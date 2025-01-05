@@ -1,0 +1,2 @@
+# Alcadeias
+AlgoTrading Project
