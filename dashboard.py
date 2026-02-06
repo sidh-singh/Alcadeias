@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 
 # ─── Configuration ───
 JSON_DIR = r'C:\Alcadeias'
-REFRESH_INTERVAL = 3000  # ms
+REFRESH_INTERVAL = 5000  # ms
 
 # ─── Color Palette ───
 COLORS = {
@@ -514,6 +514,29 @@ app = dash.Dash(
     update_title=None,
     suppress_callback_exceptions=True,
 )
+
+# Hide the default Dash loading overlay that causes flash on every callback
+app.css.append_css({'external_url': ''})
+app.index_string = '''<!DOCTYPE html>
+<html>
+<head>
+{%metas%}
+<title>{%title%}</title>
+{%favicon%}
+{%css%}
+<style>
+._dash-loading-callback { visibility: hidden !important; }
+.dash-loading { visibility: hidden !important; }
+._dash-loading { visibility: hidden !important; }
+div._dash-loading-callback--is-loading { visibility: hidden !important; }
+</style>
+</head>
+<body>
+{%app_entry%}
+<footer>{%config%}{%scripts%}{%renderer%}</footer>
+</body>
+</html>
+'''
 
 # Load symbols once at startup
 _startup_symbols = get_available_symbols()
