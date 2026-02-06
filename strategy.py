@@ -121,7 +121,10 @@ class Strategy:
             times: Hedge/multiplier from symbols config
         
         Returns:
-            tuple: (buy_signal: Signal, sell_signal: Signal)
+            tuple: (buy_signal, sell_signal, analysis_data)
+                - buy_signal: Signal enum
+                - sell_signal: Signal enum
+                - analysis_data: dict with sha_power_list, price_power_list, crossover, strengths
         """
         self.hedge = times
         
@@ -135,6 +138,12 @@ class Strategy:
         
         # Analyze candles
         lt_sha_power_list, ct_power_list, crossover = self._analyze(source_df, sha_df)
+        
+        # Calculate strengths
+        lt_buy_power = sum(1 for x in lt_sha_power_list if x == 1)
+        lt_sell_power = sum(1 for x in lt_sha_power_list if x == 0)
+        ct_buy_power = sum(1 for x in ct_power_list if x == 1)
+        ct_sell_power = sum(1 for x in ct_power_list if x == 0)
         
         buy_status = Signal.DO_NOTHING
         sell_status = Signal.DO_NOTHING
@@ -168,4 +177,14 @@ class Strategy:
                 elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** 3):
                     sell_status = Signal.SELL_MORE
         
-        return buy_status, sell_status
+        analysis_data = {
+            'sha_power_list': lt_sha_power_list,
+            'price_power_list': ct_power_list,
+            'crossover': crossover,
+            'sha_buy_strength': lt_buy_power,
+            'sha_sell_strength': lt_sell_power,
+            'price_buy_strength': ct_buy_power,
+            'price_sell_strength': ct_sell_power,
+        }
+        
+        return buy_status, sell_status, analysis_data

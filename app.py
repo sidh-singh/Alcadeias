@@ -122,6 +122,16 @@ class MT5TradingBot:
         
         return True
     
+    def _save_symbol_data(self, symbol, data):
+        """Save symbol data to JSON file on C: drive (thread-safe)"""
+        import os
+        output_dir = r'C:\Alcadeias'
+        os.makedirs(output_dir, exist_ok=True)
+        json_path = os.path.join(output_dir, f'{symbol}.json')
+        with self.thread_lock:
+            with open(json_path, 'w') as f:
+                json.dump(data, f, indent=2, default=str)
+    
     def process_symbol(self, symbol):
         """
         Process a single symbol (will be called in separate threads)
@@ -130,7 +140,7 @@ class MT5TradingBot:
         Args:
             symbol (str): Symbol to process (e.g., 'BTCUSD', 'XAUUSD')
         """
-        thread_id = threading.current_thread().name
+        from datetime import datetime
         
         # Get configuration once before loop
         brake = self.symbols_config.get('brake', 0)
@@ -143,7 +153,6 @@ class MT5TradingBot:
                 source_df = self.position_helper.get_rates(symbol, mt5.TIMEFRAME_M5, 50)
                 
                 if source_df is None or len(source_df) == 0:
-                    print(f"[{thread_id}] No data for {symbol}")
                     time.sleep(brake)
                     continue
                 
@@ -166,39 +175,74 @@ class MT5TradingBot:
                 sell_positions = self.position_helper.get_sell_positions(symbol)
                 
                 # Calculate signal
-                buy_signal, sell_signal = self.strategy.calculate_signal(
+                buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
                     source_df, sha_df, buy_positions, sell_positions, times
                 )
                 
+                # Build JSON data
+                symbol_data = {
+                    'symbol': symbol,
+                    'last_updated': datetime.now().isoformat(),
+                    'positions': {
+                        'buy': {
+                            'count': buy_positions['count'] if buy_positions else 0,
+                            'total_profit': buy_positions['total_profit'] if buy_positions else 0,
+                            'total_volume': buy_positions['total_volume'] if buy_positions else 0,
+                            'first_profit': buy_positions['first_profit'] if buy_positions else 0,
+                            'first_volume': buy_positions['first_volume'] if buy_positions else 0,
+                            'last_profit': buy_positions['last_profit'] if buy_positions else 0,
+                            'last_volume': buy_positions['last_volume'] if buy_positions else 0,
+                        },
+                        'sell': {
+                            'count': sell_positions['count'] if sell_positions else 0,
+                            'total_profit': sell_positions['total_profit'] if sell_positions else 0,
+                            'total_volume': sell_positions['total_volume'] if sell_positions else 0,
+                            'first_profit': sell_positions['first_profit'] if sell_positions else 0,
+                            'first_volume': sell_positions['first_volume'] if sell_positions else 0,
+                            'last_profit': sell_positions['last_profit'] if sell_positions else 0,
+                            'last_volume': sell_positions['last_volume'] if sell_positions else 0,
+                        },
+                    },
+                    'signal': {
+                        'buy_status': buy_signal.name,
+                        'sell_status': sell_signal.name,
+                    },
+                    'analysis': analysis_data,
+                    'order_response': None,
+                }
+                
                 # Execute buy signal
+                order_response = None
                 if buy_signal == Signal.BUY:
                     if not brake:
-                        print(f"[{thread_id}] {symbol} → BUY (vol={times * mtqty})")
-                        self.position_helper.buy(symbol, times * mtqty)
+                        order_response = self.position_helper.buy(symbol, times * mtqty)
                 elif buy_signal == Signal.BUY_MORE:
                     vol = self.strategy._get_next_fibo_volume(buy_positions['total_volume'], times)
-                    print(f"[{thread_id}] {symbol} → BUY MORE (vol={vol})")
-                    self.position_helper.buy(symbol, vol)
+                    order_response = self.position_helper.buy(symbol, vol)
                 elif buy_signal == Signal.CLOSE_BUY:
-                    print(f"[{thread_id}] {symbol} → CLOSE BUY")
-                    self.position_helper.close_by_type(symbol, 0)
+                    order_response = self.position_helper.close_by_type(symbol, 0)
                 
                 # Execute sell signal
                 if sell_signal == Signal.SELL:
                     if not brake:
-                        print(f"[{thread_id}] {symbol} → SELL (vol={times * mtqty})")
-                        self.position_helper.sell(symbol, times * mtqty)
+                        order_response = self.position_helper.sell(symbol, times * mtqty)
                 elif sell_signal == Signal.SELL_MORE:
                     vol = self.strategy._get_next_fibo_volume(sell_positions['total_volume'], times)
-                    print(f"[{thread_id}] {symbol} → SELL MORE (vol={vol})")
-                    self.position_helper.sell(symbol, vol)
+                    order_response = self.position_helper.sell(symbol, vol)
                 elif sell_signal == Signal.CLOSE_SELL:
-                    print(f"[{thread_id}] {symbol} → CLOSE SELL")
-                    self.position_helper.close_by_type(symbol, 1)
+                    order_response = self.position_helper.close_by_type(symbol, 1)
+                
+                # Attach order response if any
+                if order_response is not None:
+                    symbol_data['order_response'] = str(order_response)
+                
+                # Save to JSON
+                self._save_symbol_data(symbol, symbol_data)
+                
+                time.sleep(brake)
                 
             except Exception as e:
-                print(f"[{thread_id}] Error on {symbol}: {e}")
-                time.sleep(1)  # Brief pause on error before retrying
+                time.sleep(1)
     
     def run_multithreaded_processing(self):
         """Step 4: Start infinite multithreaded processing for all symbols"""
