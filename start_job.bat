@@ -41,9 +41,6 @@ if /i "%MODE%"=="live" (
     timeout /t 5 /nobreak > nul
 )
 
-REM === Move one directory up ===
-cd ..
-
 REM === Check if requirements already installed (flag file used) ===
 if not exist ".\deps_installed.flag" (
     echo Installing dependencies...
