@@ -512,10 +512,21 @@ app = dash.Dash(
     __name__,
     title='Alcadeias Trading Dashboard',
     update_title=None,
+    suppress_callback_exceptions=True,
 )
 
+# Load symbols once at startup
+_startup_symbols = get_available_symbols()
+if not _startup_symbols:
+    try:
+        _config_path = os.path.join(os.path.dirname(__file__), 'symbols.json')
+        with open(_config_path, 'r') as _f:
+            _startup_symbols = json.load(_f).get('symbols', [])
+    except Exception:
+        _startup_symbols = []
+
 app.layout = html.Div([
-    # Auto-refresh
+    # Auto-refresh (data only, not tabs)
     dcc.Interval(id='refresh-interval', interval=REFRESH_INTERVAL, n_intervals=0),
 
     # Header
@@ -539,10 +550,44 @@ app.layout = html.Div([
         'color': COLORS['text'],
     }),
 
-    # Tabs
-    html.Div(id='symbol-tabs-container', style={'padding': '0 30px'}),
+    # Tabs (built once, never rebuilt)
+    html.Div(
+        dcc.Tabs(
+            id='symbol-tabs',
+            value=_startup_symbols[0] if _startup_symbols else '',
+            children=[
+                dcc.Tab(
+                    label=s,
+                    value=s,
+                    style={
+                        'background': COLORS['tab_bg'],
+                        'color': COLORS['text_dim'],
+                        'border': 'none',
+                        'borderBottom': '2px solid transparent',
+                        'padding': '12px 24px',
+                        'fontSize': '13px',
+                        'fontWeight': '600',
+                        'letterSpacing': '1px',
+                    },
+                    selected_style={
+                        'background': COLORS['bg'],
+                        'color': COLORS['text'],
+                        'border': 'none',
+                        'borderBottom': f'2px solid {COLORS["tab_active"]}',
+                        'padding': '12px 24px',
+                        'fontSize': '13px',
+                        'fontWeight': '700',
+                        'letterSpacing': '1px',
+                    },
+                )
+                for s in _startup_symbols
+            ],
+            style={'borderBottom': f'1px solid {COLORS["card_border"]}'},
+        ),
+        style={'padding': '0 30px'},
+    ),
 
-    # Content
+    # Content (refreshed by callback)
     html.Div(id='tab-content', style={
         'padding': '20px 30px 40px 30px',
         'maxWidth': '1200px',
@@ -557,83 +602,22 @@ app.layout = html.Div([
 
 
 @app.callback(
-    [Output('symbol-tabs-container', 'children'),
-     Output('tab-content', 'children'),
+    [Output('tab-content', 'children'),
      Output('header-time', 'children')],
-    [Input('refresh-interval', 'n_intervals')],
+    [Input('symbol-tabs', 'value'),
+     Input('refresh-interval', 'n_intervals')],
 )
-def update_dashboard(n):
-    symbols = get_available_symbols()
-    if not symbols:
-        # Fallback: read from symbols.json
-        try:
-            config_path = os.path.join(os.path.dirname(__file__), 'symbols.json')
-            with open(config_path, 'r') as f:
-                cfg = json.load(f)
-            symbols = cfg.get('symbols', [])
-        except Exception:
-            symbols = []
+def update_content(selected_symbol, n):
+    """Single callback: refreshes content for whichever tab is selected"""
+    if not selected_symbol:
+        return html.Div('No symbols configured.', style={
+            'textAlign': 'center', 'color': COLORS['text_dim'],
+            'marginTop': '80px', 'fontSize': '18px',
+        }), ''
 
-    if not symbols:
-        return (
-            html.Div(),
-            html.Div('No symbol data found. Start the trading bot first.', style={
-                'textAlign': 'center', 'color': COLORS['text_dim'],
-                'marginTop': '80px', 'fontSize': '18px',
-            }),
-            '',
-        )
-
-    # Build tabs
-    tabs = dcc.Tabs(
-        id='symbol-tabs',
-        value=symbols[0],
-        children=[
-            dcc.Tab(
-                label=s,
-                value=s,
-                style={
-                    'background': COLORS['tab_bg'],
-                    'color': COLORS['text_dim'],
-                    'border': 'none',
-                    'borderBottom': f'2px solid transparent',
-                    'padding': '12px 24px',
-                    'fontSize': '13px',
-                    'fontWeight': '600',
-                    'letterSpacing': '1px',
-                },
-                selected_style={
-                    'background': COLORS['bg'],
-                    'color': COLORS['text'],
-                    'border': 'none',
-                    'borderBottom': f'2px solid {COLORS["tab_active"]}',
-                    'padding': '12px 24px',
-                    'fontSize': '13px',
-                    'fontWeight': '700',
-                    'letterSpacing': '1px',
-                },
-            )
-            for s in symbols
-        ],
-        style={'borderBottom': f'1px solid {COLORS["card_border"]}'},
-    )
-
-    # Build content for first/selected symbol
-    content = build_symbol_tab_content(symbols[0])
+    content = build_symbol_tab_content(selected_symbol)
     now = datetime.now().strftime('Last refresh: %H:%M:%S')
-
-    return tabs, content, now
-
-
-@app.callback(
-    Output('tab-content', 'children', allow_duplicate=True),
-    Input('symbol-tabs', 'value'),
-    prevent_initial_call=True,
-)
-def switch_tab(symbol):
-    if symbol:
-        return build_symbol_tab_content(symbol)
-    return html.Div()
+    return content, now
 
 
 if __name__ == '__main__':
