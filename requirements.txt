@@ -1,0 +1,4 @@
+pandas==2.2.0
+MetaTrader5==5.0.4738
+multiprocess==0.70.18
+

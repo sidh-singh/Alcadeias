@@ -1,0 +1,171 @@
+from enum import Enum
+
+
+class Signal(Enum):
+    DO_NOTHING = 0
+    BUY = 1
+    SELL = 2
+    CLOSE_BUY = 3
+    CLOSE_SELL = 4
+    BUY_MORE = 5
+    SELL_MORE = 6
+
+
+class Strategy:
+    """HAM Strategy - Heiken Ashi Martingale Signal Calculator"""
+    
+    def __init__(self):
+        self.hedge = 1
+        self.lookback = 7
+        self.sha_threshold = 0
+    
+    def _recur_fibo(self, n):
+        if n <= 1:
+            return n
+        return self._recur_fibo(n - 1) + self._recur_fibo(n - 2)
+    
+    def _get_fibo_qty(self, qty_count, times):
+        fib = [self._recur_fibo(i) for i in range(25)][2:]
+        try:
+            return fib[qty_count] * times
+        except (IndexError, ValueError):
+            return times
+    
+    def _get_next_fibo_volume(self, current_volume, times):
+        """
+        Get next fibonacci volume based on current total volume.
+        Finds current volume in fibo sequence, returns the next one.
+        
+        Args:
+            current_volume: Current total position volume (e.g., 0.03)
+            times: Multiplier from config
+        
+        Returns:
+            float: Next fibo volume in lots
+        """
+        fib = [self._recur_fibo(i) for i in range(25)][2:]
+        fib = [f * times for f in fib]
+        try:
+            return round(fib[fib.index(current_volume * 100) + 1] / 100, 2)
+        except (ValueError, IndexError):
+            return 0.01 * times
+    
+    def _analyze(self, source_df, sha_df):
+        """
+        Analyze last N candles for SHA power and crossover
+        
+        Returns:
+            tuple: (lt_sha_power_list, ct_power_list, crossover)
+        """
+        lt_sha_power_list = []
+        ct_power_list = []
+        crossover = []
+        
+        for i in range(self.lookback):
+            idx = -(i + 1)
+            
+            # SHA candle
+            sha_diff = sha_df['Close'].iloc[idx] - sha_df['Open'].iloc[idx]
+            sha_range = sha_df['High'].iloc[idx] - sha_df['Low'].iloc[idx]
+            
+            # Price candle
+            price_diff = source_df['Close'].iloc[idx] - source_df['Open'].iloc[idx]
+            price_range = source_df['High'].iloc[idx] - source_df['Low'].iloc[idx]
+            
+            # SHA power (bullish or bearish)
+            sha_bullish = False
+            if sha_range != 0 and (sha_diff / sha_range) >= self.sha_threshold:
+                lt_sha_power_list.append(1)
+                sha_bullish = True
+            else:
+                lt_sha_power_list.append(0)
+            
+            # Price power
+            if price_range != 0 and (price_diff / price_range) >= self.sha_threshold:
+                ct_power_list.append(1)
+            else:
+                ct_power_list.append(0)
+            
+            # Crossover: price candle position relative to SHA candle
+            p_low = source_df['Low'].iloc[idx]
+            p_high = source_df['High'].iloc[idx]
+            s_low = sha_df['Low'].iloc[idx]
+            s_high = sha_df['High'].iloc[idx]
+            
+            if sha_bullish:
+                if p_low >= s_high:
+                    crossover.append(3)    # Price fully above SHA → strong bull
+                elif p_high <= s_low:
+                    crossover.append(1)    # Price fully below SHA → weak
+                else:
+                    crossover.append(2)    # Overlapping
+            else:
+                if p_high <= s_low:
+                    crossover.append(-3)   # Price fully below SHA → strong bear
+                elif p_low >= s_high:
+                    crossover.append(-1)   # Price fully above SHA → weak
+                else:
+                    crossover.append(-2)   # Overlapping
+        
+        return lt_sha_power_list, ct_power_list, crossover
+    
+    def calculate_signal(self, source_df, sha_df, buy_positions, sell_positions, times):
+        """
+        Calculate entry/exit signals based on SHA power and crossover
+        
+        Args:
+            source_df: Raw OHLC DataFrame (capitalized columns: Open, High, Low, Close)
+            sha_df: SHA indicator DataFrame (Open, High, Low, Close)
+            buy_positions: Dict from get_buy_positions() or None
+            sell_positions: Dict from get_sell_positions() or None
+            times: Hedge/multiplier from symbols config
+        
+        Returns:
+            tuple: (buy_signal: Signal, sell_signal: Signal)
+        """
+        self.hedge = times
+        
+        # Extract position data
+        buy_count = buy_positions['count'] if buy_positions else 0
+        buy_profit = buy_positions['total_profit'] if buy_positions else 0
+        buy_first_profit = buy_positions['first_profit'] if buy_positions else 0
+        sell_count = sell_positions['count'] if sell_positions else 0
+        sell_profit = sell_positions['total_profit'] if sell_positions else 0
+        sell_first_profit = sell_positions['first_profit'] if sell_positions else 0
+        
+        # Analyze candles
+        lt_sha_power_list, ct_power_list, crossover = self._analyze(source_df, sha_df)
+        
+        buy_status = Signal.DO_NOTHING
+        sell_status = Signal.DO_NOTHING
+        
+        # ─── Entry/Exit Logic ───
+        
+        # No positions open → look for entry
+        if buy_count == 0 and sell_count == 0:
+            if lt_sha_power_list[0] == 1 and crossover[0] == 3:
+                buy_status = Signal.BUY
+            elif lt_sha_power_list[0] == 0 and crossover[0] == -3:
+                sell_status = Signal.SELL
+        
+        # Only BUY positions open
+        elif buy_count > 0 and sell_count == 0:
+            if buy_profit > self.hedge:
+                buy_status = Signal.CLOSE_BUY
+            else:
+                if crossover[0] in (-1, -2, -3, 1):
+                    buy_status = Signal.CLOSE_BUY
+                elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** 3):
+                    buy_status = Signal.BUY_MORE
+        
+        # Only SELL positions open
+        elif buy_count == 0 and sell_count > 0:
+            if sell_profit > self.hedge:
+                sell_status = Signal.CLOSE_SELL
+            else:
+                if crossover[0] in (-1, 1, 2, 3):
+                    sell_status = Signal.CLOSE_SELL
+                elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** 3):
+                    sell_status = Signal.SELL_MORE
+        
+        return buy_status, sell_status

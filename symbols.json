@@ -1,0 +1,6 @@
+{
+    "symbols" : ["BTCUSDm","XAUUSDm", "XAGUSDm"],
+    "times": 1,
+    "brake" : 0,
+    "mtqty" : 0.01
+}

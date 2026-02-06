@@ -1,2 +1,306 @@
+import MetaTrader5 as mt5
+import json
+import sys
+import threading
+import time
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from mt5_helper import MT5PositionHelper
+from indicator import Indicator
+from strategy import Strategy, Signal
+
+
+class MT5TradingBot:
+    """Main Trading Bot Class with Clean Architecture"""
+    
+    def __init__(self, mode='demo'):
+        """
+        Initialize the trading bot
+        
+        Args:
+            mode (str): Either 'demo' or 'live'
+        """
+        self.mode = mode.lower()
+        self.credentials = None
+        self.symbols_config = None
+        self.symbols = []
+        self.mt5_initialized = False
+        self.thread_lock = threading.Lock()
+        self.position_helper = None
+        self.indicator = Indicator()
+        self.strategy = Strategy()
+        
+    def load_credentials(self):
+        """Step 1: Load MT5 credentials from JSON file"""
+        try:
+            json_path = Path(__file__).parent / 'mt5_credentials.json'
+            with open(json_path, 'r') as f:
+                credentials = json.load(f)
+            
+            if self.mode not in credentials:
+                raise ValueError(f"Invalid mode '{self.mode}'. Must be 'demo' or 'live'")
+            
+            self.credentials = credentials[self.mode]
+            print(f"✓ Credentials loaded for {self.mode.upper()} account")
+            return True
+        except FileNotFoundError:
+            print(f"✗ Error: mt5_credentials.json not found")
+            return False
+        except json.JSONDecodeError:
+            print("✗ Error: Invalid JSON format in mt5_credentials.json")
+            return False
+    
+    def load_symbols(self):
+        """Step 2: Load symbols configuration from JSON file"""
+        try:
+            json_path = Path(__file__).parent / 'symbols.json'
+            with open(json_path, 'r') as f:
+                self.symbols_config = json.load(f)
+            
+            self.symbols = self.symbols_config.get('symbols', [])
+            if not self.symbols:
+                print("✗ Warning: No symbols found in symbols.json")
+                return False
+            
+            print(f"✓ Loaded {len(self.symbols)} symbols: {', '.join(self.symbols)}")
+            return True
+        except FileNotFoundError:
+            print(f"✗ Error: symbols.json not found")
+            return False
+        except json.JSONDecodeError:
+            print("✗ Error: Invalid JSON format in symbols.json")
+            return False
+    
+    def initialize_mt5(self):
+        """Step 3: Initialize and login to MT5"""
+        print(f"\n{'='*60}")
+        print(f"  Initializing MT5 - {self.mode.upper()} Account")
+        print(f"{'='*60}\n")
+        
+        # Initialize MT5
+        if not mt5.initialize(path=self.credentials['terminal_path']):
+            print(f"✗ MT5 initialization failed: {mt5.last_error()}")
+            return False
+        
+        print(f"✓ MT5 initialized successfully")
+        print(f"✓ MT5 version: {mt5.version()}")
+        
+        # Login to MT5 account
+        authorized = mt5.login(
+            login=self.credentials['login_id'],
+            password=self.credentials['login_pass'],
+            server=self.credentials['server']
+        )
+        
+        if not authorized:
+            error = mt5.last_error()
+            print(f"✗ Login failed: {error}")
+            mt5.shutdown()
+            return False
+        
+        # Get account info
+        account_info = mt5.account_info()
+        if account_info is None:
+            print("✗ Failed to get account info")
+            mt5.shutdown()
+            return False
+        
+        print(f"\n{'='*60}")
+        print(f"  Login Successful - {self.mode.upper()} Account")
+        print(f"{'='*60}")
+        print(f"Login ID: {account_info.login}")
+        print(f"Server: {account_info.server}")
+        print(f"Balance: ${account_info.balance:.2f}")
+        print(f"Equity: ${account_info.equity:.2f}")
+        print(f"Leverage: 1:{account_info.leverage}")
+        print(f"{'='*60}\n")
+        
+        self.mt5_initialized = True
+        
+        # Initialize position helper with mt5 instance
+        self.position_helper = MT5PositionHelper(mt5)
+        
+        return True
+    
+    def process_symbol(self, symbol):
+        """
+        Process a single symbol (will be called in separate threads)
+        Lightweight and optimized - runs in infinite loop
+        
+        Args:
+            symbol (str): Symbol to process (e.g., 'BTCUSD', 'XAUUSD')
+        """
+        thread_id = threading.current_thread().name
+        
+        # Get configuration once before loop
+        brake = self.symbols_config.get('brake', 0)
+        times = self.symbols_config.get('times', 1)
+        mtqty = self.symbols_config.get('mtqty', 0.01)
+        
+        while True:
+            try:
+                # Fetch M5 timeframe data (50 candles)
+                source_df = self.position_helper.get_rates(symbol, mt5.TIMEFRAME_M5, 50)
+                
+                if source_df is None or len(source_df) == 0:
+                    print(f"[{thread_id}] No data for {symbol}")
+                    time.sleep(brake)
+                    continue
+                
+                # Capitalize columns for indicator compatibility
+                source_df.rename(columns={
+                    'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'
+                }, inplace=True)
+                
+                # Calculate SHA with RMA and length 9
+                sha_df = self.indicator.calculate_sha_v3(
+                    source_df, 
+                    smooth_length=9, 
+                    smooth_ma_type='RMA',
+                    after_smooth_length=9, 
+                    after_smooth_ma_type='RMA'
+                )
+                
+                # Get buy and sell positions
+                buy_positions = self.position_helper.get_buy_positions(symbol)
+                sell_positions = self.position_helper.get_sell_positions(symbol)
+                
+                # Calculate signal
+                buy_signal, sell_signal = self.strategy.calculate_signal(
+                    source_df, sha_df, buy_positions, sell_positions, times
+                )
+                
+                # Execute buy signal
+                if buy_signal == Signal.BUY:
+                    if not brake:
+                        print(f"[{thread_id}] {symbol} → BUY (vol={times * mtqty})")
+                        self.position_helper.buy(symbol, times * mtqty)
+                elif buy_signal == Signal.BUY_MORE:
+                    vol = self.strategy._get_next_fibo_volume(buy_positions['total_volume'], times)
+                    print(f"[{thread_id}] {symbol} → BUY MORE (vol={vol})")
+                    self.position_helper.buy(symbol, vol)
+                elif buy_signal == Signal.CLOSE_BUY:
+                    print(f"[{thread_id}] {symbol} → CLOSE BUY")
+                    self.position_helper.close_by_type(symbol, 0)
+                
+                # Execute sell signal
+                if sell_signal == Signal.SELL:
+                    if not brake:
+                        print(f"[{thread_id}] {symbol} → SELL (vol={times * mtqty})")
+                        self.position_helper.sell(symbol, times * mtqty)
+                elif sell_signal == Signal.SELL_MORE:
+                    vol = self.strategy._get_next_fibo_volume(sell_positions['total_volume'], times)
+                    print(f"[{thread_id}] {symbol} → SELL MORE (vol={vol})")
+                    self.position_helper.sell(symbol, vol)
+                elif sell_signal == Signal.CLOSE_SELL:
+                    print(f"[{thread_id}] {symbol} → CLOSE SELL")
+                    self.position_helper.close_by_type(symbol, 1)
+                
+            except Exception as e:
+                print(f"[{thread_id}] Error on {symbol}: {e}")
+                time.sleep(1)  # Brief pause on error before retrying
+    
+    def run_multithreaded_processing(self):
+        """Step 4: Start infinite multithreaded processing for all symbols"""
+        print(f"\n{'='*60}")
+        print(f"  Starting Continuous Multithreaded Processing")
+        print(f"{'='*60}\n")
+        
+        max_workers = len(self.symbols)
+        
+        print(f"Launching {max_workers} threads (1 per symbol)...")
+        print(f"Press Ctrl+C to stop\n")
+        
+        # Start threads - they will run forever until interrupted
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='Symbol') as executor:
+            # Submit all symbol processing tasks (infinite loops)
+            futures = [
+                executor.submit(self.process_symbol, symbol) 
+                for symbol in self.symbols
+            ]
+            
+            # Keep main thread alive - threads run forever
+            try:
+                for future in futures:
+                    future.result()  # This will block indefinitely
+            except KeyboardInterrupt:
+                print("\n\n⚠ Stopping all threads...")
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise
+    
+    def cleanup(self):
+        """Step 5: Cleanup and shutdown MT5"""
+        if self.mt5_initialized:
+            mt5.shutdown()
+            print("\n✓ MT5 connection closed")
+    
+    def execute_job(self):
+        """
+        Main Job Orchestrator - Executes all steps in sequence
+        This is the central function that controls the entire workflow
+        """
+        print(f"\n{'#'*60}")
+        print(f"#  JOB STARTED - {self.mode.upper()} MODE")
+        print(f"{'#'*60}\n")
+        
+        try:
+            # Step 1: Load Credentials
+            if not self.load_credentials():
+                print("\n✗ Job Failed: Could not load credentials")
+                return False
+            
+            # Step 2: Load Symbols
+            if not self.load_symbols():
+                print("\n✗ Job Failed: Could not load symbols")
+                return False
+            
+            # Step 3: Initialize MT5
+            if not self.initialize_mt5():
+                print("\n✗ Job Failed: Could not initialize MT5")
+                return False
+            
+            # Step 4: Run Multithreaded Processing (Infinite Loop)
+            self.run_multithreaded_processing()
+            
+            # Step 5: Cleanup (only reached on interrupt)
+            self.cleanup()
+            
+            print(f"\n{'#'*60}")
+            print(f"#  JOB COMPLETED SUCCESSFULLY")
+            print(f"{'#'*60}\n")
+            
+            return True
+            
+        except KeyboardInterrupt:
+            print("\n\n⚠ Job interrupted by user")
+            self.cleanup()
+            return False
+        except Exception as e:
+            print(f"\n✗ Job Failed with exception: {e}")
+            self.cleanup()
+            return False
+
+
+def main():
+    """
+    Main entry point for the application
+    """
+    # Get mode from command line argument (default: demo)
+    mode = sys.argv[1] if len(sys.argv) > 1 else 'demo'
+    mode = mode.lower()
+    
+    # Validate mode
+    if mode not in ['demo', 'live']:
+        print(f"✗ Error: Invalid mode '{mode}'. Must be 'demo' or 'live'")
+        sys.exit(1)
+    
+    # Create bot instance and execute job
+    bot = MT5TradingBot(mode=mode)
+    success = bot.execute_job()
+    
+    # Exit with appropriate code
+    sys.exit(0 if success else 1)
+
+
 if '__main__' == __name__:
-    print('Hello, World!')
+    main()
