@@ -45,11 +45,24 @@ def load_symbol_data(symbol):
         return None
 
 
+def load_account_data():
+    """Load account data from dedicated account.json"""
+    path = os.path.join(JSON_DIR, 'account.json')
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
 def get_available_symbols():
     """Get list of symbols from JSON files in directory"""
     pattern = os.path.join(JSON_DIR, '*.json')
     files = glob.glob(pattern)
-    return [os.path.splitext(os.path.basename(f))[0] for f in files]
+    return [
+        os.path.splitext(os.path.basename(f))[0]
+        for f in files if os.path.basename(f) != 'account.json'
+    ]
 
 
 def make_signal_badge(status):
@@ -642,9 +655,8 @@ def update_content(selected_symbol, n):
             'marginTop': '80px', 'fontSize': '18px',
         }), html.Div(), ''
 
-    # Load data to get account info
-    data = load_symbol_data(selected_symbol)
-    account = data.get('account', {}) if data else {}
+    # Load account data from dedicated file
+    account = load_account_data()
     
     # Build account info display
     balance = account.get('balance', 0)

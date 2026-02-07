@@ -132,6 +132,18 @@ class MT5TradingBot:
             with open(json_path, 'w') as f:
                 json.dump(data, f, indent=2, default=str)
     
+    def _save_account_data(self, account_info):
+        """Save account data to dedicated account.json (thread-safe)"""
+        import os
+        from datetime import datetime
+        output_dir = r'C:\Alcadeias'
+        os.makedirs(output_dir, exist_ok=True)
+        json_path = os.path.join(output_dir, 'account.json')
+        account_info['last_updated'] = datetime.now().isoformat()
+        with self.thread_lock:
+            with open(json_path, 'w') as f:
+                json.dump(account_info, f, indent=2, default=str)
+    
     def process_symbol(self, symbol):
         """
         Process a single symbol (will be called in separate threads)
@@ -174,8 +186,10 @@ class MT5TradingBot:
                 buy_positions = self.position_helper.get_buy_positions(symbol)
                 sell_positions = self.position_helper.get_sell_positions(symbol)
                 
-                # Get account info
+                # Get account info and save to dedicated file
                 account_info = self.position_helper.get_account_info()
+                if account_info:
+                    self._save_account_data(account_info)
                 
                 # Calculate signal
                 buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
