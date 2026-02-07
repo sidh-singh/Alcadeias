@@ -174,6 +174,9 @@ class MT5TradingBot:
                 buy_positions = self.position_helper.get_buy_positions(symbol)
                 sell_positions = self.position_helper.get_sell_positions(symbol)
                 
+                # Get account info
+                account_info = self.position_helper.get_account_info()
+                
                 # Calculate signal
                 buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
                     source_df, sha_df, buy_positions, sell_positions, times
@@ -183,6 +186,7 @@ class MT5TradingBot:
                 symbol_data = {
                     'symbol': symbol,
                     'last_updated': datetime.now().isoformat(),
+                    'account': account_info if account_info else {},
                     'positions': {
                         'buy': {
                             'count': buy_positions['count'] if buy_positions else 0,

@@ -134,6 +134,41 @@ class MT5PositionHelper:
             'last_volume': round(last_pos.volume, 2)
         }
     
+    def get_account_info(self) -> Optional[Dict]:
+        """
+        Get account information (balance, equity, margin, etc.)
+        
+        Returns:
+            Dict with keys:
+                - balance: Account balance
+                - equity: Account equity
+                - margin: Used margin
+                - margin_free: Free margin
+                - margin_level: Margin level percentage
+                - profit: Current floating profit
+                - drawdown: Drawdown percentage
+            Returns None if failed
+        """
+        account = self.mt5.account_info()
+        if account is None:
+            return None
+        
+        # Calculate drawdown percentage
+        if account.balance > 0:
+            drawdown_pct = ((account.balance - account.equity) / account.balance) * 100
+        else:
+            drawdown_pct = 0
+        
+        return {
+            'balance': round(account.balance, 2),
+            'equity': round(account.equity, 2),
+            'margin': round(account.margin, 2),
+            'margin_free': round(account.margin_free, 2),
+            'margin_level': round(account.margin_level, 2) if account.margin_level else 0,
+            'profit': round(account.profit, 2),
+            'drawdown': round(drawdown_pct, 2),
+        }
+    
     def get_rates(self, symbol: str, timeframe: int, count: int):
         """
         Fetch historical rates/candles for a symbol

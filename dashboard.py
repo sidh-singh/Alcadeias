@@ -560,6 +560,9 @@ app.layout = html.Div([
                 'fontSize': '20px', 'fontWeight': '700', 'letterSpacing': '3px',
             }),
         ], style={'display': 'flex', 'alignItems': 'center'}),
+        html.Div(id='account-info', style={
+            'display': 'flex', 'gap': '20px', 'alignItems': 'center',
+        }),
         html.Div(id='header-time', style={
             'fontSize': '12px', 'color': COLORS['text_dim'],
         }),
@@ -626,6 +629,7 @@ app.layout = html.Div([
 
 @app.callback(
     [Output('tab-content', 'children'),
+     Output('account-info', 'children'),
      Output('header-time', 'children')],
     [Input('symbol-tabs', 'value'),
      Input('refresh-interval', 'n_intervals')],
@@ -636,11 +640,43 @@ def update_content(selected_symbol, n):
         return html.Div('No symbols configured.', style={
             'textAlign': 'center', 'color': COLORS['text_dim'],
             'marginTop': '80px', 'fontSize': '18px',
-        }), ''
+        }), html.Div(), ''
 
+    # Load data to get account info
+    data = load_symbol_data(selected_symbol)
+    account = data.get('account', {}) if data else {}
+    
+    # Build account info display
+    balance = account.get('balance', 0)
+    equity = account.get('equity', 0)
+    margin = account.get('margin', 0)
+    drawdown = account.get('drawdown', 0)
+    
+    equity_color = COLORS['positive'] if equity >= balance else COLORS['negative']
+    drawdown_color = COLORS['negative'] if drawdown > 5 else COLORS['text']
+    
+    account_display = html.Div([
+        html.Div([
+            html.Div('Balance', style={'fontSize': '9px', 'color': COLORS['text_dim'], 'textTransform': 'uppercase'}),
+            html.Div(f'${balance:,.2f}', style={'fontSize': '14px', 'fontWeight': '700', 'color': COLORS['text']}),
+        ], style={'textAlign': 'right'}),
+        html.Div([
+            html.Div('Equity', style={'fontSize': '9px', 'color': COLORS['text_dim'], 'textTransform': 'uppercase'}),
+            html.Div(f'${equity:,.2f}', style={'fontSize': '14px', 'fontWeight': '700', 'color': equity_color}),
+        ], style={'textAlign': 'right'}),
+        html.Div([
+            html.Div('Margin', style={'fontSize': '9px', 'color': COLORS['text_dim'], 'textTransform': 'uppercase'}),
+            html.Div(f'${margin:,.2f}', style={'fontSize': '14px', 'fontWeight': '700', 'color': COLORS['text']}),
+        ], style={'textAlign': 'right'}),
+        html.Div([
+            html.Div('Drawdown', style={'fontSize': '9px', 'color': COLORS['text_dim'], 'textTransform': 'uppercase'}),
+            html.Div(f'{drawdown:.2f}%', style={'fontSize': '14px', 'fontWeight': '700', 'color': drawdown_color}),
+        ], style={'textAlign': 'right'}),
+    ], style={'display': 'flex', 'gap': '20px'})
+    
     content = build_symbol_tab_content(selected_symbol)
     now = datetime.now().strftime('Last refresh: %H:%M:%S')
-    return content, now
+    return content, account_display, now
 
 
 if __name__ == '__main__':
