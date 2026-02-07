@@ -293,9 +293,12 @@ class MT5TradingBot:
                 )
                 
                 # Build JSON data
+                # Get server time for consistency with broker
+                server_time = self.position_helper._get_server_time()
                 symbol_data = {
                     'symbol': symbol,
                     'last_updated': datetime.now().isoformat(),
+                    'server_time': server_time.isoformat(),
                     'market_status': market_status,
                     'account': account_info if account_info else {},
                     'positions': {

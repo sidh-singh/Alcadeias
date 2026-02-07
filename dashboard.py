@@ -1045,8 +1045,19 @@ def update_content(selected_symbol, n, prev_hash):
     ], style={'display': 'flex', 'gap': '20px'})
     
     content = build_symbol_tab_content(selected_symbol)
-    now = datetime.now().strftime('Last refresh: %H:%M:%S')
-    return content, account_display, now, current_hash
+    
+    # Use server time from symbol data if available, otherwise fall back to local time
+    server_time_str = symbol_data.get('server_time') if symbol_data else None
+    if server_time_str:
+        try:
+            server_dt = datetime.fromisoformat(server_time_str)
+            time_display = server_dt.strftime('Server Time: %H:%M:%S')
+        except (ValueError, TypeError):
+            time_display = datetime.now().strftime('Last refresh: %H:%M:%S')
+    else:
+        time_display = datetime.now().strftime('Last refresh: %H:%M:%S')
+    
+    return content, account_display, time_display, current_hash
 
 
 if __name__ == '__main__':
