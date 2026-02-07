@@ -483,7 +483,7 @@ def load_daily_trade_data(symbol):
             file_server_date = data.get('server_date', '')
             try:
                 file_date = datetime.strptime(file_server_date, '%Y-%m-%d').date()
-                if file_date != datetime.now(datetime.timezone.utc).date():
+                if file_date != datetime.now(tz=timezone.utc).date():
                     return None  # Stale data from a previous trading day
             except (ValueError, TypeError):
                 pass
