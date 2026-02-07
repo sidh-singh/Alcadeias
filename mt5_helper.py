@@ -220,10 +220,8 @@ class MT5PositionHelper:
         else:
             self.request["tp"] = tp
         
-        # print(self.request)
         order_status = self.mt5.order_send(self.request)
         time.sleep(0.1)
-        # print(order_status)
         return order_status
     
     def sell(self, symbol: str, qty: float, sl: float = 0, tp: float = 0):
@@ -259,10 +257,8 @@ class MT5PositionHelper:
         else:
             self.request["tp"] = tp
         
-        # print(self.request)
         order_status = self.mt5.order_send(self.request)
         time.sleep(0.1)
-        # print(order_status)
         return order_status
     
     def close_by_type(self, symbol: str, pos_type: int):
@@ -274,28 +270,50 @@ class MT5PositionHelper:
             pos_type: Position type (0 = BUY, 1 = SELL)
         
         Returns:
-            bool: True if all positions closed successfully
+            dict: Detailed information about the close operation with keys:
+                - success: bool, overall success
+                - message: str, status message
+                - total_positions: int, total positions for symbol
+                - filtered_count: int, positions of the specified type
+                - closed_count: int, successfully closed positions
+                - failed_count: int, failed closures
+                - closed_tickets: list, ticket IDs that were closed
+                - errors: list, error messages if any
         """
+        result = {
+            'success': False,
+            'message': '',
+            'total_positions': 0,
+            'filtered_count': 0,
+            'closed_count': 0,
+            'failed_count': 0,
+            'closed_tickets': [],
+            'errors': [],
+        }
+        
         positions = self.mt5.positions_get(symbol=symbol)
         if positions is None:
-            print(f"No positions found for {symbol}")
-            return False
-            
-        # print(f'Total number of positions: {len(positions)} for symbol: {symbol}')
+            result['message'] = f"No positions found for {symbol}"
+            result['success'] = True  # No positions is not an error
+            return result
+        
+        result['total_positions'] = len(positions)
         
         # Filter positions by type (0 = BUY, 1 = SELL)
         filtered_positions = [pos for pos in positions if pos.type == pos_type]
+        result['filtered_count'] = len(filtered_positions)
         
         if not filtered_positions:
-            print(f"No {('BUY' if pos_type == 0 else 'SELL')} positions found for {symbol}")
-            return True
+            pos_type_name = 'BUY' if pos_type == 0 else 'SELL'
+            result['message'] = f"No {pos_type_name} positions found for {symbol}"
+            result['success'] = True
+            return result
         
-        success = True
         for pos in filtered_positions:
             tick = self.mt5.symbol_info_tick(pos.symbol)
             if tick is None:
-                print(f"Failed to get tick data for {pos.symbol}")
-                success = False
+                result['errors'].append(f"Failed to get tick data for position {pos.ticket}")
+                result['failed_count'] += 1
                 continue
             
             # Invert type to close (0 -> SELL, 1 -> BUY)
@@ -315,16 +333,22 @@ class MT5PositionHelper:
                 "type_filling": self.mt5.ORDER_FILLING_IOC,
             }
             
-            # print(f"Closing position: {request}")
             order_result = self.mt5.order_send(request)
             
             if order_result is None:
-                # print("order_send failed, no response")
-                success = False
+                result['errors'].append(f"order_send failed for position {pos.ticket}, no response")
+                result['failed_count'] += 1
             elif order_result.retcode != self.mt5.TRADE_RETCODE_DONE:
-                # print(f"Failed to close position {pos.ticket}, retcode={order_result.retcode}")
-                success = False
-            # else:
-                # print(f"Successfully closed position {pos.ticket}")
+                result['errors'].append(f"Failed to close position {pos.ticket}, retcode={order_result.retcode}")
+                result['failed_count'] += 1
+            else:
+                result['closed_tickets'].append(pos.ticket)
+                result['closed_count'] += 1
         
-        return success
+        result['success'] = result['failed_count'] == 0
+        if result['success']:
+            result['message'] = f"Successfully closed {result['closed_count']} positions"
+        else:
+            result['message'] = f"Closed {result['closed_count']}/{result['filtered_count']} positions, {result['failed_count']} failed"
+        
+        return result

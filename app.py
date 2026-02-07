@@ -231,6 +231,7 @@ class MT5TradingBot:
                 
                 # Execute buy signal
                 order_response = None
+                close_response = None
                 if buy_signal == Signal.BUY:
                     if not brake:
                         order_response = self.position_helper.buy(symbol, times * mtqty)
@@ -238,7 +239,7 @@ class MT5TradingBot:
                     vol = self.strategy._get_next_fibo_volume(buy_positions['total_volume'], times)
                     order_response = self.position_helper.buy(symbol, vol)
                 elif buy_signal == Signal.CLOSE_BUY:
-                    order_response = self.position_helper.close_by_type(symbol, 0)
+                    close_response = self.position_helper.close_by_type(symbol, 0)
                 
                 # Execute sell signal
                 if sell_signal == Signal.SELL:
@@ -248,11 +249,15 @@ class MT5TradingBot:
                     vol = self.strategy._get_next_fibo_volume(sell_positions['total_volume'], times)
                     order_response = self.position_helper.sell(symbol, vol)
                 elif sell_signal == Signal.CLOSE_SELL:
-                    order_response = self.position_helper.close_by_type(symbol, 1)
+                    close_response = self.position_helper.close_by_type(symbol, 1)
                 
                 # Attach order response if any
                 if order_response is not None:
                     symbol_data['order_response'] = str(order_response)
+                
+                # Attach close response if any
+                if close_response is not None:
+                    symbol_data['close_response'] = close_response
                 
                 # Save to JSON
                 self._save_symbol_data(symbol, symbol_data)

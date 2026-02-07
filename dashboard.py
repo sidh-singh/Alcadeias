@@ -187,6 +187,7 @@ def build_signal_section(data):
     buy_status = signal.get('buy_status', 'DO_NOTHING')
     sell_status = signal.get('sell_status', 'DO_NOTHING')
     order_resp = data.get('order_response')
+    close_resp = data.get('close_response')
 
     children = [
         html.H3('⚡ Signal Status', style={
@@ -226,6 +227,50 @@ def build_signal_section(data):
                 'fontSize': '12px', 'color': COLORS['warning'],
                 'wordBreak': 'break-all', 'whiteSpace': 'pre-wrap',
             }),
+        ], style={
+            'background': COLORS['card'],
+            'border': f'1px solid {COLORS["card_border"]}',
+            'borderRadius': '12px',
+            'padding': '16px',
+            'marginTop': '12px',
+        }))
+
+    if close_resp:
+        # Determine color based on success
+        status_color = COLORS['buy'] if close_resp.get('success') else COLORS['sell']
+        
+        children.append(html.Div([
+            html.Div('CLOSE POSITIONS RESPONSE', style={
+                'fontSize': '11px', 'color': COLORS['text_dim'],
+                'textTransform': 'uppercase', 'letterSpacing': '1px', 'marginBottom': '12px',
+            }),
+            html.Div([
+                html.Div([
+                    html.Div('Status', style={'fontSize': '10px', 'color': COLORS['text_dim']}),
+                    html.Div(close_resp.get('message', 'N/A'), style={
+                        'fontSize': '13px', 'color': status_color, 'fontWeight': '600'
+                    }),
+                ], style={'marginBottom': '10px'}),
+                html.Div([
+                    make_metric_card('Total Positions', str(close_resp.get('total_positions', 0)), COLORS['text']),
+                    make_metric_card('Filtered', str(close_resp.get('filtered_count', 0)), COLORS['accent']),
+                    make_metric_card('Closed', str(close_resp.get('closed_count', 0)), COLORS['buy']),
+                    make_metric_card('Failed', str(close_resp.get('failed_count', 0)), COLORS['sell']),
+                ], style={'display': 'flex', 'gap': '10px', 'flexWrap': 'wrap', 'marginBottom': '10px'}),
+                html.Div([
+                    html.Div('Closed Tickets: ', style={'fontSize': '11px', 'color': COLORS['text_dim'], 'display': 'inline'}),
+                    html.Code(str(close_resp.get('closed_tickets', [])), style={
+                        'fontSize': '11px', 'color': COLORS['positive']
+                    }),
+                ], style={'marginBottom': '8px'}) if close_resp.get('closed_tickets') else None,
+                html.Div([
+                    html.Div('Errors:', style={'fontSize': '11px', 'color': COLORS['negative'], 'marginBottom': '4px'}),
+                    html.Div([
+                        html.Div(f'• {err}', style={'fontSize': '11px', 'color': COLORS['text_dim'], 'marginLeft': '8px'})
+                        for err in close_resp.get('errors', [])
+                    ]),
+                ]) if close_resp.get('errors') else None,
+            ], style={'fontSize': '12px'}),
         ], style={
             'background': COLORS['card'],
             'border': f'1px solid {COLORS["card_border"]}',
