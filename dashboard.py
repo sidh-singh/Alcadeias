@@ -407,11 +407,27 @@ def build_symbol_tab_content(symbol):
     data = load_symbol_data(symbol)
 
     if data is None:
+        # Smooth skeleton placeholder instead of loading screen
+        skeleton_bar = lambda w: html.Div(style={
+            'height': '14px', 'width': w, 'borderRadius': '6px',
+            'background': COLORS['card_border'], 'marginBottom': '10px',
+        })
         return html.Div([
-            html.Div('⏳', style={'fontSize': '48px', 'textAlign': 'center', 'marginTop': '60px'}),
-            html.Div(f'Waiting for data from {symbol}...', style={
-                'textAlign': 'center', 'color': COLORS['text_dim'], 'fontSize': '16px', 'marginTop': '12px',
-            }),
+            html.Div([
+                html.H2(symbol, style={
+                    'margin': '0 0 20px 0', 'fontSize': '24px', 'fontWeight': '700',
+                    'color': COLORS['text'],
+                }),
+                html.Div([
+                    skeleton_bar('60%'), skeleton_bar('45%'), skeleton_bar('80%'),
+                    html.Div(style={'height': '20px'}),
+                    skeleton_bar('50%'), skeleton_bar('70%'),
+                ]),
+                html.Div(f'Connecting to {symbol}...', style={
+                    'textAlign': 'center', 'color': COLORS['text_dim'],
+                    'fontSize': '13px', 'marginTop': '30px',
+                }),
+            ], className='skeleton-pulse', style={'marginTop': '30px'}),
         ])
 
     analysis = data.get('analysis', {})
@@ -542,6 +558,22 @@ app.index_string = '''<!DOCTYPE html>
 .dash-loading { visibility: hidden !important; }
 ._dash-loading { visibility: hidden !important; }
 div._dash-loading-callback--is-loading { visibility: hidden !important; }
+
+/* Smooth content transitions */
+#tab-content {
+    animation: fadeIn 0.3s ease-in;
+}
+@keyframes fadeIn {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+}
+@keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+}
+.skeleton-pulse {
+    animation: pulse 1.5s ease-in-out infinite;
+}
 </style>
 </head>
 <body>
@@ -564,6 +596,8 @@ if not _startup_symbols:
 app.layout = html.Div([
     # Auto-refresh (data only, not tabs)
     dcc.Interval(id='refresh-interval', interval=REFRESH_INTERVAL, n_intervals=0),
+    # Cache to skip redundant DOM rebuilds
+    dcc.Store(id='data-hash', data=''),
 
     # Header
     html.Div([
@@ -643,20 +677,37 @@ app.layout = html.Div([
 @app.callback(
     [Output('tab-content', 'children'),
      Output('account-info', 'children'),
-     Output('header-time', 'children')],
+     Output('header-time', 'children'),
+     Output('data-hash', 'data')],
     [Input('symbol-tabs', 'value'),
      Input('refresh-interval', 'n_intervals')],
+    [dash.State('data-hash', 'data')],
 )
-def update_content(selected_symbol, n):
-    """Single callback: refreshes content for whichever tab is selected"""
+def update_content(selected_symbol, n, prev_hash):
+    """Single callback: refreshes content only when data changes or tab switches"""
+    import hashlib
+    
     if not selected_symbol:
         return html.Div('No symbols configured.', style={
             'textAlign': 'center', 'color': COLORS['text_dim'],
             'marginTop': '80px', 'fontSize': '18px',
-        }), html.Div(), ''
+        }), html.Div(), '', ''
 
-    # Load account data from dedicated file
+    # Load raw data to check if anything changed
+    symbol_data = load_symbol_data(selected_symbol)
     account = load_account_data()
+    
+    # Build a quick hash of the data to detect changes
+    raw = json.dumps({'s': symbol_data, 'a': account}, default=str, sort_keys=True)
+    current_hash = hashlib.md5(raw.encode()).hexdigest()
+    
+    # Check if this is a tab switch or data actually changed
+    triggered = callback_context.triggered[0]['prop_id'] if callback_context.triggered else ''
+    is_tab_switch = 'symbol-tabs' in triggered
+    
+    # Skip DOM rebuild if data hasn't changed (interval-only trigger)
+    if not is_tab_switch and current_hash == prev_hash:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
     
     # Build account info display
     balance = account.get('balance', 0)
@@ -688,7 +739,7 @@ def update_content(selected_symbol, n):
     
     content = build_symbol_tab_content(selected_symbol)
     now = datetime.now().strftime('Last refresh: %H:%M:%S')
-    return content, account_display, now
+    return content, account_display, now, current_hash
 
 
 if __name__ == '__main__':
