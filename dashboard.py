@@ -450,32 +450,52 @@ def build_crossover_legend():
 
 # ─── Daily Trade Functions ───
 
-def load_daily_trade_data():
-    """Load the most recent daily trade log.
-    Finds the latest file in daily_trade directory by modification time,
-    avoiding local vs server timezone mismatch on filename.
+def load_daily_trade_data(symbol):
+    """Load the most recent daily trade log for a specific symbol.
+    Returns None if no data exists or data is stale (e.g., market closed on weekend).
+    
+    Folder structure: daily_trade/{symbol}/{date}.json
     """
     try:
-        if not os.path.isdir(DAILY_TRADE_DIR):
+        symbol_dir = os.path.join(DAILY_TRADE_DIR, symbol)
+        if not os.path.isdir(symbol_dir):
             return None
-        pattern = os.path.join(DAILY_TRADE_DIR, '*.json')
+        pattern = os.path.join(symbol_dir, '*.json')
         files = [
             f for f in glob.glob(pattern)
             if os.path.basename(f) != 'historical_summary.json'
         ]
         if not files:
             return None
-        # Pick the most recently modified file (= today's active log)
+        # Pick the most recently modified file
         latest = max(files, key=os.path.getmtime)
         with open(latest, 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+        
+        # Check if data is stale (e.g., Friday data shown on Saturday/Sunday)
+        # If market is closed AND file date doesn't match local date → stale
+        symbol_json = load_symbol_data(symbol)
+        market_is_open = True
+        if symbol_json:
+            market_is_open = symbol_json.get('market_status', {}).get('is_open', True)
+        
+        if not market_is_open:
+            file_server_date = data.get('server_date', '')
+            try:
+                file_date = datetime.strptime(file_server_date, '%Y-%m-%d').date()
+                if file_date != datetime.now().date():
+                    return None  # Stale data from a previous trading day
+            except (ValueError, TypeError):
+                pass
+        
+        return data
     except (FileNotFoundError, json.JSONDecodeError, ValueError):
         return None
 
 
-def load_historical_summary():
-    """Load the historical summary (last 10 years)"""
-    path = os.path.join(DAILY_TRADE_DIR, 'historical_summary.json')
+def load_historical_summary(symbol):
+    """Load the historical summary (last 10 years) for a specific symbol"""
+    path = os.path.join(DAILY_TRADE_DIR, symbol, 'historical_summary.json')
     try:
         with open(path, 'r') as f:
             return json.load(f)
@@ -483,52 +503,70 @@ def load_historical_summary():
         return None
 
 
+def load_today_all_symbols_pl():
+    """Calculate today's total P/L across all symbols by scanning per-symbol folders"""
+    total_pl = 0.0
+    total_deals = 0
+    try:
+        if not os.path.isdir(DAILY_TRADE_DIR):
+            return 0, 0
+        for entry in os.listdir(DAILY_TRADE_DIR):
+            folder_path = os.path.join(DAILY_TRADE_DIR, entry)
+            if not os.path.isdir(folder_path):
+                continue
+            data = load_daily_trade_data(entry)
+            if data:
+                total_pl += data.get('total_profit', 0)
+                total_deals += data.get('deal_count', 0)
+    except Exception:
+        pass
+    return round(total_pl, 2), total_deals
+
+
 def build_daily_trades_section(symbol):
     """Build daily trades chart and metrics for a symbol"""
-    daily_data = load_daily_trade_data()
-    historical = load_historical_summary()
+    daily_data = load_daily_trade_data(symbol)
+    historical = load_historical_summary(symbol)
 
-    # Extract today's deals for this symbol
+    # Extract today's deals for this symbol (flat structure, no nesting)
     today_deals = []
-    symbol_summary = {}
-    overall_summary = {}
     if daily_data:
-        symbol_data = daily_data.get('symbols', {}).get(symbol, {})
-        today_deals = symbol_data.get('deals', [])
-        symbol_summary = symbol_data
-        overall_summary = daily_data.get('summary', {})
+        today_deals = daily_data.get('deals', [])
 
     # ── Metric Cards ──
-    today_total = overall_summary.get('total_profit', 0)
-    today_avg = overall_summary.get('avg_profit', 0)
-    today_count = overall_summary.get('total_deals', 0)
+    sym_total = daily_data.get('total_profit', 0) if daily_data else 0
+    sym_avg = daily_data.get('avg_profit', 0) if daily_data else 0
+    sym_count = daily_data.get('deal_count', 0) if daily_data else 0
     hist_total = historical.get('total_profit', 0) if historical else 0
     hist_count = historical.get('total_deals', 0) if historical else 0
 
+    # Get total P/L across all symbols for today
+    all_sym_pl, all_sym_deals = load_today_all_symbols_pl()
+
     metrics_row = html.Div([
         make_metric_card(
-            'Today Total P/L',
-            f'${today_total:,.2f}',
-            COLORS['positive'] if today_total >= 0 else COLORS['negative'],
-            f'{today_count} deals',
+            f'{symbol} P/L Today',
+            f'${sym_total:,.2f}',
+            COLORS['positive'] if sym_total >= 0 else COLORS['negative'],
+            f'{sym_count} deals',
         ),
         make_metric_card(
-            'Today Avg Profit',
-            f'${today_avg:,.2f}',
-            COLORS['positive'] if today_avg >= 0 else COLORS['negative'],
+            f'{symbol} Avg Profit',
+            f'${sym_avg:,.2f}',
+            COLORS['positive'] if sym_avg >= 0 else COLORS['negative'],
             'per deal',
         ),
         make_metric_card(
-            f'{symbol} P/L Today',
-            f'${symbol_summary.get("total_profit", 0):,.2f}',
-            COLORS['positive'] if symbol_summary.get('total_profit', 0) >= 0 else COLORS['negative'],
-            f'{symbol_summary.get("deal_count", 0)} deals',
-        ),
-        make_metric_card(
-            'Lifetime P/L',
+            f'{symbol} Lifetime P/L',
             f'${hist_total:,.2f}',
             COLORS['positive'] if hist_total >= 0 else COLORS['negative'],
             f'{hist_count} deals (last 10y)',
+        ),
+        make_metric_card(
+            'All Symbols Today',
+            f'${all_sym_pl:,.2f}',
+            COLORS['positive'] if all_sym_pl >= 0 else COLORS['negative'],
+            f'{all_sym_deals} deals total',
         ),
     ], style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap', 'marginBottom': '16px'})
 
@@ -1001,8 +1039,8 @@ def update_content(selected_symbol, n, prev_hash):
     # Load raw data to check if anything changed
     symbol_data = load_symbol_data(selected_symbol)
     account = load_account_data()
-    daily = load_daily_trade_data()
-    historical = load_historical_summary()
+    daily = load_daily_trade_data(selected_symbol)
+    historical = load_historical_summary(selected_symbol)
     
     # Build a quick hash of the data to detect changes
     raw = json.dumps({'s': symbol_data, 'a': account, 'd': daily, 'h': historical}, default=str, sort_keys=True)
