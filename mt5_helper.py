@@ -281,7 +281,7 @@ class MT5PositionHelper:
             print(f"No positions found for {symbol}")
             return False
             
-        print(f'Total number of positions: {len(positions)} for symbol: {symbol}')
+        # print(f'Total number of positions: {len(positions)} for symbol: {symbol}')
         
         # Filter positions by type (0 = BUY, 1 = SELL)
         filtered_positions = [pos for pos in positions if pos.type == pos_type]
