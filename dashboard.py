@@ -483,7 +483,7 @@ def load_daily_trade_data(symbol):
             file_server_date = data.get('server_date', '')
             try:
                 file_date = datetime.strptime(file_server_date, '%Y-%m-%d').date()
-                if file_date != datetime.now().date():
+                if file_date != datetime.now(datetime.timezone.utc).date():
                     return None  # Stale data from a previous trading day
             except (ValueError, TypeError):
                 pass
@@ -1089,7 +1089,7 @@ def update_content(selected_symbol, n, prev_hash):
     if server_time_str:
         try:
             server_dt = datetime.fromisoformat(server_time_str)
-            time_display = server_dt.strftime('Server Time: %H:%M:%S')
+            time_display = server_dt.strftime('Server: %d %b %Y  •  %H:%M:%S UTC')
         except (ValueError, TypeError):
             time_display = datetime.now().strftime('Last refresh: %H:%M:%S')
     else:

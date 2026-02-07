@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional
 import pandas as pd
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class MT5PositionHelper:
@@ -218,8 +218,8 @@ class MT5PositionHelper:
                     'message': f'No rate data available for {symbol}',
                 }
             
-            last_candle_time = datetime.fromtimestamp(rates[-1][0])
-            now = datetime.now()
+            last_candle_time = datetime.fromtimestamp(rates[-1][0], tz=timezone.utc)
+            now = datetime.now(tz=timezone.utc)
             elapsed = (now - last_candle_time).total_seconds() / 60.0
             is_open = elapsed <= lookback_minutes
             
@@ -460,7 +460,7 @@ class MT5PositionHelper:
                 'commission': round(deal.commission, 2),
                 'swap': round(deal.swap, 2),
                 'fee': round(deal.fee, 2),
-                'time': datetime.fromtimestamp(deal.time).isoformat(),
+                'time': datetime.fromtimestamp(deal.time, tz=timezone.utc).isoformat(),
                 'time_server': deal.time,
                 'comment': deal.comment,
             })
@@ -484,30 +484,32 @@ class MT5PositionHelper:
         today_start = server_now.replace(hour=0, minute=0, second=0, microsecond=0)
         # Fetch a wider window then filter by server-time date
         deals = self.get_deal_history(today_start, server_now, symbol)
-        # Double-filter: only keep deals whose own timestamp falls on the server-date
+        # Double-filter: only keep deals whose own timestamp falls on the server-date (UTC)
         today_date = today_start.date()
         return [
             d for d in deals
-            if datetime.fromtimestamp(d['time_server']).date() == today_date
+            if datetime.fromtimestamp(d['time_server'], tz=timezone.utc).date() == today_date
         ]
 
     def _get_server_time(self) -> datetime:
         """
         Get the MT5 broker's server time by reading the latest tick or candle timestamp.
-        Falls back to local time if unavailable.
+        Returns UTC datetime (matches broker's displayed server time).
+        Falls back to UTC now if unavailable.
         """
         try:
             # Use EURUSD (always available) or any active symbol to get server time
+            # tick.time is Unix epoch (UTC seconds) — use utcfromtimestamp to keep it in UTC
             tick = self.mt5.symbol_info_tick('EURUSD')
             if tick is not None and tick.time > 0:
-                return datetime.fromtimestamp(tick.time)
+                return datetime.fromtimestamp(tick.time, tz=timezone.utc)
             # Fallback: try getting time from M1 rates
             rates = self.mt5.copy_rates_from_pos('EURUSD', self.mt5.TIMEFRAME_M1, 0, 1)
             if rates is not None and len(rates) > 0:
-                return datetime.fromtimestamp(rates[-1][0])
+                return datetime.fromtimestamp(rates[-1][0], tz=timezone.utc)
         except Exception:
             pass
-        return datetime.now()
+        return datetime.now(tz=timezone.utc)
 
     def get_deals_since(self, days: int, symbol: str = None) -> List[Dict]:
         """
@@ -520,6 +522,6 @@ class MT5PositionHelper:
         Returns:
             List of deal dicts (see get_deal_history)
         """
-        now = datetime.now()
+        now = datetime.now(tz=timezone.utc)
         start = now - timedelta(days=days)
         return self.get_deal_history(start, now, symbol)

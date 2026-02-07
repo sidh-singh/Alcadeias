@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from mt5_helper import MT5PositionHelper
 from indicator import Indicator
 from strategy import Strategy, Signal
+from datetime import timezone
 
 
 class MT5TradingBot:
@@ -139,7 +140,7 @@ class MT5TradingBot:
         output_dir = r'C:\Alcadeias'
         os.makedirs(output_dir, exist_ok=True)
         json_path = os.path.join(output_dir, 'account.json')
-        account_info['last_updated'] = datetime.now().isoformat()
+        account_info['last_updated'] = datetime.now(tz=timezone.utc).isoformat()
         with self.thread_lock:
             with open(json_path, 'w') as f:
                 json.dump(account_info, f, indent=2, default=str)
@@ -171,7 +172,7 @@ class MT5TradingBot:
             'date': server_now.strftime('%d %b %Y'),
             'server_date': server_now.strftime('%Y-%m-%d'),
             'server_time': server_now.isoformat(),
-            'last_updated': datetime.now().isoformat(),
+            'last_updated': datetime.now(tz=timezone.utc).isoformat(),
             'deal_count': len(today_deals),
             'total_profit': round(total_net, 2),
             'total_volume': round(total_volume, 4),
@@ -202,7 +203,7 @@ class MT5TradingBot:
         
         summary = {
             'symbol': symbol,
-            'last_updated': datetime.now().isoformat(),
+            'last_updated': datetime.now(tz=timezone.utc).isoformat(),
             'period': 'Last 10 years',
             'total_deals': len(all_deals),
             'total_profit': round(total_net, 2),
@@ -276,7 +277,7 @@ class MT5TradingBot:
                 server_time = self.position_helper._get_server_time()
                 symbol_data = {
                     'symbol': symbol,
-                    'last_updated': datetime.now().isoformat(),
+                    'last_updated': datetime.now(tz=timezone.utc).isoformat(),
                     'server_time': server_time.isoformat(),
                     'market_status': market_status,
                     'account': account_info if account_info else {},
