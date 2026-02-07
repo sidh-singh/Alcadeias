@@ -451,14 +451,25 @@ def build_crossover_legend():
 # ─── Daily Trade Functions ───
 
 def load_daily_trade_data():
-    """Load today's daily trade log"""
-    now = datetime.now()
-    filename = now.strftime('%d_%b_%Y').lower() + '.json'
-    path = os.path.join(DAILY_TRADE_DIR, filename)
+    """Load the most recent daily trade log.
+    Finds the latest file in daily_trade directory by modification time,
+    avoiding local vs server timezone mismatch on filename.
+    """
     try:
-        with open(path, 'r') as f:
+        if not os.path.isdir(DAILY_TRADE_DIR):
+            return None
+        pattern = os.path.join(DAILY_TRADE_DIR, '*.json')
+        files = [
+            f for f in glob.glob(pattern)
+            if os.path.basename(f) != 'historical_summary.json'
+        ]
+        if not files:
+            return None
+        # Pick the most recently modified file (= today's active log)
+        latest = max(files, key=os.path.getmtime)
+        with open(latest, 'r') as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
         return None
 
 
