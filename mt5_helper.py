@@ -1,6 +1,7 @@
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 import pandas as pd
 import time
+from datetime import datetime, timedelta
 
 
 class MT5PositionHelper:
@@ -187,6 +188,59 @@ class MT5PositionHelper:
         rates_frame["time"] = pd.to_datetime(rates_frame["time"], unit="s")
         return rates_frame
     
+    def get_market_status(self, symbol: str, timeframe: int, lookback_minutes: int = 15) -> Dict:
+        """
+        Detect whether the market is open or closed for a symbol.
+        Compares the latest candle time against current time using a lookback window.
+        
+        Args:
+            symbol: Trading symbol (e.g., 'BTCUSD', 'XAUUSD')
+            timeframe: MT5 timeframe constant used for fetching rates
+            lookback_minutes: Max minutes since last candle to consider market open (default 15)
+        
+        Returns:
+            Dict with keys:
+                - is_open: bool, True if market is open
+                - status: str, 'OPEN' or 'CLOSED'
+                - last_candle_time: str, ISO format of the last candle time
+                - minutes_since_last: float, minutes elapsed since last candle
+                - lookback_minutes: int, the threshold used
+        """
+        try:
+            rates = self.mt5.copy_rates_from_pos(symbol, timeframe, 0, 3)
+            if rates is None or len(rates) == 0:
+                return {
+                    'is_open': False,
+                    'status': 'CLOSED',
+                    'last_candle_time': None,
+                    'minutes_since_last': None,
+                    'lookback_minutes': lookback_minutes,
+                    'message': f'No rate data available for {symbol}',
+                }
+            
+            last_candle_time = datetime.fromtimestamp(rates[-1][0])
+            now = datetime.now()
+            elapsed = (now - last_candle_time).total_seconds() / 60.0
+            is_open = elapsed <= lookback_minutes
+            
+            return {
+                'is_open': is_open,
+                'status': 'OPEN' if is_open else 'CLOSED',
+                'last_candle_time': last_candle_time.isoformat(),
+                'minutes_since_last': round(elapsed, 1),
+                'lookback_minutes': lookback_minutes,
+                'message': f'Market {"open" if is_open else "closed"} — last candle {round(elapsed, 1)}m ago',
+            }
+        except Exception as e:
+            return {
+                'is_open': False,
+                'status': 'CLOSED',
+                'last_candle_time': None,
+                'minutes_since_last': None,
+                'lookback_minutes': lookback_minutes,
+                'message': f'Error checking market status: {str(e)}',
+            }
+    
     def buy(self, symbol: str, qty: float, sl: float = 0, tp: float = 0):
         """
         Place a BUY order
@@ -352,3 +406,89 @@ class MT5PositionHelper:
             result['message'] = f"Closed {result['closed_count']}/{result['filtered_count']} positions, {result['failed_count']} failed"
         
         return result
+
+    def get_deal_history(self, from_date: datetime, to_date: datetime, symbol: str = None) -> List[Dict]:
+        """
+        Get closed deal history from MT5 for a date range.
+        Only returns deals with entry type DEAL_ENTRY_OUT (closed trades with realized P/L).
+        
+        Args:
+            from_date: Start datetime
+            to_date: End datetime
+            symbol: Optional symbol filter. If None, returns all symbols.
+        
+        Returns:
+            List of dicts, each containing:
+                - ticket: Deal ticket number
+                - order: Order ticket
+                - symbol: Trading symbol
+                - type: 'BUY' or 'SELL'
+                - volume: Deal volume
+                - price: Deal price
+                - profit: Realized profit/loss
+                - commission: Commission charged
+                - swap: Swap charged
+                - fee: Fee charged
+                - time: Deal execution time (ISO format string)
+                - comment: Deal comment
+        """
+        deals = self.mt5.history_deals_get(from_date, to_date)
+        
+        if deals is None or len(deals) == 0:
+            return []
+        
+        result = []
+        for deal in deals:
+            # Only include closing deals (DEAL_ENTRY_OUT = 1) which have realized P/L
+            if deal.entry != 1:
+                continue
+            
+            # Apply symbol filter if provided
+            if symbol and deal.symbol != symbol:
+                continue
+            
+            result.append({
+                'ticket': deal.ticket,
+                'order': deal.order,
+                'symbol': deal.symbol,
+                'type': 'BUY' if deal.type == 0 else 'SELL',
+                'volume': round(deal.volume, 4),
+                'price': round(deal.price, 6),
+                'profit': round(deal.profit, 2),
+                'commission': round(deal.commission, 2),
+                'swap': round(deal.swap, 2),
+                'fee': round(deal.fee, 2),
+                'time': datetime.fromtimestamp(deal.time).isoformat(),
+                'comment': deal.comment,
+            })
+        
+        return result
+
+    def get_today_deals(self, symbol: str = None) -> List[Dict]:
+        """
+        Get all closed deals for today.
+        
+        Args:
+            symbol: Optional symbol filter
+            
+        Returns:
+            List of deal dicts (see get_deal_history)
+        """
+        now = datetime.now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return self.get_deal_history(today_start, now, symbol)
+
+    def get_deals_since(self, days: int, symbol: str = None) -> List[Dict]:
+        """
+        Get all closed deals for the last N days.
+        
+        Args:
+            days: Number of days to look back
+            symbol: Optional symbol filter
+            
+        Returns:
+            List of deal dicts (see get_deal_history)
+        """
+        now = datetime.now()
+        start = now - timedelta(days=days)
+        return self.get_deal_history(start, now, symbol)

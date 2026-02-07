@@ -12,6 +12,7 @@ from plotly.subplots import make_subplots
 
 # ─── Configuration ───
 JSON_DIR = r'C:\Alcadeias'
+DAILY_TRADE_DIR = os.path.join(JSON_DIR, 'daily_trade')
 REFRESH_INTERVAL = 5000  # ms
 
 # ─── Color Palette ───
@@ -447,6 +448,211 @@ def build_crossover_legend():
     ], style={'marginTop': '6px', 'padding': '8px 0'})
 
 
+# ─── Daily Trade Functions ───
+
+def load_daily_trade_data():
+    """Load today's daily trade log"""
+    now = datetime.now()
+    filename = now.strftime('%d_%b_%Y').lower() + '.json'
+    path = os.path.join(DAILY_TRADE_DIR, filename)
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def load_historical_summary():
+    """Load the historical summary (last 10 years)"""
+    path = os.path.join(DAILY_TRADE_DIR, 'historical_summary.json')
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def build_daily_trades_section(symbol):
+    """Build daily trades chart and metrics for a symbol"""
+    daily_data = load_daily_trade_data()
+    historical = load_historical_summary()
+
+    # Extract today's deals for this symbol
+    today_deals = []
+    symbol_summary = {}
+    overall_summary = {}
+    if daily_data:
+        symbol_data = daily_data.get('symbols', {}).get(symbol, {})
+        today_deals = symbol_data.get('deals', [])
+        symbol_summary = symbol_data
+        overall_summary = daily_data.get('summary', {})
+
+    # ── Metric Cards ──
+    today_total = overall_summary.get('total_profit', 0)
+    today_avg = overall_summary.get('avg_profit', 0)
+    today_count = overall_summary.get('total_deals', 0)
+    hist_total = historical.get('total_profit', 0) if historical else 0
+    hist_count = historical.get('total_deals', 0) if historical else 0
+
+    metrics_row = html.Div([
+        make_metric_card(
+            'Today Total P/L',
+            f'${today_total:,.2f}',
+            COLORS['positive'] if today_total >= 0 else COLORS['negative'],
+            f'{today_count} deals',
+        ),
+        make_metric_card(
+            'Today Avg Profit',
+            f'${today_avg:,.2f}',
+            COLORS['positive'] if today_avg >= 0 else COLORS['negative'],
+            'per deal',
+        ),
+        make_metric_card(
+            f'{symbol} P/L Today',
+            f'${symbol_summary.get("total_profit", 0):,.2f}',
+            COLORS['positive'] if symbol_summary.get('total_profit', 0) >= 0 else COLORS['negative'],
+            f'{symbol_summary.get("deal_count", 0)} deals',
+        ),
+        make_metric_card(
+            'Lifetime P/L',
+            f'${hist_total:,.2f}',
+            COLORS['positive'] if hist_total >= 0 else COLORS['negative'],
+            f'{hist_count} deals (last 10y)',
+        ),
+    ], style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap', 'marginBottom': '16px'})
+
+    # ── Position vs Profit/Loss Chart ──
+    if today_deals:
+        # Sort deals by time
+        sorted_deals = sorted(today_deals, key=lambda d: d.get('time', ''))
+
+        labels = []
+        profits = []
+        volumes = []
+        colors = []
+        hover_texts = []
+        cumulative_profit = 0
+        cum_profits = []
+
+        for i, deal in enumerate(sorted_deals, 1):
+            try:
+                t = datetime.fromisoformat(deal['time']).strftime('%H:%M')
+            except (ValueError, TypeError):
+                t = f'#{i}'
+            labels.append(f'{t}')
+            profit = deal.get('profit', 0)
+            profits.append(profit)
+            vol = deal.get('volume', 0)
+            volumes.append(vol)
+            colors.append(COLORS['buy'] if profit >= 0 else COLORS['sell'])
+            cumulative_profit += profit
+            cum_profits.append(round(cumulative_profit, 2))
+            hover_texts.append(
+                f"Time: {t}<br>"
+                f"Type: {deal.get('type', 'N/A')}<br>"
+                f"Volume: {vol}<br>"
+                f"Profit: ${profit:.2f}<br>"
+                f"Cumulative: ${cumulative_profit:.2f}"
+            )
+
+        fig = make_subplots(
+            rows=2, cols=1,
+            row_heights=[0.55, 0.45],
+            vertical_spacing=0.12,
+            subplot_titles=['Profit/Loss per Deal', 'Cumulative P/L'],
+        )
+
+        # Bar chart: profit per deal
+        fig.add_trace(go.Bar(
+            x=labels, y=profits,
+            marker_color=colors,
+            text=[f'${p:.2f}' for p in profits],
+            textposition='outside',
+            textfont=dict(size=10, color=COLORS['text']),
+            hovertext=hover_texts,
+            hoverinfo='text',
+            showlegend=False,
+        ), row=1, col=1)
+
+        # Volume as bubble size on profit bars
+        fig.add_trace(go.Scatter(
+            x=labels, y=profits,
+            mode='markers',
+            marker=dict(
+                size=[max(v * 80, 6) for v in volumes],
+                color=colors,
+                opacity=0.3,
+                line=dict(width=0),
+            ),
+            hoverinfo='skip',
+            showlegend=False,
+        ), row=1, col=1)
+
+        # Cumulative P/L line
+        cum_color = COLORS['positive'] if cumulative_profit >= 0 else COLORS['negative']
+        fig.add_trace(go.Scatter(
+            x=labels, y=cum_profits,
+            mode='lines+markers+text',
+            line=dict(color=cum_color, width=2),
+            marker=dict(size=6, color=cum_color),
+            text=[f'${c:.0f}' for c in cum_profits],
+            textposition='top center',
+            textfont=dict(size=9, color=COLORS['text_dim']),
+            showlegend=False,
+        ), row=2, col=1)
+
+        # Zero line for cumulative
+        fig.add_hline(y=0, line_dash='dot', line_color=COLORS['text_dim'],
+                       opacity=0.4, row=2, col=1)
+
+        fig.update_layout(
+            height=420,
+            margin=dict(l=50, r=20, t=30, b=30),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=COLORS['text'], size=11),
+        )
+        for i in range(1, 3):
+            fig.update_xaxes(showgrid=False, row=i, col=1)
+            fig.update_yaxes(
+                showgrid=True, gridcolor=COLORS['chart_grid'],
+                gridwidth=0.5, zeroline=True,
+                zerolinecolor=COLORS['text_dim'], zerolinewidth=0.5,
+                row=i, col=1,
+            )
+        for ann in fig['layout']['annotations']:
+            ann['font'] = dict(size=12, color=COLORS['text_dim'])
+
+        chart = dcc.Graph(
+            figure=fig,
+            config={'displayModeBar': False},
+            style={'height': '420px'},
+        )
+    else:
+        chart = html.Div(
+            'No closed deals today for this symbol.',
+            style={
+                'textAlign': 'center', 'color': COLORS['text_dim'],
+                'padding': '40px 0', 'fontSize': '14px',
+            },
+        )
+
+    return html.Div([
+        html.H3('📈 Daily Trade Log', style={
+            'color': COLORS['text'], 'fontSize': '16px', 'marginBottom': '14px', 'fontWeight': '600',
+        }),
+        metrics_row,
+        html.Div([
+            chart,
+        ], style={
+            'background': COLORS['card'],
+            'border': f'1px solid {COLORS["card_border"]}',
+            'borderRadius': '12px',
+            'padding': '16px',
+        }),
+    ])
+
+
 def build_symbol_tab_content(symbol):
     """Build complete content for a single symbol tab"""
     data = load_symbol_data(symbol)
@@ -487,6 +693,16 @@ def build_symbol_tab_content(symbol):
         time_str = '--:--:--'
         date_str = ''
 
+    # Market status
+    mkt = data.get('market_status', {})
+    mkt_is_open = mkt.get('is_open', False)
+    mkt_status = mkt.get('status', 'UNKNOWN')
+    mkt_minutes = mkt.get('minutes_since_last')
+    mkt_message = mkt.get('message', '')
+    mkt_color = COLORS['buy'] if mkt_is_open else COLORS['sell']
+    mkt_icon = '🟢' if mkt_is_open else '🔴'
+    mkt_sub = f'{mkt_minutes}m since last candle' if mkt_minutes is not None else ''
+
     return html.Div([
         # Header row
         html.Div([
@@ -498,7 +714,26 @@ def build_symbol_tab_content(symbol):
                     'fontSize': '12px', 'color': COLORS['text_dim'], 'marginLeft': '14px',
                 }),
             ], style={'display': 'flex', 'alignItems': 'baseline'}),
-        ], style={'marginBottom': '20px'}),
+            # Market status badge
+            html.Div([
+                html.Span(f'{mkt_icon} ', style={'fontSize': '14px'}),
+                html.Span(mkt_status, style={
+                    'background': mkt_color,
+                    'color': '#fff',
+                    'padding': '4px 14px',
+                    'borderRadius': '20px',
+                    'fontSize': '12px',
+                    'fontWeight': '700',
+                    'letterSpacing': '1px',
+                }),
+                html.Span(f'  {mkt_sub}', style={
+                    'fontSize': '11px', 'color': COLORS['text_dim'], 'marginLeft': '8px',
+                }) if mkt_sub else None,
+            ], style={'display': 'flex', 'alignItems': 'center'}),
+        ], style={
+            'display': 'flex', 'justifyContent': 'space-between',
+            'alignItems': 'center', 'marginBottom': '20px',
+        }),
 
         # Signal section
         build_signal_section(data),
@@ -555,6 +790,11 @@ def build_symbol_tab_content(symbol):
                 'padding': '16px',
             }),
         ]),
+
+        html.Div(style={'height': '20px'}),
+
+        # Daily Trade Log section
+        build_daily_trades_section(symbol),
 
         html.Div(style={'height': '20px'}),
 
@@ -741,9 +981,11 @@ def update_content(selected_symbol, n, prev_hash):
     # Load raw data to check if anything changed
     symbol_data = load_symbol_data(selected_symbol)
     account = load_account_data()
+    daily = load_daily_trade_data()
+    historical = load_historical_summary()
     
     # Build a quick hash of the data to detect changes
-    raw = json.dumps({'s': symbol_data, 'a': account}, default=str, sort_keys=True)
+    raw = json.dumps({'s': symbol_data, 'a': account, 'd': daily, 'h': historical}, default=str, sort_keys=True)
     current_hash = hashlib.md5(raw.encode()).hexdigest()
     
     # Check if this is a tab switch or data actually changed

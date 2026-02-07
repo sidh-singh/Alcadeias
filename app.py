@@ -144,6 +144,94 @@ class MT5TradingBot:
             with open(json_path, 'w') as f:
                 json.dump(account_info, f, indent=2, default=str)
     
+    def _save_daily_trades(self, symbol):
+        """Fetch today's closed deals for a symbol and save to daily_trade folder (thread-safe)"""
+        import os
+        from datetime import datetime
+        
+        output_dir = os.path.join(r'C:\Alcadeias', 'daily_trade')
+        os.makedirs(output_dir, exist_ok=True)
+        
+        now = datetime.now()
+        filename = now.strftime('%d_%b_%Y').lower() + '.json'
+        json_path = os.path.join(output_dir, filename)
+        
+        # Fetch today's closed deals for this symbol
+        today_deals = self.position_helper.get_today_deals(symbol)
+        
+        with self.thread_lock:
+            # Load existing file if present (may contain deals from other symbols)
+            existing_data = {}
+            if os.path.exists(json_path):
+                try:
+                    with open(json_path, 'r') as f:
+                        existing_data = json.load(f)
+                except (json.JSONDecodeError, FileNotFoundError):
+                    existing_data = {}
+            
+            # Update with this symbol's deals
+            existing_data['date'] = now.strftime('%d %b %Y')
+            existing_data['last_updated'] = now.isoformat()
+            
+            if 'symbols' not in existing_data:
+                existing_data['symbols'] = {}
+            
+            # Calculate symbol-level summary
+            total_profit = sum(d['profit'] for d in today_deals)
+            total_volume = sum(d['volume'] for d in today_deals)
+            avg_profit = round(total_profit / len(today_deals), 2) if today_deals else 0
+            
+            existing_data['symbols'][symbol] = {
+                'deal_count': len(today_deals),
+                'total_profit': round(total_profit, 2),
+                'total_volume': round(total_volume, 4),
+                'avg_profit': avg_profit,
+                'deals': today_deals,
+            }
+            
+            # Calculate overall daily summary across all symbols
+            all_deals = []
+            for sym_data in existing_data['symbols'].values():
+                all_deals.extend(sym_data.get('deals', []))
+            
+            existing_data['summary'] = {
+                'total_deals': len(all_deals),
+                'total_profit': round(sum(d['profit'] for d in all_deals), 2),
+                'total_volume': round(sum(d['volume'] for d in all_deals), 4),
+                'avg_profit': round(sum(d['profit'] for d in all_deals) / len(all_deals), 2) if all_deals else 0,
+            }
+            
+            with open(json_path, 'w') as f:
+                json.dump(existing_data, f, indent=2, default=str)
+    
+    def _save_historical_summary(self):
+        """Fetch last 10 days of deal history and save a summary file (thread-safe)"""
+        import os
+        from datetime import datetime
+        
+        output_dir = os.path.join(r'C:\Alcadeias', 'daily_trade')
+        os.makedirs(output_dir, exist_ok=True)
+        json_path = os.path.join(output_dir, 'historical_summary.json')
+        
+        all_deals = self.position_helper.get_deals_since(days=3650)  # ~10 years
+        
+        total_profit = sum(d['profit'] for d in all_deals)
+        total_volume = sum(d['volume'] for d in all_deals)
+        avg_profit = round(total_profit / len(all_deals), 2) if all_deals else 0
+        
+        summary = {
+            'last_updated': datetime.now().isoformat(),
+            'period': 'Last 10 years',
+            'total_deals': len(all_deals),
+            'total_profit': round(total_profit, 2),
+            'total_volume': round(total_volume, 4),
+            'avg_profit': avg_profit,
+        }
+        
+        with self.thread_lock:
+            with open(json_path, 'w') as f:
+                json.dump(summary, f, indent=2, default=str)
+    
     def process_symbol(self, symbol):
         """
         Process a single symbol (will be called in separate threads)
@@ -182,6 +270,11 @@ class MT5TradingBot:
                     after_smooth_ma_type='RMA'
                 )
                 
+                # Check market status (15 min lookback for M5 timeframe)
+                market_status = self.position_helper.get_market_status(
+                    symbol, mt5.TIMEFRAME_M5, lookback_minutes=15
+                )
+                
                 # Get buy and sell positions
                 buy_positions = self.position_helper.get_buy_positions(symbol)
                 sell_positions = self.position_helper.get_sell_positions(symbol)
@@ -200,6 +293,7 @@ class MT5TradingBot:
                 symbol_data = {
                     'symbol': symbol,
                     'last_updated': datetime.now().isoformat(),
+                    'market_status': market_status,
                     'account': account_info if account_info else {},
                     'positions': {
                         'buy': {
@@ -261,6 +355,13 @@ class MT5TradingBot:
                 
                 # Save to JSON
                 self._save_symbol_data(symbol, symbol_data)
+                
+                # Save daily trade logs
+                try:
+                    self._save_daily_trades(symbol)
+                    self._save_historical_summary()
+                except Exception:
+                    pass  # Non-critical, don't break the main loop
                 
                 time.sleep(brake)
                 
