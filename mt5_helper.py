@@ -220,10 +220,10 @@ class MT5PositionHelper:
         else:
             self.request["tp"] = tp
         
-        print(self.request)
+        # print(self.request)
         order_status = self.mt5.order_send(self.request)
         time.sleep(0.1)
-        print(order_status)
+        # print(order_status)
         return order_status
     
     def sell(self, symbol: str, qty: float, sl: float = 0, tp: float = 0):
@@ -259,10 +259,10 @@ class MT5PositionHelper:
         else:
             self.request["tp"] = tp
         
-        print(self.request)
+        # print(self.request)
         order_status = self.mt5.order_send(self.request)
         time.sleep(0.1)
-        print(order_status)
+        # print(order_status)
         return order_status
     
     def close_by_type(self, symbol: str, pos_type: int):
@@ -315,16 +315,16 @@ class MT5PositionHelper:
                 "type_filling": self.mt5.ORDER_FILLING_IOC,
             }
             
-            print(f"Closing position: {request}")
+            # print(f"Closing position: {request}")
             order_result = self.mt5.order_send(request)
             
             if order_result is None:
-                print("order_send failed, no response")
+                # print("order_send failed, no response")
                 success = False
             elif order_result.retcode != self.mt5.TRADE_RETCODE_DONE:
-                print(f"Failed to close position {pos.ticket}, retcode={order_result.retcode}")
+                # print(f"Failed to close position {pos.ticket}, retcode={order_result.retcode}")
                 success = False
-            else:
-                print(f"Successfully closed position {pos.ticket}")
+            # else:
+                # print(f"Successfully closed position {pos.ticket}")
         
         return success
