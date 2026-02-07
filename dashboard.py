@@ -540,18 +540,27 @@ def build_daily_trades_section(symbol):
             except (ValueError, TypeError):
                 t = f'#{i}'
             labels.append(f'{t}')
-            profit = deal.get('profit', 0)
+            # Use net_profit (profit + commission + swap + fee) to match MT5's actual P/L
+            profit = deal.get('net_profit', deal.get('profit', 0))
             profits.append(profit)
             vol = deal.get('volume', 0)
             volumes.append(vol)
             colors.append(COLORS['buy'] if profit >= 0 else COLORS['sell'])
             cumulative_profit += profit
             cum_profits.append(round(cumulative_profit, 2))
+            raw_profit = deal.get('profit', 0)
+            commission = deal.get('commission', 0)
+            swap = deal.get('swap', 0)
+            fee = deal.get('fee', 0)
             hover_texts.append(
                 f"Time: {t}<br>"
                 f"Type: {deal.get('type', 'N/A')}<br>"
                 f"Volume: {vol}<br>"
-                f"Profit: ${profit:.2f}<br>"
+                f"Gross Profit: ${raw_profit:.2f}<br>"
+                f"Commission: ${commission:.2f}<br>"
+                f"Swap: ${swap:.2f}<br>"
+                f"Fee: ${fee:.2f}<br>"
+                f"Net P/L: ${profit:.2f}<br>"
                 f"Cumulative: ${cumulative_profit:.2f}"
             )
 

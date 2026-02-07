@@ -447,6 +447,7 @@ class MT5PositionHelper:
             if symbol and deal.symbol != symbol:
                 continue
             
+            net = round(deal.profit + deal.commission + deal.swap + deal.fee, 2)
             result.append({
                 'ticket': deal.ticket,
                 'order': deal.order,
@@ -455,10 +456,12 @@ class MT5PositionHelper:
                 'volume': round(deal.volume, 4),
                 'price': round(deal.price, 6),
                 'profit': round(deal.profit, 2),
+                'net_profit': net,
                 'commission': round(deal.commission, 2),
                 'swap': round(deal.swap, 2),
                 'fee': round(deal.fee, 2),
                 'time': datetime.fromtimestamp(deal.time).isoformat(),
+                'time_server': deal.time,
                 'comment': deal.comment,
             })
         
@@ -467,6 +470,8 @@ class MT5PositionHelper:
     def get_today_deals(self, symbol: str = None) -> List[Dict]:
         """
         Get all closed deals for today.
+        Uses server time from the latest candle to determine "today" on the broker's clock,
+        avoiding local timezone mismatch (e.g. weekend deals appearing on wrong day).
         
         Args:
             symbol: Optional symbol filter
@@ -474,9 +479,35 @@ class MT5PositionHelper:
         Returns:
             List of deal dicts (see get_deal_history)
         """
-        now = datetime.now()
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        return self.get_deal_history(today_start, now, symbol)
+        # Use server time to define "today" boundaries
+        server_now = self._get_server_time()
+        today_start = server_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Fetch a wider window then filter by server-time date
+        deals = self.get_deal_history(today_start, server_now, symbol)
+        # Double-filter: only keep deals whose own timestamp falls on the server-date
+        today_date = today_start.date()
+        return [
+            d for d in deals
+            if datetime.fromtimestamp(d['time_server']).date() == today_date
+        ]
+
+    def _get_server_time(self) -> datetime:
+        """
+        Get the MT5 broker's server time by reading the latest tick or candle timestamp.
+        Falls back to local time if unavailable.
+        """
+        try:
+            # Use EURUSD (always available) or any active symbol to get server time
+            tick = self.mt5.symbol_info_tick('EURUSD')
+            if tick is not None and tick.time > 0:
+                return datetime.fromtimestamp(tick.time)
+            # Fallback: try getting time from M1 rates
+            rates = self.mt5.copy_rates_from_pos('EURUSD', self.mt5.TIMEFRAME_M1, 0, 1)
+            if rates is not None and len(rates) > 0:
+                return datetime.fromtimestamp(rates[-1][0])
+        except Exception:
+            pass
+        return datetime.now()
 
     def get_deals_since(self, days: int, symbol: str = None) -> List[Dict]:
         """

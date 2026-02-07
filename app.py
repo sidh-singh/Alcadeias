@@ -152,11 +152,12 @@ class MT5TradingBot:
         output_dir = os.path.join(r'C:\Alcadeias', 'daily_trade')
         os.makedirs(output_dir, exist_ok=True)
         
-        now = datetime.now()
-        filename = now.strftime('%d_%b_%Y').lower() + '.json'
+        # Use server time for the filename so it matches broker's trading day
+        server_now = self.position_helper._get_server_time()
+        filename = server_now.strftime('%d_%b_%Y').lower() + '.json'
         json_path = os.path.join(output_dir, filename)
         
-        # Fetch today's closed deals for this symbol
+        # Fetch today's closed deals for this symbol (server-time aware)
         today_deals = self.position_helper.get_today_deals(symbol)
         
         with self.thread_lock:
@@ -170,22 +171,23 @@ class MT5TradingBot:
                     existing_data = {}
             
             # Update with this symbol's deals
-            existing_data['date'] = now.strftime('%d %b %Y')
-            existing_data['last_updated'] = now.isoformat()
+            existing_data['date'] = server_now.strftime('%d %b %Y')
+            existing_data['last_updated'] = datetime.now().isoformat()
+            existing_data['server_time'] = server_now.isoformat()
             
             if 'symbols' not in existing_data:
                 existing_data['symbols'] = {}
             
-            # Calculate symbol-level summary
-            total_profit = sum(d['profit'] for d in today_deals)
+            # Calculate symbol-level summary using net_profit (includes commission+swap+fee)
+            total_net = sum(d.get('net_profit', d['profit']) for d in today_deals)
             total_volume = sum(d['volume'] for d in today_deals)
-            avg_profit = round(total_profit / len(today_deals), 2) if today_deals else 0
+            avg_net = round(total_net / len(today_deals), 2) if today_deals else 0
             
             existing_data['symbols'][symbol] = {
                 'deal_count': len(today_deals),
-                'total_profit': round(total_profit, 2),
+                'total_profit': round(total_net, 2),
                 'total_volume': round(total_volume, 4),
-                'avg_profit': avg_profit,
+                'avg_profit': avg_net,
                 'deals': today_deals,
             }
             
@@ -194,11 +196,12 @@ class MT5TradingBot:
             for sym_data in existing_data['symbols'].values():
                 all_deals.extend(sym_data.get('deals', []))
             
+            all_net = sum(d.get('net_profit', d['profit']) for d in all_deals)
             existing_data['summary'] = {
                 'total_deals': len(all_deals),
-                'total_profit': round(sum(d['profit'] for d in all_deals), 2),
+                'total_profit': round(all_net, 2),
                 'total_volume': round(sum(d['volume'] for d in all_deals), 4),
-                'avg_profit': round(sum(d['profit'] for d in all_deals) / len(all_deals), 2) if all_deals else 0,
+                'avg_profit': round(all_net / len(all_deals), 2) if all_deals else 0,
             }
             
             with open(json_path, 'w') as f:
@@ -215,17 +218,17 @@ class MT5TradingBot:
         
         all_deals = self.position_helper.get_deals_since(days=3650)  # ~10 years
         
-        total_profit = sum(d['profit'] for d in all_deals)
+        total_net = sum(d.get('net_profit', d['profit']) for d in all_deals)
         total_volume = sum(d['volume'] for d in all_deals)
-        avg_profit = round(total_profit / len(all_deals), 2) if all_deals else 0
+        avg_net = round(total_net / len(all_deals), 2) if all_deals else 0
         
         summary = {
             'last_updated': datetime.now().isoformat(),
             'period': 'Last 10 years',
             'total_deals': len(all_deals),
-            'total_profit': round(total_profit, 2),
+            'total_profit': round(total_net, 2),
             'total_volume': round(total_volume, 4),
-            'avg_profit': avg_profit,
+            'avg_profit': avg_net,
         }
         
         with self.thread_lock:
