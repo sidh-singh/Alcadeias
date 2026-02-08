@@ -744,6 +744,9 @@ def build_daily_trades_section(symbol):
         ), row=1, col=1)
 
         cum_color = COLORS['positive'] if cumulative_profit >= 0 else COLORS['negative']
+        # Convert hex to rgba for fillcolor (Plotly doesn't support 8-digit hex)
+        _r, _g, _b = int(cum_color[1:3], 16), int(cum_color[3:5], 16), int(cum_color[5:7], 16)
+        cum_fill = f'rgba({_r},{_g},{_b},0.05)'
         fig.add_trace(go.Scatter(
             x=labels, y=cum_profits,
             mode='lines+markers+text',
@@ -754,7 +757,7 @@ def build_daily_trades_section(symbol):
             textfont=dict(size=9, color=COLORS['text_dim'], family="'Inter', sans-serif"),
             showlegend=False,
             fill='tozeroy',
-            fillcolor=f'{cum_color}08',
+            fillcolor=cum_fill,
         ), row=2, col=1)
 
         fig.add_hline(y=0, line_dash='dot', line_color=COLORS['text_muted'],
