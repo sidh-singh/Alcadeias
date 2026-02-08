@@ -585,8 +585,6 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                 _signal_row('SHA', '🔵', '#5dade2', sha_buy, sha_list, latest_cross),
                 row_divider,
                 _signal_row('Price', '🔴', '#e74c3c', price_buy, price_list, cross_sum),
-                row_divider,
-                _signal_row('IDX', '📊', '#f39c12', sha_buy + price_buy, sha_list, latest_cross + cross_sum),
             ]),
             # ── Footer timestamp ──
             html.Div(last_updated, style={
