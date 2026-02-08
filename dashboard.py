@@ -427,12 +427,12 @@ def build_activity_section(data):
 def _crossover_badge(val):
     """Compact colored badge for a crossover value — Ballom style."""
     cfg = {
-        3:  ('🔥 +3', '#00c853', 'rgba(0, 200, 83, 0.12)'),
-        2:  ('⚡ +2', '#4caf50', 'rgba(76, 175, 80, 0.12)'),
-        1:  ('💨 +1', '#81c784', 'rgba(129, 199, 132, 0.12)'),
-        -1: ('💨 −1', '#e57373', 'rgba(229, 115, 115, 0.12)'),
-        -2: ('⚡ −2', '#f44336', 'rgba(244, 67, 54, 0.12)'),
-        -3: ('🔥 −3', '#c62828', 'rgba(198, 40, 40, 0.12)'),
+        3:  ('🔥 +3', '#009d7a', 'rgba(0, 157, 122, 0.12)'),
+        2:  ('⚡ +2', '#00d2a0', 'rgba(0, 210, 160, 0.12)'),
+        1:  ('💨 +1', '#4de8c8', 'rgba(77, 232, 200, 0.12)'),
+        -1: ('💨 −1', '#ee7b6e', 'rgba(238, 123, 110, 0.12)'),
+        -2: ('⚡ −2', '#e74c3c', 'rgba(231, 76, 60, 0.12)'),
+        -3: ('🔥 −3', '#c0392b', 'rgba(192, 57, 43, 0.12)'),
     }
     emoji_txt, color, bg = cfg.get(val, (str(val), '#888', 'rgba(255,255,255,0.04)'))
     return html.Span(emoji_txt, style={
@@ -483,8 +483,8 @@ def _list_dots(lst, max_items=7):
 
 def _cross_dots(cross_list, max_items=7):
     """Render crossover values as uniform circle dots with green/red light-medium-dark shading."""
-    green_map = {1: '#81c784', 2: '#4caf50', 3: '#00c853'}
-    red_map   = {1: '#e57373', 2: '#f44336', 3: '#c62828'}
+    green_map = {1: '#4de8c8', 2: '#00d2a0', 3: '#009d7a'}
+    red_map   = {1: '#ee7b6e', 2: '#e74c3c', 3: '#c0392b'}
     dots = []
     for i, v in enumerate(cross_list[:max_items]):
         if v > 0:
@@ -504,8 +504,8 @@ def _cross_dots(cross_list, max_items=7):
 
 def _cross_power_bar(cross_list, max_items=7):
     """Power bar for crossover — each segment colored by its value's green/red shade."""
-    green_map = {1: '#81c784', 2: '#4caf50', 3: '#00c853'}
-    red_map   = {1: '#e57373', 2: '#f44336', 3: '#c62828'}
+    green_map = {1: '#4de8c8', 2: '#00d2a0', 3: '#009d7a'}
+    red_map   = {1: '#ee7b6e', 2: '#e74c3c', 3: '#c0392b'}
     bull_count = sum(1 for v in cross_list[:max_items] if v > 0)
     segs = []
     for i in range(max_items):
@@ -523,7 +523,7 @@ def _cross_power_bar(cross_list, max_items=7):
             'display': 'inline-block', 'width': '8px', 'height': '16px',
             'borderRadius': '2px', 'background': c, 'marginRight': '2px',
         }))
-    p_color = '#00c853' if bull_count >= 5 else '#f39c12' if bull_count >= 3 else '#c62828'
+    p_color = '#00d2a0' if bull_count >= 5 else '#f39c12' if bull_count >= 3 else '#e74c3c'
     return html.Div([
         *segs,
         html.Span(f' {bull_count}', style={
@@ -652,6 +652,112 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                 row_divider,
                 cross_row,
             ]),
+            # ── Legend ──
+            html.Div(
+                style={
+                    'padding': '8px 16px 10px',
+                    'borderTop': f'1px solid {COLORS["divider"]}',
+                    'display': 'flex',
+                    'flexWrap': 'wrap',
+                    'gap': '16px',
+                    'alignItems': 'center',
+                },
+                children=[
+                    html.Span('LEGEND', style={
+                        'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                        'fontWeight': '700', 'letterSpacing': '1px',
+                        'marginRight': '4px',
+                    }),
+                    # Candle dots legend
+                    html.Div([
+                        html.Span(style={
+                            'display': 'inline-block', 'width': '8px', 'height': '8px',
+                            'borderRadius': '50%', 'background': '#00d2a0',
+                            'marginRight': '4px', 'verticalAlign': 'middle',
+                        }),
+                        html.Span('Bullish', style={
+                            'fontSize': '0.65rem', 'color': COLORS['text_secondary'],
+                            'verticalAlign': 'middle',
+                        }),
+                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
+                    html.Div([
+                        html.Span(style={
+                            'display': 'inline-block', 'width': '8px', 'height': '8px',
+                            'borderRadius': '50%', 'background': '#e74c3c',
+                            'marginRight': '4px', 'verticalAlign': 'middle',
+                        }),
+                        html.Span('Bearish', style={
+                            'fontSize': '0.65rem', 'color': COLORS['text_secondary'],
+                            'verticalAlign': 'middle',
+                        }),
+                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
+                    # Divider
+                    html.Span('│', style={
+                        'color': COLORS['text_muted'], 'fontSize': '0.75rem',
+                    }),
+                    # Crossover intensity legend
+                    html.Span('Cross:', style={
+                        'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                        'fontWeight': '600', 'letterSpacing': '0.5px',
+                    }),
+                    html.Div([
+                        html.Span(style={
+                            'display': 'inline-block', 'width': '8px', 'height': '8px',
+                            'borderRadius': '50%', 'background': '#4de8c8',
+                            'marginRight': '3px',
+                        }),
+                        html.Span('Light', style={
+                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                            'marginRight': '8px',
+                        }),
+                        html.Span(style={
+                            'display': 'inline-block', 'width': '8px', 'height': '8px',
+                            'borderRadius': '50%', 'background': '#00d2a0',
+                            'marginRight': '3px',
+                        }),
+                        html.Span('Medium', style={
+                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                            'marginRight': '8px',
+                        }),
+                        html.Span(style={
+                            'display': 'inline-block', 'width': '8px', 'height': '8px',
+                            'borderRadius': '50%', 'background': '#009d7a',
+                            'marginRight': '3px',
+                        }),
+                        html.Span('Strong', style={
+                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                        }),
+                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
+                    html.Div([
+                        html.Span(style={
+                            'display': 'inline-block', 'width': '8px', 'height': '8px',
+                            'borderRadius': '50%', 'background': '#ee7b6e',
+                            'marginRight': '3px',
+                        }),
+                        html.Span('Light', style={
+                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                            'marginRight': '8px',
+                        }),
+                        html.Span(style={
+                            'display': 'inline-block', 'width': '8px', 'height': '8px',
+                            'borderRadius': '50%', 'background': '#e74c3c',
+                            'marginRight': '3px',
+                        }),
+                        html.Span('Medium', style={
+                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                            'marginRight': '8px',
+                        }),
+                        html.Span(style={
+                            'display': 'inline-block', 'width': '8px', 'height': '8px',
+                            'borderRadius': '50%', 'background': '#c0392b',
+                            'marginRight': '3px',
+                        }),
+                        html.Span('Strong', style={
+                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                        }),
+                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
+                ],
+            ),
             # ── Footer timestamp ──
             html.Div(last_updated, style={
                 'fontSize': '0.65rem', 'color': COLORS['text_muted'],
