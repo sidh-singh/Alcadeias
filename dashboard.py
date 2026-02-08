@@ -1,6 +1,7 @@
 import json
 import os
 import glob
+import re
 from datetime import datetime, timezone
 
 import dash
@@ -240,14 +241,12 @@ def build_positions_section(data):
 
 
 def build_signal_section(data):
-    """Build signal status section with premium styling"""
+    """Build signal status section — clean and consistent across all tabs"""
     signal = data.get('signal', {})
     buy_status = signal.get('buy_status', 'DO_NOTHING')
     sell_status = signal.get('sell_status', 'DO_NOTHING')
-    order_resp = data.get('order_response')
-    close_resp = data.get('close_response')
 
-    children = [
+    return html.Div([
         html.Div([
             html.Span('⚡', style={'fontSize': '14px'}),
             html.Span('Signals', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
@@ -284,74 +283,145 @@ def build_signal_section(data):
             'overflow': 'hidden',
             'padding': '0',
         }),
-    ]
+    ])
 
+
+def _parse_order_response(order_resp):
+    """Parse MT5 OrderSendResult into clean fields"""
+    resp_str = str(order_resp)
+    fields = {}
+    for key in ('retcode', 'comment', 'deal', 'order', 'volume', 'price', 'symbol'):
+        if key == 'comment':
+            m = re.search(r"comment='([^']*)", resp_str)
+        else:
+            m = re.search(rf'{key}=([^,)]+)', resp_str)
+        if m:
+            fields[key] = m.group(1).strip()
+    return fields
+
+
+def build_activity_section(data):
+    """Build compact Recent Activity strip for order/close responses.
+    Always renders consistently regardless of content."""
+    order_resp = data.get('order_response')
+    close_resp = data.get('close_response')
+
+    if not order_resp and not close_resp:
+        return html.Div()  # Nothing to show
+
+    rows = []
+
+    # ── Order response row ──
     if order_resp:
-        children.append(html.Div([
-            html.Div('LAST ORDER RESPONSE', style={
+        f = _parse_order_response(order_resp)
+        retcode = f.get('retcode', '?')
+        comment = f.get('comment', '')
+        symbol = f.get('symbol', '')
+        volume = f.get('volume', '')
+        is_ok = retcode == '10009'
+        rc_color = COLORS['positive'] if is_ok else COLORS['warning']
+        icon = '✓' if is_ok else '⚠'
+
+        detail_chips = []
+        if symbol:
+            detail_chips.append(html.Span(symbol, style={
+                'fontSize': '10px', 'color': COLORS['text_secondary'],
+                'background': 'rgba(255,255,255,0.04)', 'padding': '2px 8px',
+                'borderRadius': '6px', 'marginLeft': '8px',
+            }))
+        if volume and volume != '0.0':
+            detail_chips.append(html.Span(f'vol {volume}', style={
+                'fontSize': '10px', 'color': COLORS['text_secondary'],
+                'background': 'rgba(255,255,255,0.04)', 'padding': '2px 8px',
+                'borderRadius': '6px', 'marginLeft': '4px',
+            }))
+
+        rows.append(html.Div([
+            html.Span(icon, style={
+                'fontSize': '12px', 'marginRight': '10px', 'color': rc_color,
+                'width': '16px', 'textAlign': 'center',
+            }),
+            html.Span('ORDER', style={
+                'fontSize': '9px', 'fontWeight': '700', 'color': COLORS['text_dim'],
+                'letterSpacing': '1.5px', 'marginRight': '12px', 'minWidth': '42px',
+            }),
+            html.Span(comment or f'retcode={retcode}', style={
+                'fontSize': '12px', 'color': rc_color, 'fontWeight': '500',
+                'fontFamily': "'JetBrains Mono', monospace",
+            }),
+            html.Span(f'  RC {retcode}', style={
                 'fontSize': '10px', 'color': COLORS['text_dim'],
-                'textTransform': 'uppercase', 'letterSpacing': '1.5px', 'marginBottom': '10px',
-                'fontWeight': '500',
+                'fontFamily': "'JetBrains Mono', monospace", 'marginLeft': '6px',
             }),
-            html.Code(str(order_resp), style={
-                'fontSize': '12px', 'color': COLORS['warning'],
-                'wordBreak': 'break-all', 'whiteSpace': 'pre-wrap',
-                'fontFamily': "'JetBrains Mono', 'SF Mono', monospace",
-            }),
+            *detail_chips,
         ], style={
-            **CARD_STYLE,
-            'marginTop': '12px',
+            'display': 'flex', 'alignItems': 'center',
+            'padding': '9px 16px',
+            'borderBottom': f'1px solid {COLORS["divider"]}' if close_resp else 'none',
         }))
 
+    # ── Close response row ──
     if close_resp:
-        status_color = COLORS['buy'] if close_resp.get('success') else COLORS['sell']
+        success = close_resp.get('success', False)
+        closed = close_resp.get('closed_count', 0)
+        failed = close_resp.get('failed_count', 0)
+        total = close_resp.get('filtered_count', 0)
+        errors = close_resp.get('errors', [])
+        sc = COLORS['positive'] if success else COLORS['negative']
+        icon = '✓' if success else '✗'
 
-        children.append(html.Div([
-            html.Div('CLOSE POSITIONS RESPONSE', style={
-                'fontSize': '10px', 'color': COLORS['text_dim'],
-                'textTransform': 'uppercase', 'letterSpacing': '1.5px', 'marginBottom': '14px',
-                'fontWeight': '500',
+        summary = f'{closed}/{total} closed'
+        if failed > 0:
+            summary += f', {failed} failed'
+
+        err_chip = None
+        if errors:
+            err_text = errors[0] if len(errors) == 1 else f'{len(errors)} errors'
+            err_chip = html.Span(err_text, style={
+                'fontSize': '10px', 'color': COLORS['negative'],
+                'background': COLORS['sell_soft'], 'padding': '2px 8px',
+                'borderRadius': '6px', 'marginLeft': '8px',
+                'fontFamily': "'JetBrains Mono', monospace",
+            })
+
+        rows.append(html.Div([
+            html.Span(icon, style={
+                'fontSize': '12px', 'marginRight': '10px', 'color': sc,
+                'width': '16px', 'textAlign': 'center',
             }),
-            html.Div([
-                html.Div([
-                    html.Div('Status', style={'fontSize': '10px', 'color': COLORS['text_dim']}),
-                    html.Div(close_resp.get('message', 'N/A'), style={
-                        'fontSize': '13px', 'color': status_color, 'fontWeight': '600'
-                    }),
-                ], style={'marginBottom': '12px'}),
-                html.Div([
-                    make_metric_card('Total', str(close_resp.get('total_positions', 0)), COLORS['text']),
-                    make_metric_card('Filtered', str(close_resp.get('filtered_count', 0)), COLORS['accent']),
-                    make_metric_card('Closed', str(close_resp.get('closed_count', 0)), COLORS['buy']),
-                    make_metric_card('Failed', str(close_resp.get('failed_count', 0)), COLORS['sell']),
-                ], style={'display': 'flex', 'gap': '10px', 'flexWrap': 'wrap', 'marginBottom': '12px'}),
-                html.Div([
-                    html.Div('Closed Tickets: ', style={
-                        'fontSize': '11px', 'color': COLORS['text_dim'], 'display': 'inline',
-                    }),
-                    html.Code(str(close_resp.get('closed_tickets', [])), style={
-                        'fontSize': '11px', 'color': COLORS['positive'],
-                        'fontFamily': "'JetBrains Mono', monospace",
-                    }),
-                ], style={'marginBottom': '8px'}) if close_resp.get('closed_tickets') else None,
-                html.Div([
-                    html.Div('Errors:', style={
-                        'fontSize': '11px', 'color': COLORS['negative'], 'marginBottom': '4px',
-                    }),
-                    html.Div([
-                        html.Div(f'• {err}', style={
-                            'fontSize': '11px', 'color': COLORS['text_dim'], 'marginLeft': '8px',
-                        })
-                        for err in close_resp.get('errors', [])
-                    ]),
-                ]) if close_resp.get('errors') else None,
-            ]),
+            html.Span('CLOSE', style={
+                'fontSize': '9px', 'fontWeight': '700', 'color': COLORS['text_dim'],
+                'letterSpacing': '1.5px', 'marginRight': '12px', 'minWidth': '42px',
+            }),
+            html.Span(summary, style={
+                'fontSize': '12px', 'color': sc, 'fontWeight': '500',
+                'fontFamily': "'JetBrains Mono', monospace",
+            }),
+            err_chip,
         ], style={
-            **CARD_STYLE,
-            'marginTop': '12px',
+            'display': 'flex', 'alignItems': 'center',
+            'padding': '9px 16px',
         }))
 
-    return html.Div(children)
+    return html.Div([
+        html.Div([
+            html.Span('📌', style={'fontSize': '11px', 'marginRight': '6px'}),
+            html.Span('Recent Activity', style={
+                'fontSize': '9px', 'fontWeight': '600', 'color': COLORS['text_dim'],
+                'textTransform': 'uppercase', 'letterSpacing': '1.5px',
+            }),
+        ], style={
+            'display': 'flex', 'alignItems': 'center',
+            'padding': '8px 16px 4px',
+        }),
+        *rows,
+    ], style={
+        'background': COLORS['card'],
+        'border': f'1px solid {COLORS["card_border"]}',
+        'borderRadius': '10px',
+        'marginTop': '12px',
+        'overflow': 'hidden',
+    })
 
 
 def _cross_color(v):
@@ -903,6 +973,9 @@ def build_symbol_tab_content(symbol):
             html.Div([build_signal_section(data)], style={'flex': '1'}),
             html.Div([build_positions_section(data)], style={'flex': '1'}),
         ], style={'display': 'flex', 'gap': '16px', 'flexWrap': 'wrap'}),
+
+        # ── Recent Activity (order / close responses) ──
+        build_activity_section(data),
 
         html.Div(style={'height': '16px'}),
 
