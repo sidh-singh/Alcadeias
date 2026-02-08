@@ -482,23 +482,56 @@ def _list_dots(lst, max_items=7):
 
 
 def _cross_dots(cross_list, max_items=7):
-    """Render crossover values [-3..+3] as colored circle dots.
-    Size scales with abs(value): ±1=8px, ±2=10px, ±3=12px."""
-    color_map = {
-        3: '#00c853', 2: '#4caf50', 1: '#81c784',
-        -1: '#e57373', -2: '#f44336', -3: '#c62828',
-    }
+    """Render crossover values as uniform circle dots with green/red light-medium-dark shading."""
+    green_map = {1: '#81c784', 2: '#4caf50', 3: '#00c853'}
+    red_map   = {1: '#e57373', 2: '#f44336', 3: '#c62828'}
     dots = []
     for i, v in enumerate(cross_list[:max_items]):
-        c = color_map.get(v, '#555')
-        size = {1: '8px', 2: '10px', 3: '12px'}.get(abs(v), '8px')
+        if v > 0:
+            c = green_map.get(v, '#81c784')
+        elif v < 0:
+            c = red_map.get(abs(v), '#e57373')
+        else:
+            c = '#555'
         opacity = max(0.35, 1.0 - (i * 0.09))
         dots.append(html.Span(style={
-            'display': 'inline-block', 'width': size, 'height': size,
+            'display': 'inline-block', 'width': '10px', 'height': '10px',
             'borderRadius': '50%', 'background': c,
             'marginRight': '3px', 'opacity': str(opacity),
         }))
     return html.Div(dots, style={'display': 'inline-flex', 'alignItems': 'center'})
+
+
+def _cross_power_bar(cross_list, max_items=7):
+    """Power bar for crossover — each segment colored by its value's green/red shade."""
+    green_map = {1: '#81c784', 2: '#4caf50', 3: '#00c853'}
+    red_map   = {1: '#e57373', 2: '#f44336', 3: '#c62828'}
+    bull_count = sum(1 for v in cross_list[:max_items] if v > 0)
+    segs = []
+    for i in range(max_items):
+        if i < len(cross_list):
+            v = cross_list[i]
+            if v > 0:
+                c = green_map.get(v, '#81c784')
+            elif v < 0:
+                c = red_map.get(abs(v), '#e57373')
+            else:
+                c = 'rgba(255,255,255,0.06)'
+        else:
+            c = 'rgba(255,255,255,0.06)'
+        segs.append(html.Span(style={
+            'display': 'inline-block', 'width': '8px', 'height': '16px',
+            'borderRadius': '2px', 'background': c, 'marginRight': '2px',
+        }))
+    p_color = '#00c853' if bull_count >= 5 else '#f39c12' if bull_count >= 3 else '#c62828'
+    return html.Div([
+        *segs,
+        html.Span(f' {bull_count}', style={
+            'fontSize': '0.75rem', 'fontWeight': '700', 'marginLeft': '4px',
+            'color': p_color if bull_count > 0 else COLORS['text_dim'],
+            'fontFamily': "'JetBrains Mono', monospace",
+        }),
+    ], style={'display': 'inline-flex', 'alignItems': 'center'})
 
 
 def _signal_row(label, icon, color, power, lst):
@@ -539,9 +572,6 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     bias_color = '#00d2a0' if is_bullish else '#e74c3c'
     trend_bg = 'rgba(0, 210, 160, 0.08)' if is_bullish else 'rgba(231, 76, 60, 0.08)'
 
-    # Crossover values
-    latest_cross = crossover[0] if crossover else 0
-
     # Column header style
     col_hdr = {
         'fontSize': '0.65rem', 'color': COLORS['text_dim'],
@@ -555,11 +585,11 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
         'margin': '0',
     })
 
-    # Crossover row — its own layout: label | candle dots | latest badge
+    # Crossover row — same 3-column grid as SHA / Price
     cross_row = html.Div(
         style={
             'display': 'grid',
-            'gridTemplateColumns': '64px 1fr auto',
+            'gridTemplateColumns': '64px 1fr 1fr',
             'gap': '8px', 'alignItems': 'center',
             'padding': '8px 0',
         },
@@ -567,8 +597,8 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
             html.Span('🔀 Cross', style={
                 'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#f39c12',
             }),
+            _cross_power_bar(crossover),
             _cross_dots(crossover),
-            _crossover_badge(latest_cross),
         ],
     )
 
@@ -601,7 +631,7 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                     }),
                 ],
             ),
-            # ── Column headers for SHA / Price ──
+            # ── Column headers ──
             html.Div(
                 style={
                     'display': 'grid',
@@ -614,26 +644,11 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                     html.Span('CANDLES', style=col_hdr),
                 ],
             ),
-            # ── SHA + Price rows ──
-            html.Div(style={'padding': '0 16px 6px'}, children=[
+            # ── SHA + Price + Cross rows ──
+            html.Div(style={'padding': '0 16px 10px'}, children=[
                 _signal_row('SHA', '🔵', '#5dade2', sha_buy, sha_list),
                 row_divider,
                 _signal_row('Price', '🔴', '#e74c3c', price_buy, price_list),
-            ]),
-            # ── Crossover section ──
-            html.Div(
-                style={
-                    'display': 'grid',
-                    'gridTemplateColumns': '64px 1fr auto',
-                    'gap': '8px', 'padding': '0 16px',
-                },
-                children=[
-                    html.Span(''),
-                    html.Span('CANDLES', style=col_hdr),
-                    html.Span('LATEST', style=col_hdr),
-                ],
-            ),
-            html.Div(style={'padding': '0 16px 10px'}, children=[
                 row_divider,
                 cross_row,
             ]),
