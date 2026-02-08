@@ -133,124 +133,109 @@ def make_signal_badge(status):
 
 
 def make_metric_card(title, value, color=None, sub=None, icon=None):
-    """Create a premium metric card with glassmorphism"""
+    """Create a compact metric card"""
     accent = color or COLORS['text']
     return html.Div([
         html.Div([
             html.Span(icon or '', style={
-                'fontSize': '13px',
-                'marginRight': '6px',
-                'opacity': '0.7',
+                'fontSize': '11px',
+                'marginRight': '5px',
+                'opacity': '0.6',
             }) if icon else None,
             html.Span(title, style={
-                'fontSize': '10px',
+                'fontSize': '9px',
                 'color': COLORS['text_dim'],
                 'textTransform': 'uppercase',
-                'letterSpacing': '1.2px',
+                'letterSpacing': '1px',
                 'fontWeight': '500',
             }),
-        ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '8px'}),
+        ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '5px'}),
         html.Div(value, style={
-            'fontSize': '20px',
+            'fontSize': '16px',
             'fontWeight': '700',
             'color': accent,
-            'fontFamily': "'JetBrains Mono', 'SF Mono', 'Fira Code', monospace",
-            'letterSpacing': '-0.5px',
+            'fontFamily': "'JetBrains Mono', 'SF Mono', monospace",
+            'letterSpacing': '-0.3px',
+            'lineHeight': '1.2',
         }),
         html.Div(sub, style={
-            'fontSize': '10px',
+            'fontSize': '9px',
             'color': COLORS['text_dim'],
-            'marginTop': '4px',
-            'fontWeight': '400',
+            'marginTop': '3px',
         }) if sub else None,
     ], style={
         'background': COLORS['card'],
-        'backdropFilter': 'blur(16px)',
-        'WebkitBackdropFilter': 'blur(16px)',
         'border': f'1px solid {COLORS["card_border"]}',
-        'borderRadius': '14px',
-        'padding': '16px 20px',
-        'minWidth': '140px',
+        'borderRadius': '10px',
+        'padding': '12px 14px',
+        'minWidth': '110px',
         'flex': '1',
-        'borderTop': f'2px solid {accent}22',
-        'transition': 'all 0.3s ease',
     })
 
 
 def build_positions_section(data):
-    """Build the buy/sell position details section with premium styling"""
+    """Build compact positions section"""
     pos = data.get('positions', {})
     buy = pos.get('buy', {})
     sell = pos.get('sell', {})
+    buy_count = buy.get('count', 0)
+    sell_count = sell.get('count', 0)
 
-    def pos_row(label, p, color, glow_color):
-        count = p.get('count', 0)
-        if count == 0:
-            return html.Div([
-                html.Div([
-                    html.Div(style={
-                        'width': '8px', 'height': '8px', 'borderRadius': '50%',
-                        'background': color, 'marginRight': '10px',
-                        'boxShadow': f'0 0 8px {glow_color}',
-                    }),
-                    html.Span(label, style={
-                        'fontWeight': '600', 'fontSize': '14px', 'letterSpacing': '0.5px',
-                    }),
-                ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '12px'}),
-                html.Div('No open positions', style={
-                    'color': COLORS['text_dim'], 'fontSize': '13px',
-                    'paddingLeft': '18px', 'fontStyle': 'italic',
-                }),
-            ], style={
-                **CARD_STYLE,
-                'flex': '1',
-                'borderLeft': f'3px solid {color}33',
-            })
-
-        profit_color = COLORS['positive'] if p.get('total_profit', 0) >= 0 else COLORS['negative']
-
+    if buy_count == 0 and sell_count == 0:
         return html.Div([
             html.Div([
-                html.Div(style={
-                    'width': '8px', 'height': '8px', 'borderRadius': '50%',
-                    'background': color, 'marginRight': '10px',
-                    'boxShadow': f'0 0 8px {glow_color}',
-                }),
-                html.Span(label, style={
-                    'fontWeight': '600', 'fontSize': '14px', 'letterSpacing': '0.5px',
-                }),
-                html.Span(f'{count} position{"s" if count > 1 else ""}', style={
-                    'marginLeft': 'auto', 'color': COLORS['text_dim'],
-                    'fontSize': '11px', 'fontWeight': '500',
-                    'background': COLORS['card_hover'],
-                    'padding': '3px 10px', 'borderRadius': '12px',
-                }),
-            ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '16px'}),
+                html.Span('📋', style={'fontSize': '14px'}),
+                html.Span('Open Positions', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
+            html.Div('No open positions', style={
+                'color': COLORS['text_dim'], 'fontSize': '12px',
+                'padding': '14px 16px', 'textAlign': 'center',
+                'background': COLORS['card'], 'borderRadius': '10px',
+                'border': f'1px solid {COLORS["card_border"]}',
+            }),
+        ])
+
+    def pos_row(label, p, color):
+        count = p.get('count', 0)
+        if count == 0:
+            return None
+        profit = p.get('total_profit', 0)
+        profit_color = COLORS['positive'] if profit >= 0 else COLORS['negative']
+        return html.Div([
             html.Div([
-                make_metric_card('Total P/L', f"${p.get('total_profit', 0):.2f}", profit_color, icon='💰'),
-                make_metric_card('Volume', f"{p.get('total_volume', 0):.2f}", icon='📦'),
-                make_metric_card('First P/L', f"${p.get('first_profit', 0):.2f}",
-                                 COLORS['positive'] if p.get('first_profit', 0) >= 0 else COLORS['negative'],
-                                 f"Vol: {p.get('first_volume', 0):.2f}"),
-                make_metric_card('Last P/L', f"${p.get('last_profit', 0):.2f}",
-                                 COLORS['positive'] if p.get('last_profit', 0) >= 0 else COLORS['negative'],
-                                 f"Vol: {p.get('last_volume', 0):.2f}"),
-            ], style={'display': 'flex', 'gap': '10px', 'flexWrap': 'wrap'}),
+                html.Span('●', style={'color': color, 'fontSize': '9px', 'marginRight': '6px'}),
+                html.Span(label, style={'fontWeight': '600', 'fontSize': '12px'}),
+                html.Span(f'{count}', style={
+                    'marginLeft': '6px', 'color': COLORS['text_dim'],
+                    'fontSize': '10px', 'background': 'rgba(255,255,255,0.04)',
+                    'padding': '1px 7px', 'borderRadius': '8px',
+                }),
+            ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '8px'}),
+            html.Div([
+                make_metric_card('P/L', f"${profit:.2f}", profit_color),
+                make_metric_card('Volume', f"{p.get('total_volume', 0):.2f}"),
+                make_metric_card('First', f"${p.get('first_profit', 0):.2f}",
+                                 COLORS['positive'] if p.get('first_profit', 0) >= 0 else COLORS['negative']),
+                make_metric_card('Last', f"${p.get('last_profit', 0):.2f}",
+                                 COLORS['positive'] if p.get('last_profit', 0) >= 0 else COLORS['negative']),
+            ], style={'display': 'flex', 'gap': '8px', 'flexWrap': 'wrap'}),
         ], style={
-            **CARD_STYLE,
-            'flex': '1',
+            'background': COLORS['card'],
+            'border': f'1px solid {COLORS["card_border"]}',
+            'borderRadius': '10px',
             'borderLeft': f'3px solid {color}55',
+            'padding': '12px 14px',
+            'flex': '1',
         })
+
+    rows = [r for r in [pos_row('BUY', buy, COLORS['buy']), pos_row('SELL', sell, COLORS['sell'])] if r]
 
     return html.Div([
         html.Div([
-            html.Span('📊', style={'fontSize': '18px'}),
-            html.Span('Position Details', style=SECTION_TITLE_STYLE),
-        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '10px', 'marginBottom': '16px'}),
-        html.Div([
-            pos_row('BUY', buy, COLORS['buy'], COLORS['buy_glow']),
-            pos_row('SELL', sell, COLORS['sell'], COLORS['sell_glow']),
-        ], style={'display': 'flex', 'gap': '16px', 'flexWrap': 'wrap'}),
+            html.Span('📋', style={'fontSize': '14px'}),
+            html.Span('Open Positions', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
+        html.Div(rows, style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap'}),
     ])
 
 
@@ -264,35 +249,37 @@ def build_signal_section(data):
 
     children = [
         html.Div([
-            html.Span('⚡', style={'fontSize': '18px'}),
-            html.Span('Signal Status', style=SECTION_TITLE_STYLE),
-        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '10px', 'marginBottom': '16px'}),
+            html.Span('⚡', style={'fontSize': '14px'}),
+            html.Span('Signals', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
         html.Div([
             html.Div([
-                html.Div('BUY SIGNAL', style={
-                    'fontSize': '10px', 'color': COLORS['text_dim'],
+                html.Div('BUY', style={
+                    'fontSize': '9px', 'color': COLORS['text_dim'],
                     'textTransform': 'uppercase', 'letterSpacing': '1.5px',
-                    'marginBottom': '12px', 'fontWeight': '500',
+                    'marginBottom': '8px', 'fontWeight': '500',
                 }),
                 make_signal_badge(buy_status),
             ], style={
                 'textAlign': 'center', 'flex': '1',
-                'padding': '24px 16px',
+                'padding': '14px 12px',
                 'borderRight': f'1px solid {COLORS["divider"]}',
             }),
             html.Div([
-                html.Div('SELL SIGNAL', style={
-                    'fontSize': '10px', 'color': COLORS['text_dim'],
+                html.Div('SELL', style={
+                    'fontSize': '9px', 'color': COLORS['text_dim'],
                     'textTransform': 'uppercase', 'letterSpacing': '1.5px',
-                    'marginBottom': '12px', 'fontWeight': '500',
+                    'marginBottom': '8px', 'fontWeight': '500',
                 }),
                 make_signal_badge(sell_status),
             ], style={
                 'textAlign': 'center', 'flex': '1',
-                'padding': '24px 16px',
+                'padding': '14px 12px',
             }),
         ], style={
-            **CARD_STYLE,
+            'background': COLORS['card'],
+            'border': f'1px solid {COLORS["card_border"]}',
+            'borderRadius': '10px',
             'display': 'flex',
             'overflow': 'hidden',
             'padding': '0',
@@ -367,193 +354,196 @@ def build_signal_section(data):
     return html.Div(children)
 
 
-def build_sha_strength_chart(analysis):
-    """Build SHA strength gauge chart with premium styling"""
-    buy_str = analysis.get('sha_buy_strength', 0)
-    sell_str = analysis.get('sha_sell_strength', 0)
-    total = buy_str + sell_str or 1
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Bar(
-        x=[buy_str], y=['SHA'],
-        orientation='h', name='Bullish',
-        marker=dict(
-            color=COLORS['buy'],
-            line=dict(width=0),
-        ),
-        text=[f'{buy_str}/{total}'], textposition='inside',
-        textfont=dict(color='white', size=13, family="'Inter', sans-serif"),
-    ))
-    fig.add_trace(go.Bar(
-        x=[sell_str], y=['SHA'],
-        orientation='h', name='Bearish',
-        marker=dict(
-            color=COLORS['sell'],
-            line=dict(width=0),
-        ),
-        text=[f'{sell_str}/{total}'], textposition='inside',
-        textfont=dict(color='white', size=13, family="'Inter', sans-serif"),
-    ))
-
-    p_buy = analysis.get('price_buy_strength', 0)
-    p_sell = analysis.get('price_sell_strength', 0)
-    p_total = p_buy + p_sell or 1
-
-    fig.add_trace(go.Bar(
-        x=[p_buy], y=['Price'],
-        orientation='h', name='Price Bull',
-        marker=dict(color='#00e6b8', line=dict(width=0)),
-        showlegend=False,
-        text=[f'{p_buy}/{p_total}'], textposition='inside',
-        textfont=dict(color='#0a0e1a', size=13, family="'Inter', sans-serif"),
-    ))
-    fig.add_trace(go.Bar(
-        x=[p_sell], y=['Price'],
-        orientation='h', name='Price Bear',
-        marker=dict(color='#ff8e8e', line=dict(width=0)),
-        showlegend=False,
-        text=[f'{p_sell}/{p_total}'], textposition='inside',
-        textfont=dict(color='#0a0e1a', size=13, family="'Inter', sans-serif"),
-    ))
-
-    fig.update_layout(
-        barmode='stack',
-        height=130,
-        margin=dict(l=60, r=20, t=10, b=10),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color=COLORS['text_secondary'], size=12, family="'Inter', sans-serif"),
-        legend=dict(
-            orientation='h', y=-0.3,
-            font=dict(size=11, color=COLORS['text_secondary']),
-            bgcolor='rgba(0,0,0,0)',
-        ),
-        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
-        yaxis=dict(showgrid=False),
-        bargap=0.35,
-    )
-
-    return fig
+def _cross_color(v):
+    """Get color for a crossover value"""
+    if v >= 3: return '#00d2a0'
+    if v == 2: return '#00e6b8'
+    if v == 1: return '#7cd9c0'
+    if v == -1: return '#ff8e8e'
+    if v == -2: return '#ff6b6b'
+    if v <= -3: return '#e53e3e'
+    return COLORS['neutral']
 
 
-def build_power_list_chart(analysis):
-    """Build the SHA/Price power list heatmap with crossover — premium version"""
+def _cross_icon(v):
+    """Get icon for a crossover value"""
+    if v >= 2: return '🔥'
+    if v == 1: return '➡️'
+    if v == -1: return '➡️'
+    if v <= -2: return '🔥'
+    return '➡️'
+
+
+def _make_power_blocks(power_list, strength):
+    """Build compact colored block segments from power list + strength number"""
+    blocks = []
+    for v in power_list:
+        c = COLORS['buy'] if v == 1 else COLORS['sell']
+        blocks.append(html.Span(style={
+            'display': 'inline-block',
+            'width': '10px', 'height': '16px',
+            'background': c,
+            'borderRadius': '2px',
+            'marginRight': '1px',
+        }))
+    return html.Div([
+        html.Span(blocks, style={'display': 'inline-flex', 'alignItems': 'center', 'marginRight': '8px'}),
+        html.Span(str(strength), style={
+            'fontFamily': "'JetBrains Mono', monospace",
+            'fontWeight': '700', 'fontSize': '13px',
+            'color': COLORS['buy'] if strength > 0 else COLORS['text_dim'],
+        }),
+    ], style={'display': 'flex', 'alignItems': 'center'})
+
+
+def _make_candle_dots(power_list):
+    """Build colored dots for each candle"""
+    dots = []
+    for v in power_list:
+        c = COLORS['buy'] if v == 1 else COLORS['sell']
+        dots.append(html.Span('●', style={
+            'color': c, 'fontSize': '11px', 'marginRight': '2px',
+        }))
+    return html.Div(dots, style={'display': 'flex', 'alignItems': 'center', 'flexWrap': 'wrap'})
+
+
+def _make_cross_bar(value):
+    """Build a horizontal progress bar for crossover value"""
+    color = _cross_color(value)
+    icon = _cross_icon(value)
+    abs_val = abs(value) if value != 0 else 0
+    pct = min(abs_val / 3 * 100, 100)
+    return html.Div([
+        html.Span(icon, style={'fontSize': '11px', 'marginRight': '6px'}),
+        html.Div([
+            html.Div(style={
+                'width': f'{pct}%', 'minWidth': '4px',
+                'height': '100%',
+                'background': color,
+                'borderRadius': '4px',
+                'transition': 'width 0.4s ease',
+            }),
+        ], style={
+            'flex': '1', 'height': '14px',
+            'background': 'rgba(255,255,255,0.04)',
+            'borderRadius': '4px', 'overflow': 'hidden',
+        }),
+        html.Span(f'{value:+d}' if value != 0 else '0', style={
+            'fontFamily': "'JetBrains Mono', monospace",
+            'fontWeight': '700', 'fontSize': '12px',
+            'color': color, 'marginLeft': '8px', 'minWidth': '24px',
+        }),
+    ], style={'display': 'flex', 'alignItems': 'center', 'width': '100%'})
+
+
+def build_sha_analysis_panel(symbol, analysis, last_updated=''):
+    """Build compact SHA analysis panel with table layout matching screenshot style"""
     sha_list = analysis.get('sha_power_list', [])
     price_list = analysis.get('price_power_list', [])
     crossover = analysis.get('crossover', [])
-    n = len(sha_list)
+    sha_buy = analysis.get('sha_buy_strength', 0)
+    sha_sell = analysis.get('sha_sell_strength', 0)
+    price_buy = analysis.get('price_buy_strength', 0)
+    price_sell = analysis.get('price_sell_strength', 0)
 
-    labels = [f'C-{i+1}' for i in range(n)]
+    # Overall bias
+    total_buy = sha_buy + price_buy
+    total_sell = sha_sell + price_sell
+    is_bullish = total_buy >= total_sell
+    bias_text = 'BULLISH' if is_bullish else 'BEARISH'
+    bias_color = COLORS['buy'] if is_bullish else COLORS['sell']
 
-    fig = make_subplots(
-        rows=3, cols=1,
-        row_heights=[0.33, 0.33, 0.34],
-        vertical_spacing=0.10,
-        subplot_titles=['SHA Power (1=Bull, 0=Bear)', 'Price Power (1=Bull, 0=Bear)', 'Crossover'],
-    )
+    # Latest crossover value (most recent = index 0)
+    latest_cross = crossover[0] if crossover else 0
+    # Sum crossover for overall signal
+    cross_sum = sum(crossover) if crossover else 0
 
-    # SHA power
-    sha_colors = [COLORS['buy'] if v == 1 else COLORS['sell'] for v in sha_list]
-    fig.add_trace(go.Bar(
-        x=labels, y=[1]*n,
-        marker=dict(color=sha_colors, line=dict(width=1, color='rgba(10,14,26,0.5)')),
-        text=[str(v) for v in sha_list],
-        textposition='inside',
-        textfont=dict(size=13, color='white', family="'Inter', sans-serif"),
-        showlegend=False,
-    ), row=1, col=1)
+    # Column header style
+    col_hdr = {
+        'fontSize': '9px', 'color': COLORS['text_dim'],
+        'textTransform': 'uppercase', 'letterSpacing': '1.5px',
+        'fontWeight': '600', 'padding': '6px 0',
+    }
 
-    # Price power
-    price_colors = [COLORS['buy'] if v == 1 else COLORS['sell'] for v in price_list]
-    fig.add_trace(go.Bar(
-        x=labels, y=[1]*n,
-        marker=dict(color=price_colors, line=dict(width=1, color='rgba(10,14,26,0.5)')),
-        text=[str(v) for v in price_list],
-        textposition='inside',
-        textfont=dict(size=13, color='white', family="'Inter', sans-serif"),
-        showlegend=False,
-    ), row=2, col=1)
+    # Row builder
+    def make_row(icon_color, label, power_list, strength, cross_val):
+        return html.Div([
+            # Label
+            html.Div([
+                html.Span('●', style={'color': icon_color, 'fontSize': '10px', 'marginRight': '8px'}),
+                html.Span(label, style={
+                    'fontWeight': '600', 'fontSize': '12px',
+                    'color': COLORS['text'], 'letterSpacing': '0.5px',
+                }),
+            ], style={'display': 'flex', 'alignItems': 'center', 'minWidth': '70px', 'width': '70px'}),
+            # Power blocks
+            html.Div([
+                _make_power_blocks(power_list, strength),
+            ], style={'flex': '1.2', 'padding': '0 10px'}),
+            # Candle dots
+            html.Div([
+                _make_candle_dots(power_list),
+            ], style={'flex': '1.2', 'padding': '0 10px'}),
+            # Cross bar
+            html.Div([
+                _make_cross_bar(cross_val),
+            ], style={'flex': '1.5', 'padding': '0 4px'}),
+        ], style={
+            'display': 'flex', 'alignItems': 'center',
+            'padding': '8px 16px',
+            'borderBottom': f'1px solid {COLORS["divider"]}',
+        })
 
-    # Crossover
-    cross_colors = []
-    for v in crossover:
-        if v == 3:
-            cross_colors.append('#00d2a0')
-        elif v == 2:
-            cross_colors.append('#00e6b8')
-        elif v == 1:
-            cross_colors.append('#7cd9c0')
-        elif v == -1:
-            cross_colors.append('#ff8e8e')
-        elif v == -2:
-            cross_colors.append('#ff6b6b')
-        elif v == -3:
-            cross_colors.append('#e53e3e')
-        else:
-            cross_colors.append(COLORS['neutral'])
-
-    fig.add_trace(go.Bar(
-        x=labels,
-        y=[abs(v) for v in crossover],
-        marker=dict(color=cross_colors, line=dict(width=1, color='rgba(10,14,26,0.5)')),
-        text=[str(v) for v in crossover],
-        textposition='inside',
-        textfont=dict(size=13, color='white', family="'Inter', sans-serif"),
-        showlegend=False,
-    ), row=3, col=1)
-
-    fig.update_layout(
-        height=380,
-        margin=dict(l=30, r=20, t=30, b=20),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color=COLORS['text_secondary'], size=11, family="'Inter', sans-serif"),
-        bargap=0.15,
-    )
-
-    for i in range(1, 4):
-        fig.update_yaxes(showticklabels=False, showgrid=False, zeroline=False, row=i, col=1)
-        fig.update_xaxes(showgrid=False, row=i, col=1, tickfont=dict(size=10, color=COLORS['text_dim']))
-
-    for ann in fig['layout']['annotations']:
-        ann['font'] = dict(size=11, color=COLORS['text_dim'], family="'Inter', sans-serif")
-
-    return fig
-
-
-def build_crossover_legend():
-    """Crossover value legend with premium pills"""
-    items = [
-        ('+3', 'Strong Bull', '#00d2a0'),
-        ('+2', 'Overlap Bull', '#00e6b8'),
-        ('+1', 'Weak Bull', '#7cd9c0'),
-        ('-1', 'Weak Bear', '#ff8e8e'),
-        ('-2', 'Overlap Bear', '#ff6b6b'),
-        ('-3', 'Strong Bear', '#e53e3e'),
-    ]
     return html.Div([
+        # ── Header bar ──
         html.Div([
-            html.Span(style={
-                'width': '10px', 'height': '10px', 'borderRadius': '3px',
-                'background': c, 'display': 'inline-block', 'marginRight': '6px',
-                'boxShadow': f'0 0 6px {c}44',
+            html.Span(symbol, style={
+                'fontWeight': '700', 'fontSize': '14px',
+                'letterSpacing': '1px', 'color': '#fff',
             }),
-            html.Span(f'{val} ', style={
-                'fontWeight': '600', 'fontSize': '11px', 'color': COLORS['text'],
-                'fontFamily': "'JetBrains Mono', monospace",
-            }),
-            html.Span(label, style={
-                'fontSize': '10px', 'color': COLORS['text_dim'],
+            html.Span([
+                html.Span('◼ ', style={'fontSize': '8px'}),
+                html.Span(bias_text),
+            ], style={
+                'fontSize': '11px', 'fontWeight': '700',
+                'letterSpacing': '1px', 'color': '#fff',
+                'background': 'rgba(255,255,255,0.15)',
+                'padding': '3px 12px', 'borderRadius': '4px',
             }),
         ], style={
-            'display': 'inline-flex', 'alignItems': 'center',
-            'marginRight': '16px', 'padding': '4px 0',
-        })
-        for val, label, c in items
+            'display': 'flex', 'justifyContent': 'space-between',
+            'alignItems': 'center',
+            'padding': '10px 16px',
+            'background': f'linear-gradient(135deg, {bias_color}, {bias_color}cc)',
+            'borderRadius': '12px 12px 0 0',
+        }),
+        # ── Column headers ──
+        html.Div([
+            html.Div('', style={'minWidth': '70px', 'width': '70px'}),
+            html.Div('POWER', style={**col_hdr, 'flex': '1.2', 'padding': '0 10px'}),
+            html.Div('CANDLES', style={**col_hdr, 'flex': '1.2', 'padding': '0 10px'}),
+            html.Div('CROSS', style={**col_hdr, 'flex': '1.5', 'padding': '0 4px'}),
+        ], style={
+            'display': 'flex', 'alignItems': 'center',
+            'padding': '6px 16px',
+            'background': 'rgba(255,255,255,0.02)',
+            'borderBottom': f'1px solid {COLORS["divider"]}',
+        }),
+        # ── Data rows ──
+        make_row('#5b9bf5', 'SHA', sha_list, sha_buy, latest_cross),
+        make_row('#ff6b6b', 'Price', price_list, price_buy, cross_sum),
+        make_row('#ffa940', 'IDX', sha_list, sha_buy + price_buy, latest_cross + cross_sum),
+        # ── Footer timestamp ──
+        html.Div(last_updated, style={
+            'fontSize': '10px', 'color': COLORS['text_muted'],
+            'textAlign': 'right', 'padding': '6px 16px 8px',
+            'fontFamily': "'JetBrains Mono', monospace",
+        }),
     ], style={
-        'marginTop': '8px', 'padding': '10px 0',
-        'borderTop': f'1px solid {COLORS["divider"]}',
+        'background': COLORS['card_solid'],
+        'border': f'1px solid {COLORS["card_border"]}',
+        'borderRadius': '12px',
+        'overflow': 'hidden',
     })
 
 
@@ -800,11 +790,16 @@ def build_daily_trades_section(symbol):
 
     return html.Div([
         html.Div([
-            html.Span('📈', style={'fontSize': '18px'}),
-            html.Span('Daily Trade Log', style=SECTION_TITLE_STYLE),
-        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '10px', 'marginBottom': '16px'}),
+            html.Span('📈', style={'fontSize': '14px'}),
+            html.Span('Daily Trade Log', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
         metrics_row,
-        html.Div([chart], style=CARD_STYLE),
+        html.Div([chart], style={
+            'background': COLORS['card'],
+            'border': f'1px solid {COLORS["card_border"]}',
+            'borderRadius': '10px',
+            'padding': '12px 14px',
+        }),
     ])
 
 
@@ -864,13 +859,13 @@ def build_symbol_tab_content(symbol):
         html.Div([
             html.Div([
                 html.H2(symbol, style={
-                    'margin': '0', 'fontSize': '28px', 'fontWeight': '800',
+                    'margin': '0', 'fontSize': '22px', 'fontWeight': '800',
                     'color': COLORS['text'],
                     'letterSpacing': '1px',
                 }),
                 html.Span(f'{date_str}  •  {time_str}', style={
-                    'fontSize': '12px', 'color': COLORS['text_dim'],
-                    'marginLeft': '16px', 'fontWeight': '400',
+                    'fontSize': '11px', 'color': COLORS['text_dim'],
+                    'marginLeft': '14px', 'fontWeight': '400',
                     'fontFamily': "'JetBrains Mono', monospace",
                 }),
             ], style={'display': 'flex', 'alignItems': 'baseline'}),
@@ -898,66 +893,34 @@ def build_symbol_tab_content(symbol):
             ], style={'display': 'flex', 'alignItems': 'center'}),
         ], style={
             'display': 'flex', 'justifyContent': 'space-between',
-            'alignItems': 'center', 'marginBottom': '28px',
-            'paddingBottom': '20px',
+            'alignItems': 'center', 'marginBottom': '16px',
+            'paddingBottom': '14px',
             'borderBottom': f'1px solid {COLORS["divider"]}',
         }),
 
-        # Signal section
-        build_signal_section(data),
+        # ── Top row: Signals + Positions side by side ──
+        html.Div([
+            html.Div([build_signal_section(data)], style={'flex': '1'}),
+            html.Div([build_positions_section(data)], style={'flex': '1'}),
+        ], style={'display': 'flex', 'gap': '16px', 'flexWrap': 'wrap'}),
 
-        html.Div(style={'height': '24px'}),
+        html.Div(style={'height': '16px'}),
 
-        # Positions section
-        build_positions_section(data),
-
-        html.Div(style={'height': '24px'}),
-
-        # Analysis section
+        # ── SHA Signal Analysis (compact table panel) ──
         html.Div([
             html.Div([
-                html.Span('🔬', style={'fontSize': '18px'}),
-                html.Span('SHA Indicator Analysis', style=SECTION_TITLE_STYLE),
-            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '10px', 'marginBottom': '16px'}),
-
-            # Strength bar
-            html.Div([
-                html.Div('STRENGTH', style={
-                    'fontSize': '10px', 'color': COLORS['text_dim'],
-                    'textTransform': 'uppercase', 'letterSpacing': '1.5px',
-                    'marginBottom': '10px', 'fontWeight': '500',
-                }),
-                dcc.Graph(
-                    figure=build_sha_strength_chart(analysis),
-                    config={'displayModeBar': False},
-                    style={'height': '130px'},
-                ),
-            ], style=CARD_STYLE),
-
-            html.Div(style={'height': '14px'}),
-
-            # Power lists + Crossover
-            html.Div([
-                html.Div('CANDLE-BY-CANDLE ANALYSIS (latest → oldest)', style={
-                    'fontSize': '10px', 'color': COLORS['text_dim'],
-                    'textTransform': 'uppercase', 'letterSpacing': '1.5px',
-                    'marginBottom': '6px', 'fontWeight': '500',
-                }),
-                dcc.Graph(
-                    figure=build_power_list_chart(analysis),
-                    config={'displayModeBar': False},
-                    style={'height': '380px'},
-                ),
-                build_crossover_legend(),
-            ], style=CARD_STYLE),
+                html.Span('🎯', style={'fontSize': '14px'}),
+                html.Span('SHA Signal Analysis', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
+            build_sha_analysis_panel(symbol, analysis, last_updated),
         ]),
 
-        html.Div(style={'height': '24px'}),
+        html.Div(style={'height': '16px'}),
 
         # Daily Trade Log section
         build_daily_trades_section(symbol),
 
-        html.Div(style={'height': '24px'}),
+        html.Div(style={'height': '16px'}),
 
         # Raw JSON
         html.Details([
