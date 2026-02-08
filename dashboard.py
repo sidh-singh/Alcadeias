@@ -424,90 +424,85 @@ def build_activity_section(data):
     })
 
 
-def _cross_color(v):
-    """Get color for a crossover value"""
-    if v >= 3: return '#00d2a0'
-    if v == 2: return '#00e6b8'
-    if v == 1: return '#7cd9c0'
-    if v == -1: return '#ff8e8e'
-    if v == -2: return '#ff6b6b'
-    if v <= -3: return '#e53e3e'
-    return COLORS['neutral']
+def _crossover_badge(val):
+    """Compact colored badge for a crossover value — Ballom style."""
+    cfg = {
+        3:  ('🔥 +3', '#00d2a0', 'rgba(0, 210, 160, 0.12)'),
+        2:  ('⚡ +2', '#27ae60', 'rgba(39, 174, 96, 0.12)'),
+        1:  ('💨 +1', '#5dade2', 'rgba(93, 173, 226, 0.12)'),
+        -1: ('💨 −1', '#f5b041', 'rgba(245, 176, 65, 0.12)'),
+        -2: ('⚡ −2', '#e67e22', 'rgba(230, 126, 34, 0.12)'),
+        -3: ('🔥 −3', '#e74c3c', 'rgba(231, 76, 60, 0.12)'),
+    }
+    emoji_txt, color, bg = cfg.get(val, (str(val), '#888', 'rgba(255,255,255,0.04)'))
+    return html.Span(emoji_txt, style={
+        'color': color, 'background': bg,
+        'padding': '3px 10px', 'borderRadius': '10px',
+        'fontSize': '0.78rem', 'fontWeight': '600',
+        'whiteSpace': 'nowrap',
+        'fontFamily': "'JetBrains Mono', monospace",
+    })
 
 
-def _cross_icon(v):
-    """Get icon for a crossover value"""
-    if v >= 2: return '🔥'
-    if v == 1: return '➡️'
-    if v == -1: return '➡️'
-    if v <= -2: return '🔥'
-    return '➡️'
-
-
-def _make_power_blocks(power_list, strength):
-    """Build compact colored block segments from power list + strength number"""
-    blocks = []
-    for v in power_list:
-        c = COLORS['buy'] if v == 1 else COLORS['sell']
-        blocks.append(html.Span(style={
-            'display': 'inline-block',
-            'width': '10px', 'height': '16px',
-            'background': c,
-            'borderRadius': '2px',
-            'marginRight': '1px',
-        }))
-    return html.Div([
-        html.Span(blocks, style={'display': 'inline-flex', 'alignItems': 'center', 'marginRight': '8px'}),
-        html.Span(str(strength), style={
-            'fontFamily': "'JetBrains Mono', monospace",
-            'fontWeight': '700', 'fontSize': '13px',
-            'color': COLORS['buy'] if strength > 0 else COLORS['text_dim'],
-        }),
-    ], style={'display': 'flex', 'alignItems': 'center'})
-
-
-def _make_candle_dots(power_list):
-    """Build colored dots for each candle"""
+def _power_bar(power, max_power=7):
+    """Compact inline power gauge with colored rectangular segments."""
     dots = []
-    for v in power_list:
-        c = COLORS['buy'] if v == 1 else COLORS['sell']
-        dots.append(html.Span('●', style={
-            'color': c, 'fontSize': '11px', 'marginRight': '2px',
+    for i in range(max_power):
+        if i < power:
+            c = '#00d2a0' if power >= 5 else '#f39c12' if power >= 3 else '#e74c3c'
+        else:
+            c = 'rgba(255,255,255,0.06)'
+        dots.append(html.Span(style={
+            'display': 'inline-block', 'width': '8px', 'height': '16px',
+            'borderRadius': '2px', 'background': c, 'marginRight': '2px',
         }))
-    return html.Div(dots, style={'display': 'flex', 'alignItems': 'center', 'flexWrap': 'wrap'})
-
-
-def _make_cross_bar(value):
-    """Build a horizontal progress bar for crossover value"""
-    color = _cross_color(value)
-    icon = _cross_icon(value)
-    abs_val = abs(value) if value != 0 else 0
-    pct = min(abs_val / 3 * 100, 100)
+    p_color = '#00d2a0' if power >= 5 else '#f39c12' if power >= 3 else '#e74c3c'
     return html.Div([
-        html.Span(icon, style={'fontSize': '11px', 'marginRight': '6px'}),
-        html.Div([
-            html.Div(style={
-                'width': f'{pct}%', 'minWidth': '4px',
-                'height': '100%',
-                'background': color,
-                'borderRadius': '4px',
-                'transition': 'width 0.4s ease',
-            }),
-        ], style={
-            'flex': '1', 'height': '14px',
-            'background': 'rgba(255,255,255,0.04)',
-            'borderRadius': '4px', 'overflow': 'hidden',
-        }),
-        html.Span(f'{value:+d}' if value != 0 else '0', style={
+        *dots,
+        html.Span(f' {power}', style={
+            'fontSize': '0.75rem', 'fontWeight': '700', 'marginLeft': '4px',
+            'color': p_color if power > 0 else COLORS['text_dim'],
             'fontFamily': "'JetBrains Mono', monospace",
-            'fontWeight': '700', 'fontSize': '12px',
-            'color': color, 'marginLeft': '8px', 'minWidth': '24px',
         }),
-    ], style={'display': 'flex', 'alignItems': 'center', 'width': '100%'})
+    ], style={'display': 'inline-flex', 'alignItems': 'center'})
+
+
+def _list_dots(lst, max_items=7):
+    """Render the bullish/bearish list as colored circle dots with fade."""
+    dots = []
+    for i, v in enumerate(lst[:max_items]):
+        c = '#00d2a0' if v == 1 else '#e74c3c'
+        opacity = max(0.35, 1.0 - (i * 0.09))
+        dots.append(html.Span(style={
+            'display': 'inline-block', 'width': '10px', 'height': '10px',
+            'borderRadius': '50%', 'background': c,
+            'marginRight': '3px', 'opacity': str(opacity),
+        }))
+    return html.Div(dots, style={'display': 'inline-flex', 'alignItems': 'center'})
+
+
+def _signal_row(label, icon, color, power, lst, cross_val):
+    """One compact row for SHA / Price / IDX in the signal card — grid layout."""
+    return html.Div(
+        style={
+            'display': 'grid',
+            'gridTemplateColumns': '64px 1fr 1fr 1fr',
+            'gap': '8px', 'alignItems': 'center',
+            'padding': '8px 0',
+        },
+        children=[
+            html.Span(f'{icon} {label}', style={
+                'fontWeight': '700', 'fontSize': '0.82rem', 'color': color,
+            }),
+            _power_bar(power),
+            _list_dots(lst),
+            _crossover_badge(cross_val),
+        ],
+    )
 
 
 def build_sha_analysis_panel(symbol, analysis, last_updated=''):
-    """Build compact SHA analysis panel with table layout matching screenshot style"""
+    """Build clean SHA analysis card — Ballom-inspired grid layout."""
     sha_list = analysis.get('sha_power_list', [])
     price_list = analysis.get('price_power_list', [])
     crossover = analysis.get('crossover', [])
@@ -521,100 +516,86 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     total_sell = sha_sell + price_sell
     is_bullish = total_buy >= total_sell
     bias_text = 'BULLISH' if is_bullish else 'BEARISH'
-    bias_color = COLORS['buy'] if is_bullish else COLORS['sell']
+    bias_icon = '📈' if is_bullish else '📉'
+    bias_color = '#00d2a0' if is_bullish else '#e74c3c'
+    trend_bg = 'rgba(0, 210, 160, 0.08)' if is_bullish else 'rgba(231, 76, 60, 0.08)'
 
-    # Latest crossover value (most recent = index 0)
+    # Crossover values
     latest_cross = crossover[0] if crossover else 0
-    # Sum crossover for overall signal
     cross_sum = sum(crossover) if crossover else 0
 
     # Column header style
     col_hdr = {
-        'fontSize': '9px', 'color': COLORS['text_dim'],
-        'textTransform': 'uppercase', 'letterSpacing': '1.5px',
-        'fontWeight': '600', 'padding': '6px 0',
+        'fontSize': '0.65rem', 'color': COLORS['text_dim'],
+        'fontWeight': '600', 'letterSpacing': '0.5px',
     }
 
-    # Row builder
-    def make_row(icon_color, label, power_list, strength, cross_val):
-        return html.Div([
-            # Label
-            html.Div([
-                html.Span('●', style={'color': icon_color, 'fontSize': '10px', 'marginRight': '8px'}),
-                html.Span(label, style={
-                    'fontWeight': '600', 'fontSize': '12px',
-                    'color': COLORS['text'], 'letterSpacing': '0.5px',
-                }),
-            ], style={'display': 'flex', 'alignItems': 'center', 'minWidth': '70px', 'width': '70px'}),
-            # Power blocks
-            html.Div([
-                _make_power_blocks(power_list, strength),
-            ], style={'flex': '1.2', 'padding': '0 10px'}),
-            # Candle dots
-            html.Div([
-                _make_candle_dots(power_list),
-            ], style={'flex': '1.2', 'padding': '0 10px'}),
-            # Cross bar
-            html.Div([
-                _make_cross_bar(cross_val),
-            ], style={'flex': '1.5', 'padding': '0 4px'}),
-        ], style={
-            'display': 'flex', 'alignItems': 'center',
-            'padding': '8px 16px',
-            'borderBottom': f'1px solid {COLORS["divider"]}',
-        })
-
-    return html.Div([
-        # ── Header bar ──
-        html.Div([
-            html.Span(symbol, style={
-                'fontWeight': '700', 'fontSize': '14px',
-                'letterSpacing': '1px', 'color': '#fff',
-            }),
-            html.Span([
-                html.Span('◼ ', style={'fontSize': '8px'}),
-                html.Span(bias_text),
-            ], style={
-                'fontSize': '11px', 'fontWeight': '700',
-                'letterSpacing': '1px', 'color': '#fff',
-                'background': 'rgba(255,255,255,0.15)',
-                'padding': '3px 12px', 'borderRadius': '4px',
-            }),
-        ], style={
-            'display': 'flex', 'justifyContent': 'space-between',
-            'alignItems': 'center',
-            'padding': '10px 16px',
-            'background': f'linear-gradient(135deg, {bias_color}, {bias_color}cc)',
-            'borderRadius': '12px 12px 0 0',
-        }),
-        # ── Column headers ──
-        html.Div([
-            html.Div('', style={'minWidth': '70px', 'width': '70px'}),
-            html.Div('POWER', style={**col_hdr, 'flex': '1.2', 'padding': '0 10px'}),
-            html.Div('CANDLES', style={**col_hdr, 'flex': '1.2', 'padding': '0 10px'}),
-            html.Div('CROSS', style={**col_hdr, 'flex': '1.5', 'padding': '0 4px'}),
-        ], style={
-            'display': 'flex', 'alignItems': 'center',
-            'padding': '6px 16px',
-            'background': 'rgba(255,255,255,0.02)',
-            'borderBottom': f'1px solid {COLORS["divider"]}',
-        }),
-        # ── Data rows ──
-        make_row('#5b9bf5', 'SHA', sha_list, sha_buy, latest_cross),
-        make_row('#ff6b6b', 'Price', price_list, price_buy, cross_sum),
-        make_row('#ffa940', 'IDX', sha_list, sha_buy + price_buy, latest_cross + cross_sum),
-        # ── Footer timestamp ──
-        html.Div(last_updated, style={
-            'fontSize': '10px', 'color': COLORS['text_muted'],
-            'textAlign': 'right', 'padding': '6px 16px 8px',
-            'fontFamily': "'JetBrains Mono', monospace",
-        }),
-    ], style={
-        'background': COLORS['card_solid'],
-        'border': f'1px solid {COLORS["card_border"]}',
-        'borderRadius': '12px',
-        'overflow': 'hidden',
+    # Divider line
+    row_divider = html.Hr(style={
+        'border': 'none',
+        'borderTop': f'1px solid {COLORS["divider"]}',
+        'margin': '0',
     })
+
+    return html.Div(
+        style={
+            'background': COLORS['card_solid'],
+            'borderRadius': '12px',
+            'overflow': 'hidden',
+            'border': f'1px solid {COLORS["card_border"]}',
+        },
+        children=[
+            # ── Header bar ──
+            html.Div(
+                style={
+                    'display': 'flex', 'justifyContent': 'space-between',
+                    'alignItems': 'center', 'padding': '10px 16px',
+                    'background': trend_bg,
+                    'borderBottom': f'2px solid {bias_color}',
+                },
+                children=[
+                    html.Span(symbol, style={
+                        'fontWeight': '700', 'fontSize': '0.95rem',
+                        'color': COLORS['text'], 'letterSpacing': '1px',
+                    }),
+                    html.Span(f'{bias_icon} {bias_text}', style={
+                        'color': bias_color, 'fontWeight': '700',
+                        'fontSize': '0.8rem',
+                        'background': COLORS['card_solid'],
+                        'padding': '2px 10px', 'borderRadius': '10px',
+                    }),
+                ],
+            ),
+            # ── Column headers ──
+            html.Div(
+                style={
+                    'display': 'grid',
+                    'gridTemplateColumns': '64px 1fr 1fr 1fr',
+                    'gap': '8px', 'padding': '8px 16px 0',
+                },
+                children=[
+                    html.Span(''),
+                    html.Span('POWER', style=col_hdr),
+                    html.Span('CANDLES', style=col_hdr),
+                    html.Span('CROSS', style=col_hdr),
+                ],
+            ),
+            # ── Signal rows ──
+            html.Div(style={'padding': '0 16px 10px'}, children=[
+                _signal_row('SHA', '🔵', '#5dade2', sha_buy, sha_list, latest_cross),
+                row_divider,
+                _signal_row('Price', '🔴', '#e74c3c', price_buy, price_list, cross_sum),
+                row_divider,
+                _signal_row('IDX', '📊', '#f39c12', sha_buy + price_buy, sha_list, latest_cross + cross_sum),
+            ]),
+            # ── Footer timestamp ──
+            html.Div(last_updated, style={
+                'fontSize': '0.65rem', 'color': COLORS['text_muted'],
+                'padding': '4px 16px 8px', 'textAlign': 'right',
+                'fontFamily': "'JetBrains Mono', monospace",
+            }),
+        ],
+    )
 
 
 # ─── Daily Trade Functions ───
