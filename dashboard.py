@@ -427,12 +427,12 @@ def build_activity_section(data):
 def _crossover_badge(val):
     """Compact colored badge for a crossover value — Ballom style."""
     cfg = {
-        3:  ('🔥 +3', '#00d2a0', 'rgba(0, 210, 160, 0.12)'),
-        2:  ('⚡ +2', '#27ae60', 'rgba(39, 174, 96, 0.12)'),
-        1:  ('💨 +1', '#5dade2', 'rgba(93, 173, 226, 0.12)'),
-        -1: ('💨 −1', '#f5b041', 'rgba(245, 176, 65, 0.12)'),
-        -2: ('⚡ −2', '#e67e22', 'rgba(230, 126, 34, 0.12)'),
-        -3: ('🔥 −3', '#e74c3c', 'rgba(231, 76, 60, 0.12)'),
+        3:  ('🔥 +3', '#00c853', 'rgba(0, 200, 83, 0.12)'),
+        2:  ('⚡ +2', '#4caf50', 'rgba(76, 175, 80, 0.12)'),
+        1:  ('💨 +1', '#81c784', 'rgba(129, 199, 132, 0.12)'),
+        -1: ('💨 −1', '#e57373', 'rgba(229, 115, 115, 0.12)'),
+        -2: ('⚡ −2', '#f44336', 'rgba(244, 67, 54, 0.12)'),
+        -3: ('🔥 −3', '#c62828', 'rgba(198, 40, 40, 0.12)'),
     }
     emoji_txt, color, bg = cfg.get(val, (str(val), '#888', 'rgba(255,255,255,0.04)'))
     return html.Span(emoji_txt, style={
@@ -481,12 +481,32 @@ def _list_dots(lst, max_items=7):
     return html.Div(dots, style={'display': 'inline-flex', 'alignItems': 'center'})
 
 
-def _signal_row(label, icon, color, power, lst, cross_val):
-    """One compact row for SHA / Price / IDX in the signal card — grid layout."""
+def _cross_dots(cross_list, max_items=7):
+    """Render crossover values [-3..+3] as colored circle dots.
+    Size scales with abs(value): ±1=8px, ±2=10px, ±3=12px."""
+    color_map = {
+        3: '#00c853', 2: '#4caf50', 1: '#81c784',
+        -1: '#e57373', -2: '#f44336', -3: '#c62828',
+    }
+    dots = []
+    for i, v in enumerate(cross_list[:max_items]):
+        c = color_map.get(v, '#555')
+        size = {1: '8px', 2: '10px', 3: '12px'}.get(abs(v), '8px')
+        opacity = max(0.35, 1.0 - (i * 0.09))
+        dots.append(html.Span(style={
+            'display': 'inline-block', 'width': size, 'height': size,
+            'borderRadius': '50%', 'background': c,
+            'marginRight': '3px', 'opacity': str(opacity),
+        }))
+    return html.Div(dots, style={'display': 'inline-flex', 'alignItems': 'center'})
+
+
+def _signal_row(label, icon, color, power, lst):
+    """One compact row for SHA / Price in the signal card — grid layout."""
     return html.Div(
         style={
             'display': 'grid',
-            'gridTemplateColumns': '64px 1fr 1fr 1fr',
+            'gridTemplateColumns': '64px 1fr 1fr',
             'gap': '8px', 'alignItems': 'center',
             'padding': '8px 0',
         },
@@ -496,7 +516,6 @@ def _signal_row(label, icon, color, power, lst, cross_val):
             }),
             _power_bar(power),
             _list_dots(lst),
-            _crossover_badge(cross_val),
         ],
     )
 
@@ -522,7 +541,6 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
 
     # Crossover values
     latest_cross = crossover[0] if crossover else 0
-    cross_sum = sum(crossover) if crossover else 0
 
     # Column header style
     col_hdr = {
@@ -536,6 +554,23 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
         'borderTop': f'1px solid {COLORS["divider"]}',
         'margin': '0',
     })
+
+    # Crossover row — its own layout: label | candle dots | latest badge
+    cross_row = html.Div(
+        style={
+            'display': 'grid',
+            'gridTemplateColumns': '64px 1fr auto',
+            'gap': '8px', 'alignItems': 'center',
+            'padding': '8px 0',
+        },
+        children=[
+            html.Span('🔀 Cross', style={
+                'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#f39c12',
+            }),
+            _cross_dots(crossover),
+            _crossover_badge(latest_cross),
+        ],
+    )
 
     return html.Div(
         style={
@@ -566,25 +601,41 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                     }),
                 ],
             ),
-            # ── Column headers ──
+            # ── Column headers for SHA / Price ──
             html.Div(
                 style={
                     'display': 'grid',
-                    'gridTemplateColumns': '64px 1fr 1fr 1fr',
+                    'gridTemplateColumns': '64px 1fr 1fr',
                     'gap': '8px', 'padding': '8px 16px 0',
                 },
                 children=[
                     html.Span(''),
                     html.Span('POWER', style=col_hdr),
                     html.Span('CANDLES', style=col_hdr),
-                    html.Span('CROSS', style=col_hdr),
                 ],
             ),
-            # ── Signal rows ──
-            html.Div(style={'padding': '0 16px 10px'}, children=[
-                _signal_row('SHA', '🔵', '#5dade2', sha_buy, sha_list, latest_cross),
+            # ── SHA + Price rows ──
+            html.Div(style={'padding': '0 16px 6px'}, children=[
+                _signal_row('SHA', '🔵', '#5dade2', sha_buy, sha_list),
                 row_divider,
-                _signal_row('Price', '🔴', '#e74c3c', price_buy, price_list, cross_sum),
+                _signal_row('Price', '🔴', '#e74c3c', price_buy, price_list),
+            ]),
+            # ── Crossover section ──
+            html.Div(
+                style={
+                    'display': 'grid',
+                    'gridTemplateColumns': '64px 1fr auto',
+                    'gap': '8px', 'padding': '0 16px',
+                },
+                children=[
+                    html.Span(''),
+                    html.Span('CANDLES', style=col_hdr),
+                    html.Span('LATEST', style=col_hdr),
+                ],
+            ),
+            html.Div(style={'padding': '0 16px 10px'}, children=[
+                row_divider,
+                cross_row,
             ]),
             # ── Footer timestamp ──
             html.Div(last_updated, style={
