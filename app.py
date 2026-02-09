@@ -232,7 +232,7 @@ class MT5TradingBot:
         
         while True:
             try:
-                # Fetch M5 timeframe data (50 candles)
+                # Fetch M1 timeframe data (50 candles)
                 source_df = self.position_helper.get_rates(symbol, mt5.TIMEFRAME_M1, 50)
                 
                 if source_df is None or len(source_df) == 0:
@@ -244,12 +244,12 @@ class MT5TradingBot:
                     'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'
                 }, inplace=True)
                 
-                # Calculate SHA with RMA and length 9
+                # Calculate SHA with RMA and length 7 (matches TradingView SHA 7 RMA 7 RMA)
                 sha_df = self.indicator.calculate_sha_v3(
                     source_df, 
-                    smooth_length=9, 
+                    smooth_length=7, 
                     smooth_ma_type='RMA',
-                    after_smooth_length=9, 
+                    after_smooth_length=7, 
                     after_smooth_ma_type='RMA'
                 )
                 
