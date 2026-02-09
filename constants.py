@@ -6,9 +6,9 @@ Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
 # ─── SHA Indicator Parameters ───
-SHA_SMOOTH_LENGTH = 9               # Pre-smooth length for SHA v3
+SHA_SMOOTH_LENGTH = 5               # Pre-smooth length for SHA v3
 SHA_SMOOTH_MA_TYPE = 'RMA'          # MA type for pre-smoothing  (SMA, EMA, RMA, WMA, HMA …)
-SHA_AFTER_SMOOTH_LENGTH = 9         # Post-HA smooth length
+SHA_AFTER_SMOOTH_LENGTH = 5         # Post-HA smooth length
 SHA_AFTER_SMOOTH_MA_TYPE = 'RMA'    # MA type for post-HA smoothing
 
 # ─── Data Fetching ───
