@@ -162,7 +162,7 @@ class Strategy:
             if buy_profit > self.hedge:
                 buy_status = Signal.CLOSE_BUY
             else:
-                if crossover[0] in (0):
+                if lt_sha_power_list[0] == 0:
                     buy_status = Signal.CLOSE_BUY
                 elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** 3):
                     buy_status = Signal.BUY_MORE
@@ -172,7 +172,7 @@ class Strategy:
             if sell_profit > self.hedge:
                 sell_status = Signal.CLOSE_SELL
             else:
-                if crossover[0] in (0):
+                if lt_sha_power_list[0] == 1:
                     sell_status = Signal.CLOSE_SELL
                 elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** 3):
                     sell_status = Signal.SELL_MORE
