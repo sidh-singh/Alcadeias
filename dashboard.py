@@ -1120,8 +1120,86 @@ def build_strategy_log_section(symbol):
 
         chip_text = '  •  '.join(chips) if chips else ''
 
-        # Build full-detail JSON for the tooltip (shown on hover/click)
-        detail_json = json.dumps(details, indent=2, default=str) if details else ''
+        # Build full-detail key-value rows for the expandable section
+        # Show only meaningful fields, skip nested dicts like raw response
+        _detail_display_keys = [
+            ('symbol', 'Symbol'),
+            ('qty', 'Volume'),
+            ('fibo_level', 'Fibo Level'),
+            ('total_volume', 'Total Volume'),
+            ('total_profit', 'Total P/L'),
+            ('first_profit', 'First P/L'),
+            ('positions_closed', 'Positions Closed'),
+            ('note', 'Note'),
+            ('message', 'Message'),
+            ('comment', 'Comment'),
+        ]
+        detail_rows = []
+        for key, label in _detail_display_keys:
+            val = details.get(key)
+            if val is None:
+                continue
+            # Format money values
+            if 'profit' in key.lower():
+                val_str = f'${val}'
+                val_color = COLORS['positive'] if float(val) >= 0 else COLORS['negative']
+            else:
+                val_str = str(val)
+                val_color = COLORS['text_secondary']
+            detail_rows.append(
+                html.Div([
+                    html.Span(label, style={
+                        'fontSize': '10px', 'color': COLORS['text_dim'],
+                        'minWidth': '100px', 'flexShrink': '0',
+                        'fontWeight': '500', 'letterSpacing': '0.3px',
+                    }),
+                    html.Span(val_str, style={
+                        'fontSize': '11px', 'color': val_color,
+                        'fontFamily': "'JetBrains Mono', monospace",
+                        'fontWeight': '500',
+                    }),
+                ], style={'display': 'flex', 'gap': '12px', 'padding': '3px 0'})
+            )
+        # Parse response string for retcode / comment if present
+        resp_raw = details.get('response', '')
+        if isinstance(resp_raw, str) and 'retcode' in resp_raw:
+            for rk, rl in [('retcode', 'Retcode'), ('comment', 'Comment')]:
+                if rk == 'comment':
+                    m = re.search(r"comment='([^']*)", resp_raw)
+                else:
+                    m = re.search(rf'{rk}=([^,)]+)', resp_raw)
+                if m:
+                    detail_rows.append(
+                        html.Div([
+                            html.Span(rl, style={
+                                'fontSize': '10px', 'color': COLORS['text_dim'],
+                                'minWidth': '100px', 'flexShrink': '0',
+                                'fontWeight': '500',
+                            }),
+                            html.Span(m.group(1).strip(), style={
+                                'fontSize': '11px', 'color': COLORS['text_secondary'],
+                                'fontFamily': "'JetBrains Mono', monospace",
+                            }),
+                        ], style={'display': 'flex', 'gap': '12px', 'padding': '3px 0'})
+                    )
+        # If response is a dict (close_response), extract key fields
+        if isinstance(resp_raw, dict):
+            for rk, rl in [('message', 'Message'), ('closed_count', 'Closed'), ('failed_count', 'Failed')]:
+                rv = resp_raw.get(rk)
+                if rv is not None:
+                    detail_rows.append(
+                        html.Div([
+                            html.Span(rl, style={
+                                'fontSize': '10px', 'color': COLORS['text_dim'],
+                                'minWidth': '100px', 'flexShrink': '0',
+                                'fontWeight': '500',
+                            }),
+                            html.Span(str(rv), style={
+                                'fontSize': '11px', 'color': COLORS['text_secondary'],
+                                'fontFamily': "'JetBrains Mono', monospace",
+                            }),
+                        ], style={'display': 'flex', 'gap': '12px', 'padding': '3px 0'})
+                    )
 
         row = html.Div([
             # Timestamp
@@ -1177,20 +1255,14 @@ def build_strategy_log_section(symbol):
                 'listStyleType': 'none',
                 'outline': 'none',
             }),
-            html.Pre(detail_json, style={
-                'fontSize': '10px',
-                'color': COLORS['text_dim'],
+            html.Div(detail_rows, style={
                 'background': 'rgba(0,0,0,0.25)',
                 'borderRadius': '8px',
                 'padding': '10px 14px',
                 'margin': '0 14px 8px 14px',
                 'maxHeight': '180px',
                 'overflow': 'auto',
-                'fontFamily': "'JetBrains Mono', monospace",
-                'lineHeight': '1.5',
-                'whiteSpace': 'pre-wrap',
-                'wordBreak': 'break-all',
-            }) if detail_json else html.Div(),
+            }) if detail_rows else html.Div(),
         ], style={'margin': '0'})
 
         rows.append(detail_block)

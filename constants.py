@@ -6,13 +6,13 @@ Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
 # ─── SHA Indicator Parameters ───
-SHA_SMOOTH_LENGTH = 2               # Pre-smooth length for SHA v3
+SHA_SMOOTH_LENGTH = 9               # Pre-smooth length for SHA v3
 SHA_SMOOTH_MA_TYPE = 'RMA'          # MA type for pre-smoothing  (SMA, EMA, RMA, WMA, HMA …)
-SHA_AFTER_SMOOTH_LENGTH = 2         # Post-HA smooth length
+SHA_AFTER_SMOOTH_LENGTH = 9         # Post-HA smooth length
 SHA_AFTER_SMOOTH_MA_TYPE = 'RMA'    # MA type for post-HA smoothing
 
 # ─── Data Fetching ───
-CANDLE_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe for price data (resolved via mt5 at runtime)
+CANDLE_TIMEFRAME = 'TIMEFRAME_M5'   # Timeframe for price data (resolved via mt5 at runtime)
 CANDLE_COUNT = 50                   # Number of candles to fetch per cycle
 
 # ─── Market Status ───
