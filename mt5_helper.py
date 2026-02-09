@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 import time
 from datetime import datetime, timedelta, timezone
-from constants import RISK_REWARD_RATIO
+
 
 
 class MT5PositionHelper:
@@ -31,8 +31,6 @@ class MT5PositionHelper:
             "sl": 0,
             "tp": 0,
         }
-        self.risk_reward_ratio = RISK_REWARD_RATIO
-        
         # Initialize request defaults
         self.request['type_time'] = self.mt5.ORDER_TIME_GTC
         self.request['type_filling'] = self.mt5.ORDER_FILLING_IOC
@@ -260,20 +258,9 @@ class MT5PositionHelper:
         self.request['price'] = self.mt5.symbol_info_tick(symbol).ask
         self.request['type'] = self.mt5.ORDER_TYPE_BUY
         
-        # Set SL/TP (auto-calculate if not provided)
-        if sl == 0:
-            self.request["sl"] = (self.mt5.symbol_info_tick(symbol).ask) - (
-                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[0]
-            )
-        else:
-            self.request["sl"] = sl
-            
-        if tp == 0:
-            self.request["tp"] = (self.mt5.symbol_info_tick(symbol).ask) + (
-                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[1]
-            )
-        else:
-            self.request["tp"] = tp
+        # SL/TP disabled — strategy manages exits via CLOSE_BUY / CLOSE_SELL signals
+        self.request["sl"] = sl      # 0 = no stop loss
+        self.request["tp"] = tp      # 0 = no take profit
         
         order_status = self.mt5.order_send(self.request)
         time.sleep(0.1)
@@ -297,20 +284,9 @@ class MT5PositionHelper:
         self.request['price'] = self.mt5.symbol_info_tick(symbol).ask
         self.request['type'] = self.mt5.ORDER_TYPE_SELL
         
-        # Set SL/TP (auto-calculate if not provided)
-        if sl == 0:
-            self.request["sl"] = (self.mt5.symbol_info_tick(symbol).ask) + (
-                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[0]
-            )
-        else:
-            self.request["sl"] = sl
-            
-        if tp == 0:
-            self.request["tp"] = (self.mt5.symbol_info_tick(symbol).ask) - (
-                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[1]
-            )
-        else:
-            self.request["tp"] = tp
+        # SL/TP disabled — strategy manages exits via CLOSE_BUY / CLOSE_SELL signals
+        self.request["sl"] = sl      # 0 = no stop loss
+        self.request["tp"] = tp      # 0 = no take profit
         
         order_status = self.mt5.order_send(self.request)
         time.sleep(0.1)
