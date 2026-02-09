@@ -233,7 +233,7 @@ class MT5TradingBot:
         while True:
             try:
                 # Fetch M5 timeframe data (50 candles)
-                source_df = self.position_helper.get_rates(symbol, mt5.TIMEFRAME_M5, 50)
+                source_df = self.position_helper.get_rates(symbol, mt5.TIMEFRAME_M1, 50)
                 
                 if source_df is None or len(source_df) == 0:
                     time.sleep(brake)
