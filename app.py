@@ -244,12 +244,12 @@ class MT5TradingBot:
                     'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'
                 }, inplace=True)
                 
-                # Calculate SHA with RMA and length 7 (matches TradingView SHA 7 RMA 7 RMA)
+                # Calculate SHA with RMA and length 4 (matches TradingView SHA 4 RMA 4 RMA)
                 sha_df = self.indicator.calculate_sha_v3(
                     source_df, 
-                    smooth_length=7, 
+                    smooth_length=4, 
                     smooth_ma_type='RMA',
-                    after_smooth_length=7, 
+                    after_smooth_length=4, 
                     after_smooth_ma_type='RMA'
                 )
                 
