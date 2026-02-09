@@ -2,6 +2,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 import time
 from datetime import datetime, timedelta, timezone
+from constants import SL_TP_DISTANCE_PCT
 
 
 
@@ -255,12 +256,14 @@ class MT5PositionHelper:
         """
         self.request['symbol'] = symbol
         self.request['volume'] = qty
-        self.request['price'] = self.mt5.symbol_info_tick(symbol).ask
+        ask = self.mt5.symbol_info_tick(symbol).ask
+        self.request['price'] = ask
         self.request['type'] = self.mt5.ORDER_TYPE_BUY
         
-        # SL/TP disabled — strategy manages exits via CLOSE_BUY / CLOSE_SELL signals
-        self.request["sl"] = sl      # 0 = no stop loss
-        self.request["tp"] = tp      # 0 = no take profit
+        # Unrealistic SL/TP — keeps broker happy but never triggers
+        # BUY: SL far below entry, TP far above entry
+        self.request["sl"] = sl if sl != 0 else round(ask - (ask * SL_TP_DISTANCE_PCT), 6)
+        self.request["tp"] = tp if tp != 0 else round(ask + (ask * SL_TP_DISTANCE_PCT), 6)
         
         order_status = self.mt5.order_send(self.request)
         time.sleep(0.1)
@@ -281,12 +284,14 @@ class MT5PositionHelper:
         """
         self.request['symbol'] = symbol
         self.request['volume'] = qty
-        self.request['price'] = self.mt5.symbol_info_tick(symbol).ask
+        ask = self.mt5.symbol_info_tick(symbol).ask
+        self.request['price'] = ask
         self.request['type'] = self.mt5.ORDER_TYPE_SELL
         
-        # SL/TP disabled — strategy manages exits via CLOSE_BUY / CLOSE_SELL signals
-        self.request["sl"] = sl      # 0 = no stop loss
-        self.request["tp"] = tp      # 0 = no take profit
+        # Unrealistic SL/TP — keeps broker happy but never triggers
+        # SELL: SL far above entry, TP far below entry
+        self.request["sl"] = sl if sl != 0 else round(ask + (ask * SL_TP_DISTANCE_PCT), 6)
+        self.request["tp"] = tp if tp != 0 else round(ask - (ask * SL_TP_DISTANCE_PCT), 6)
         
         order_status = self.mt5.order_send(self.request)
         time.sleep(0.1)

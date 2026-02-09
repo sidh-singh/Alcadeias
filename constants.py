@@ -26,9 +26,9 @@ STRATEGY_SHA_THRESHOLD = 0          # Min SHA ratio to classify candle as bullis
 FIBO_SEQUENCE_LENGTH = 25           # Fibonacci sequence length (first 2 dropped)
 
 # ─── Risk Management ───
-# SL/TP is disabled — strategy manages exits via CLOSE_BUY / CLOSE_SELL signals.
-# If you ever re-enable SL/TP in mt5_helper.py, uncomment the line below.
-# RISK_REWARD_RATIO = [1, 1]        # [risk, reward] for auto SL/TP calculation
+# Strategy manages exits — SL/TP are set far away so the broker accepts the order
+# but they never realistically trigger.  0.95 = 95% of price distance.
+SL_TP_DISTANCE_PCT = 0.95           # Fraction of price used for dummy SL/TP
 
 # ─── File System / Output ───
 OUTPUT_DIR = r'C:\Alcadeias'                    # Root directory for JSON data files
