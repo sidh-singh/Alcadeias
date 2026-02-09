@@ -16,6 +16,7 @@ from constants import (
     DASHBOARD_REFRESH_INTERVAL, DASHBOARD_HOST, DASHBOARD_PORT,
     HISTORICAL_SUMMARY_FILENAME,
     GRAPH_TEXT_LABEL_THRESHOLD, GRAPH_CUM_LABEL_THRESHOLD,
+    STRATEGY_LOG_FILENAME,
 )
 
 # ─── Configuration ───
@@ -1029,6 +1030,192 @@ def build_daily_trades_section(symbol):
     ])
 
 
+# ─── Strategy Log Functions ───
+
+def load_strategy_log(symbol):
+    """Load strategy log entries for a symbol"""
+    log_path = os.path.join(JSON_DIR, 'logs', f'{symbol}_{STRATEGY_LOG_FILENAME}')
+    try:
+        with open(log_path, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def _event_badge_config(event):
+    """Return (color, bg, icon) for a strategy log event"""
+    mapping = {
+        'BUY_EXECUTED':       (COLORS['buy'],     COLORS['buy_soft'],  '⚡'),
+        'SELL_EXECUTED':      (COLORS['sell'],     COLORS['sell_soft'], '⚡'),
+        'BUY_MORE_EXECUTED':  (COLORS['buy'],     COLORS['buy_soft'],  '⚡'),
+        'SELL_MORE_EXECUTED': (COLORS['sell'],     COLORS['sell_soft'], '⚡'),
+        'CLOSE_BUY':          (COLORS['warning'],  'rgba(255,217,61,0.12)', '✕'),
+        'CLOSE_SELL':         (COLORS['warning'],  'rgba(255,217,61,0.12)', '✕'),
+        'BUY_SIGNAL':         ('#5dade2',          'rgba(93,173,226,0.12)',  '◦'),
+        'SELL_SIGNAL':        ('#e57373',          'rgba(229,115,115,0.12)', '◦'),
+    }
+    return mapping.get(event, (COLORS['text_dim'], 'rgba(255,255,255,0.04)', '•'))
+
+
+def _tag_color(tag):
+    """Return color for a log tag"""
+    return {
+        'ENTRY': COLORS['buy'],
+        'EXIT': COLORS['warning'],
+        'SIGNAL': COLORS['accent'],
+        'ERROR': COLORS['sell'],
+    }.get(tag, COLORS['text_dim'])
+
+
+def build_strategy_log_section(symbol):
+    """Build the Strategy Log panel with clickable/hoverable entries"""
+    log_entries = load_strategy_log(symbol)
+
+    if not log_entries:
+        return html.Div([
+            html.Div([
+                html.Span('📋', style={'fontSize': '14px'}),
+                html.Span('Strategy Log', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
+            html.Div([
+                html.Div('📭', style={'fontSize': '24px', 'marginBottom': '6px', 'opacity': '0.4'}),
+                html.Div('No strategy events yet', style={
+                    'color': COLORS['text_dim'], 'fontSize': '12px',
+                }),
+            ], style={
+                'textAlign': 'center', 'padding': '32px 0',
+                'background': COLORS['card'],
+                'border': f'1px solid {COLORS["card_border"]}',
+                'borderRadius': '10px',
+            }),
+        ])
+
+    rows = []
+    for entry in log_entries:
+        event = entry.get('event', '')
+        tag = entry.get('tag', '')
+        details = entry.get('details', {})
+        evt_color, evt_bg, evt_icon = _event_badge_config(event)
+        t_color = _tag_color(tag)
+
+        # Parse time
+        try:
+            dt = datetime.fromisoformat(entry.get('time', ''))
+            time_str = dt.strftime('%H:%M:%S')
+        except (ValueError, TypeError):
+            time_str = '--:--:--'
+
+        # Build detail chips for inline preview
+        chips = []
+        if details.get('qty'):
+            chips.append(f"qty: {details['qty']}")
+        if details.get('fibo_level'):
+            chips.append(f"fibo: {details['fibo_level']}")
+        if details.get('total_profit') is not None and tag == 'EXIT':
+            chips.append(f"P/L: ${details['total_profit']}")
+        if details.get('positions_closed'):
+            chips.append(f"closed: {details['positions_closed']}")
+        if details.get('note'):
+            chips.append(details['note'])
+
+        chip_text = '  •  '.join(chips) if chips else ''
+
+        # Build full-detail JSON for the tooltip (shown on hover/click)
+        detail_json = json.dumps(details, indent=2, default=str) if details else ''
+
+        row = html.Div([
+            # Timestamp
+            html.Span(time_str, style={
+                'fontSize': '11px', 'color': COLORS['text_dim'],
+                'fontFamily': "'JetBrains Mono', monospace",
+                'minWidth': '60px', 'flexShrink': '0',
+            }),
+            # Event badge
+            html.Span(f'{evt_icon} {event}', style={
+                'background': evt_bg,
+                'color': evt_color,
+                'padding': '3px 10px',
+                'borderRadius': '10px',
+                'fontSize': '11px',
+                'fontWeight': '700',
+                'letterSpacing': '0.3px',
+                'whiteSpace': 'nowrap',
+                'flexShrink': '0',
+            }),
+            # Tag
+            html.Span(tag, style={
+                'fontSize': '9px',
+                'fontWeight': '700',
+                'color': t_color,
+                'letterSpacing': '1px',
+                'flexShrink': '0',
+            }),
+            # Inline summary chips
+            html.Span(chip_text, style={
+                'fontSize': '11px',
+                'color': COLORS['text_secondary'],
+                'fontFamily': "'JetBrains Mono', monospace",
+                'overflow': 'hidden',
+                'textOverflow': 'ellipsis',
+                'whiteSpace': 'nowrap',
+                'flex': '1',
+                'minWidth': '0',
+            }) if chip_text else html.Span(),
+        ], style={
+            'display': 'flex', 'alignItems': 'center', 'gap': '10px',
+            'padding': '8px 14px',
+            'borderBottom': f'1px solid {COLORS["divider"]}',
+            'cursor': 'pointer',
+            'transition': 'background 0.15s',
+        },
+        # The detail block is in a sibling <details> below
+        )
+
+        # Expandable detail block (click to expand on desktop, tap on touch)
+        detail_block = html.Details([
+            html.Summary(row, style={
+                'listStyleType': 'none',
+                'outline': 'none',
+            }),
+            html.Pre(detail_json, style={
+                'fontSize': '10px',
+                'color': COLORS['text_dim'],
+                'background': 'rgba(0,0,0,0.25)',
+                'borderRadius': '8px',
+                'padding': '10px 14px',
+                'margin': '0 14px 8px 14px',
+                'maxHeight': '180px',
+                'overflow': 'auto',
+                'fontFamily': "'JetBrains Mono', monospace",
+                'lineHeight': '1.5',
+                'whiteSpace': 'pre-wrap',
+                'wordBreak': 'break-all',
+            }) if detail_json else html.Div(),
+        ], style={'margin': '0'})
+
+        rows.append(detail_block)
+
+    return html.Div([
+        html.Div([
+            html.Span('📋', style={'fontSize': '14px'}),
+            html.Span('Strategy Log', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+            html.Span(f'{len(log_entries)} events', style={
+                'fontSize': '9px', 'color': COLORS['text_dim'],
+                'marginLeft': '8px', 'background': 'rgba(255,255,255,0.04)',
+                'padding': '2px 8px', 'borderRadius': '8px',
+            }),
+        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
+        html.Div(rows, style={
+            'background': COLORS['card'],
+            'border': f'1px solid {COLORS["card_border"]}',
+            'borderRadius': '10px',
+            'maxHeight': '400px',
+            'overflowY': 'auto',
+            'overflowX': 'hidden',
+        }),
+    ])
+
+
 def build_symbol_tab_content(symbol):
     """Build complete content for a single symbol tab — premium version"""
     data = load_symbol_data(symbol)
@@ -1150,6 +1337,11 @@ def build_symbol_tab_content(symbol):
 
         # Daily Trade Log section
         build_daily_trades_section(symbol),
+
+        html.Div(style={'height': '16px'}),
+
+        # Strategy Log section
+        build_strategy_log_section(symbol),
 
         html.Div(style={'height': '16px'}),
 
@@ -1275,6 +1467,11 @@ app.index_string = '''<!DOCTYPE html>
     }
     details[open] > summary::before {
         content: '▾ ';
+    }
+
+    /* === Strategy Log Row Hover === */
+    details > summary > div:hover {
+        background: rgba(99, 115, 171, 0.06) !important;
     }
 
     /* === Plotly Tooltips === */
@@ -1457,9 +1654,10 @@ def update_content(selected_symbol, n, prev_hash):
     account = load_account_data()
     daily = load_daily_trade_data(selected_symbol)
     historical = load_historical_summary(selected_symbol)
+    strategy_log = load_strategy_log(selected_symbol)
 
     # Build a quick hash of the data to detect changes
-    raw = json.dumps({'s': symbol_data, 'a': account, 'd': daily, 'h': historical},
+    raw = json.dumps({'s': symbol_data, 'a': account, 'd': daily, 'h': historical, 'l': strategy_log},
                      default=str, sort_keys=True)
     current_hash = hashlib.md5(raw.encode()).hexdigest()
 

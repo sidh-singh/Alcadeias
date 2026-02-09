@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 import time
 from datetime import datetime, timedelta, timezone
-from constants import SL_TP_DISTANCE_PCT
+from constants import RISK_REWARD_RATIO
 
 
 
@@ -32,6 +32,8 @@ class MT5PositionHelper:
             "sl": 0,
             "tp": 0,
         }
+        self.risk_reward_ratio = RISK_REWARD_RATIO
+        
         # Initialize request defaults
         self.request['type_time'] = self.mt5.ORDER_TIME_GTC
         self.request['type_filling'] = self.mt5.ORDER_FILLING_IOC
@@ -256,14 +258,23 @@ class MT5PositionHelper:
         """
         self.request['symbol'] = symbol
         self.request['volume'] = qty
-        ask = self.mt5.symbol_info_tick(symbol).ask
-        self.request['price'] = ask
+        self.request['price'] = self.mt5.symbol_info_tick(symbol).ask
         self.request['type'] = self.mt5.ORDER_TYPE_BUY
         
-        # Unrealistic SL/TP — keeps broker happy but never triggers
-        # BUY: SL far below entry, TP far above entry
-        self.request["sl"] = sl if sl != 0 else round(ask - (ask * SL_TP_DISTANCE_PCT), 6)
-        self.request["tp"] = tp if tp != 0 else round(ask + (ask * SL_TP_DISTANCE_PCT), 6)
+        # Set SL/TP (auto-calculate if not provided)
+        if sl == 0:
+            self.request["sl"] = (self.mt5.symbol_info_tick(symbol).ask) - (
+                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[0]
+            )
+        else:
+            self.request["sl"] = sl
+            
+        if tp == 0:
+            self.request["tp"] = (self.mt5.symbol_info_tick(symbol).ask) + (
+                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[1]
+            )
+        else:
+            self.request["tp"] = tp
         
         order_status = self.mt5.order_send(self.request)
         time.sleep(0.1)
@@ -284,14 +295,23 @@ class MT5PositionHelper:
         """
         self.request['symbol'] = symbol
         self.request['volume'] = qty
-        ask = self.mt5.symbol_info_tick(symbol).ask
-        self.request['price'] = ask
+        self.request['price'] = self.mt5.symbol_info_tick(symbol).ask
         self.request['type'] = self.mt5.ORDER_TYPE_SELL
         
-        # Unrealistic SL/TP — keeps broker happy but never triggers
-        # SELL: SL far above entry, TP far below entry
-        self.request["sl"] = sl if sl != 0 else round(ask + (ask * SL_TP_DISTANCE_PCT), 6)
-        self.request["tp"] = tp if tp != 0 else round(ask - (ask * SL_TP_DISTANCE_PCT), 6)
+        # Set SL/TP (auto-calculate if not provided)
+        if sl == 0:
+            self.request["sl"] = (self.mt5.symbol_info_tick(symbol).ask) + (
+                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[0]
+            )
+        else:
+            self.request["sl"] = sl
+            
+        if tp == 0:
+            self.request["tp"] = (self.mt5.symbol_info_tick(symbol).ask) - (
+                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[1]
+            )
+        else:
+            self.request["tp"] = tp
         
         order_status = self.mt5.order_send(self.request)
         time.sleep(0.1)

@@ -16,6 +16,7 @@ from constants import (
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
     HISTORICAL_SUMMARY_DAYS, HISTORICAL_SUMMARY_FILENAME,
+    STRATEGY_LOG_FILENAME, STRATEGY_LOG_MAX_ENTRIES,
 )
 
 
@@ -223,6 +224,48 @@ class MT5TradingBot:
             with open(json_path, 'w') as f:
                 json.dump(summary, f, indent=2, default=str)
     
+    def _log_event(self, symbol, event, tag, details=None):
+        """Append a strategy event to the per-symbol log file (thread-safe).
+        
+        Args:
+            symbol: Trading symbol
+            event: Short event name (e.g. 'BUY_EXECUTED', 'CLOSE_SELL', 'SIGNAL_BUY')
+            tag: Category tag (e.g. 'ENTRY', 'EXIT', 'SIGNAL', 'ERROR')
+            details: Optional dict with extra info (volume, profit, response, etc.)
+        """
+        import os
+        from datetime import datetime
+
+        server_time = self.position_helper._get_server_time()
+
+        entry = {
+            'time': server_time.isoformat(),
+            'utc_time': datetime.now(tz=timezone.utc).isoformat(),
+            'symbol': symbol,
+            'event': event,
+            'tag': tag,
+            'details': details or {},
+        }
+
+        log_dir = os.path.join(OUTPUT_DIR, 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, f'{symbol}_{STRATEGY_LOG_FILENAME}')
+
+        with self.thread_lock:
+            # Load existing log
+            try:
+                with open(log_path, 'r') as f:
+                    log_data = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                log_data = []
+
+            # Prepend (newest first) and cap
+            log_data.insert(0, entry)
+            log_data = log_data[:STRATEGY_LOG_MAX_ENTRIES]
+
+            with open(log_path, 'w') as f:
+                json.dump(log_data, f, indent=2, default=str)
+    
     def process_symbol(self, symbol):
         """
         Process a single symbol (will be called in separate threads)
@@ -323,21 +366,63 @@ class MT5TradingBot:
                 if buy_signal == Signal.BUY:
                     if not brake:
                         order_response = self.position_helper.buy(symbol, times * mtqty)
+                        self._log_event(symbol, 'BUY_EXECUTED', 'ENTRY', {
+                            'qty': times * mtqty,
+                            'response': str(order_response),
+                        })
+                    else:
+                        self._log_event(symbol, 'BUY_SIGNAL', 'SIGNAL', {
+                            'note': 'Brake active — order skipped',
+                        })
                 elif buy_signal == Signal.BUY_MORE:
                     vol = self.strategy._get_next_fibo_volume(buy_positions['total_volume'], times)
                     order_response = self.position_helper.buy(symbol, vol)
+                    self._log_event(symbol, 'BUY_MORE_EXECUTED', 'ENTRY', {
+                        'qty': vol,
+                        'fibo_level': buy_positions['count'] + 1,
+                        'total_volume': buy_positions['total_volume'],
+                        'total_profit': buy_positions['total_profit'],
+                        'first_profit': buy_positions['first_profit'],
+                        'response': str(order_response),
+                    })
                 elif buy_signal == Signal.CLOSE_BUY:
                     close_response = self.position_helper.close_by_type(symbol, 0)
+                    self._log_event(symbol, 'CLOSE_BUY', 'EXIT', {
+                        'positions_closed': close_response.get('closed_count', 0),
+                        'total_profit': buy_positions['total_profit'] if buy_positions else 0,
+                        'response': close_response,
+                    })
                 
                 # Execute sell signal
                 if sell_signal == Signal.SELL:
                     if not brake:
                         order_response = self.position_helper.sell(symbol, times * mtqty)
+                        self._log_event(symbol, 'SELL_EXECUTED', 'ENTRY', {
+                            'qty': times * mtqty,
+                            'response': str(order_response),
+                        })
+                    else:
+                        self._log_event(symbol, 'SELL_SIGNAL', 'SIGNAL', {
+                            'note': 'Brake active — order skipped',
+                        })
                 elif sell_signal == Signal.SELL_MORE:
                     vol = self.strategy._get_next_fibo_volume(sell_positions['total_volume'], times)
                     order_response = self.position_helper.sell(symbol, vol)
+                    self._log_event(symbol, 'SELL_MORE_EXECUTED', 'ENTRY', {
+                        'qty': vol,
+                        'fibo_level': sell_positions['count'] + 1,
+                        'total_volume': sell_positions['total_volume'],
+                        'total_profit': sell_positions['total_profit'],
+                        'first_profit': sell_positions['first_profit'],
+                        'response': str(order_response),
+                    })
                 elif sell_signal == Signal.CLOSE_SELL:
                     close_response = self.position_helper.close_by_type(symbol, 1)
+                    self._log_event(symbol, 'CLOSE_SELL', 'EXIT', {
+                        'positions_closed': close_response.get('closed_count', 0),
+                        'total_profit': sell_positions['total_profit'] if sell_positions else 0,
+                        'response': close_response,
+                    })
                 
                 # Attach order response if any
                 if order_response is not None:
