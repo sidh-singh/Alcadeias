@@ -2,6 +2,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 import time
 from datetime import datetime, timedelta, timezone
+from constants import RISK_REWARD_RATIO
 
 
 class MT5PositionHelper:
@@ -30,7 +31,7 @@ class MT5PositionHelper:
             "sl": 0,
             "tp": 0,
         }
-        self.risk_reward_ratio = [1, 1]
+        self.risk_reward_ratio = RISK_REWARD_RATIO
         
         # Initialize request defaults
         self.request['type_time'] = self.mt5.ORDER_TIME_GTC

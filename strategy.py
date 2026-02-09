@@ -1,4 +1,8 @@
 from enum import Enum
+from constants import (
+    STRATEGY_HEDGE, STRATEGY_LOOKBACK, STRATEGY_SHA_THRESHOLD,
+    FIBO_SEQUENCE_LENGTH,
+)
 
 
 class Signal(Enum):
@@ -15,9 +19,9 @@ class Strategy:
     """HAM Strategy - Heiken Ashi Martingale Signal Calculator"""
     
     def __init__(self):
-        self.hedge = 1
-        self.lookback = 7
-        self.sha_threshold = 0
+        self.hedge = STRATEGY_HEDGE
+        self.lookback = STRATEGY_LOOKBACK
+        self.sha_threshold = STRATEGY_SHA_THRESHOLD
     
     def _recur_fibo(self, n):
         if n <= 1:
@@ -25,7 +29,7 @@ class Strategy:
         return self._recur_fibo(n - 1) + self._recur_fibo(n - 2)
     
     def _get_fibo_qty(self, qty_count, times):
-        fib = [self._recur_fibo(i) for i in range(25)][2:]
+        fib = [self._recur_fibo(i) for i in range(FIBO_SEQUENCE_LENGTH)][2:]
         try:
             return fib[qty_count] * times
         except (IndexError, ValueError):
@@ -43,7 +47,7 @@ class Strategy:
         Returns:
             float: Next fibo volume in lots
         """
-        fib = [self._recur_fibo(i) for i in range(25)][2:]
+        fib = [self._recur_fibo(i) for i in range(FIBO_SEQUENCE_LENGTH)][2:]
         fib = [f * times for f in fib]
         try:
             return round(fib[fib.index(current_volume * 100) + 1] / 100, 2)

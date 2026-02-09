@@ -11,10 +11,17 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
+from constants import (
+    OUTPUT_DIR, DAILY_TRADE_SUBDIR,
+    DASHBOARD_REFRESH_INTERVAL, DASHBOARD_HOST, DASHBOARD_PORT,
+    HISTORICAL_SUMMARY_FILENAME,
+    GRAPH_TEXT_LABEL_THRESHOLD, GRAPH_CUM_LABEL_THRESHOLD,
+)
+
 # ─── Configuration ───
-JSON_DIR = r'C:\Alcadeias'
-DAILY_TRADE_DIR = os.path.join(JSON_DIR, 'daily_trade')
-REFRESH_INTERVAL = 5000  # ms
+JSON_DIR = OUTPUT_DIR
+DAILY_TRADE_DIR = os.path.join(JSON_DIR, DAILY_TRADE_SUBDIR)
+REFRESH_INTERVAL = DASHBOARD_REFRESH_INTERVAL
 
 # ─── Premium Color Palette ───
 COLORS = {
@@ -241,49 +248,49 @@ def build_positions_section(data):
 
 
 def build_signal_section(data):
-    """Build signal status section — clean and consistent across all tabs"""
+    """Build compact inline signal badges — minimal footprint"""
     signal = data.get('signal', {})
     buy_status = signal.get('buy_status', 'DO_NOTHING')
     sell_status = signal.get('sell_status', 'DO_NOTHING')
 
+    def _mini_badge(label, status):
+        color_map = {
+            'BUY': COLORS['buy'], 'SELL': COLORS['sell'],
+            'CLOSE_BUY': COLORS['warning'], 'CLOSE_SELL': COLORS['warning'],
+            'BUY_MORE': COLORS['buy'], 'SELL_MORE': COLORS['sell'],
+            'DO_NOTHING': COLORS['text_muted'],
+        }
+        color = color_map.get(status, COLORS['text_muted'])
+        is_active = status != 'DO_NOTHING'
+        return html.Div([
+            html.Span(label, style={
+                'fontSize': '8px', 'color': COLORS['text_dim'],
+                'textTransform': 'uppercase', 'letterSpacing': '1px',
+                'fontWeight': '500', 'marginRight': '6px',
+            }),
+            html.Span(status, style={
+                'background': f'{color}22' if is_active else 'transparent',
+                'color': color,
+                'padding': '3px 10px',
+                'borderRadius': '12px',
+                'fontSize': '10px',
+                'fontWeight': '700',
+                'letterSpacing': '0.5px',
+                'border': f'1px solid {color}44' if is_active else f'1px solid {COLORS["card_border"]}',
+            }),
+        ], style={'display': 'flex', 'alignItems': 'center'})
+
     return html.Div([
-        html.Div([
-            html.Span('⚡', style={'fontSize': '14px'}),
-            html.Span('Signals', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
-        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
-        html.Div([
-            html.Div([
-                html.Div('BUY', style={
-                    'fontSize': '9px', 'color': COLORS['text_dim'],
-                    'textTransform': 'uppercase', 'letterSpacing': '1.5px',
-                    'marginBottom': '8px', 'fontWeight': '500',
-                }),
-                make_signal_badge(buy_status),
-            ], style={
-                'textAlign': 'center', 'flex': '1',
-                'padding': '14px 12px',
-                'borderRight': f'1px solid {COLORS["divider"]}',
-            }),
-            html.Div([
-                html.Div('SELL', style={
-                    'fontSize': '9px', 'color': COLORS['text_dim'],
-                    'textTransform': 'uppercase', 'letterSpacing': '1.5px',
-                    'marginBottom': '8px', 'fontWeight': '500',
-                }),
-                make_signal_badge(sell_status),
-            ], style={
-                'textAlign': 'center', 'flex': '1',
-                'padding': '14px 12px',
-            }),
-        ], style={
-            'background': COLORS['card'],
-            'border': f'1px solid {COLORS["card_border"]}',
-            'borderRadius': '10px',
-            'display': 'flex',
-            'overflow': 'hidden',
-            'padding': '0',
-        }),
-    ])
+        html.Span('⚡', style={'fontSize': '11px', 'marginRight': '6px', 'opacity': '0.6'}),
+        _mini_badge('B', buy_status),
+        _mini_badge('S', sell_status),
+    ], style={
+        'display': 'flex', 'alignItems': 'center', 'gap': '10px',
+        'background': COLORS['card'],
+        'border': f'1px solid {COLORS["card_border"]}',
+        'borderRadius': '10px',
+        'padding': '6px 14px',
+    })
 
 
 def _parse_order_response(order_resp):
@@ -779,7 +786,7 @@ def load_daily_trade_data(symbol):
         pattern = os.path.join(symbol_dir, '*.json')
         files = [
             f for f in glob.glob(pattern)
-            if os.path.basename(f) != 'historical_summary.json'
+            if os.path.basename(f) != HISTORICAL_SUMMARY_FILENAME
         ]
         if not files:
             return None
@@ -808,7 +815,7 @@ def load_daily_trade_data(symbol):
 
 def load_historical_summary(symbol):
     """Load the historical summary (last 10 years) for a specific symbol"""
-    path = os.path.join(DAILY_TRADE_DIR, symbol, 'historical_summary.json')
+    path = os.path.join(DAILY_TRADE_DIR, symbol, HISTORICAL_SUMMARY_FILENAME)
     try:
         with open(path, 'r') as f:
             return json.load(f)
@@ -927,30 +934,21 @@ def build_daily_trades_section(symbol):
             subplot_titles=['Profit/Loss per Deal', 'Cumulative P/L'],
         )
 
+        n_deals = len(sorted_deals)
+        show_bar_text = n_deals <= GRAPH_TEXT_LABEL_THRESHOLD
+        show_cum_text = n_deals <= GRAPH_CUM_LABEL_THRESHOLD
+
         fig.add_trace(go.Bar(
             x=labels, y=profits,
             marker=dict(
                 color=colors,
                 line=dict(width=0),
             ),
-            text=[f'${p:.2f}' for p in profits],
-            textposition='outside',
-            textfont=dict(size=10, color=COLORS['text_secondary'], family="'Inter', sans-serif"),
+            text=[f'${p:.2f}' for p in profits] if show_bar_text else None,
+            textposition='outside' if show_bar_text else None,
+            textfont=dict(size=10, color=COLORS['text_secondary'], family="'Inter', sans-serif") if show_bar_text else None,
             hovertext=hover_texts,
             hoverinfo='text',
-            showlegend=False,
-        ), row=1, col=1)
-
-        fig.add_trace(go.Scatter(
-            x=labels, y=profits,
-            mode='markers',
-            marker=dict(
-                size=[max(v * 80, 6) for v in volumes],
-                color=colors,
-                opacity=0.2,
-                line=dict(width=0),
-            ),
-            hoverinfo='skip',
             showlegend=False,
         ), row=1, col=1)
 
@@ -958,14 +956,17 @@ def build_daily_trades_section(symbol):
         # Convert hex to rgba for fillcolor (Plotly doesn't support 8-digit hex)
         _r, _g, _b = int(cum_color[1:3], 16), int(cum_color[3:5], 16), int(cum_color[5:7], 16)
         cum_fill = f'rgba({_r},{_g},{_b},0.05)'
+
+        cum_mode = 'lines+markers+text' if show_cum_text else 'lines'
+        cum_marker = dict(size=5, color=cum_color, line=dict(width=1, color=COLORS['bg'])) if show_cum_text else dict(size=0)
         fig.add_trace(go.Scatter(
             x=labels, y=cum_profits,
-            mode='lines+markers+text',
-            line=dict(color=cum_color, width=2.5, shape='spline'),
-            marker=dict(size=7, color=cum_color, line=dict(width=2, color=COLORS['bg'])),
-            text=[f'${c:.0f}' for c in cum_profits],
-            textposition='top center',
-            textfont=dict(size=9, color=COLORS['text_dim'], family="'Inter', sans-serif"),
+            mode=cum_mode,
+            line=dict(color=cum_color, width=2, shape='spline'),
+            marker=cum_marker,
+            text=[f'${c:.0f}' for c in cum_profits] if show_cum_text else None,
+            textposition='top center' if show_cum_text else None,
+            textfont=dict(size=9, color=COLORS['text_dim'], family="'Inter', sans-serif") if show_cum_text else None,
             showlegend=False,
             fill='tozeroy',
             fillcolor=cum_fill,
@@ -981,9 +982,13 @@ def build_daily_trades_section(symbol):
             plot_bgcolor='rgba(0,0,0,0)',
             font=dict(color=COLORS['text_secondary'], size=11, family="'Inter', sans-serif"),
         )
+        # Reduce x-axis tick density for many deals
+        tick_step = max(1, n_deals // 30) if n_deals > 40 else None
         for i in range(1, 3):
             fig.update_xaxes(showgrid=False, row=i, col=1,
-                             tickfont=dict(size=10, color=COLORS['text_dim']))
+                             tickfont=dict(size=9, color=COLORS['text_dim']),
+                             dtick=tick_step,
+                             tickangle=-45 if n_deals > 40 else 0)
             fig.update_yaxes(
                 showgrid=True, gridcolor=COLORS['chart_grid'],
                 gridwidth=0.5, zeroline=True,
@@ -1119,11 +1124,13 @@ def build_symbol_tab_content(symbol):
             'borderBottom': f'1px solid {COLORS["divider"]}',
         }),
 
-        # ── Top row: Signals + Positions side by side ──
+        # ── Top row: Signal badges + Positions ──
         html.Div([
-            html.Div([build_signal_section(data)], style={'flex': '1'}),
-            html.Div([build_positions_section(data)], style={'flex': '1'}),
-        ], style={'display': 'flex', 'gap': '16px', 'flexWrap': 'wrap'}),
+            build_signal_section(data),
+            html.Div(style={'flex': '1'}),
+        ], style={'display': 'flex', 'gap': '12px', 'alignItems': 'center', 'marginBottom': '12px'}),
+
+        build_positions_section(data),
 
         # ── Recent Activity (order / close responses) ──
         build_activity_section(data),
@@ -1522,4 +1529,4 @@ def update_content(selected_symbol, n, prev_hash):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8050)
+    app.run(debug=True, host=DASHBOARD_HOST, port=DASHBOARD_PORT)

@@ -9,6 +9,14 @@ from mt5_helper import MT5PositionHelper
 from indicator import Indicator
 from strategy import Strategy, Signal
 from datetime import timezone
+from constants import (
+    SHA_SMOOTH_LENGTH, SHA_SMOOTH_MA_TYPE,
+    SHA_AFTER_SMOOTH_LENGTH, SHA_AFTER_SMOOTH_MA_TYPE,
+    CANDLE_TIMEFRAME, CANDLE_COUNT,
+    MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
+    OUTPUT_DIR, DAILY_TRADE_SUBDIR,
+    HISTORICAL_SUMMARY_DAYS, HISTORICAL_SUMMARY_FILENAME,
+)
 
 
 class MT5TradingBot:
@@ -126,7 +134,7 @@ class MT5TradingBot:
     def _save_symbol_data(self, symbol, data):
         """Save symbol data to JSON file on C: drive (thread-safe)"""
         import os
-        output_dir = r'C:\Alcadeias'
+        output_dir = OUTPUT_DIR
         os.makedirs(output_dir, exist_ok=True)
         json_path = os.path.join(output_dir, f'{symbol}.json')
         with self.thread_lock:
@@ -137,7 +145,7 @@ class MT5TradingBot:
         """Save account data to dedicated account.json (thread-safe)"""
         import os
         from datetime import datetime
-        output_dir = r'C:\Alcadeias'
+        output_dir = OUTPUT_DIR
         os.makedirs(output_dir, exist_ok=True)
         json_path = os.path.join(output_dir, 'account.json')
         account_info['last_updated'] = datetime.now(tz=timezone.utc).isoformat()
@@ -189,13 +197,13 @@ class MT5TradingBot:
         import os
         from datetime import datetime
         
-        # Per-symbol folder: C:\Alcadeias\daily_trade\{symbol}\
-        output_dir = os.path.join(r'C:\Alcadeias', 'daily_trade', symbol)
+        # Per-symbol folder: <OUTPUT_DIR>/daily_trade/{symbol}/
+        output_dir = os.path.join(OUTPUT_DIR, DAILY_TRADE_SUBDIR, symbol)
         os.makedirs(output_dir, exist_ok=True)
-        json_path = os.path.join(output_dir, 'historical_summary.json')
+        json_path = os.path.join(output_dir, HISTORICAL_SUMMARY_FILENAME)
         
-        # Fetch only this symbol's deals for the last 10 years
-        all_deals = self.position_helper.get_deals_since(days=3650, symbol=symbol)
+        # Fetch only this symbol's deals for the configured history period
+        all_deals = self.position_helper.get_deals_since(days=HISTORICAL_SUMMARY_DAYS, symbol=symbol)
         
         total_net = sum(d.get('net_profit', d['profit']) for d in all_deals)
         total_volume = sum(d['volume'] for d in all_deals)
@@ -232,8 +240,8 @@ class MT5TradingBot:
         
         while True:
             try:
-                # Fetch M1 timeframe data (50 candles)
-                source_df = self.position_helper.get_rates(symbol, mt5.TIMEFRAME_M1, 50)
+                # Fetch candle data using configured timeframe and count
+                source_df = self.position_helper.get_rates(symbol, getattr(mt5, CANDLE_TIMEFRAME), CANDLE_COUNT)
                 
                 if source_df is None or len(source_df) == 0:
                     time.sleep(brake)
@@ -244,18 +252,18 @@ class MT5TradingBot:
                     'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'
                 }, inplace=True)
                 
-                # Calculate SHA with RMA and length 4 (matches TradingView SHA 4 RMA 4 RMA)
+                # Calculate SHA indicator with configured parameters
                 sha_df = self.indicator.calculate_sha_v3(
                     source_df, 
-                    smooth_length=2, 
-                    smooth_ma_type='RMA',
-                    after_smooth_length=2, 
-                    after_smooth_ma_type='RMA'
+                    smooth_length=SHA_SMOOTH_LENGTH, 
+                    smooth_ma_type=SHA_SMOOTH_MA_TYPE,
+                    after_smooth_length=SHA_AFTER_SMOOTH_LENGTH, 
+                    after_smooth_ma_type=SHA_AFTER_SMOOTH_MA_TYPE
                 )
                 
-                # Check market status (15 min lookback for M5 timeframe)
+                # Check market status using configured timeframe & lookback
                 market_status = self.position_helper.get_market_status(
-                    symbol, mt5.TIMEFRAME_M5, lookback_minutes=15
+                    symbol, getattr(mt5, MARKET_STATUS_TIMEFRAME), lookback_minutes=MARKET_LOOKBACK_MINUTES
                 )
                 
                 # Get buy and sell positions
