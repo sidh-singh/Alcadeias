@@ -388,7 +388,7 @@ class MT5TradingBot:
                             'note': 'Brake active — order skipped',
                         })
                 elif buy_signal == Signal.BUY_MORE:
-                    vol = self.strategy._get_next_fibo_volume(buy_positions['total_volume'], times)
+                    vol = self.strategy._get_next_fibo_volume(buy_positions['count'], times)
                     order_response = self.position_helper.buy(symbol, vol)
                     self._log_event(symbol, 'BUY_MORE_EXECUTED', 'ENTRY', {
                         'qty': vol,
@@ -419,7 +419,7 @@ class MT5TradingBot:
                             'note': 'Brake active — order skipped',
                         })
                 elif sell_signal == Signal.SELL_MORE:
-                    vol = self.strategy._get_next_fibo_volume(sell_positions['total_volume'], times)
+                    vol = self.strategy._get_next_fibo_volume(sell_positions['count'], times)
                     order_response = self.position_helper.sell(symbol, vol)
                     self._log_event(symbol, 'SELL_MORE_EXECUTED', 'ENTRY', {
                         'qty': vol,
