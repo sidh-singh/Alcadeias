@@ -4,8 +4,8 @@
     "brake" : 0,
     "mtqty" : 0.01,
     "gap_range": {
-        "BTCUSDm": [0.2, 0.30],
-        "XAUUSDm": [0.1, 0.30],
-        "XAGUSDm": [0.05, 0.30]
+        "BTCUSDm": [0.0011, 0.0028],
+        "XAUUSDm": [0.0008, 0.002],
+        "XAGUSDm": [0.15, 0.35]
     }
 }

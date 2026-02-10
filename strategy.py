@@ -183,32 +183,32 @@ class Strategy:
         
         # ─── Entry/Exit Logic ───
         
-        # No positions open → look for entry
+        gap_in_range = gap_range[0] <= abs(current_gap_pct) <= gap_range[1]
+        
+        # No positions open → look for entry (gap% must be in range)
         if buy_count == 0 and sell_count == 0:
-            if lt_sha_power_list[0] == 1 and crossover[0] == 3:
+            if lt_sha_power_list[0] == 1 and crossover[0] == 3 and gap_in_range:
                 buy_status = Signal.BUY
-            elif lt_sha_power_list[0] == 0 and crossover[0] == -3:
+            elif lt_sha_power_list[0] == 0 and crossover[0] == -3 and gap_in_range:
                 sell_status = Signal.SELL
         
-        # Only BUY positions open
+        # Only BUY positions open → exit when trend SHA flips bearish
         elif buy_count > 0 and sell_count == 0:
             if buy_profit > self.hedge:
                 buy_status = Signal.CLOSE_BUY
-            else:
-                if lt_sha_power_list[0] == 0:
-                    buy_status = Signal.CLOSE_BUY
-                elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** 3):
-                    buy_status = Signal.BUY_MORE
+            elif lt_trend_power_list[0] == 0:
+                buy_status = Signal.CLOSE_BUY
+            elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** 3):
+                buy_status = Signal.BUY_MORE
         
-        # Only SELL positions open
+        # Only SELL positions open → exit when trend SHA flips bullish
         elif buy_count == 0 and sell_count > 0:
             if sell_profit > self.hedge:
                 sell_status = Signal.CLOSE_SELL
-            else:
-                if lt_sha_power_list[0] == 1:
-                    sell_status = Signal.CLOSE_SELL
-                elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** 3):
-                    sell_status = Signal.SELL_MORE
+            elif lt_trend_power_list[0] == 1:
+                sell_status = Signal.CLOSE_SELL
+            elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** 3):
+                sell_status = Signal.SELL_MORE
         
         analysis_data = {
             'sha_power_list': lt_sha_power_list,
