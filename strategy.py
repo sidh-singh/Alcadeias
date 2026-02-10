@@ -187,9 +187,9 @@ class Strategy:
         
         # No positions open → look for entry (gap% must be in range)
         if buy_count == 0 and sell_count == 0:
-            if lt_sha_power_list[0] == 1 and crossover[0] == 3 and gap_in_range:
+            if lt_trend_power_list[0] == 1 and crossover[0] == 3 and gap_in_range:
                 buy_status = Signal.BUY
-            elif lt_sha_power_list[0] == 0 and crossover[0] == -3 and gap_in_range:
+            elif lt_trend_power_list[0] == 0 and crossover[0] == -3 and gap_in_range:
                 sell_status = Signal.SELL
         
         # Only BUY positions open → exit when trend SHA flips bearish
