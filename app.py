@@ -10,8 +10,9 @@ from indicator import Indicator
 from strategy import Strategy, Signal
 from datetime import timezone
 from constants import (
-    SHA_SMOOTH_LENGTH, SHA_SMOOTH_MA_TYPE,
-    SHA_AFTER_SMOOTH_LENGTH, SHA_AFTER_SMOOTH_MA_TYPE,
+    SHA_LENGTH, SHA_MA_TYPE,
+    SHA_TREND_LENGTH, SHA_TREND_MA_TYPE,
+    DEFAULT_GAP_RANGE,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
@@ -280,6 +281,8 @@ class MT5TradingBot:
         brake = self.symbols_config.get('brake', 0)
         times = self.symbols_config.get('times', 1)
         mtqty = self.symbols_config.get('mtqty', 0.01)
+        gap_ranges = self.symbols_config.get('gap_range', {})
+        symbol_gap_range = gap_ranges.get(symbol, DEFAULT_GAP_RANGE)
         
         while True:
             try:
@@ -295,14 +298,22 @@ class MT5TradingBot:
                     'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'
                 }, inplace=True)
                 
-                # Calculate SHA indicator with configured parameters
+                # Calculate SHA signal indicator
                 sha_df = self.indicator.calculate_sha_v3(
                     source_df, 
-                    smooth_length=SHA_SMOOTH_LENGTH, 
-                    smooth_ma_type=SHA_SMOOTH_MA_TYPE,
-                    after_smooth_length=SHA_AFTER_SMOOTH_LENGTH, 
-                    after_smooth_ma_type=SHA_AFTER_SMOOTH_MA_TYPE
+                    length=SHA_LENGTH, 
+                    ma_type=SHA_MA_TYPE,
                 )
+                
+                # Calculate SHA trend indicator
+                sha_trend_df = self.indicator.calculate_sha_v3(
+                    source_df, 
+                    length=SHA_TREND_LENGTH, 
+                    ma_type=SHA_TREND_MA_TYPE,
+                )
+                
+                # Calculate gap% between signal SHA and trend SHA
+                gap_pct_series = self.indicator.calculate_sha_gap(sha_df, sha_trend_df)
                 
                 # Check market status using configured timeframe & lookback
                 market_status = self.position_helper.get_market_status(
@@ -320,7 +331,8 @@ class MT5TradingBot:
                 
                 # Calculate signal
                 buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
-                    source_df, sha_df, buy_positions, sell_positions, times
+                    source_df, sha_df, sha_trend_df, gap_pct_series,
+                    buy_positions, sell_positions, times, gap_range=symbol_gap_range
                 )
                 
                 # Build JSON data

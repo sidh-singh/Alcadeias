@@ -561,6 +561,56 @@ def _signal_row(label, icon, color, power, lst):
     )
 
 
+def _build_gap_row(gap_pct, gap_range):
+    """Build the SHA gap% row with range indicator."""
+    abs_gap = abs(gap_pct)
+    gap_min = gap_range[0] if gap_range and len(gap_range) >= 2 else 0.1
+    gap_max = gap_range[1] if gap_range and len(gap_range) >= 2 else 0.30
+    in_range = gap_min <= abs_gap <= gap_max
+
+    gap_color = '#00d2a0' if gap_pct >= 0 else '#e74c3c'
+    gap_sign = '+' if gap_pct >= 0 else ''
+    range_badge_color = '#00d2a0' if in_range else '#ffd93d'
+    range_badge_text = '✓ IN RANGE' if in_range else '○ OUT'
+
+    return html.Div(
+        style={
+            'display': 'grid',
+            'gridTemplateColumns': '64px 1fr 1fr',
+            'gap': '8px', 'alignItems': 'center',
+            'padding': '8px 0',
+        },
+        children=[
+            html.Span('📊 Gap', style={
+                'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#a78bfa',
+            }),
+            html.Span(f'{gap_sign}{gap_pct:.4f}%', style={
+                'fontWeight': '800',
+                'fontSize': '1.05rem',
+                'color': gap_color,
+                'fontFamily': "'JetBrains Mono', monospace",
+            }),
+            html.Div([
+                html.Span(f'{gap_min} – {gap_max}', style={
+                    'fontSize': '0.72rem',
+                    'color': COLORS['text_secondary'],
+                    'fontFamily': "'JetBrains Mono', monospace",
+                    'marginRight': '8px',
+                }),
+                html.Span(range_badge_text, style={
+                    'fontSize': '0.6rem',
+                    'fontWeight': '700',
+                    'color': range_badge_color,
+                    'background': f'{range_badge_color}18',
+                    'padding': '2px 8px',
+                    'borderRadius': '8px',
+                    'border': f'1px solid {range_badge_color}33',
+                }),
+            ], style={'display': 'flex', 'alignItems': 'center'}),
+        ],
+    )
+
+
 def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     """Build clean SHA analysis card — Ballom-inspired grid layout."""
     sha_list = analysis.get('sha_power_list', [])
@@ -571,9 +621,18 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     price_buy = analysis.get('price_buy_strength', 0)
     price_sell = analysis.get('price_sell_strength', 0)
 
-    # Overall bias
-    total_buy = sha_buy + price_buy
-    total_sell = sha_sell + price_sell
+    # Trend SHA data
+    trend_list = analysis.get('sha_trend_power_list', [])
+    trend_buy = analysis.get('sha_trend_buy_strength', 0)
+    trend_sell = analysis.get('sha_trend_sell_strength', 0)
+
+    # Gap% data
+    gap_pct = analysis.get('current_gap_pct', 0)
+    gap_range_val = analysis.get('gap_range', [0.1, 0.30])
+
+    # Overall bias (includes trend)
+    total_buy = sha_buy + price_buy + trend_buy
+    total_sell = sha_sell + price_sell + trend_sell
     is_bullish = total_buy >= total_sell
     bias_text = 'BULLISH' if is_bullish else 'BEARISH'
     bias_icon = '📈' if is_bullish else '📉'
@@ -652,13 +711,17 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                     html.Span('CANDLES', style=col_hdr),
                 ],
             ),
-            # ── SHA + Price + Cross rows ──
+            # ── Signal + Trend + Price + Cross + Gap rows ──
             html.Div(style={'padding': '0 16px 10px'}, children=[
-                _signal_row('SHA', '🔵', '#5dade2', sha_buy, sha_list),
+                _signal_row('Signal', '🔵', '#5dade2', sha_buy, sha_list),
+                row_divider,
+                _signal_row('Trend', '🟣', '#a78bfa', trend_buy, trend_list),
                 row_divider,
                 _signal_row('Price', '🔴', '#e74c3c', price_buy, price_list),
                 row_divider,
                 cross_row,
+                row_divider,
+                _build_gap_row(gap_pct, gap_range_val),
             ]),
             # ── Legend ──
             html.Div(

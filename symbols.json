@@ -2,5 +2,10 @@
     "symbols" : ["BTCUSDm","XAUUSDm", "XAGUSDm"],
     "times": 1,
     "brake" : 0,
-    "mtqty" : 0.01
+    "mtqty" : 0.01,
+    "gap_range": {
+        "BTCUSDm": [0.2, 0.30],
+        "XAUUSDm": [0.1, 0.30],
+        "XAGUSDm": [0.05, 0.30]
+    }
 }

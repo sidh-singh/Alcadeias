@@ -9,17 +9,14 @@ class Indicator:
         """Initialize SHA Indicator"""
         pass
     
-    def calculate_sha_v3(self, df, smooth_length=10, smooth_ma_type='EMA', 
-                         after_smooth_length=10, after_smooth_ma_type='EMA'):
+    def calculate_sha_v3(self, df, length=10, ma_type='EMA'):
         """
         Calculate Smoothed Heiken Ashi v3
         
         Args:
             df: DataFrame with OHLCV data
-            smooth_length: Length for initial smoothing (default=10)
-            smooth_ma_type: MA type for initial smoothing (default='EMA')
-            after_smooth_length: Length for post-HA smoothing (default=10)
-            after_smooth_ma_type: MA type for post-HA smoothing (default='EMA')
+            length: Smoothing length (used for both pre and post HA smoothing)
+            ma_type: MA type (used for both pre and post HA smoothing)
         
         Returns:
             DataFrame with SHA OHLC columns
@@ -27,10 +24,10 @@ class Indicator:
         df = df.copy()
 
         # Step 1: Pre-smooth the OHLC
-        o = self._ma(df['Open'], smooth_length, smooth_ma_type, df.get('Volume'))
-        h = self._ma(df['High'], smooth_length, smooth_ma_type, df.get('Volume'))
-        l = self._ma(df['Low'], smooth_length, smooth_ma_type, df.get('Volume'))
-        c = self._ma(df['Close'], smooth_length, smooth_ma_type, df.get('Volume'))
+        o = self._ma(df['Open'], length, ma_type, df.get('Volume'))
+        h = self._ma(df['High'], length, ma_type, df.get('Volume'))
+        l = self._ma(df['Low'], length, ma_type, df.get('Volume'))
+        c = self._ma(df['Close'], length, ma_type, df.get('Volume'))
 
         # Step 2: Heiken Ashi Calculation
         ha_close = (o + h + l + c) / 4
@@ -44,11 +41,11 @@ class Indicator:
         ha_high = pd.concat([h, ha_open, ha_close], axis=1).max(axis=1)
         ha_low = pd.concat([l, ha_open, ha_close], axis=1).min(axis=1)
 
-        # Step 3: Smooth again after HA
-        sha_open = self._ma(ha_open, after_smooth_length, after_smooth_ma_type, df.get('Volume'))
-        sha_high = self._ma(ha_high, after_smooth_length, after_smooth_ma_type, df.get('Volume'))
-        sha_low = self._ma(ha_low, after_smooth_length, after_smooth_ma_type, df.get('Volume'))
-        sha_close = self._ma(ha_close, after_smooth_length, after_smooth_ma_type, df.get('Volume'))
+        # Step 3: Smooth again after HA (same length & MA type)
+        sha_open = self._ma(ha_open, length, ma_type, df.get('Volume'))
+        sha_high = self._ma(ha_high, length, ma_type, df.get('Volume'))
+        sha_low = self._ma(ha_low, length, ma_type, df.get('Volume'))
+        sha_close = self._ma(ha_close, length, ma_type, df.get('Volume'))
 
         sha = pd.DataFrame({
             'Open': sha_open,
@@ -58,6 +55,26 @@ class Indicator:
         }, index=df.index)
 
         return sha
+    
+    def calculate_sha_gap(self, sha_df, sha_trend_df):
+        """
+        Calculate gap % between signal SHA and trend SHA.
+        Uses mean of OHLC candles; trend SHA is the base value.
+        
+        Positive = signal SHA above trend (bullish divergence)
+        Negative = signal SHA below trend (bearish divergence)
+        
+        Args:
+            sha_df: Signal SHA DataFrame (Open, High, Low, Close)
+            sha_trend_df: Trend SHA DataFrame (Open, High, Low, Close)
+        
+        Returns:
+            pd.Series: gap percentage for each candle
+        """
+        sha_mean = (sha_df['Open'] + sha_df['High'] + sha_df['Low'] + sha_df['Close']) / 4
+        trend_mean = (sha_trend_df['Open'] + sha_trend_df['High'] + sha_trend_df['Low'] + sha_trend_df['Close']) / 4
+        gap_pct = ((sha_mean - trend_mean) / trend_mean) * 100
+        return gap_pct
     
     def _ma(self, series, length, ma_type='EMA', volume=None):
         """

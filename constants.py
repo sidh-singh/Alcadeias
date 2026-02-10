@@ -5,11 +5,16 @@ All tuneable parameters in one place.
 Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
-# ─── SHA Indicator Parameters ───
-SHA_SMOOTH_LENGTH = 3               # Pre-smooth length for SHA v3
-SHA_SMOOTH_MA_TYPE = 'RMA'          # MA type for pre-smoothing  (SMA, EMA, RMA, WMA, HMA …)
-SHA_AFTER_SMOOTH_LENGTH = 3         # Post-HA smooth length
-SHA_AFTER_SMOOTH_MA_TYPE = 'RMA'    # MA type for post-HA smoothing
+# ─── SHA Signal Indicator ───
+SHA_LENGTH = 3                      # Smoothing length for signal SHA (pre & post)
+SHA_MA_TYPE = 'RMA'                 # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
+
+# ─── SHA Trend Indicator ───
+SHA_TREND_LENGTH = 10               # Smoothing length for trend SHA (pre & post)
+SHA_TREND_MA_TYPE = 'EMA'           # MA type for trend SHA
+
+# ─── SHA Gap ───
+DEFAULT_GAP_RANGE = [0.1, 0.30]     # Default gap% range [min, max] if not set per symbol
 
 # ─── Data Fetching ───
 CANDLE_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe for price data (resolved via mt5 at runtime)

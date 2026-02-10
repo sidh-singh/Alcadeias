@@ -1,7 +1,7 @@
 from enum import Enum
 from constants import (
     STRATEGY_HEDGE, STRATEGY_LOOKBACK, STRATEGY_SHA_THRESHOLD,
-    FIBO_SEQUENCE_LENGTH,
+    FIBO_SEQUENCE_LENGTH, DEFAULT_GAP_RANGE,
 )
 
 
@@ -113,22 +113,39 @@ class Strategy:
         
         return lt_sha_power_list, ct_power_list, crossover
     
-    def calculate_signal(self, source_df, sha_df, buy_positions, sell_positions, times):
+    def _analyze_trend(self, sha_trend_df):
+        """Analyze last N candles of trend SHA for power (bullish/bearish)."""
+        trend_power_list = []
+        for i in range(self.lookback):
+            idx = -(i + 1)
+            sha_diff = sha_trend_df['Close'].iloc[idx] - sha_trend_df['Open'].iloc[idx]
+            sha_range = sha_trend_df['High'].iloc[idx] - sha_trend_df['Low'].iloc[idx]
+            if sha_range != 0 and (sha_diff / sha_range) >= self.sha_threshold:
+                trend_power_list.append(1)
+            else:
+                trend_power_list.append(0)
+        return trend_power_list
+    
+    def calculate_signal(self, source_df, sha_df, sha_trend_df, gap_pct_series,
+                         buy_positions, sell_positions, times, gap_range=None):
         """
         Calculate entry/exit signals based on SHA power and crossover
         
         Args:
             source_df: Raw OHLC DataFrame (capitalized columns: Open, High, Low, Close)
-            sha_df: SHA indicator DataFrame (Open, High, Low, Close)
+            sha_df: SHA signal indicator DataFrame (Open, High, Low, Close)
+            sha_trend_df: SHA trend indicator DataFrame (Open, High, Low, Close)
+            gap_pct_series: pd.Series of gap% between signal and trend SHA
             buy_positions: Dict from get_buy_positions() or None
             sell_positions: Dict from get_sell_positions() or None
             times: Hedge/multiplier from symbols config
+            gap_range: [min, max] gap% range for this symbol (default from constants)
         
         Returns:
             tuple: (buy_signal, sell_signal, analysis_data)
                 - buy_signal: Signal enum
                 - sell_signal: Signal enum
-                - analysis_data: dict with sha_power_list, price_power_list, crossover, strengths
+                - analysis_data: dict with sha/trend power, crossover, gap% data
         """
         self.hedge = times
         
@@ -148,6 +165,18 @@ class Strategy:
         lt_sell_power = sum(1 for x in lt_sha_power_list if x == 0)
         ct_buy_power = sum(1 for x in ct_power_list if x == 1)
         ct_sell_power = sum(1 for x in ct_power_list if x == 0)
+        
+        # Analyze trend SHA
+        lt_trend_power_list = self._analyze_trend(sha_trend_df)
+        lt_trend_buy_power = sum(1 for x in lt_trend_power_list if x == 1)
+        lt_trend_sell_power = sum(1 for x in lt_trend_power_list if x == 0)
+        
+        # Current candle gap%
+        current_gap_pct = round(float(gap_pct_series.iloc[-1]), 4) if len(gap_pct_series) > 0 else 0.0
+        
+        # Gap range
+        if gap_range is None:
+            gap_range = DEFAULT_GAP_RANGE
         
         buy_status = Signal.DO_NOTHING
         sell_status = Signal.DO_NOTHING
@@ -189,6 +218,11 @@ class Strategy:
             'sha_sell_strength': lt_sell_power,
             'price_buy_strength': ct_buy_power,
             'price_sell_strength': ct_sell_power,
+            'sha_trend_power_list': lt_trend_power_list,
+            'sha_trend_buy_strength': lt_trend_buy_power,
+            'sha_trend_sell_strength': lt_trend_sell_power,
+            'current_gap_pct': current_gap_pct,
+            'gap_range': gap_range,
         }
         
         return buy_status, sell_status, analysis_data
