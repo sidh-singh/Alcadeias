@@ -279,7 +279,8 @@ class MT5TradingBot:
         
         # Get configuration once before loop
         brake = self.symbols_config.get('brake', 0)
-        times = self.symbols_config.get('times', 1)
+        times_cfg = self.symbols_config.get('times', 1)
+        times = times_cfg.get(symbol, 1) if isinstance(times_cfg, dict) else times_cfg
         mtqty = self.symbols_config.get('mtqty', 0.01)
         gap_ranges = self.symbols_config.get('gap_range', {})
         symbol_gap_range = gap_ranges.get(symbol, DEFAULT_GAP_RANGE)
