@@ -183,7 +183,7 @@ class Strategy:
         
         # ─── Entry/Exit Logic ───
         
-        gap_in_range = gap_range[0] <= abs(current_gap_pct) <= gap_range[1]
+        gap_in_range = gap_range[0] <= current_gap_pct <= gap_range[1]
         
         # No positions open → look for entry (gap% must be in range)
         if buy_count == 0 and sell_count == 0:

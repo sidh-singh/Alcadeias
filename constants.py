@@ -14,7 +14,7 @@ SHA_TREND_LENGTH = 11               # Smoothing length for trend SHA (pre & post
 SHA_TREND_MA_TYPE = 'RMA'           # MA type for trend SHA
 
 # ─── SHA Gap ───
-DEFAULT_GAP_RANGE = [0.1, 0.30]     # Default gap% range [min, max] if not set per symbol
+DEFAULT_GAP_RANGE = [0.001, 0.003]   # Default gap range [min, max] as raw ratio (not ×100)
 
 # ─── Data Fetching ───
 CANDLE_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe for price data (resolved via mt5 at runtime)

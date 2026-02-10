@@ -58,22 +58,20 @@ class Indicator:
     
     def calculate_sha_gap(self, sha_df, sha_trend_df):
         """
-        Calculate gap % between signal SHA and trend SHA.
+        Calculate absolute gap ratio between signal SHA and trend SHA.
         Uses mean of OHLC candles; trend SHA is the base value.
-        
-        Positive = signal SHA above trend (bullish divergence)
-        Negative = signal SHA below trend (bearish divergence)
+        Result is always positive (absolute value).
         
         Args:
             sha_df: Signal SHA DataFrame (Open, High, Low, Close)
             sha_trend_df: Trend SHA DataFrame (Open, High, Low, Close)
         
         Returns:
-            pd.Series: gap percentage for each candle
+            pd.Series: absolute gap ratio for each candle (e.g. 0.0015)
         """
         sha_mean = (sha_df['Open'] + sha_df['High'] + sha_df['Low'] + sha_df['Close']) / 4
         trend_mean = (sha_trend_df['Open'] + sha_trend_df['High'] + sha_trend_df['Low'] + sha_trend_df['Close']) / 4
-        gap_pct = ((sha_mean - trend_mean) / trend_mean) * 100
+        gap_pct = ((sha_mean - trend_mean) / trend_mean).abs()
         return gap_pct
     
     def _ma(self, series, length, ma_type='EMA', volume=None):
