@@ -563,13 +563,16 @@ def _signal_row(label, icon, color, power, lst):
 
 def _build_gap_row(gap_pct, gap_range):
     """Build the SHA gap% row with range indicator."""
-    abs_gap = abs(gap_pct)
-    gap_min = gap_range[0] if gap_range and len(gap_range) >= 2 else 0.1
-    gap_max = gap_range[1] if gap_range and len(gap_range) >= 2 else 0.30
-    in_range = gap_min <= abs_gap <= gap_max
+    # Convert raw ratio to display percentage
+    display_gap = gap_pct * 100
+    gap_min = gap_range[0] if gap_range and len(gap_range) >= 2 else 0.001
+    gap_max = gap_range[1] if gap_range and len(gap_range) >= 2 else 0.003
+    in_range = gap_min <= gap_pct <= gap_max
 
-    gap_color = '#00d2a0' if gap_pct >= 0 else '#e74c3c'
-    gap_sign = '+' if gap_pct >= 0 else ''
+    display_min = gap_min * 100
+    display_max = gap_max * 100
+
+    gap_color = '#00d2a0'
     range_badge_color = '#00d2a0' if in_range else '#ffd93d'
     range_badge_text = '✓ IN RANGE' if in_range else '○ OUT'
 
@@ -584,14 +587,14 @@ def _build_gap_row(gap_pct, gap_range):
             html.Span('📊 Gap', style={
                 'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#a78bfa',
             }),
-            html.Span(f'{gap_sign}{gap_pct:.4f}%', style={
+            html.Span(f'{display_gap:.4f}%', style={
                 'fontWeight': '800',
                 'fontSize': '1.05rem',
                 'color': gap_color,
                 'fontFamily': "'JetBrains Mono', monospace",
             }),
             html.Div([
-                html.Span(f'{gap_min} – {gap_max}', style={
+                html.Span(f'{display_min:.2f}% – {display_max:.2f}%', style={
                     'fontSize': '0.72rem',
                     'color': COLORS['text_secondary'],
                     'fontFamily': "'JetBrains Mono', monospace",
