@@ -18,6 +18,7 @@ from constants import (
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
     HISTORICAL_SUMMARY_DAYS, HISTORICAL_SUMMARY_FILENAME,
     STRATEGY_LOG_FILENAME, STRATEGY_LOG_MAX_ENTRIES,
+    ORDER_COOLDOWN_SECONDS,
 )
 
 
@@ -398,6 +399,7 @@ class MT5TradingBot:
                         'first_profit': buy_positions['first_profit'],
                         'response': str(order_response),
                     })
+                    time.sleep(ORDER_COOLDOWN_SECONDS)  # Wait for MT5 to register position
                 elif buy_signal == Signal.CLOSE_BUY:
                     close_response = self.position_helper.close_by_type(symbol, 0)
                     self._log_event(symbol, 'CLOSE_BUY', 'EXIT', {
@@ -429,6 +431,7 @@ class MT5TradingBot:
                         'first_profit': sell_positions['first_profit'],
                         'response': str(order_response),
                     })
+                    time.sleep(ORDER_COOLDOWN_SECONDS)  # Wait for MT5 to register position
                 elif sell_signal == Signal.CLOSE_SELL:
                     close_response = self.position_helper.close_by_type(symbol, 1)
                     self._log_event(symbol, 'CLOSE_SELL', 'EXIT', {

@@ -49,6 +49,9 @@ DASHBOARD_MAX_HEIGHT_JSON = 300     # Max-height (px) for raw JSON viewer
 GRAPH_TEXT_LABEL_THRESHOLD = 60     # Hide per-bar text labels when deal count exceeds this
 GRAPH_CUM_LABEL_THRESHOLD = 60     # Hide cumulative line labels when deal count exceeds this
 
+# ─── Order Execution ───
+ORDER_COOLDOWN_SECONDS = 2                       # Mandatory sleep after placing an order (lets MT5 update positions)
+
 # ─── Strategy Log ───
 STRATEGY_LOG_FILENAME = 'strategy_log.json'     # Log file name inside OUTPUT_DIR
 STRATEGY_LOG_MAX_ENTRIES = 200                   # Max log entries kept per symbol
