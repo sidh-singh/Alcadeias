@@ -146,7 +146,8 @@ class Strategy:
                 - sell_signal: Signal enum
                 - analysis_data: dict with sha/trend power, crossover, gap% data
         """
-        self.hedge = times
+        # Use local variable instead of self.hedge for thread-safety
+        hedge = times
         
         # Extract position data
         buy_count = buy_positions['count'] if buy_positions else 0
@@ -193,7 +194,7 @@ class Strategy:
         
         # Only BUY positions open → exit when trend SHA flips bearish
         elif buy_count > 0 and sell_count == 0:
-            if buy_profit > self.hedge:
+            if buy_profit > hedge:
                 buy_status = Signal.CLOSE_BUY
             # elif lt_trend_power_list[0] == 0:
                 # buy_status = Signal.CLOSE_BUY
@@ -202,7 +203,7 @@ class Strategy:
         
         # Only SELL positions open → exit when trend SHA flips bullish
         elif buy_count == 0 and sell_count > 0:
-            if sell_profit > self.hedge:
+            if sell_profit > hedge:
                 sell_status = Signal.CLOSE_SELL
             # elif lt_trend_power_list[0] == 1:
                 # sell_status = Signal.CLOSE_SELL
