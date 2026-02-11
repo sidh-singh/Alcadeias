@@ -1,10 +1,6 @@
 {
     "symbols" : ["BTCUSDm","XAUUSDm", "XAGUSDm"],
-    "times": {
-        "BTCUSDm": 1,
-        "XAUUSDm": 1,
-        "XAGUSDm": 1
-    },
+    "times": 1,
     "brake" : 0,
     "mtqty" : 0.01,
     "gap_range": {

@@ -35,22 +35,23 @@ class Strategy:
         except (IndexError, ValueError):
             return times
     
-    def _get_next_fibo_volume(self, position_count, times):
+    def _get_next_fibo_volume(self, current_volume, times):
         """
-        Get next fibonacci volume based on current position count.
-        Uses count as index into fib sequence.
+        Get next fibonacci volume based on current total volume.
+        Finds current volume in fibo sequence, returns the next one.
         
         Args:
-            position_count: Current number of open positions (e.g., 1, 2, 3...)
+            current_volume: Current total position volume (e.g., 0.03)
             times: Multiplier from config
         
         Returns:
             float: Next fibo volume in lots
         """
         fib = [self._recur_fibo(i) for i in range(FIBO_SEQUENCE_LENGTH)][2:]
+        fib = [f * times for f in fib]
         try:
-            return round(fib[position_count] * times / 100, 2)
-        except IndexError:
+            return round(fib[fib.index(current_volume * 100) + 1] / 100, 2)
+        except (ValueError, IndexError):
             return 0.01 * times
     
     def _analyze(self, source_df, sha_df):
@@ -146,8 +147,7 @@ class Strategy:
                 - sell_signal: Signal enum
                 - analysis_data: dict with sha/trend power, crossover, gap% data
         """
-        # Use local variable instead of self.hedge for thread-safety
-        hedge = times
+        self.hedge = times
         
         # Extract position data
         buy_count = buy_positions['count'] if buy_positions else 0
@@ -194,20 +194,20 @@ class Strategy:
         
         # Only BUY positions open → exit when trend SHA flips bearish
         elif buy_count > 0 and sell_count == 0:
-            if buy_profit > hedge:
+            if buy_profit > self.hedge:
                 buy_status = Signal.CLOSE_BUY
-            # elif lt_trend_power_list[0] == 0:
-                # buy_status = Signal.CLOSE_BUY
-            elif buy_first_profit < -(self._get_fibo_qty(buy_count, 1) ** 4):
+            elif lt_trend_power_list[0] == 0:
+                buy_status = Signal.CLOSE_BUY
+            elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** 3):
                 buy_status = Signal.BUY_MORE
         
         # Only SELL positions open → exit when trend SHA flips bullish
         elif buy_count == 0 and sell_count > 0:
-            if sell_profit > hedge:
+            if sell_profit > self.hedge:
                 sell_status = Signal.CLOSE_SELL
-            # elif lt_trend_power_list[0] == 1:
-                # sell_status = Signal.CLOSE_SELL
-            elif sell_first_profit < -(self._get_fibo_qty(sell_count, 1) ** 4):
+            elif lt_trend_power_list[0] == 1:
+                sell_status = Signal.CLOSE_SELL
+            elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** 3):
                 sell_status = Signal.SELL_MORE
         
         analysis_data = {
