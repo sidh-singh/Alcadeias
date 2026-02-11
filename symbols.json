@@ -2,8 +2,8 @@
     "symbols" : ["BTCUSDm","XAUUSDm", "XAGUSDm"],
     "times": {
         "BTCUSDm": 10,
-        "XAUUSDm": 3,
-        "XAGUSDm": 3
+        "XAUUSDm": 10,
+        "XAGUSDm": 10
     },
     "brake" : 0,
     "mtqty" : 0.01,
