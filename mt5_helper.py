@@ -21,23 +21,12 @@ class MT5PositionHelper:
             mt5_instance: The MetaTrader5 module instance from app.py
         """
         self.mt5 = mt5_instance
-        self.request = {
-            "action": 0,
-            "symbol": "",
-            "volume": 0,
-            "type": 0,
-            "price": 0,
-            "type_time": 0,
-            "type_filling": 0,
-            "sl": 0,
-            "tp": 0,
-        }
         self.risk_reward_ratio = RISK_REWARD_RATIO
         
-        # Initialize request defaults
-        self.request['type_time'] = self.mt5.ORDER_TIME_GTC
-        self.request['type_filling'] = self.mt5.ORDER_FILLING_IOC
-        self.request['action'] = self.mt5.TRADE_ACTION_DEAL
+        # Store MT5 constants for building per-call request dicts
+        self._order_time_gtc = self.mt5.ORDER_TIME_GTC
+        self._order_filling_ioc = self.mt5.ORDER_FILLING_IOC
+        self._trade_action_deal = self.mt5.TRADE_ACTION_DEAL
     
     def get_buy_positions(self, symbol: str) -> Optional[Dict]:
         """
@@ -243,9 +232,50 @@ class MT5PositionHelper:
                 'message': f'Error checking market status: {str(e)}',
             }
     
+    def _build_request(self, symbol: str, qty: float, order_type, sl: float, tp: float) -> dict:
+        """
+        Build a fresh, thread-safe request dict for an order.
+        
+        Args:
+            symbol: Trading symbol
+            qty: Order volume/quantity
+            order_type: MT5 order type constant (ORDER_TYPE_BUY / ORDER_TYPE_SELL)
+            sl: Stop loss (0 for auto-calculation)
+            tp: Take profit (0 for auto-calculation)
+        
+        Returns:
+            dict: Ready-to-send request dictionary
+        """
+        ask = self.mt5.symbol_info_tick(symbol).ask
+        is_buy = (order_type == self.mt5.ORDER_TYPE_BUY)
+        
+        if sl == 0:
+            computed_sl = ask - (ask * self.risk_reward_ratio[0]) if is_buy \
+                          else ask + (ask * self.risk_reward_ratio[0])
+        else:
+            computed_sl = sl
+        
+        if tp == 0:
+            computed_tp = ask + (ask * self.risk_reward_ratio[1]) if is_buy \
+                          else ask - (ask * self.risk_reward_ratio[1])
+        else:
+            computed_tp = tp
+        
+        return {
+            "action": self._trade_action_deal,
+            "symbol": symbol,
+            "volume": qty,
+            "type": order_type,
+            "price": ask,
+            "type_time": self._order_time_gtc,
+            "type_filling": self._order_filling_ioc,
+            "sl": computed_sl,
+            "tp": computed_tp,
+        }
+
     def buy(self, symbol: str, qty: float, sl: float = 0, tp: float = 0):
         """
-        Place a BUY order
+        Place a BUY order (thread-safe — builds a local request dict)
         
         Args:
             symbol: Trading symbol
@@ -256,33 +286,14 @@ class MT5PositionHelper:
         Returns:
             Order result from MT5
         """
-        self.request['symbol'] = symbol
-        self.request['volume'] = qty
-        self.request['price'] = self.mt5.symbol_info_tick(symbol).ask
-        self.request['type'] = self.mt5.ORDER_TYPE_BUY
-        
-        # Set SL/TP (auto-calculate if not provided)
-        if sl == 0:
-            self.request["sl"] = (self.mt5.symbol_info_tick(symbol).ask) - (
-                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[0]
-            )
-        else:
-            self.request["sl"] = sl
-            
-        if tp == 0:
-            self.request["tp"] = (self.mt5.symbol_info_tick(symbol).ask) + (
-                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[1]
-            )
-        else:
-            self.request["tp"] = tp
-        
-        order_status = self.mt5.order_send(self.request)
+        request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_BUY, sl, tp)
+        order_status = self.mt5.order_send(request)
         time.sleep(0.1)
         return order_status
     
     def sell(self, symbol: str, qty: float, sl: float = 0, tp: float = 0):
         """
-        Place a SELL order
+        Place a SELL order (thread-safe — builds a local request dict)
         
         Args:
             symbol: Trading symbol
@@ -293,27 +304,8 @@ class MT5PositionHelper:
         Returns:
             Order result from MT5
         """
-        self.request['symbol'] = symbol
-        self.request['volume'] = qty
-        self.request['price'] = self.mt5.symbol_info_tick(symbol).ask
-        self.request['type'] = self.mt5.ORDER_TYPE_SELL
-        
-        # Set SL/TP (auto-calculate if not provided)
-        if sl == 0:
-            self.request["sl"] = (self.mt5.symbol_info_tick(symbol).ask) + (
-                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[0]
-            )
-        else:
-            self.request["sl"] = sl
-            
-        if tp == 0:
-            self.request["tp"] = (self.mt5.symbol_info_tick(symbol).ask) - (
-                self.mt5.symbol_info_tick(symbol).ask * self.risk_reward_ratio[1]
-            )
-        else:
-            self.request["tp"] = tp
-        
-        order_status = self.mt5.order_send(self.request)
+        request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_SELL, sl, tp)
+        order_status = self.mt5.order_send(request)
         time.sleep(0.1)
         return order_status
     

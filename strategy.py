@@ -35,23 +35,22 @@ class Strategy:
         except (IndexError, ValueError):
             return times
     
-    def _get_next_fibo_volume(self, current_volume, times):
+    def _get_next_fibo_volume(self, position_count, times):
         """
-        Get next fibonacci volume based on current total volume.
-        Finds current volume in fibo sequence, returns the next one.
+        Get next fibonacci volume based on current position count.
+        Uses count as index into fib sequence.
         
         Args:
-            current_volume: Current total position volume (e.g., 0.03)
+            position_count: Current number of open positions (e.g., 1, 2, 3...)
             times: Multiplier from config
         
         Returns:
             float: Next fibo volume in lots
         """
         fib = [self._recur_fibo(i) for i in range(FIBO_SEQUENCE_LENGTH)][2:]
-        fib = [f * times for f in fib]
         try:
-            return round(fib[fib.index(current_volume * 100) + 1] / 100, 2)
-        except (ValueError, IndexError):
+            return round(fib[position_count] * times / 100, 2)
+        except IndexError:
             return 0.01 * times
     
     def _analyze(self, source_df, sha_df):
@@ -147,7 +146,8 @@ class Strategy:
                 - sell_signal: Signal enum
                 - analysis_data: dict with sha/trend power, crossover, gap% data
         """
-        self.hedge = times
+        # Use local variable instead of self.hedge for thread-safety
+        hedge = times
         
         # Extract position data
         buy_count = buy_positions['count'] if buy_positions else 0
@@ -195,7 +195,7 @@ class Strategy:
         
         # Only BUY positions open → exit when trend SHA flips bearish
         elif buy_count > 0 and sell_count == 0:
-            if buy_profit > self.hedge:
+            if buy_profit > hedge:
                 buy_status = Signal.CLOSE_BUY
             elif (lt_sha_power_list[0] == 0) and below_gap:
                 buy_status = Signal.CLOSE_BUY
@@ -204,7 +204,7 @@ class Strategy:
         
         # Only SELL positions open → exit when trend SHA flips bullish
         elif buy_count == 0 and sell_count > 0:
-            if sell_profit > self.hedge:
+            if sell_profit > hedge:
                 sell_status = Signal.CLOSE_SELL
             elif (lt_sha_power_list[0] == 1) and below_gap:
                 sell_status = Signal.CLOSE_SELL
