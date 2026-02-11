@@ -184,6 +184,7 @@ class Strategy:
         # ─── Entry/Exit Logic ───
         
         gap_in_range = gap_range[0] <= current_gap_pct <= gap_range[1]
+        below_gap = current_gap_pct < gap_range[0] 
         
         # No positions open → look for entry (gap% must be in range)
         if buy_count == 0 and sell_count == 0:
@@ -196,7 +197,7 @@ class Strategy:
         elif buy_count > 0 and sell_count == 0:
             if buy_profit > self.hedge:
                 buy_status = Signal.CLOSE_BUY
-            elif lt_sha_power_list[0] == 0:
+            elif (lt_sha_power_list[0] == 0) and below_gap:
                 buy_status = Signal.CLOSE_BUY
             elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** 3):
                 buy_status = Signal.BUY_MORE
@@ -205,7 +206,7 @@ class Strategy:
         elif buy_count == 0 and sell_count > 0:
             if sell_profit > self.hedge:
                 sell_status = Signal.CLOSE_SELL
-            elif lt_sha_power_list[0] == 1:
+            elif (lt_sha_power_list[0] == 1) and below_gap:
                 sell_status = Signal.CLOSE_SELL
             elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** 3):
                 sell_status = Signal.SELL_MORE
