@@ -17,7 +17,7 @@ SHA_TREND_MA_TYPE = 'RMA'           # MA type for trend SHA
 DEFAULT_GAP_RANGE = [0.001, 0.003]   # Default gap range [min, max] as raw ratio (not ×100)
 
 # ─── Data Fetching ───
-CANDLE_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe for price data (resolved via mt5 at runtime)
+CANDLE_TIMEFRAME = 'TIMEFRAME_M5'   # Timeframe for price data (resolved via mt5 at runtime)
 CANDLE_COUNT = 50                   # Number of candles to fetch per cycle
 
 # ─── Market Status ───
