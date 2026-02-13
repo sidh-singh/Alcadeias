@@ -1,7 +1,7 @@
 {
     "symbols" : ["BTCUSDm","XAUUSDm", "XAGUSDm"],
     "times": {
-        "BTCUSDm": 10,
+        "BTCUSDm": 1,
         "XAUUSDm": 1,
         "XAGUSDm": 1
     },
