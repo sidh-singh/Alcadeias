@@ -1946,144 +1946,196 @@ app.layout = html.Div([
             # Miniature Figure — Alcadeias, Lord of Spirits (12500-power Angel Command)
             html.Div(
                 dash.html.Iframe(
-                    srcDoc='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 260" width="56" height="72">
+                    srcDoc='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 280" width="56" height="72">
   <defs>
-    <linearGradient id="gBody" x1="0.3" y1="0" x2="0.7" y2="1">
-      <stop offset="0%" stop-color="#f5ecd0"/>
-      <stop offset="25%" stop-color="#dfc060"/>
-      <stop offset="55%" stop-color="#c49a30"/>
-      <stop offset="100%" stop-color="#3a5a8a"/>
+    <!-- Dark armor base: deep navy-black with blue edge highlights -->
+    <linearGradient id="gArmor" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#1a2a4a"/>
+      <stop offset="40%" stop-color="#0c1628"/>
+      <stop offset="100%" stop-color="#060c1a"/>
     </linearGradient>
-    <linearGradient id="gWL" x1="1" y1="0.2" x2="0" y2="0.8">
-      <stop offset="0%" stop-color="#fffef0"/>
-      <stop offset="25%" stop-color="#e8d890"/>
-      <stop offset="55%" stop-color="#4a8ecc"/>
-      <stop offset="100%" stop-color="#1e3d6a"/>
+    <!-- Gold edge gradient for blade armor trim -->
+    <linearGradient id="gGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f5e6a0"/>
+      <stop offset="35%" stop-color="#d4a843"/>
+      <stop offset="70%" stop-color="#c49a30"/>
+      <stop offset="100%" stop-color="#a07820"/>
     </linearGradient>
-    <linearGradient id="gWR" x1="0" y1="0.2" x2="1" y2="0.8">
-      <stop offset="0%" stop-color="#fffef0"/>
-      <stop offset="25%" stop-color="#e8d890"/>
-      <stop offset="55%" stop-color="#4a8ecc"/>
-      <stop offset="100%" stop-color="#1e3d6a"/>
+    <!-- Wing blade gradient: gold tip fading to dark blue -->
+    <linearGradient id="gWingL" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d4a843"/>
+      <stop offset="30%" stop-color="#1a2a4a"/>
+      <stop offset="100%" stop-color="#060c1a"/>
     </linearGradient>
+    <linearGradient id="gWingR" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d4a843"/>
+      <stop offset="30%" stop-color="#1a2a4a"/>
+      <stop offset="100%" stop-color="#060c1a"/>
+    </linearGradient>
+    <!-- Helm crest gradient -->
     <linearGradient id="gHelm" x1="0.5" y1="0" x2="0.5" y2="1">
-      <stop offset="0%" stop-color="#5a9ed6"/>
-      <stop offset="60%" stop-color="#2a5a8a"/>
-      <stop offset="100%" stop-color="#142a4a"/>
+      <stop offset="0%" stop-color="#2a4a70"/>
+      <stop offset="50%" stop-color="#0e1c32"/>
+      <stop offset="100%" stop-color="#060c1a"/>
     </linearGradient>
-    <linearGradient id="gCape" x1="0.5" y1="0" x2="0.5" y2="1">
-      <stop offset="0%" stop-color="#4a8ecc"/>
-      <stop offset="50%" stop-color="#2a5580"/>
-      <stop offset="100%" stop-color="#0e1e3a"/>
-    </linearGradient>
-    <radialGradient id="gOrb" cx="0.5" cy="0.4" r="0.5">
+    <!-- Orb radial: bright white center to golden edge -->
+    <radialGradient id="gOrb" cx="0.45" cy="0.4" r="0.55">
       <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="30%" stop-color="#fffde6"/>
+      <stop offset="20%" stop-color="#fffde6"/>
+      <stop offset="50%" stop-color="#f0d870"/>
       <stop offset="100%" stop-color="#d4a843"/>
     </radialGradient>
-    <radialGradient id="gHalo" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0%" stop-color="rgba(255,250,220,0)"/>
-      <stop offset="60%" stop-color="rgba(212,168,67,0.08)"/>
-      <stop offset="100%" stop-color="rgba(212,168,67,0.22)"/>
+    <!-- Orb outer glow -->
+    <radialGradient id="gOrbGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="rgba(255,253,230,0.5)"/>
+      <stop offset="50%" stop-color="rgba(212,168,67,0.25)"/>
+      <stop offset="100%" stop-color="rgba(212,168,67,0)"/>
     </radialGradient>
-    <filter id="gl"><feGaussianBlur stdDeviation="1.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <!-- Base halo -->
+    <radialGradient id="gHalo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="rgba(212,168,67,0)"/>
+      <stop offset="60%" stop-color="rgba(212,168,67,0.06)"/>
+      <stop offset="100%" stop-color="rgba(212,168,67,0.18)"/>
+    </radialGradient>
+    <filter id="gl"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     <filter id="au"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    <filter id="ws"><feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#4a8ecc" flood-opacity="0.25"/></filter>
+    <filter id="orbGl"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="rayGl"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
   </defs>
-  <!-- DIVINE HALO — ring of light behind head -->
-  <ellipse cx="100" cy="42" rx="28" ry="6" fill="none" stroke="#d4a843" stroke-width="1.8" opacity="0.55" filter="url(#gl)"/>
-  <ellipse cx="100" cy="42" rx="22" ry="4.5" fill="none" stroke="#f0e6c0" stroke-width="0.8" opacity="0.35"/>
-  <!-- LARGE WINGS — sweeping blade-feathered (Light civilization signature) -->
-  <!-- Left wing: 6 blade-feathers fanning upward & outward -->
-  <path d="M78 80 L8 14 L22 42 L52 70 Z" fill="url(#gWL)" opacity="0.92" filter="url(#ws)"/>
-  <path d="M76 88 L4 32 L18 54 L50 82 Z" fill="url(#gWL)" opacity="0.84"/>
-  <path d="M74 96 L6 52 L20 68 L52 92 Z" fill="url(#gWL)" opacity="0.76"/>
-  <path d="M76 104 L12 68 L26 82 L56 100 Z" fill="url(#gWL)" opacity="0.65"/>
-  <path d="M78 110 L20 84 L36 96 L60 108 Z" fill="url(#gWL)" opacity="0.55"/>
-  <path d="M80 116 L30 98 L46 108 L66 116 Z" fill="url(#gWL)" opacity="0.42"/>
+
+  <!-- ===== WING BLADES — sharp angular blades fanning out ===== -->
+  <!-- Left wing: 5 dark blade-feathers with golden leading edges -->
+  <path d="M78 75 L5 8 L28 50 L60 72 Z" fill="url(#gWingL)" stroke="#c49a30" stroke-width="0.6" opacity="0.95"/>
+  <path d="M75 85 L2 28 L22 58 L55 82 Z" fill="#0e1c32" stroke="#a07820" stroke-width="0.5" opacity="0.88"/>
+  <path d="M73 95 L8 50 L25 68 L55 92 Z" fill="url(#gWingL)" opacity="0.78"/>
+  <path d="M76 105 L18 72 L35 86 L60 102 Z" fill="#0e1c32" stroke="#a07820" stroke-width="0.4" opacity="0.65"/>
+  <path d="M78 112 L30 90 L48 100 L66 110 Z" fill="url(#gWingL)" opacity="0.5"/>
   <!-- Right wing -->
-  <path d="M122 80 L192 14 L178 42 L148 70 Z" fill="url(#gWR)" opacity="0.92" filter="url(#ws)"/>
-  <path d="M124 88 L196 32 L182 54 L150 82 Z" fill="url(#gWR)" opacity="0.84"/>
-  <path d="M126 96 L194 52 L180 68 L148 92 Z" fill="url(#gWR)" opacity="0.76"/>
-  <path d="M124 104 L188 68 L174 82 L144 100 Z" fill="url(#gWR)" opacity="0.65"/>
-  <path d="M122 110 L180 84 L164 96 L140 108 Z" fill="url(#gWR)" opacity="0.55"/>
-  <path d="M120 116 L170 98 L154 108 L134 116 Z" fill="url(#gWR)" opacity="0.42"/>
-  <!-- Wing inner glow membrane -->
-  <path d="M80 82 L30 28 L50 60 L80 90 Z" fill="#4a8ecc" opacity="0.12"/>
-  <path d="M120 82 L170 28 L150 60 L120 90 Z" fill="#4a8ecc" opacity="0.12"/>
-  <!-- CAPE — flowing behind and below -->
-  <path d="M82 130 L68 210 L78 195 L88 230 L100 210 L112 230 L122 195 L132 210 L118 130 Z" fill="url(#gCape)" opacity="0.7" stroke="#4a8ecc" stroke-width="0.4"/>
-  <path d="M86 140 L76 195 L86 180 Z" fill="#3a6a9a" opacity="0.35"/>
-  <path d="M114 140 L124 195 L114 180 Z" fill="#3a6a9a" opacity="0.35"/>
-  <!-- LEGS — armored greaves -->
-  <path d="M92 170 L88 215 L95 218 L98 175 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.5"/>
-  <path d="M108 170 L112 215 L105 218 L102 175 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.5"/>
-  <!-- Knee guards -->
-  <ellipse cx="93" cy="185" rx="5" ry="4" fill="#dfc060" stroke="#c49a30" stroke-width="0.5"/>
-  <ellipse cx="107" cy="185" rx="5" ry="4" fill="#dfc060" stroke="#c49a30" stroke-width="0.5"/>
-  <!-- Feet / sabatons -->
-  <path d="M86 214 L83 224 L97 224 L96 216 Z" fill="#b8922e" stroke="#a8841e" stroke-width="0.4"/>
-  <path d="M114 214 L117 224 L103 224 L104 216 Z" fill="#b8922e" stroke="#a8841e" stroke-width="0.4"/>
-  <!-- BODY — torso armor (golden plate mail) -->
-  <path d="M100 52 L82 78 L78 120 L86 155 L100 168 L114 155 L122 120 L118 78 Z" fill="url(#gBody)" stroke="#c0a864" stroke-width="0.8" filter="url(#gl)"/>
-  <!-- Chest plate v-lines -->
-  <path d="M90 78 L100 70 L110 78" fill="none" stroke="#f0e6c0" stroke-width="0.8" opacity="0.65"/>
-  <path d="M88 88 L100 80 L112 88" fill="none" stroke="#f0e6c0" stroke-width="0.6" opacity="0.5"/>
-  <path d="M90 98 L100 92 L110 98" fill="none" stroke="#f0e6c0" stroke-width="0.5" opacity="0.4"/>
-  <!-- Waist / belt -->
-  <rect x="84" y="142" width="32" height="6" rx="2" fill="#dfc060" stroke="#c49a30" stroke-width="0.5"/>
-  <circle cx="100" cy="145" r="3" fill="#f0e6c0" stroke="#c49a30" stroke-width="0.5"/>
-  <!-- ARMS — extended with gauntlets -->
-  <path d="M82 80 L62 100 L58 115 L64 118 L72 105 L82 90 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.5"/>
-  <path d="M118 80 L138 100 L142 115 L136 118 L128 105 L118 90 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.5"/>
-  <!-- Forearm guards -->
-  <path d="M62 102 L56 112 L60 116 L66 108 Z" fill="#dfc060" stroke="#c49a30" stroke-width="0.4"/>
-  <path d="M138 102 L144 112 L140 116 L134 108 Z" fill="#dfc060" stroke="#c49a30" stroke-width="0.4"/>
-  <!-- SHOULDER PAULDRONS — spiked golden -->
-  <path d="M82 74 L56 56 L74 72 Z" fill="#dfc060" stroke="#c49a30" stroke-width="0.5"/>
-  <path d="M80 70 L48 46 L70 68 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.4" opacity="0.85"/>
-  <path d="M78 66 L52 38 L68 64 Z" fill="#dfc060" opacity="0.7"/>
-  <path d="M118 74 L144 56 L126 72 Z" fill="#dfc060" stroke="#c49a30" stroke-width="0.5"/>
-  <path d="M120 70 L152 46 L130 68 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.4" opacity="0.85"/>
-  <path d="M122 66 L148 38 L132 64 Z" fill="#dfc060" opacity="0.7"/>
-  <!-- FLOATING WEAPONS — levitated light sabers (Angel Command signature) -->
-  <g filter="url(#gl)" opacity="0.75">
-    <rect x="44" y="118" width="3" height="30" rx="1" fill="#f0e6c0" transform="rotate(-15 45 133)"/>
-    <rect x="44" y="118" width="3" height="5" rx="1" fill="#d4a843" transform="rotate(-15 45 120)"/>
-  </g>
-  <g filter="url(#gl)" opacity="0.75">
-    <rect x="153" y="118" width="3" height="30" rx="1" fill="#f0e6c0" transform="rotate(15 154 133)"/>
-    <rect x="153" y="118" width="3" height="5" rx="1" fill="#d4a843" transform="rotate(15 154 120)"/>
-  </g>
-  <!-- FLOATING ORBS around body (weapons hovering untouched) -->
-  <circle cx="52" cy="140" r="4" fill="url(#gOrb)" filter="url(#gl)" opacity="0.7"/>
-  <circle cx="148" cy="140" r="4" fill="url(#gOrb)" filter="url(#gl)" opacity="0.7"/>
-  <circle cx="42" cy="100" r="3" fill="#fffbe6" filter="url(#gl)" opacity="0.5"/>
-  <circle cx="158" cy="100" r="3" fill="#fffbe6" filter="url(#gl)" opacity="0.5"/>
-  <!-- HELM — ornate blue with golden crest & side horns -->
-  <path d="M100 36 L84 54 L88 62 L100 58 L112 62 L116 54 Z" fill="url(#gHelm)" stroke="#d4a843" stroke-width="1"/>
-  <!-- Visor — glowing slit -->
-  <line x1="90" y1="52" x2="110" y2="52" stroke="#f0e6c0" stroke-width="1.2" opacity="0.9" filter="url(#gl)"/>
-  <!-- Central crest — tall golden blade -->
-  <path d="M100 36 L96 12 L100 24 L104 12 Z" fill="#d4a843" stroke="#f0e6c0" stroke-width="0.6" filter="url(#gl)"/>
-  <!-- Side horn blades -->
-  <path d="M86 48 L72 26 L84 44 Z" fill="#d4a843" opacity="0.85"/>
-  <path d="M114 48 L128 26 L116 44 Z" fill="#d4a843" opacity="0.85"/>
-  <!-- Small inner horns -->
-  <path d="M90 44 L80 30 L88 42 Z" fill="#b8922e" opacity="0.65"/>
-  <path d="M110 44 L120 30 L112 42 Z" fill="#b8922e" opacity="0.65"/>
-  <!-- CORE ORB — divine light at chest center -->
-  <circle cx="100" cy="95" r="10" fill="url(#gOrb)" filter="url(#au)" opacity="0.92"/>
-  <circle cx="100" cy="95" r="5" fill="#fff" opacity="0.97"/>
-  <!-- Energy rays from orb -->
-  <line x1="100" y1="83" x2="100" y2="74" stroke="#f0e6c0" stroke-width="1.2" opacity="0.6" filter="url(#gl)"/>
-  <line x1="110" y1="89" x2="120" y2="82" stroke="#f0e6c0" stroke-width="0.9" opacity="0.5"/>
-  <line x1="90" y1="89" x2="80" y2="82" stroke="#f0e6c0" stroke-width="0.9" opacity="0.5"/>
-  <line x1="110" y1="101" x2="118" y2="108" stroke="#f0e6c0" stroke-width="0.7" opacity="0.4"/>
-  <line x1="90" y1="101" x2="82" y2="108" stroke="#f0e6c0" stroke-width="0.7" opacity="0.4"/>
-  <!-- BASE PLATFORM — radiant light disc -->
-  <ellipse cx="100" cy="228" rx="38" ry="8" fill="url(#gHalo)" filter="url(#au)"/>
-  <ellipse cx="100" cy="228" rx="24" ry="4" fill="none" stroke="#d4a843" stroke-width="0.5" opacity="0.3"/>
+  <path d="M142 75 L215 8 L192 50 L160 72 Z" fill="url(#gWingR)" stroke="#c49a30" stroke-width="0.6" opacity="0.95"/>
+  <path d="M145 85 L218 28 L198 58 L165 82 Z" fill="#0e1c32" stroke="#a07820" stroke-width="0.5" opacity="0.88"/>
+  <path d="M147 95 L212 50 L195 68 L165 92 Z" fill="url(#gWingR)" opacity="0.78"/>
+  <path d="M144 105 L202 72 L185 86 L160 102 Z" fill="#0e1c32" stroke="#a07820" stroke-width="0.4" opacity="0.65"/>
+  <path d="M142 112 L190 90 L172 100 L154 110 Z" fill="url(#gWingR)" opacity="0.5"/>
+  <!-- Wing gold edge highlights -->
+  <line x1="5" y1="8" x2="60" y2="72" stroke="#d4a843" stroke-width="0.8" opacity="0.7"/>
+  <line x1="215" y1="8" x2="160" y2="72" stroke="#d4a843" stroke-width="0.8" opacity="0.7"/>
+
+  <!-- ===== CAPE — dark flowing behind ===== -->
+  <path d="M84 135 L68 220 L80 200 L92 240 L110 215 L120 240 L132 200 L148 220 L136 135 Z" fill="#0a1220" opacity="0.7" stroke="#1a2a4a" stroke-width="0.4"/>
+  <path d="M88 145 L78 200 L88 185 Z" fill="#0e1628" opacity="0.4"/>
+  <path d="M132 145 L142 200 L132 185 Z" fill="#0e1628" opacity="0.4"/>
+
+  <!-- ===== LEGS — dark armored greaves with gold trim ===== -->
+  <path d="M96 172 L92 222 L100 225 L103 178 Z" fill="url(#gArmor)" stroke="#c49a30" stroke-width="0.5"/>
+  <path d="M117 172 L121 222 L113 225 L110 178 Z" fill="url(#gArmor)" stroke="#c49a30" stroke-width="0.5"/>
+  <!-- Knee blades -->
+  <path d="M90 188 L82 178 L92 186 Z" fill="#d4a843" opacity="0.8"/>
+  <path d="M123 188 L131 178 L121 186 Z" fill="#d4a843" opacity="0.8"/>
+  <!-- Sabatons with front spike -->
+  <path d="M89 221 L84 234 L102 234 L101 223 Z" fill="#0c1628" stroke="#a07820" stroke-width="0.4"/>
+  <path d="M86 230 L78 226 L84 232 Z" fill="#d4a843" opacity="0.6"/>
+  <path d="M124 221 L129 234 L111 234 L112 223 Z" fill="#0c1628" stroke="#a07820" stroke-width="0.4"/>
+  <path d="M127 230 L135 226 L129 232 Z" fill="#d4a843" opacity="0.6"/>
+
+  <!-- ===== TORSO — angular dark plate armor ===== -->
+  <path d="M110 55 L85 78 L80 125 L88 158 L110 170 L132 158 L140 125 L135 78 Z" fill="url(#gArmor)" stroke="#c49a30" stroke-width="0.7"/>
+  <!-- Chest plate angular lines (V-shaped armor seams) -->
+  <path d="M95 80 L110 68 L125 80" fill="none" stroke="#d4a843" stroke-width="0.9" opacity="0.7"/>
+  <path d="M93 90 L110 80 L127 90" fill="none" stroke="#d4a843" stroke-width="0.7" opacity="0.55"/>
+  <path d="M95 100 L110 94 L125 100" fill="none" stroke="#c49a30" stroke-width="0.5" opacity="0.4"/>
+  <!-- Abdominal plates -->
+  <path d="M92 120 L110 115 L128 120 L128 140 L110 148 L92 140 Z" fill="#0a1220" stroke="#c49a30" stroke-width="0.4" opacity="0.6"/>
+  <!-- Belt with gold buckle -->
+  <rect x="88" y="148" width="44" height="6" rx="2" fill="#c49a30" stroke="#a07820" stroke-width="0.4"/>
+  <path d="M107 148 L110 142 L113 148" fill="#f0e6c0" opacity="0.7"/>
+
+  <!-- ===== LEFT ARM — down/side, gauntlet with claws ===== -->
+  <path d="M85 82 L65 105 L58 125 L64 128 L74 110 L85 95 Z" fill="url(#gArmor)" stroke="#c49a30" stroke-width="0.5"/>
+  <!-- Left forearm blade -->
+  <path d="M62 108 L50 98 L58 112 Z" fill="#d4a843" opacity="0.75"/>
+  <!-- Left hand claws -->
+  <path d="M58 124 L52 132 L56 130 Z" fill="#d4a843" opacity="0.6"/>
+  <path d="M60 126 L56 136 L60 133 Z" fill="#d4a843" opacity="0.6"/>
+  <path d="M63 127 L62 138 L66 134 Z" fill="#d4a843" opacity="0.6"/>
+
+  <!-- ===== RIGHT ARM — extended forward holding orb ===== -->
+  <path d="M135 82 L158 95 L170 88 L172 92 L162 100 L140 95 Z" fill="url(#gArmor)" stroke="#c49a30" stroke-width="0.5"/>
+  <!-- Right forearm reaching out -->
+  <path d="M162 98 L178 82 L182 86 L168 100 Z" fill="url(#gArmor)" stroke="#c49a30" stroke-width="0.4"/>
+  <!-- Right hand open (fingers around orb) -->
+  <path d="M178 80 L186 68 L184 72 L180 82 Z" fill="#d4a843" opacity="0.7"/>
+  <path d="M180 78 L192 70 L190 74 L182 80 Z" fill="#d4a843" opacity="0.7"/>
+  <path d="M181 82 L194 78 L192 82 L183 84 Z" fill="#d4a843" opacity="0.65"/>
+  <path d="M180 85 L190 86 L188 89 L181 87 Z" fill="#d4a843" opacity="0.55"/>
+
+  <!-- ===== SHOULDER PAULDRONS — massive spiked dark armor with gold blades ===== -->
+  <!-- Left pauldron: 4 layered spikes -->
+  <path d="M85 74 L55 48 L78 70 Z" fill="url(#gArmor)" stroke="#c49a30" stroke-width="0.6"/>
+  <path d="M83 68 L42 34 L72 64 Z" fill="#0c1628" stroke="#d4a843" stroke-width="0.5" opacity="0.9"/>
+  <path d="M80 64 L38 24 L68 58 Z" fill="url(#gArmor)" stroke="#c49a30" stroke-width="0.4" opacity="0.85"/>
+  <path d="M78 60 L48 18 L66 52 Z" fill="#d4a843" opacity="0.5"/>
+  <!-- Right pauldron -->
+  <path d="M135 74 L165 48 L142 70 Z" fill="url(#gArmor)" stroke="#c49a30" stroke-width="0.6"/>
+  <path d="M137 68 L178 34 L148 64 Z" fill="#0c1628" stroke="#d4a843" stroke-width="0.5" opacity="0.9"/>
+  <path d="M140 64 L182 24 L152 58 Z" fill="url(#gArmor)" stroke="#c49a30" stroke-width="0.4" opacity="0.85"/>
+  <path d="M142 60 L172 18 L154 52 Z" fill="#d4a843" opacity="0.5"/>
+
+  <!-- ===== HELM — angular dark visor with tall golden crest & horn blades ===== -->
+  <path d="M110 38 L90 56 L94 64 L110 60 L126 64 L130 56 Z" fill="url(#gHelm)" stroke="#c49a30" stroke-width="0.8"/>
+  <!-- Visor slit — menacing glowing gold -->
+  <line x1="96" y1="54" x2="124" y2="54" stroke="#f0e6c0" stroke-width="1.5" opacity="0.95" filter="url(#gl)"/>
+  <line x1="98" y1="54" x2="122" y2="54" stroke="#ffffff" stroke-width="0.6" opacity="0.5"/>
+  <!-- Central crest — tall sharp golden blade -->
+  <path d="M110 38 L105 6 L110 22 L115 6 Z" fill="url(#gGold)" stroke="#f0e6c0" stroke-width="0.5" filter="url(#gl)"/>
+  <!-- Main side horns — sweeping golden blades -->
+  <path d="M92 50 L68 18 L88 44 Z" fill="url(#gGold)" stroke="#f0e6c0" stroke-width="0.3" opacity="0.9"/>
+  <path d="M128 50 L152 18 L132 44 Z" fill="url(#gGold)" stroke="#f0e6c0" stroke-width="0.3" opacity="0.9"/>
+  <!-- Secondary inner horns -->
+  <path d="M96 46 L78 24 L94 42 Z" fill="#c49a30" opacity="0.7"/>
+  <path d="M124 46 L142 24 L126 42 Z" fill="#c49a30" opacity="0.7"/>
+  <!-- Small cheek blades -->
+  <path d="M90 58 L80 52 L88 56 Z" fill="#d4a843" opacity="0.6"/>
+  <path d="M130 58 L140 52 L132 56 Z" fill="#d4a843" opacity="0.6"/>
+
+  <!-- ===== CORE ORB — golden-white light at chest center ===== -->
+  <circle cx="110" cy="98" r="8" fill="url(#gOrb)" filter="url(#gl)" opacity="0.9"/>
+  <circle cx="110" cy="98" r="4" fill="#fff" opacity="0.95"/>
+  <!-- Chest energy lines from core -->
+  <line x1="110" y1="88" x2="110" y2="80" stroke="#f0e6c0" stroke-width="0.8" opacity="0.5"/>
+  <line x1="118" y1="94" x2="126" y2="88" stroke="#f0e6c0" stroke-width="0.6" opacity="0.4"/>
+  <line x1="102" y1="94" x2="94" y2="88" stroke="#f0e6c0" stroke-width="0.6" opacity="0.4"/>
+
+  <!-- ===== HAND ORB — glowing sphere held by right hand ===== -->
+  <!-- Outer glow aura -->
+  <circle cx="188" cy="72" r="24" fill="url(#gOrbGlow)" filter="url(#orbGl)" opacity="0.8"/>
+  <!-- Orb ring -->
+  <circle cx="188" cy="72" r="14" fill="none" stroke="#d4a843" stroke-width="1" opacity="0.5"/>
+  <!-- Main orb sphere -->
+  <circle cx="188" cy="72" r="11" fill="url(#gOrb)" filter="url(#gl)"/>
+  <circle cx="188" cy="72" r="6" fill="#fff" opacity="0.95"/>
+  <circle cx="186" cy="69" r="2.5" fill="#fff" opacity="0.6"/>
+  <!-- Inner ring pattern (like the card art) -->
+  <circle cx="188" cy="72" r="8" fill="none" stroke="#f0e6c0" stroke-width="0.5" opacity="0.5"/>
+  <!-- Energy rays shooting outward from orb -->
+  <line x1="188" y1="56" x2="188" y2="42" stroke="#f5e6a0" stroke-width="1.4" opacity="0.7" filter="url(#rayGl)"/>
+  <line x1="202" y1="64" x2="214" y2="56" stroke="#f5e6a0" stroke-width="1.2" opacity="0.65" filter="url(#rayGl)"/>
+  <line x1="204" y1="76" x2="218" y2="78" stroke="#f5e6a0" stroke-width="1.0" opacity="0.55" filter="url(#rayGl)"/>
+  <line x1="200" y1="84" x2="210" y2="94" stroke="#f5e6a0" stroke-width="0.9" opacity="0.45" filter="url(#rayGl)"/>
+  <line x1="188" y1="88" x2="188" y2="100" stroke="#f5e6a0" stroke-width="0.8" opacity="0.4" filter="url(#rayGl)"/>
+  <line x1="176" y1="60" x2="168" y2="50" stroke="#f5e6a0" stroke-width="1.0" opacity="0.5" filter="url(#rayGl)"/>
+  <line x1="174" y1="76" x2="164" y2="80" stroke="#f5e6a0" stroke-width="0.7" opacity="0.35" filter="url(#rayGl)"/>
+  <!-- Diagonal accent rays -->
+  <line x1="196" y1="58" x2="208" y2="46" stroke="#d4a843" stroke-width="0.6" opacity="0.4"/>
+  <line x1="198" y1="82" x2="212" y2="90" stroke="#d4a843" stroke-width="0.5" opacity="0.3"/>
+
+  <!-- ===== FLOATING ENERGY MOTES around body ===== -->
+  <circle cx="50" cy="100" r="2.5" fill="#fffbe6" filter="url(#gl)" opacity="0.45"/>
+  <circle cx="170" cy="130" r="2" fill="#fffbe6" filter="url(#gl)" opacity="0.35"/>
+  <circle cx="45" cy="140" r="1.8" fill="#d4a843" filter="url(#gl)" opacity="0.3"/>
+
+  <!-- ===== BASE PLATFORM — faint divine light disc ===== -->
+  <ellipse cx="110" cy="238" rx="42" ry="8" fill="url(#gHalo)" filter="url(#au)"/>
+  <ellipse cx="110" cy="238" rx="28" ry="4" fill="none" stroke="#d4a843" stroke-width="0.5" opacity="0.25"/>
 </svg>''',
                     style={
                         'border': 'none', 'width': '56px', 'height': '72px',
