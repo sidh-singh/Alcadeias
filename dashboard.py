@@ -17,6 +17,7 @@ from constants import (
     HISTORICAL_SUMMARY_FILENAME,
     GRAPH_TEXT_LABEL_THRESHOLD, GRAPH_CUM_LABEL_THRESHOLD,
     STRATEGY_LOG_FILENAME,
+    ACTIVE_CONFIG_FILENAME,
 )
 
 # ─── Configuration ───
@@ -111,8 +112,47 @@ def get_available_symbols():
     files = glob.glob(pattern)
     return [
         os.path.splitext(os.path.basename(f))[0]
-        for f in files if os.path.basename(f) != 'account.json'
+        for f in files if os.path.basename(f) not in ('account.json', ACTIVE_CONFIG_FILENAME)
     ]
+
+
+# ─── Active Config Management ───
+ACTIVE_CONFIG_PATH = os.path.join(JSON_DIR, ACTIVE_CONFIG_FILENAME)
+
+
+def load_symbols_config():
+    """Load all available symbols from symbols.json"""
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), 'symbols.json')
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {'symbols': []}
+
+
+def load_active_config():
+    """Load active configuration (mode + selected symbols)"""
+    try:
+        with open(ACTIVE_CONFIG_PATH, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        symbols_cfg = load_symbols_config()
+        return {
+            'mode': 'demo',
+            'active_symbols': symbols_cfg.get('symbols', []),
+        }
+
+
+def save_active_config(config):
+    """Save active configuration to JSON file"""
+    try:
+        config_dir = os.path.dirname(ACTIVE_CONFIG_PATH)
+        if config_dir:
+            os.makedirs(config_dir, exist_ok=True)
+        with open(ACTIVE_CONFIG_PATH, 'w') as f:
+            json.dump(config, f, indent=2)
+    except OSError:
+        pass
 
 
 def make_signal_badge(status):
@@ -1616,6 +1656,74 @@ app.index_string = '''<!DOCTYPE html>
     .plotly .hoverlayer .hovertext {
         font-family: 'Inter', sans-serif !important;
     }
+
+    /* === Dark Dropdown Theme === */
+    .Select-control {
+        background-color: #111628 !important;
+        border-color: rgba(99, 115, 171, 0.2) !important;
+        color: #e8ecf4 !important;
+    }
+    .Select-menu-outer {
+        background-color: #111628 !important;
+        border-color: rgba(99, 115, 171, 0.2) !important;
+    }
+    .Select-option,
+    .VirtualizedSelectOption {
+        background-color: #111628 !important;
+        color: #e8ecf4 !important;
+    }
+    .VirtualizedSelectFocusedOption,
+    .Select-option.is-focused {
+        background-color: rgba(124, 108, 240, 0.18) !important;
+    }
+    .Select-value {
+        background-color: rgba(124, 108, 240, 0.2) !important;
+        border-color: rgba(124, 108, 240, 0.3) !important;
+        color: #e8ecf4 !important;
+    }
+    .Select-value-label {
+        color: #e8ecf4 !important;
+    }
+    .Select-input input {
+        color: #e8ecf4 !important;
+    }
+    .Select-placeholder {
+        color: #5a6580 !important;
+    }
+    .Select-arrow-zone .Select-arrow {
+        border-color: #5a6580 transparent transparent !important;
+    }
+    .Select-clear-zone {
+        color: #5a6580 !important;
+    }
+    .Select-multi-value-wrapper .Select-value .Select-value-icon {
+        border-right-color: rgba(124, 108, 240, 0.3) !important;
+    }
+    .Select-multi-value-wrapper .Select-value .Select-value-icon:hover {
+        color: #ff6b6b !important;
+        background-color: rgba(255, 107, 107, 0.15) !important;
+    }
+    .Select-noresults {
+        background-color: #111628 !important;
+        color: #5a6580 !important;
+    }
+
+    /* === Mode Toggle Buttons === */
+    .mode-btn {
+        border: none;
+        padding: 6px 18px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: all 0.25s ease;
+        font-family: 'Inter', sans-serif;
+        outline: none;
+    }
+    .mode-btn:hover {
+        filter: brightness(1.15);
+    }
 </style>
 </head>
 <body>
@@ -1625,15 +1733,77 @@ app.index_string = '''<!DOCTYPE html>
 </html>
 '''
 
-# Load symbols once at startup
-_startup_symbols = get_available_symbols()
-if not _startup_symbols:
-    try:
-        _config_path = os.path.join(os.path.dirname(__file__), 'symbols.json')
-        with open(_config_path, 'r') as _f:
-            _startup_symbols = json.load(_f).get('symbols', [])
-    except Exception:
-        _startup_symbols = []
+# ─── Load symbols configuration at startup ───
+_symbols_config = load_symbols_config()
+_all_symbols = _symbols_config.get('symbols', [])
+_active_config = load_active_config()
+_active_symbols = _active_config.get('active_symbols', _all_symbols)
+_current_mode = _active_config.get('mode', 'demo')
+# Validate active symbols against available ones
+_active_symbols = [s for s in _active_symbols if s in _all_symbols]
+if not _active_symbols:
+    _active_symbols = _all_symbols
+
+
+def _build_tabs(symbols):
+    """Build the dcc.Tabs component for the given symbol list"""
+    _TAB_STYLE = {
+        'background': 'transparent',
+        'color': COLORS['text_dim'],
+        'border': 'none',
+        'borderBottom': '2px solid transparent',
+        'padding': '14px 28px',
+        'fontSize': '12px',
+        'fontWeight': '600',
+        'letterSpacing': '1.5px',
+        'transition': 'all 0.3s ease',
+        'fontFamily': "'Inter', sans-serif",
+    }
+    _TAB_SELECTED = {
+        'background': 'transparent',
+        'color': COLORS['text'],
+        'border': 'none',
+        'borderBottom': f'2px solid {COLORS["tab_active"]}',
+        'padding': '14px 28px',
+        'fontSize': '12px',
+        'fontWeight': '700',
+        'letterSpacing': '1.5px',
+        'fontFamily': "'Inter', sans-serif",
+        'boxShadow': f'0 2px 12px {COLORS["accent_glow"]}',
+    }
+    if not symbols:
+        return html.Div('No symbols selected', style={
+            'color': COLORS['text_dim'], 'fontSize': '13px',
+            'padding': '16px 32px', 'textAlign': 'center',
+            'background': COLORS['tab_bg'],
+        })
+    return dcc.Tabs(
+        id='symbol-tabs',
+        value=symbols[0],
+        children=[
+            dcc.Tab(label=s, value=s, style=_TAB_STYLE, selected_style=_TAB_SELECTED)
+            for s in symbols
+        ],
+        style={'borderBottom': f'1px solid {COLORS["divider"]}', 'background': COLORS['tab_bg']},
+    )
+
+
+def _mode_btn_style(mode, is_active):
+    """Return inline style dict for a mode toggle button"""
+    if mode == 'demo':
+        active_bg, active_glow = COLORS['buy'], COLORS['buy_glow']
+    else:
+        active_bg, active_glow = COLORS['sell'], COLORS['sell_glow']
+    if is_active:
+        return {
+            'background': active_bg, 'color': '#fff',
+            'boxShadow': f'0 0 14px {active_glow}',
+        }
+    return {
+        'background': 'transparent', 'color': COLORS['text_dim'],
+        'boxShadow': 'none',
+    }
+
 
 app.layout = html.Div([
     # Auto-refresh
@@ -1688,47 +1858,64 @@ app.layout = html.Div([
         'color': COLORS['text'],
     }),
 
-    # ── Tabs ──
+    # ── Control Bar: Mode Toggle + Symbol Selector ──
+    html.Div([
+        # Left: Mode toggle
+        html.Div([
+            html.Span('MODE', style={
+                'fontSize': '9px', 'fontWeight': '600', 'color': COLORS['text_dim'],
+                'letterSpacing': '1.5px', 'marginRight': '12px',
+            }),
+            html.Div([
+                html.Button('DEMO', id='btn-mode-demo', n_clicks=0, className='mode-btn',
+                            style=_mode_btn_style('demo', _current_mode == 'demo')),
+                html.Button('LIVE', id='btn-mode-live', n_clicks=0, className='mode-btn',
+                            style=_mode_btn_style('live', _current_mode == 'live')),
+            ], style={
+                'display': 'flex', 'gap': '4px',
+                'background': 'rgba(255,255,255,0.03)',
+                'borderRadius': '10px', 'padding': '3px',
+                'border': f'1px solid {COLORS["card_border"]}',
+            }),
+            html.Span(_current_mode.upper(), id='mode-indicator', style={
+                'fontSize': '9px', 'fontWeight': '700', 'letterSpacing': '1px',
+                'marginLeft': '10px',
+                'color': COLORS['buy'] if _current_mode == 'demo' else COLORS['sell'],
+                'background': f'{COLORS["buy"] if _current_mode == "demo" else COLORS["sell"]}18',
+                'padding': '2px 8px', 'borderRadius': '8px',
+                'border': f'1px solid {COLORS["buy"] if _current_mode == "demo" else COLORS["sell"]}33',
+            }),
+        ], style={'display': 'flex', 'alignItems': 'center'}),
+
+        # Right: Symbol selector dropdown
+        html.Div([
+            html.Span('SYMBOLS', style={
+                'fontSize': '9px', 'fontWeight': '600', 'color': COLORS['text_dim'],
+                'letterSpacing': '1.5px', 'marginRight': '12px', 'flexShrink': '0',
+            }),
+            dcc.Dropdown(
+                id='symbol-selector',
+                options=[{'label': s, 'value': s} for s in _all_symbols],
+                value=_active_symbols,
+                multi=True,
+                placeholder='Select symbols to trade...',
+                style={'minWidth': '320px', 'flex': '1'},
+            ),
+        ], style={'display': 'flex', 'alignItems': 'center', 'flex': '1', 'maxWidth': '550px'}),
+    ], style={
+        'display': 'flex',
+        'justifyContent': 'space-between',
+        'alignItems': 'center',
+        'padding': '10px 32px',
+        'background': COLORS['bg_secondary'],
+        'borderBottom': f'1px solid {COLORS["divider"]}',
+        'gap': '24px',
+    }),
+
+    # ── Tabs (dynamic – updated by symbol-selector callback) ──
     html.Div(
-        dcc.Tabs(
-            id='symbol-tabs',
-            value=_startup_symbols[0] if _startup_symbols else '',
-            children=[
-                dcc.Tab(
-                    label=s,
-                    value=s,
-                    style={
-                        'background': 'transparent',
-                        'color': COLORS['text_dim'],
-                        'border': 'none',
-                        'borderBottom': '2px solid transparent',
-                        'padding': '14px 28px',
-                        'fontSize': '12px',
-                        'fontWeight': '600',
-                        'letterSpacing': '1.5px',
-                        'transition': 'all 0.3s ease',
-                        'fontFamily': "'Inter', sans-serif",
-                    },
-                    selected_style={
-                        'background': 'transparent',
-                        'color': COLORS['text'],
-                        'border': 'none',
-                        'borderBottom': f'2px solid {COLORS["tab_active"]}',
-                        'padding': '14px 28px',
-                        'fontSize': '12px',
-                        'fontWeight': '700',
-                        'letterSpacing': '1.5px',
-                        'fontFamily': "'Inter', sans-serif",
-                        'boxShadow': f'0 2px 12px {COLORS["accent_glow"]}',
-                    },
-                )
-                for s in _startup_symbols
-            ],
-            style={
-                'borderBottom': f'1px solid {COLORS["divider"]}',
-                'background': COLORS['tab_bg'],
-            },
-        ),
+        _build_tabs(_active_symbols),
+        id='tabs-container',
         style={'padding': '0 32px', 'background': COLORS['tab_bg']},
     ),
 
@@ -1764,6 +1951,64 @@ app.layout = html.Div([
 })
 
 
+# ─── Mode Toggle Callback ───
+@app.callback(
+    [Output('btn-mode-demo', 'style'),
+     Output('btn-mode-live', 'style'),
+     Output('mode-indicator', 'children'),
+     Output('mode-indicator', 'style')],
+    [Input('btn-mode-demo', 'n_clicks'),
+     Input('btn-mode-live', 'n_clicks')],
+    prevent_initial_call=True,
+)
+def toggle_mode(demo_clicks, live_clicks):
+    """Toggle between DEMO and LIVE mode and persist to active_config.json.
+    The bot reads this on next startup."""
+    triggered = callback_context.triggered[0]['prop_id'] if callback_context.triggered else ''
+    config = load_active_config()
+    if 'btn-mode-live' in triggered:
+        config['mode'] = 'live'
+    elif 'btn-mode-demo' in triggered:
+        config['mode'] = 'demo'
+    mode = config.get('mode', 'demo')
+    save_active_config(config)
+
+    demo_style = _mode_btn_style('demo', mode == 'demo')
+    live_style = _mode_btn_style('live', mode == 'live')
+
+    indicator_color = COLORS['buy'] if mode == 'demo' else COLORS['sell']
+    indicator_style = {
+        'fontSize': '9px', 'fontWeight': '700', 'letterSpacing': '1px',
+        'marginLeft': '10px',
+        'color': indicator_color,
+        'background': f'{indicator_color}18',
+        'padding': '2px 8px', 'borderRadius': '8px',
+        'border': f'1px solid {indicator_color}33',
+    }
+
+    return demo_style, live_style, mode.upper(), indicator_style
+
+
+# ─── Symbol Selector Callback ───
+@app.callback(
+    Output('tabs-container', 'children'),
+    [Input('symbol-selector', 'value')],
+    prevent_initial_call=True,
+)
+def update_symbol_tabs(selected_symbols):
+    """Update tabs when symbols are selected/deselected and persist to active_config.json.
+    The bot reads this on next startup."""
+    if not selected_symbols:
+        selected_symbols = []
+
+    config = load_active_config()
+    config['active_symbols'] = selected_symbols
+    save_active_config(config)
+
+    return _build_tabs(selected_symbols)
+
+
+# ─── Main Content Callback ───
 @app.callback(
     [Output('tab-content', 'children'),
      Output('account-info', 'children'),

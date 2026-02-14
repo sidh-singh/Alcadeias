@@ -55,3 +55,6 @@ ORDER_COOLDOWN_SECONDS = 1                       # Mandatory sleep after placing
 # ─── Strategy Log ───
 STRATEGY_LOG_FILENAME = 'strategy_log.json'     # Log file name inside OUTPUT_DIR
 STRATEGY_LOG_MAX_ENTRIES = 200                   # Max log entries kept per symbol
+
+# ─── Active Config (Dashboard ↔ Bot) ───
+ACTIVE_CONFIG_FILENAME = 'active_config.json'   # Dashboard writes, bot reads on startup

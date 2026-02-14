@@ -1,5 +1,6 @@
 import MetaTrader5 as mt5
 import json
+import os
 import sys
 import threading
 import time
@@ -19,6 +20,7 @@ from constants import (
     HISTORICAL_SUMMARY_DAYS, HISTORICAL_SUMMARY_FILENAME,
     STRATEGY_LOG_FILENAME, STRATEGY_LOG_MAX_ENTRIES,
     ORDER_COOLDOWN_SECONDS,
+    ACTIVE_CONFIG_FILENAME,
 )
 
 
@@ -74,6 +76,13 @@ class MT5TradingBot:
                 print("✗ Warning: No symbols found in symbols.json")
                 return False
             
+            # Narrow to dashboard-selected symbols if available
+            if hasattr(self, '_dashboard_active_symbols') and self._dashboard_active_symbols:
+                valid = [s for s in self._dashboard_active_symbols if s in self.symbols]
+                if valid:
+                    self.symbols = valid
+                    print(f"✓ Active symbols from dashboard: {', '.join(self.symbols)}")
+
             print(f"✓ Loaded {len(self.symbols)} symbols: {', '.join(self.symbols)}")
             return True
         except FileNotFoundError:
@@ -502,6 +511,19 @@ class MT5TradingBot:
         Main Job Orchestrator - Executes all steps in sequence
         This is the central function that controls the entire workflow
         """
+        # ── Read dashboard active config (mode + symbols override) ──
+        _acfg_path = os.path.join(OUTPUT_DIR, ACTIVE_CONFIG_FILENAME)
+        try:
+            with open(_acfg_path, 'r') as _af:
+                _acfg = json.load(_af)
+            _dash_mode = _acfg.get('mode', '').lower()
+            if _dash_mode in ('demo', 'live'):
+                self.mode = _dash_mode
+                print(f"✓ Mode set from dashboard config: {self.mode.upper()}")
+            self._dashboard_active_symbols = _acfg.get('active_symbols', [])
+        except (FileNotFoundError, json.JSONDecodeError):
+            self._dashboard_active_symbols = []
+
         print(f"\n{'#'*60}")
         print(f"#  JOB STARTED - {self.mode.upper()} MODE")
         print(f"{'#'*60}\n")
