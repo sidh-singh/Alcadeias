@@ -131,15 +131,23 @@ def load_symbols_config():
 
 
 def load_active_config():
-    """Load active configuration (mode + selected symbols)"""
+    """Load active configuration (mode + per-mode selected symbols)"""
     try:
         with open(ACTIVE_CONFIG_PATH, 'r') as f:
-            return json.load(f)
+            cfg = json.load(f)
+        # Migrate old format (single active_symbols list) → per-mode lists
+        if 'active_symbols' in cfg and 'demo_symbols' not in cfg:
+            cfg['demo_symbols'] = cfg.pop('active_symbols')
+            cfg.setdefault('live_symbols', cfg['demo_symbols'][:])
+            save_active_config(cfg)
+        return cfg
     except (FileNotFoundError, json.JSONDecodeError):
         symbols_cfg = load_symbols_config()
+        all_syms = symbols_cfg.get('symbols', [])
         return {
             'mode': 'demo',
-            'active_symbols': symbols_cfg.get('symbols', []),
+            'demo_symbols': all_syms[:],
+            'live_symbols': all_syms[:],
         }
 
 
@@ -1674,6 +1682,7 @@ app.index_string = '''<!DOCTYPE html>
     .Select-menu-outer {
         background-color: #0c1328 !important;
         border-color: rgba(192, 168, 100, 0.2) !important;
+        z-index: 999 !important;
     }
     .Select-option,
     .VirtualizedSelectOption {
@@ -1685,12 +1694,13 @@ app.index_string = '''<!DOCTYPE html>
         background-color: rgba(212, 168, 67, 0.15) !important;
     }
     .Select-value {
-        background-color: rgba(212, 168, 67, 0.18) !important;
-        border-color: rgba(212, 168, 67, 0.30) !important;
+        background-color: #1a2540 !important;
+        border-color: rgba(212, 168, 67, 0.35) !important;
         color: #f0ede4 !important;
     }
     .Select-value-label {
         color: #f0ede4 !important;
+        font-weight: 600 !important;
     }
     .Select-input input {
         color: #f0ede4 !important;
@@ -1705,7 +1715,8 @@ app.index_string = '''<!DOCTYPE html>
         color: #5c6478 !important;
     }
     .Select-multi-value-wrapper .Select-value .Select-value-icon {
-        border-right-color: rgba(212, 168, 67, 0.3) !important;
+        border-right-color: rgba(212, 168, 67, 0.35) !important;
+        color: #b8b0a0 !important;
     }
     .Select-multi-value-wrapper .Select-value .Select-value-icon:hover {
         color: #e05555 !important;
@@ -1714,6 +1725,27 @@ app.index_string = '''<!DOCTYPE html>
     .Select-noresults {
         background-color: #0c1328 !important;
         color: #5c6478 !important;
+    }
+    /* Dash-specific dropdown overrides */
+    .dash-dropdown .Select--multi .Select-value {
+        background-color: #1a2540 !important;
+        border: 1px solid rgba(212, 168, 67, 0.35) !important;
+        color: #f0ede4 !important;
+    }
+    .dash-dropdown .Select-control {
+        background-color: #0a0f20 !important;
+        border: 1px solid rgba(192, 168, 100, 0.22) !important;
+    }
+    .dash-dropdown .Select-menu-outer {
+        background-color: #0c1328 !important;
+    }
+    .dash-dropdown .Select-option {
+        background-color: #0c1328 !important;
+        color: #f0ede4 !important;
+    }
+    .dash-dropdown .Select-option:hover,
+    .dash-dropdown .Select-option.is-focused {
+        background-color: #1a2540 !important;
     }
 
     /* === Mode Toggle Buttons === */
@@ -1754,12 +1786,13 @@ app.index_string = '''<!DOCTYPE html>
 _symbols_config = load_symbols_config()
 _all_symbols = _symbols_config.get('symbols', [])
 _active_config = load_active_config()
-_active_symbols = _active_config.get('active_symbols', _all_symbols)
 _current_mode = _active_config.get('mode', 'demo')
-# Validate active symbols against available ones
-_active_symbols = [s for s in _active_symbols if s in _all_symbols]
-if not _active_symbols:
-    _active_symbols = _all_symbols
+# Per-mode symbol lists
+_demo_symbols = _active_config.get('demo_symbols', _all_symbols[:])
+_live_symbols = _active_config.get('live_symbols', _all_symbols[:])
+_demo_symbols = [s for s in _demo_symbols if s in _all_symbols] or _all_symbols[:]
+_live_symbols = [s for s in _live_symbols if s in _all_symbols] or _all_symbols[:]
+_active_symbols = _demo_symbols if _current_mode == 'demo' else _live_symbols
 
 
 def _build_tabs(symbols):
@@ -1834,69 +1867,109 @@ app.layout = html.Div([
     # ── Header — Alcadeias Mascot + Branding ──
     html.Div([
         html.Div([
-            # SVG Mascot — Alcadeias Lord of Spirits (stylized angel silhouette)
+            # SVG Mascot — Alcadeias Lord of Spirits (12500-power Angel Command)
             html.Div(
                 dash.html.Iframe(
-                    srcDoc='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="44" height="44">
+                    srcDoc='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="54" height="54">
   <defs>
-    <linearGradient id="gBody" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#d4a843"/>
-      <stop offset="50%" stop-color="#f0e6c0"/>
-      <stop offset="100%" stop-color="#4a8ecc"/>
+    <linearGradient id="gArmor" x1="0" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#f5ecd0"/>
+      <stop offset="35%" stop-color="#d4a843"/>
+      <stop offset="70%" stop-color="#b8922e"/>
+      <stop offset="100%" stop-color="#4a6ea0"/>
     </linearGradient>
-    <linearGradient id="gWing" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#4a8ecc"/>
-      <stop offset="60%" stop-color="#d4a843"/>
-      <stop offset="100%" stop-color="#f5ecd0"/>
-    </linearGradient>
-    <linearGradient id="gHalo" x1="0" y1="0" x2="1" y2="0">
+    <linearGradient id="gWingL" x1="1" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#f0e6c0"/>
-      <stop offset="50%" stop-color="#d4a843"/>
-      <stop offset="100%" stop-color="#f0e6c0"/>
+      <stop offset="30%" stop-color="#d4a843"/>
+      <stop offset="60%" stop-color="#4a8ecc"/>
+      <stop offset="100%" stop-color="#2a5a8a"/>
     </linearGradient>
-    <filter id="aura">
-      <feGaussianBlur stdDeviation="2" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
+    <linearGradient id="gWingR" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0e6c0"/>
+      <stop offset="30%" stop-color="#d4a843"/>
+      <stop offset="60%" stop-color="#4a8ecc"/>
+      <stop offset="100%" stop-color="#2a5a8a"/>
+    </linearGradient>
+    <linearGradient id="gHelm" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#4a8ecc"/>
+      <stop offset="50%" stop-color="#2a5a8a"/>
+      <stop offset="100%" stop-color="#1a3a5a"/>
+    </linearGradient>
+    <radialGradient id="gOrb" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="40%" stop-color="#fffbe6"/>
+      <stop offset="100%" stop-color="#d4a843"/>
+    </radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="1.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="aura"><feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
   </defs>
-  <!-- Halo -->
-  <ellipse cx="50" cy="22" rx="16" ry="5" fill="none" stroke="url(#gHalo)" stroke-width="1.8" opacity="0.85" filter="url(#aura)"/>
-  <!-- Left Wing -->
-  <path d="M30 45 Q10 20 18 12 Q24 18 32 30 Q28 22 22 10 Q30 20 36 35 Q34 28 30 16 Q36 28 38 40 Z" fill="url(#gWing)" opacity="0.9" filter="url(#aura)"/>
-  <!-- Right Wing -->
-  <path d="M70 45 Q90 20 82 12 Q76 18 68 30 Q72 22 78 10 Q70 20 64 35 Q66 28 70 16 Q64 28 62 40 Z" fill="url(#gWing)" opacity="0.9" filter="url(#aura)"/>
-  <!-- Body / Armor core -->
-  <path d="M50 28 L42 45 L38 70 L44 85 L50 90 L56 85 L62 70 L58 45 Z" fill="url(#gBody)" stroke="#c0a864" stroke-width="0.6" filter="url(#aura)"/>
-  <!-- Shoulder spikes left -->
-  <path d="M42 42 L28 36 L38 46 Z" fill="#d4a843" opacity="0.8"/>
-  <path d="M40 38 L24 28 L36 40 Z" fill="#c0a864" opacity="0.7"/>
-  <!-- Shoulder spikes right -->
-  <path d="M58 42 L72 36 L62 46 Z" fill="#d4a843" opacity="0.8"/>
-  <path d="M60 38 L76 28 L64 40 Z" fill="#c0a864" opacity="0.7"/>
-  <!-- Helm / Head -->
-  <path d="M50 20 L44 30 L50 35 L56 30 Z" fill="#4a8ecc" stroke="#d4a843" stroke-width="0.8"/>
-  <!-- Helm crest -->
-  <path d="M50 20 L48 12 L50 16 L52 12 Z" fill="#d4a843" opacity="0.9"/>
-  <!-- Core energy orb -->
-  <circle cx="50" cy="52" r="5" fill="#f0e6c0" opacity="0.9" filter="url(#aura)"/>
-  <circle cx="50" cy="52" r="2.5" fill="#fff" opacity="0.95"/>
-  <!-- Energy rays -->
-  <line x1="50" y1="46" x2="50" y2="42" stroke="#f0e6c0" stroke-width="0.8" opacity="0.6"/>
-  <line x1="55" y1="49" x2="59" y2="46" stroke="#f0e6c0" stroke-width="0.8" opacity="0.6"/>
-  <line x1="45" y1="49" x2="41" y2="46" stroke="#f0e6c0" stroke-width="0.8" opacity="0.6"/>
-  <line x1="54" y1="55" x2="58" y2="58" stroke="#f0e6c0" stroke-width="0.8" opacity="0.5"/>
-  <line x1="46" y1="55" x2="42" y2="58" stroke="#f0e6c0" stroke-width="0.8" opacity="0.5"/>
+  <!-- WINGS — 5 blade-feather spikes each side -->
+  <!-- Left wing blades -->
+  <path d="M40 48 L6 10 L16 30 L26 42 Z" fill="url(#gWingL)" opacity="0.92"/>
+  <path d="M38 52 L2 22 L12 38 L28 50 Z" fill="url(#gWingL)" opacity="0.85"/>
+  <path d="M36 56 L4 36 L14 46 L30 56 Z" fill="url(#gWingL)" opacity="0.78"/>
+  <path d="M38 60 L8 46 L18 54 L32 60 Z" fill="url(#gWingL)" opacity="0.70"/>
+  <path d="M40 64 L14 56 L24 62 L36 66 Z" fill="url(#gWingL)" opacity="0.60"/>
+  <!-- Right wing blades -->
+  <path d="M80 48 L114 10 L104 30 L94 42 Z" fill="url(#gWingR)" opacity="0.92"/>
+  <path d="M82 52 L118 22 L108 38 L92 50 Z" fill="url(#gWingR)" opacity="0.85"/>
+  <path d="M84 56 L116 36 L106 46 L90 56 Z" fill="url(#gWingR)" opacity="0.78"/>
+  <path d="M82 60 L112 46 L102 54 L88 60 Z" fill="url(#gWingR)" opacity="0.70"/>
+  <path d="M80 64 L106 56 L96 62 L84 66 Z" fill="url(#gWingR)" opacity="0.60"/>
+  <!-- Wing inner membrane -->
+  <path d="M42 50 L20 18 L30 40 L42 55 Z" fill="#4a8ecc" opacity="0.25"/>
+  <path d="M78 50 L100 18 L90 40 L78 55 Z" fill="#4a8ecc" opacity="0.25"/>
+  <!-- BODY ARMOR -->
+  <path d="M60 30 L48 48 L44 74 L50 92 L60 98 L70 92 L76 74 L72 48 Z" fill="url(#gArmor)" stroke="#c0a864" stroke-width="0.7" filter="url(#glow)"/>
+  <!-- Chest plate lines -->
+  <path d="M54 48 L60 44 L66 48" fill="none" stroke="#f0e6c0" stroke-width="0.5" opacity="0.6"/>
+  <path d="M52 55 L60 50 L68 55" fill="none" stroke="#f0e6c0" stroke-width="0.4" opacity="0.5"/>
+  <!-- SHOULDER SPIKES — golden blades -->
+  <path d="M48 46 L28 34 L42 48 Z" fill="#d4a843" stroke="#c0a864" stroke-width="0.4"/>
+  <path d="M46 42 L22 26 L40 44 Z" fill="#b8922e" stroke="#c0a864" stroke-width="0.3" opacity="0.85"/>
+  <path d="M44 40 L26 22 L38 42 Z" fill="#d4a843" opacity="0.7"/>
+  <path d="M72 46 L92 34 L78 48 Z" fill="#d4a843" stroke="#c0a864" stroke-width="0.4"/>
+  <path d="M74 42 L98 26 L80 44 Z" fill="#b8922e" stroke="#c0a864" stroke-width="0.3" opacity="0.85"/>
+  <path d="M76 40 L94 22 L82 42 Z" fill="#d4a843" opacity="0.7"/>
+  <!-- HIP / WAIST SPIKES -->
+  <path d="M46 72 L32 76 L44 74 Z" fill="#b8922e" opacity="0.7"/>
+  <path d="M74 72 L88 76 L76 74 Z" fill="#b8922e" opacity="0.7"/>
+  <!-- HELM — angular blue with gold trim -->
+  <path d="M60 22 L50 34 L54 38 L60 36 L66 38 L70 34 Z" fill="url(#gHelm)" stroke="#d4a843" stroke-width="0.8"/>
+  <!-- Helm visor slit -->
+  <line x1="54" y1="32" x2="66" y2="32" stroke="#f0e6c0" stroke-width="0.6" opacity="0.8"/>
+  <!-- Helm crest — tall golden blade -->
+  <path d="M60 22 L57 8 L60 14 L63 8 Z" fill="#d4a843" stroke="#f0e6c0" stroke-width="0.4" filter="url(#glow)"/>
+  <!-- Helm side horns -->
+  <path d="M52 30 L44 18 L50 28 Z" fill="#d4a843" opacity="0.8"/>
+  <path d="M68 30 L76 18 L70 28 Z" fill="#d4a843" opacity="0.8"/>
+  <!-- CORE ORB — divine light sphere -->
+  <circle cx="60" cy="58" r="7" fill="url(#gOrb)" filter="url(#aura)" opacity="0.95"/>
+  <circle cx="60" cy="58" r="3.5" fill="#fff" opacity="0.98"/>
+  <!-- Orb energy rays -->
+  <line x1="60" y1="50" x2="60" y2="44" stroke="#f0e6c0" stroke-width="1" opacity="0.7" filter="url(#glow)"/>
+  <line x1="67" y1="54" x2="74" y2="48" stroke="#f0e6c0" stroke-width="0.8" opacity="0.6"/>
+  <line x1="53" y1="54" x2="46" y2="48" stroke="#f0e6c0" stroke-width="0.8" opacity="0.6"/>
+  <line x1="67" y1="62" x2="74" y2="68" stroke="#f0e6c0" stroke-width="0.8" opacity="0.5"/>
+  <line x1="53" y1="62" x2="46" y2="68" stroke="#f0e6c0" stroke-width="0.8" opacity="0.5"/>
+  <line x1="60" y1="66" x2="60" y2="72" stroke="#f0e6c0" stroke-width="0.6" opacity="0.4"/>
+  <line x1="65" y1="52" x2="70" y2="50" stroke="#fffbe6" stroke-width="0.5" opacity="0.5"/>
+  <line x1="55" y1="52" x2="50" y2="50" stroke="#fffbe6" stroke-width="0.5" opacity="0.5"/>
+  <!-- CAPE / lower drape -->
+  <path d="M50 88 L46 108 L54 100 L60 110 L66 100 L74 108 L70 88" fill="none" stroke="#4a8ecc" stroke-width="0.6" opacity="0.4"/>
 </svg>''',
                     style={
-                        'border': 'none', 'width': '44px', 'height': '44px',
+                        'border': 'none', 'width': '54px', 'height': '54px',
                         'background': 'transparent', 'display': 'block',
                         'overflow': 'hidden',
                     },
                 ),
                 className='mascot-container',
                 style={
-                    'width': '48px', 'height': '48px',
-                    'background': 'radial-gradient(circle, rgba(212,168,67,0.12) 0%, transparent 70%)',
+                    'width': '58px', 'height': '58px',
+                    'background': 'radial-gradient(circle, rgba(212,168,67,0.10) 0%, rgba(74,142,204,0.05) 50%, transparent 75%)',
                     'marginRight': '14px', 'flexShrink': '0',
                 },
             ),
@@ -1963,11 +2036,12 @@ app.layout = html.Div([
             }),
         ], style={'display': 'flex', 'alignItems': 'center'}),
 
-        # Right: Symbol selector dropdown
+        # Right: Symbol selector dropdown (per-mode)
         html.Div([
-            html.Span('SYMBOLS', style={
+            html.Span(id='symbols-label', children=f'SYMBOLS ({_current_mode.upper()})', style={
                 'fontSize': '9px', 'fontWeight': '600', 'color': COLORS['text_dim'],
                 'letterSpacing': '1.5px', 'marginRight': '12px', 'flexShrink': '0',
+                'whiteSpace': 'nowrap',
             }),
             dcc.Dropdown(
                 id='symbol-selector',
@@ -1976,8 +2050,9 @@ app.layout = html.Div([
                 multi=True,
                 placeholder='Select symbols to trade...',
                 style={'minWidth': '320px', 'flex': '1'},
+                className='dash-dropdown',
             ),
-        ], style={'display': 'flex', 'alignItems': 'center', 'flex': '1', 'maxWidth': '550px'}),
+        ], style={'display': 'flex', 'alignItems': 'center', 'flex': '1', 'maxWidth': '580px'}),
     ], style={
         'display': 'flex',
         'justifyContent': 'space-between',
@@ -2041,14 +2116,16 @@ app.layout = html.Div([
     [Output('btn-mode-demo', 'style'),
      Output('btn-mode-live', 'style'),
      Output('mode-indicator', 'children'),
-     Output('mode-indicator', 'style')],
+     Output('mode-indicator', 'style'),
+     Output('symbol-selector', 'value'),
+     Output('symbols-label', 'children'),
+     Output('tabs-container', 'children')],
     [Input('btn-mode-demo', 'n_clicks'),
      Input('btn-mode-live', 'n_clicks')],
     prevent_initial_call=True,
 )
 def toggle_mode(demo_clicks, live_clicks):
-    """Toggle between DEMO and LIVE mode and persist to active_config.json.
-    The bot reads this on next startup."""
+    """Toggle between DEMO and LIVE mode, swap symbol dropdown values, and persist."""
     triggered = callback_context.triggered[0]['prop_id'] if callback_context.triggered else ''
     config = load_active_config()
     if 'btn-mode-live' in triggered:
@@ -2071,23 +2148,31 @@ def toggle_mode(demo_clicks, live_clicks):
         'border': f'1px solid {indicator_color}33',
     }
 
-    return demo_style, live_style, mode.upper(), indicator_style
+    # Load the correct per-mode symbol list
+    key = 'demo_symbols' if mode == 'demo' else 'live_symbols'
+    syms = config.get(key, _all_symbols[:])
+    syms = [s for s in syms if s in _all_symbols] or _all_symbols[:]
+    label = f'SYMBOLS ({mode.upper()})'
+    tabs = _build_tabs(syms)
+
+    return demo_style, live_style, mode.upper(), indicator_style, syms, label, tabs
 
 
 # ─── Symbol Selector Callback ───
 @app.callback(
-    Output('tabs-container', 'children'),
+    Output('tabs-container', 'children', allow_duplicate=True),
     [Input('symbol-selector', 'value')],
     prevent_initial_call=True,
 )
 def update_symbol_tabs(selected_symbols):
-    """Update tabs when symbols are selected/deselected and persist to active_config.json.
-    The bot reads this on next startup."""
+    """Update tabs when symbols are selected/deselected and persist per-mode to active_config.json."""
     if not selected_symbols:
         selected_symbols = []
 
     config = load_active_config()
-    config['active_symbols'] = selected_symbols
+    mode = config.get('mode', 'demo')
+    key = 'demo_symbols' if mode == 'demo' else 'live_symbols'
+    config[key] = selected_symbols
     save_active_config(config)
 
     return _build_tabs(selected_symbols)

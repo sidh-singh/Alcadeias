@@ -520,7 +520,10 @@ class MT5TradingBot:
             if _dash_mode in ('demo', 'live'):
                 self.mode = _dash_mode
                 print(f"✓ Mode set from dashboard config: {self.mode.upper()}")
-            self._dashboard_active_symbols = _acfg.get('active_symbols', [])
+            self._dashboard_active_symbols = _acfg.get(
+                f'{self.mode}_symbols',
+                _acfg.get('active_symbols', [])   # fallback for old format
+            )
         except (FileNotFoundError, json.JSONDecodeError):
             self._dashboard_active_symbols = []
 
