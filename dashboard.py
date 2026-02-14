@@ -25,44 +25,44 @@ JSON_DIR = OUTPUT_DIR
 DAILY_TRADE_DIR = os.path.join(JSON_DIR, DAILY_TRADE_SUBDIR)
 REFRESH_INTERVAL = DASHBOARD_REFRESH_INTERVAL
 
-# ─── Premium Color Palette ───
+# ─── Alcadeias Lord of Spirits — Blue / Gold / White Angel Theme ───
 COLORS = {
-    # Backgrounds
-    'bg': '#0a0e1a',
-    'bg_secondary': '#0f1423',
-    'card': 'rgba(17, 22, 40, 0.85)',
-    'card_solid': '#111628',
-    'card_border': 'rgba(99, 115, 171, 0.12)',
-    'card_hover': 'rgba(99, 115, 171, 0.08)',
-    # Text
-    'text': '#e8ecf4',
-    'text_secondary': '#a3adc4',
-    'text_dim': '#5a6580',
-    'text_muted': '#3d4660',
-    # Accents
-    'accent': '#7c6cf0',
-    'accent_glow': 'rgba(124, 108, 240, 0.25)',
-    'accent_soft': 'rgba(124, 108, 240, 0.12)',
-    # Signals
-    'buy': '#00d2a0',
-    'buy_soft': 'rgba(0, 210, 160, 0.12)',
-    'buy_glow': 'rgba(0, 210, 160, 0.3)',
-    'sell': '#ff6b6b',
-    'sell_soft': 'rgba(255, 107, 107, 0.12)',
-    'sell_glow': 'rgba(255, 107, 107, 0.3)',
+    # Backgrounds — deep celestial navy
+    'bg': '#060b18',
+    'bg_secondary': '#0a1025',
+    'card': 'rgba(10, 16, 37, 0.88)',
+    'card_solid': '#0c1328',
+    'card_border': 'rgba(192, 168, 100, 0.14)',
+    'card_hover': 'rgba(192, 168, 100, 0.08)',
+    # Text — luminous white / gold
+    'text': '#f0ede4',
+    'text_secondary': '#b8b0a0',
+    'text_dim': '#5c6478',
+    'text_muted': '#3a4058',
+    # Accents — divine gold
+    'accent': '#d4a843',
+    'accent_glow': 'rgba(212, 168, 67, 0.30)',
+    'accent_soft': 'rgba(212, 168, 67, 0.12)',
+    # Signals — celestial green / ember red
+    'buy': '#3cc48e',
+    'buy_soft': 'rgba(60, 196, 142, 0.12)',
+    'buy_glow': 'rgba(60, 196, 142, 0.30)',
+    'sell': '#e05555',
+    'sell_soft': 'rgba(224, 85, 85, 0.12)',
+    'sell_glow': 'rgba(224, 85, 85, 0.30)',
     # Status
-    'positive': '#00d2a0',
-    'negative': '#ff6b6b',
-    'warning': '#ffd93d',
-    'neutral': '#5a6580',
-    # UI
-    'header_bg': 'rgba(10, 14, 26, 0.95)',
-    'tab_bg': '#0f1423',
-    'tab_active': '#7c6cf0',
-    'chart_grid': 'rgba(99, 115, 171, 0.08)',
-    'divider': 'rgba(99, 115, 171, 0.1)',
-    'gradient_start': '#7c6cf0',
-    'gradient_end': '#00d2a0',
+    'positive': '#3cc48e',
+    'negative': '#e05555',
+    'warning': '#f0c040',
+    'neutral': '#5c6478',
+    # UI — gold / royal blue
+    'header_bg': 'rgba(6, 11, 24, 0.96)',
+    'tab_bg': '#0a1025',
+    'tab_active': '#d4a843',
+    'chart_grid': 'rgba(192, 168, 100, 0.07)',
+    'divider': 'rgba(192, 168, 100, 0.10)',
+    'gradient_start': '#d4a843',
+    'gradient_end': '#4a8ecc',
 }
 
 
@@ -1567,12 +1567,12 @@ app.index_string = '''<!DOCTYPE html>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-    /* === Reset & Base === */
+    /* === Reset & Base — Alcadeias Angel Theme === */
     *, *::before, *::after { box-sizing: border-box; }
     body {
         margin: 0;
         padding: 0;
-        background: #0a0e1a;
+        background: #060b18;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
@@ -1586,14 +1586,14 @@ app.index_string = '''<!DOCTYPE html>
         visibility: hidden !important;
     }
 
-    /* === Custom Scrollbar === */
+    /* === Custom Scrollbar — gold accent === */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb {
-        background: rgba(124, 108, 240, 0.25);
+        background: rgba(212, 168, 67, 0.30);
         border-radius: 10px;
     }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(124, 108, 240, 0.45); }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(212, 168, 67, 0.55); }
 
     /* === Animations === */
     @keyframes fadeIn {
@@ -1612,6 +1612,14 @@ app.index_string = '''<!DOCTYPE html>
         0%, 100% { opacity: 0.6; }
         50% { opacity: 1; }
     }
+    @keyframes haloRotate {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    @keyframes divinePulse {
+        0%, 100% { box-shadow: 0 0 8px rgba(212,168,67,0.2), 0 0 20px rgba(74,142,204,0.1); }
+        50% { box-shadow: 0 0 16px rgba(212,168,67,0.4), 0 0 40px rgba(74,142,204,0.2); }
+    }
 
     #tab-content {
         animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1621,18 +1629,18 @@ app.index_string = '''<!DOCTYPE html>
         animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
 
-    /* === Gradient Top Bar === */
+    /* === Gradient Top Bar — gold / royal blue shimmer === */
     .gradient-bar {
-        height: 2px;
-        background: linear-gradient(90deg, #7c6cf0, #00d2a0, #7c6cf0);
-        background-size: 200% auto;
-        animation: shimmer 4s linear infinite;
+        height: 3px;
+        background: linear-gradient(90deg, #d4a843, #4a8ecc, #f0e6c0, #4a8ecc, #d4a843);
+        background-size: 300% auto;
+        animation: shimmer 5s linear infinite;
     }
 
-    /* === Text Selection === */
+    /* === Text Selection — golden === */
     ::selection {
-        background: rgba(124, 108, 240, 0.3);
-        color: #e8ecf4;
+        background: rgba(212, 168, 67, 0.3);
+        color: #f0ede4;
     }
 
     /* === Details Marker === */
@@ -1640,7 +1648,7 @@ app.index_string = '''<!DOCTYPE html>
     details > summary::-webkit-details-marker { display: none; }
     details > summary::before {
         content: '▸ ';
-        color: #5a6580;
+        color: #5c6478;
         transition: transform 0.2s;
     }
     details[open] > summary::before {
@@ -1649,7 +1657,7 @@ app.index_string = '''<!DOCTYPE html>
 
     /* === Strategy Log Row Hover === */
     details > summary > div:hover {
-        background: rgba(99, 115, 171, 0.06) !important;
+        background: rgba(192, 168, 100, 0.06) !important;
     }
 
     /* === Plotly Tooltips === */
@@ -1657,55 +1665,55 @@ app.index_string = '''<!DOCTYPE html>
         font-family: 'Inter', sans-serif !important;
     }
 
-    /* === Dark Dropdown Theme === */
+    /* === Dark Dropdown — Alcadeias Gold Theme === */
     .Select-control {
-        background-color: #111628 !important;
-        border-color: rgba(99, 115, 171, 0.2) !important;
-        color: #e8ecf4 !important;
+        background-color: #0c1328 !important;
+        border-color: rgba(192, 168, 100, 0.2) !important;
+        color: #f0ede4 !important;
     }
     .Select-menu-outer {
-        background-color: #111628 !important;
-        border-color: rgba(99, 115, 171, 0.2) !important;
+        background-color: #0c1328 !important;
+        border-color: rgba(192, 168, 100, 0.2) !important;
     }
     .Select-option,
     .VirtualizedSelectOption {
-        background-color: #111628 !important;
-        color: #e8ecf4 !important;
+        background-color: #0c1328 !important;
+        color: #f0ede4 !important;
     }
     .VirtualizedSelectFocusedOption,
     .Select-option.is-focused {
-        background-color: rgba(124, 108, 240, 0.18) !important;
+        background-color: rgba(212, 168, 67, 0.15) !important;
     }
     .Select-value {
-        background-color: rgba(124, 108, 240, 0.2) !important;
-        border-color: rgba(124, 108, 240, 0.3) !important;
-        color: #e8ecf4 !important;
+        background-color: rgba(212, 168, 67, 0.18) !important;
+        border-color: rgba(212, 168, 67, 0.30) !important;
+        color: #f0ede4 !important;
     }
     .Select-value-label {
-        color: #e8ecf4 !important;
+        color: #f0ede4 !important;
     }
     .Select-input input {
-        color: #e8ecf4 !important;
+        color: #f0ede4 !important;
     }
     .Select-placeholder {
-        color: #5a6580 !important;
+        color: #5c6478 !important;
     }
     .Select-arrow-zone .Select-arrow {
-        border-color: #5a6580 transparent transparent !important;
+        border-color: #5c6478 transparent transparent !important;
     }
     .Select-clear-zone {
-        color: #5a6580 !important;
+        color: #5c6478 !important;
     }
     .Select-multi-value-wrapper .Select-value .Select-value-icon {
-        border-right-color: rgba(124, 108, 240, 0.3) !important;
+        border-right-color: rgba(212, 168, 67, 0.3) !important;
     }
     .Select-multi-value-wrapper .Select-value .Select-value-icon:hover {
-        color: #ff6b6b !important;
-        background-color: rgba(255, 107, 107, 0.15) !important;
+        color: #e05555 !important;
+        background-color: rgba(224, 85, 85, 0.15) !important;
     }
     .Select-noresults {
-        background-color: #111628 !important;
-        color: #5a6580 !important;
+        background-color: #0c1328 !important;
+        color: #5c6478 !important;
     }
 
     /* === Mode Toggle Buttons === */
@@ -1723,6 +1731,15 @@ app.index_string = '''<!DOCTYPE html>
     }
     .mode-btn:hover {
         filter: brightness(1.15);
+    }
+
+    /* === Mascot container glow === */
+    .mascot-container {
+        animation: divinePulse 3s ease-in-out infinite;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 </style>
 </head>
@@ -1811,30 +1828,89 @@ app.layout = html.Div([
     # Cache to skip redundant DOM rebuilds
     dcc.Store(id='data-hash', data=''),
 
-    # ── Top gradient accent line ──
+    # ── Top gradient accent line — divine gold/blue ──
     html.Div(className='gradient-bar'),
 
-    # ── Header ──
+    # ── Header — Alcadeias Mascot + Branding ──
     html.Div([
         html.Div([
-            # Logo mark with gradient
-            html.Div(style={
-                'width': '32px', 'height': '32px', 'borderRadius': '10px',
-                'background': 'linear-gradient(135deg, #7c6cf0, #00d2a0)',
-                'boxShadow': '0 4px 15px rgba(124, 108, 240, 0.25)',
-                'marginRight': '14px',
-            }),
+            # SVG Mascot — Alcadeias Lord of Spirits (stylized angel silhouette)
+            html.Div(
+                dash.html.Iframe(
+                    srcDoc='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="44" height="44">
+  <defs>
+    <linearGradient id="gBody" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d4a843"/>
+      <stop offset="50%" stop-color="#f0e6c0"/>
+      <stop offset="100%" stop-color="#4a8ecc"/>
+    </linearGradient>
+    <linearGradient id="gWing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4a8ecc"/>
+      <stop offset="60%" stop-color="#d4a843"/>
+      <stop offset="100%" stop-color="#f5ecd0"/>
+    </linearGradient>
+    <linearGradient id="gHalo" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f0e6c0"/>
+      <stop offset="50%" stop-color="#d4a843"/>
+      <stop offset="100%" stop-color="#f0e6c0"/>
+    </linearGradient>
+    <filter id="aura">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Halo -->
+  <ellipse cx="50" cy="22" rx="16" ry="5" fill="none" stroke="url(#gHalo)" stroke-width="1.8" opacity="0.85" filter="url(#aura)"/>
+  <!-- Left Wing -->
+  <path d="M30 45 Q10 20 18 12 Q24 18 32 30 Q28 22 22 10 Q30 20 36 35 Q34 28 30 16 Q36 28 38 40 Z" fill="url(#gWing)" opacity="0.9" filter="url(#aura)"/>
+  <!-- Right Wing -->
+  <path d="M70 45 Q90 20 82 12 Q76 18 68 30 Q72 22 78 10 Q70 20 64 35 Q66 28 70 16 Q64 28 62 40 Z" fill="url(#gWing)" opacity="0.9" filter="url(#aura)"/>
+  <!-- Body / Armor core -->
+  <path d="M50 28 L42 45 L38 70 L44 85 L50 90 L56 85 L62 70 L58 45 Z" fill="url(#gBody)" stroke="#c0a864" stroke-width="0.6" filter="url(#aura)"/>
+  <!-- Shoulder spikes left -->
+  <path d="M42 42 L28 36 L38 46 Z" fill="#d4a843" opacity="0.8"/>
+  <path d="M40 38 L24 28 L36 40 Z" fill="#c0a864" opacity="0.7"/>
+  <!-- Shoulder spikes right -->
+  <path d="M58 42 L72 36 L62 46 Z" fill="#d4a843" opacity="0.8"/>
+  <path d="M60 38 L76 28 L64 40 Z" fill="#c0a864" opacity="0.7"/>
+  <!-- Helm / Head -->
+  <path d="M50 20 L44 30 L50 35 L56 30 Z" fill="#4a8ecc" stroke="#d4a843" stroke-width="0.8"/>
+  <!-- Helm crest -->
+  <path d="M50 20 L48 12 L50 16 L52 12 Z" fill="#d4a843" opacity="0.9"/>
+  <!-- Core energy orb -->
+  <circle cx="50" cy="52" r="5" fill="#f0e6c0" opacity="0.9" filter="url(#aura)"/>
+  <circle cx="50" cy="52" r="2.5" fill="#fff" opacity="0.95"/>
+  <!-- Energy rays -->
+  <line x1="50" y1="46" x2="50" y2="42" stroke="#f0e6c0" stroke-width="0.8" opacity="0.6"/>
+  <line x1="55" y1="49" x2="59" y2="46" stroke="#f0e6c0" stroke-width="0.8" opacity="0.6"/>
+  <line x1="45" y1="49" x2="41" y2="46" stroke="#f0e6c0" stroke-width="0.8" opacity="0.6"/>
+  <line x1="54" y1="55" x2="58" y2="58" stroke="#f0e6c0" stroke-width="0.8" opacity="0.5"/>
+  <line x1="46" y1="55" x2="42" y2="58" stroke="#f0e6c0" stroke-width="0.8" opacity="0.5"/>
+</svg>''',
+                    style={
+                        'border': 'none', 'width': '44px', 'height': '44px',
+                        'background': 'transparent', 'display': 'block',
+                        'overflow': 'hidden',
+                    },
+                ),
+                className='mascot-container',
+                style={
+                    'width': '48px', 'height': '48px',
+                    'background': 'radial-gradient(circle, rgba(212,168,67,0.12) 0%, transparent 70%)',
+                    'marginRight': '14px', 'flexShrink': '0',
+                },
+            ),
             html.Div([
                 html.Span('ALCADEIAS', style={
-                    'fontSize': '18px', 'fontWeight': '800', 'letterSpacing': '3px',
-                    'background': 'linear-gradient(135deg, #e8ecf4, #7c6cf0)',
+                    'fontSize': '19px', 'fontWeight': '800', 'letterSpacing': '3.5px',
+                    'background': 'linear-gradient(135deg, #f0e6c0, #d4a843, #4a8ecc)',
                     'WebkitBackgroundClip': 'text',
                     'WebkitTextFillColor': 'transparent',
                 }),
-                html.Div('Trading Dashboard', style={
-                    'fontSize': '10px', 'color': '#5a6580',
+                html.Div('Lord of Spirits · Trading Dashboard', style={
+                    'fontSize': '9px', 'color': '#7a7060',
                     'letterSpacing': '2px', 'textTransform': 'uppercase',
-                    'marginTop': '1px',
+                    'marginTop': '2px', 'fontWeight': '500',
                 }),
             ]),
         ], style={'display': 'flex', 'alignItems': 'center'}),
@@ -1842,7 +1918,7 @@ app.layout = html.Div([
             'display': 'flex', 'gap': '24px', 'alignItems': 'center',
         }),
         html.Div(id='header-time', style={
-            'fontSize': '11px', 'color': '#5a6580',
+            'fontSize': '11px', 'color': '#7a7060',
             'fontFamily': "'JetBrains Mono', monospace",
             'fontWeight': '400',
         }),
@@ -1850,8 +1926,8 @@ app.layout = html.Div([
         'display': 'flex',
         'justifyContent': 'space-between',
         'alignItems': 'center',
-        'padding': '14px 32px',
-        'background': 'rgba(10, 14, 26, 0.95)',
+        'padding': '12px 32px',
+        'background': 'linear-gradient(180deg, rgba(6,11,24,0.97) 0%, rgba(10,16,37,0.95) 100%)',
         'backdropFilter': 'blur(20px)',
         'WebkitBackdropFilter': 'blur(20px)',
         'borderBottom': f'1px solid {COLORS["divider"]}',
@@ -1926,20 +2002,29 @@ app.layout = html.Div([
         'margin': '0 auto',
     }),
 
-    # ── Footer ──
+    # ── Footer — angelic divider ──
     html.Div([
         html.Div(style={
             'height': '1px',
-            'background': f'linear-gradient(90deg, transparent, {COLORS["divider"]}, transparent)',
+            'background': f'linear-gradient(90deg, transparent, rgba(212,168,67,0.18), rgba(74,142,204,0.12), transparent)',
             'marginBottom': '16px',
         }),
-        html.Div('Alcadeias Trading System', style={
+        html.Div([
+            html.Span('✦', style={'color': '#d4a843', 'fontSize': '10px', 'marginRight': '8px', 'opacity': '0.5'}),
+            html.Span('Alcadeias · Lord of Spirits', style={
+                'fontSize': '10px',
+                'background': 'linear-gradient(90deg, #d4a843, #4a8ecc)',
+                'WebkitBackgroundClip': 'text',
+                'WebkitTextFillColor': 'transparent',
+                'letterSpacing': '2.5px',
+                'textTransform': 'uppercase',
+                'fontWeight': '600',
+            }),
+            html.Span('✦', style={'color': '#4a8ecc', 'fontSize': '10px', 'marginLeft': '8px', 'opacity': '0.5'}),
+        ], style={
             'textAlign': 'center',
-            'fontSize': '10px',
-            'color': COLORS['text_muted'],
-            'letterSpacing': '2px',
-            'textTransform': 'uppercase',
-            'paddingBottom': '16px',
+            'paddingBottom': '18px',
+            'display': 'flex', 'justifyContent': 'center', 'alignItems': 'center',
         }),
     ], style={'padding': '0 32px'}),
 
