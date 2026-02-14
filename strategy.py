@@ -197,18 +197,18 @@ class Strategy:
         elif buy_count > 0 and sell_count == 0:
             if buy_profit > hedge:
                 buy_status = Signal.CLOSE_BUY
-            elif (lt_trend_power_list[0] == 0) and gap_in_range and (buy_count >= 6):
+            elif (lt_trend_power_list[0] == 0) and (buy_count >= 5):
                 buy_status = Signal.CLOSE_BUY
-            elif buy_first_profit < -(self._get_fibo_qty(buy_count, 1) ** 3):
+            elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** 3):
                 buy_status = Signal.BUY_MORE
         
         # Only SELL positions open → exit when trend SHA flips bullish
         elif buy_count == 0 and sell_count > 0:
             if sell_profit > hedge:
                 sell_status = Signal.CLOSE_SELL
-            elif (lt_trend_power_list[0] == 1) and gap_in_range and (sell_count >= 6):
+            elif (lt_trend_power_list[0] == 1) and (sell_count >= 5):
                 sell_status = Signal.CLOSE_SELL
-            elif sell_first_profit < -(self._get_fibo_qty(sell_count, 1) ** 3):
+            elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** 3):
                 sell_status = Signal.SELL_MORE
         
         analysis_data = {
