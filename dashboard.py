@@ -1561,9 +1561,8 @@ app = dash.Dash(
     title='Alcadeias Trading Dashboard',
     update_title=None,
     suppress_callback_exceptions=True,
+    assets_folder='assets',
 )
-
-app.css.append_css({'external_url': ''})
 app.index_string = '''<!DOCTYPE html>
 <html>
 <head>
@@ -1673,33 +1672,51 @@ app.index_string = '''<!DOCTYPE html>
         font-family: 'Inter', sans-serif !important;
     }
 
-    /* === Dark Dropdown — Alcadeias Gold Theme === */
-    /* Target by component ID for maximum specificity */
+    /* === NUCLEAR Dark Dropdown Override — Alcadeias Gold Theme === */
+    /* Target EVERY element inside any dropdown container */
+    #symbol-selector,
+    #symbol-selector *,
+    .dash-dropdown,
+    .dash-dropdown * {
+        box-sizing: border-box !important;
+    }
+    /* Main dropdown container / input area */
     #symbol-selector .Select-control,
+    #symbol-selector > div > .Select > .Select-control,
     .dash-dropdown .Select-control,
-    .Select-control {
+    .Select-control,
+    #symbol-selector [class*="control"],
+    #symbol-selector [class*="ValueContainer"],
+    #symbol-selector [class*="multiValue"] {
         background-color: #0a1025 !important;
         background: #0a1025 !important;
         border: 1px solid rgba(192, 168, 100, 0.25) !important;
         color: #f0ede4 !important;
     }
     #symbol-selector .Select-multi-value-wrapper,
-    .dash-dropdown .Select-multi-value-wrapper {
+    .dash-dropdown .Select-multi-value-wrapper,
+    #symbol-selector [class*="ValueContainer"] {
         background: transparent !important;
     }
+    /* Menu / dropdown list */
     #symbol-selector .Select-menu-outer,
     .dash-dropdown .Select-menu-outer,
-    .Select-menu-outer {
+    .Select-menu-outer,
+    #symbol-selector [class*="menu"],
+    #symbol-selector [class*="MenuList"],
+    .dash-dropdown [class*="menu"] {
         background-color: #0c1328 !important;
         background: #0c1328 !important;
         border: 1px solid rgba(192, 168, 100, 0.25) !important;
         z-index: 999 !important;
     }
+    /* Options in the list */
     #symbol-selector .Select-option,
     #symbol-selector .VirtualizedSelectOption,
     .dash-dropdown .Select-option,
     .Select-option,
-    .VirtualizedSelectOption {
+    .VirtualizedSelectOption,
+    #symbol-selector [class*="option"] {
         background-color: #0c1328 !important;
         background: #0c1328 !important;
         color: #f0ede4 !important;
@@ -1707,48 +1724,75 @@ app.index_string = '''<!DOCTYPE html>
     #symbol-selector .VirtualizedSelectFocusedOption,
     #symbol-selector .Select-option.is-focused,
     .VirtualizedSelectFocusedOption,
-    .Select-option.is-focused {
+    .Select-option.is-focused,
+    #symbol-selector [class*="option"]:hover {
         background-color: #1a2540 !important;
         background: #1a2540 !important;
     }
+    /* Selected value chips / tags */
     #symbol-selector .Select-value,
     .dash-dropdown .Select-value,
     .dash-dropdown .Select--multi .Select-value,
-    .Select-value {
+    .Select-value,
+    #symbol-selector [class*="multiValue"],
+    #symbol-selector [class*="multi-value"],
+    #symbol-selector [class*="tag"],
+    #symbol-selector span[class] {
         background-color: #162040 !important;
         background: #162040 !important;
         border: 1px solid rgba(212, 168, 67, 0.40) !important;
         color: #ffffff !important;
     }
+    /* Value labels — WHITE TEXT */
     #symbol-selector .Select-value-label,
     .dash-dropdown .Select-value-label,
     .Select-value-label,
-    .Select--multi .Select-value-label {
+    .Select--multi .Select-value-label,
+    #symbol-selector [class*="multiValue"] [class*="label"],
+    #symbol-selector [class*="singleValue"],
+    #symbol-selector span {
         color: #ffffff !important;
         font-weight: 600 !important;
         font-size: 12px !important;
     }
+    /* Input text */
     #symbol-selector .Select-input input,
     .dash-dropdown .Select-input input,
-    .Select-input input {
+    .Select-input input,
+    #symbol-selector input {
         color: #f0ede4 !important;
+        background: transparent !important;
     }
+    /* Placeholder */
     #symbol-selector .Select-placeholder,
-    .Select-placeholder {
+    .Select-placeholder,
+    #symbol-selector [class*="placeholder"] {
         color: #5c6478 !important;
     }
+    /* Arrow / chevron */
     #symbol-selector .Select-arrow-zone .Select-arrow,
-    .Select-arrow-zone .Select-arrow {
+    .Select-arrow-zone .Select-arrow,
+    #symbol-selector [class*="indicator"],
+    #symbol-selector svg {
+        color: #5c6478 !important;
+        fill: #5c6478 !important;
+    }
+    #symbol-selector .Select-arrow-zone .Select-arrow {
         border-color: #5c6478 transparent transparent !important;
     }
+    /* Clear button */
     #symbol-selector .Select-clear-zone,
     .Select-clear-zone {
         color: #5c6478 !important;
     }
+    /* Remove (x) on individual tags */
     #symbol-selector .Select-value .Select-value-icon,
-    .Select-multi-value-wrapper .Select-value .Select-value-icon {
+    .Select-multi-value-wrapper .Select-value .Select-value-icon,
+    #symbol-selector [class*="multiValue"] [class*="remove"],
+    #symbol-selector [class*="Remove"] {
         border-right: 1px solid rgba(212, 168, 67, 0.35) !important;
         color: #b8b0a0 !important;
+        background: transparent !important;
     }
     #symbol-selector .Select-value .Select-value-icon:hover,
     .Select-multi-value-wrapper .Select-value .Select-value-icon:hover {
@@ -1756,11 +1800,27 @@ app.index_string = '''<!DOCTYPE html>
         background-color: rgba(224, 85, 85, 0.15) !important;
         background: rgba(224, 85, 85, 0.15) !important;
     }
+    /* No results text */
     #symbol-selector .Select-noresults,
     .Select-noresults {
         background-color: #0c1328 !important;
         background: #0c1328 !important;
         color: #5c6478 !important;
+    }
+
+    /* === ALL Dropdowns and selects on page — global dark theme === */
+    .Select, .Select div, .Select span,
+    [class*="dropdown"] [class*="control"],
+    [class*="dropdown"] [class*="menu"],
+    [class*="dropdown"] [class*="option"],
+    select {
+        font-family: 'Inter', sans-serif !important;
+    }
+    select, select option {
+        background-color: #0c1328 !important;
+        background: #0c1328 !important;
+        color: #f0ede4 !important;
+        border-color: rgba(192, 168, 100, 0.25) !important;
     }
 
     /* === Mode Toggle Buttons === */

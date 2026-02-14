@@ -1,0 +1,163 @@
+/* ==========================================================
+   Alcadeias Dark Dropdown Override
+   This file is auto-loaded by Dash from the assets/ folder
+   AFTER all component CSS, ensuring our styles win.
+   ========================================================== */
+
+/* ─── Symbol Selector + ALL Dropdowns ─── */
+#symbol-selector .Select-control,
+.dash-dropdown .Select-control,
+.Select-control {
+    background-color: #0a1025 !important;
+    background: #0a1025 !important;
+    border: 1px solid rgba(192, 168, 100, 0.25) !important;
+    color: #f0ede4 !important;
+    cursor: pointer !important;
+}
+
+#symbol-selector .Select-multi-value-wrapper,
+.dash-dropdown .Select-multi-value-wrapper,
+.Select-multi-value-wrapper {
+    background: transparent !important;
+}
+
+/* ─── Menu / Dropdown list ─── */
+#symbol-selector .Select-menu-outer,
+.dash-dropdown .Select-menu-outer,
+.Select-menu-outer {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+    border: 1px solid rgba(192, 168, 100, 0.25) !important;
+    z-index: 9999 !important;
+}
+
+.Select-menu {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+}
+
+/* ─── Options in the dropdown list ─── */
+#symbol-selector .Select-option,
+#symbol-selector .VirtualizedSelectOption,
+.dash-dropdown .Select-option,
+.Select-option,
+.VirtualizedSelectOption {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+    color: #f0ede4 !important;
+}
+
+#symbol-selector .VirtualizedSelectFocusedOption,
+#symbol-selector .Select-option.is-focused,
+.VirtualizedSelectFocusedOption,
+.Select-option.is-focused,
+.Select-option:hover {
+    background-color: #1a2540 !important;
+    background: #1a2540 !important;
+}
+
+/* ─── Selected value chips/tags — DARK BG + WHITE TEXT ─── */
+#symbol-selector .Select-value,
+.dash-dropdown .Select-value,
+.dash-dropdown .Select--multi .Select-value,
+.Select--multi .Select-value,
+.Select-value {
+    background-color: #162040 !important;
+    background: #162040 !important;
+    border: 1px solid rgba(212, 168, 67, 0.40) !important;
+    border-radius: 4px !important;
+    color: #ffffff !important;
+}
+
+#symbol-selector .Select-value-label,
+.dash-dropdown .Select-value-label,
+.Select-value-label,
+.Select--multi .Select-value-label {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+}
+
+/* ─── Input / typing area ─── */
+#symbol-selector .Select-input,
+.dash-dropdown .Select-input,
+.Select-input {
+    background: transparent !important;
+}
+
+#symbol-selector .Select-input > input,
+.dash-dropdown .Select-input > input,
+.Select-input > input,
+#symbol-selector input,
+.dash-dropdown input {
+    color: #f0ede4 !important;
+    background: transparent !important;
+}
+
+/* ─── Placeholder ─── */
+#symbol-selector .Select-placeholder,
+.dash-dropdown .Select-placeholder,
+.Select-placeholder {
+    color: #5c6478 !important;
+}
+
+/* ─── Arrow / chevron ─── */
+.Select-arrow-zone .Select-arrow {
+    border-color: #7a7060 transparent transparent !important;
+}
+
+.Select-arrow-zone,
+.Select-clear-zone {
+    color: #7a7060 !important;
+}
+
+/* ─── Remove icon on chips ─── */
+.Select-value .Select-value-icon {
+    border-right: 1px solid rgba(212, 168, 67, 0.35) !important;
+    color: #b8b0a0 !important;
+    padding: 2px 5px !important;
+}
+
+.Select-value .Select-value-icon:hover {
+    color: #e05555 !important;
+    background-color: rgba(224, 85, 85, 0.15) !important;
+    background: rgba(224, 85, 85, 0.15) !important;
+}
+
+/* ─── No results ─── */
+.Select-noresults {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+    color: #5c6478 !important;
+}
+
+/* ─── Plotly Modebar & Date Selectors (dark theme) ─── */
+.modebar-container {
+    background: transparent !important;
+}
+
+.modebar-btn {
+    fill: #7a7060 !important;
+}
+
+.modebar-btn:hover {
+    fill: #d4a843 !important;
+}
+
+/* Plotly rangeselector buttons */
+.rangeselector .button {
+    background-color: #0c1328 !important;
+    color: #f0ede4 !important;
+    border-color: rgba(192, 168, 100, 0.25) !important;
+}
+
+/* ─── Native HTML select/input elements fallback ─── */
+select,
+select option,
+input[type="date"],
+input[type="text"] {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+    color: #f0ede4 !important;
+    border-color: rgba(192, 168, 100, 0.25) !important;
+}
