@@ -43,6 +43,8 @@ class MT5TradingBot:
         self.position_helper = None
         self.indicator = Indicator()
         self.strategy = Strategy()
+        self._stop_event = threading.Event()     # Signal workers to stop
+        self._mode_changed = threading.Event()   # Signal that mode has changed
         
     def load_credentials(self):
         """Step 1: Load MT5 credentials from JSON file"""
@@ -469,11 +471,45 @@ class MT5TradingBot:
                 
                 time.sleep(brake)
                 
+                # Check if supervisor requested shutdown (mode change)
+                if self._stop_event.is_set():
+                    return
+                
             except Exception as e:
                 time.sleep(1)
+                if self._stop_event.is_set():
+                    return
     
+    def _read_config_mode(self):
+        """Read the current mode from active_config.json"""
+        _acfg_path = os.path.join(OUTPUT_DIR, ACTIVE_CONFIG_FILENAME)
+        try:
+            with open(_acfg_path, 'r') as _af:
+                _acfg = json.load(_af)
+            return _acfg.get('mode', 'demo').lower()
+        except (FileNotFoundError, json.JSONDecodeError):
+            return self.mode
+
+    def _watch_mode(self, check_interval=2):
+        """Background thread: poll active_config.json for mode changes.
+        When mode differs from self.mode, signal workers to stop so the
+        supervisor in execute_job() can re-initialise MT5."""
+        while not self._stop_event.is_set():
+            time.sleep(check_interval)
+            new_mode = self._read_config_mode()
+            if new_mode in ('demo', 'live') and new_mode != self.mode:
+                print(f"\n{'='*60}")
+                print(f"  ⚡ MODE CHANGE DETECTED: {self.mode.upper()} → {new_mode.upper()}")
+                print(f"  Re-initialising MT5 with {new_mode.upper()} account...")
+                print(f"{'='*60}\n")
+                self._mode_changed.set()
+                self._stop_event.set()     # Tell all workers to exit
+                return
+
     def run_multithreaded_processing(self):
-        """Step 4: Start infinite multithreaded processing for all symbols"""
+        """Step 4: Start infinite multithreaded processing for all symbols.
+        Returns normally when a mode-change is detected so the supervisor
+        can re-initialise MT5."""
         print(f"\n{'='*60}")
         print(f"  Starting Continuous Multithreaded Processing")
         print(f"{'='*60}\n")
@@ -482,8 +518,16 @@ class MT5TradingBot:
         
         print(f"Launching {max_workers} threads (1 per symbol)...")
         print(f"Press Ctrl+C to stop\n")
+
+        # Reset stop / mode-changed events for this run
+        self._stop_event.clear()
+        self._mode_changed.clear()
+
+        # Start mode-watching thread
+        watcher = threading.Thread(target=self._watch_mode, daemon=True, name='ModeWatcher')
+        watcher.start()
         
-        # Start threads - they will run forever until interrupted
+        # Start threads - they will run until stop_event is set
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='Symbol') as executor:
             # Submit all symbol processing tasks (infinite loops)
             futures = [
@@ -491,14 +535,19 @@ class MT5TradingBot:
                 for symbol in self.symbols
             ]
             
-            # Keep main thread alive - threads run forever
+            # Keep main thread alive — futures complete when stop_event is set
             try:
-                for future in futures:
-                    future.result()  # This will block indefinitely
+                for future in as_completed(futures):
+                    future.result()
+                    if self._stop_event.is_set():
+                        break
             except KeyboardInterrupt:
                 print("\n\n⚠ Stopping all threads...")
+                self._stop_event.set()
                 executor.shutdown(wait=False, cancel_futures=True)
                 raise
+
+        watcher.join(timeout=5)
     
     def cleanup(self):
         """Step 5: Cleanup and shutdown MT5"""
@@ -506,10 +555,10 @@ class MT5TradingBot:
             mt5.shutdown()
             print("\n✓ MT5 connection closed")
     
-    def execute_job(self):
+    def _init_cycle(self):
         """
-        Main Job Orchestrator - Executes all steps in sequence
-        This is the central function that controls the entire workflow
+        Single initialisation cycle: read config → load credentials → load
+        symbols → initialise MT5.  Returns True on success.
         """
         # ── Read dashboard active config (mode + symbols override) ──
         _acfg_path = os.path.join(OUTPUT_DIR, ACTIVE_CONFIG_FILENAME)
@@ -530,41 +579,63 @@ class MT5TradingBot:
         print(f"\n{'#'*60}")
         print(f"#  JOB STARTED - {self.mode.upper()} MODE")
         print(f"{'#'*60}\n")
-        
+
+        # Step 1: Load Credentials
+        if not self.load_credentials():
+            print("\n✗ Job Failed: Could not load credentials")
+            return False
+
+        # Step 2: Load Symbols
+        if not self.load_symbols():
+            print("\n✗ Job Failed: Could not load symbols")
+            return False
+
+        # Step 3: Initialize MT5
+        if not self.initialize_mt5():
+            print("\n✗ Job Failed: Could not initialize MT5")
+            return False
+
+        return True
+
+    def execute_job(self):
+        """
+        Main Job Orchestrator — supervisor loop.
+        Initialises MT5, starts worker threads, and watches for mode changes.
+        On mode change: stops workers, shuts down MT5, re-initialises with
+        the new account, and restarts — all automatically.
+        """
         try:
-            # Step 1: Load Credentials
-            if not self.load_credentials():
-                print("\n✗ Job Failed: Could not load credentials")
-                return False
-            
-            # Step 2: Load Symbols
-            if not self.load_symbols():
-                print("\n✗ Job Failed: Could not load symbols")
-                return False
-            
-            # Step 3: Initialize MT5
-            if not self.initialize_mt5():
-                print("\n✗ Job Failed: Could not initialize MT5")
-                return False
-            
-            # Step 4: Run Multithreaded Processing (Infinite Loop)
-            self.run_multithreaded_processing()
-            
-            # Step 5: Cleanup (only reached on interrupt)
-            self.cleanup()
-            
-            print(f"\n{'#'*60}")
-            print(f"#  JOB COMPLETED SUCCESSFULLY")
-            print(f"{'#'*60}\n")
-            
-            return True
-            
+            while True:
+                # ── Initialise (or re-initialise after mode change) ──
+                if not self._init_cycle():
+                    return False
+
+                # ── Run processing (blocks until stop_event or Ctrl+C) ──
+                self.run_multithreaded_processing()
+
+                if self._mode_changed.is_set():
+                    # Graceful re-init: shut down current MT5 connection
+                    self.cleanup()
+                    print(f"\n{'='*60}")
+                    print(f"  ♻ Re-initialising MT5 for {self._read_config_mode().upper()} account...")
+                    print(f"{'='*60}\n")
+                    continue   # Loop back to _init_cycle with new mode
+                else:
+                    # Normal shutdown (Ctrl+C or no mode change)
+                    self.cleanup()
+                    print(f"\n{'#'*60}")
+                    print(f"#  JOB COMPLETED SUCCESSFULLY")
+                    print(f"{'#'*60}\n")
+                    return True
+
         except KeyboardInterrupt:
             print("\n\n⚠ Job interrupted by user")
+            self._stop_event.set()
             self.cleanup()
             return False
         except Exception as e:
             print(f"\n✗ Job Failed with exception: {e}")
+            self._stop_event.set()
             self.cleanup()
             return False
 
