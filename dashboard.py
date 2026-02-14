@@ -1674,78 +1674,93 @@ app.index_string = '''<!DOCTYPE html>
     }
 
     /* === Dark Dropdown — Alcadeias Gold Theme === */
+    /* Target by component ID for maximum specificity */
+    #symbol-selector .Select-control,
+    .dash-dropdown .Select-control,
     .Select-control {
-        background-color: #0c1328 !important;
-        border-color: rgba(192, 168, 100, 0.2) !important;
+        background-color: #0a1025 !important;
+        background: #0a1025 !important;
+        border: 1px solid rgba(192, 168, 100, 0.25) !important;
         color: #f0ede4 !important;
     }
+    #symbol-selector .Select-multi-value-wrapper,
+    .dash-dropdown .Select-multi-value-wrapper {
+        background: transparent !important;
+    }
+    #symbol-selector .Select-menu-outer,
+    .dash-dropdown .Select-menu-outer,
     .Select-menu-outer {
         background-color: #0c1328 !important;
-        border-color: rgba(192, 168, 100, 0.2) !important;
+        background: #0c1328 !important;
+        border: 1px solid rgba(192, 168, 100, 0.25) !important;
         z-index: 999 !important;
     }
+    #symbol-selector .Select-option,
+    #symbol-selector .VirtualizedSelectOption,
+    .dash-dropdown .Select-option,
     .Select-option,
     .VirtualizedSelectOption {
         background-color: #0c1328 !important;
+        background: #0c1328 !important;
         color: #f0ede4 !important;
     }
+    #symbol-selector .VirtualizedSelectFocusedOption,
+    #symbol-selector .Select-option.is-focused,
     .VirtualizedSelectFocusedOption,
     .Select-option.is-focused {
-        background-color: rgba(212, 168, 67, 0.15) !important;
-    }
-    .Select-value {
         background-color: #1a2540 !important;
-        border-color: rgba(212, 168, 67, 0.35) !important;
-        color: #f0ede4 !important;
+        background: #1a2540 !important;
     }
-    .Select-value-label {
-        color: #f0ede4 !important;
+    #symbol-selector .Select-value,
+    .dash-dropdown .Select-value,
+    .dash-dropdown .Select--multi .Select-value,
+    .Select-value {
+        background-color: #162040 !important;
+        background: #162040 !important;
+        border: 1px solid rgba(212, 168, 67, 0.40) !important;
+        color: #ffffff !important;
+    }
+    #symbol-selector .Select-value-label,
+    .dash-dropdown .Select-value-label,
+    .Select-value-label,
+    .Select--multi .Select-value-label {
+        color: #ffffff !important;
         font-weight: 600 !important;
+        font-size: 12px !important;
     }
+    #symbol-selector .Select-input input,
+    .dash-dropdown .Select-input input,
     .Select-input input {
         color: #f0ede4 !important;
     }
+    #symbol-selector .Select-placeholder,
     .Select-placeholder {
         color: #5c6478 !important;
     }
+    #symbol-selector .Select-arrow-zone .Select-arrow,
     .Select-arrow-zone .Select-arrow {
         border-color: #5c6478 transparent transparent !important;
     }
+    #symbol-selector .Select-clear-zone,
     .Select-clear-zone {
         color: #5c6478 !important;
     }
+    #symbol-selector .Select-value .Select-value-icon,
     .Select-multi-value-wrapper .Select-value .Select-value-icon {
-        border-right-color: rgba(212, 168, 67, 0.35) !important;
+        border-right: 1px solid rgba(212, 168, 67, 0.35) !important;
         color: #b8b0a0 !important;
     }
+    #symbol-selector .Select-value .Select-value-icon:hover,
     .Select-multi-value-wrapper .Select-value .Select-value-icon:hover {
         color: #e05555 !important;
         background-color: rgba(224, 85, 85, 0.15) !important;
+        background: rgba(224, 85, 85, 0.15) !important;
     }
+    #symbol-selector .Select-noresults,
     .Select-noresults {
         background-color: #0c1328 !important;
+        background: #0c1328 !important;
         color: #5c6478 !important;
-    }
-    /* Dash-specific dropdown overrides */
-    .dash-dropdown .Select--multi .Select-value {
-        background-color: #1a2540 !important;
-        border: 1px solid rgba(212, 168, 67, 0.35) !important;
-        color: #f0ede4 !important;
-    }
-    .dash-dropdown .Select-control {
-        background-color: #0a0f20 !important;
-        border: 1px solid rgba(192, 168, 100, 0.22) !important;
-    }
-    .dash-dropdown .Select-menu-outer {
-        background-color: #0c1328 !important;
-    }
-    .dash-dropdown .Select-option {
-        background-color: #0c1328 !important;
-        color: #f0ede4 !important;
-    }
-    .dash-dropdown .Select-option:hover,
-    .dash-dropdown .Select-option.is-focused {
-        background-color: #1a2540 !important;
     }
 
     /* === Mode Toggle Buttons === */
@@ -1822,11 +1837,12 @@ def _build_tabs(symbols):
         'boxShadow': f'0 2px 12px {COLORS["accent_glow"]}',
     }
     if not symbols:
-        return html.Div('No symbols selected', style={
-            'color': COLORS['text_dim'], 'fontSize': '13px',
-            'padding': '16px 32px', 'textAlign': 'center',
-            'background': COLORS['tab_bg'],
-        })
+        return dcc.Tabs(
+            id='symbol-tabs',
+            value='',
+            children=[],
+            style={'display': 'none'},
+        )
     return dcc.Tabs(
         id='symbol-tabs',
         value=symbols[0],
@@ -1867,109 +1883,158 @@ app.layout = html.Div([
     # ── Header — Alcadeias Mascot + Branding ──
     html.Div([
         html.Div([
-            # SVG Mascot — Alcadeias Lord of Spirits (12500-power Angel Command)
+            # Miniature Figure — Alcadeias, Lord of Spirits (12500-power Angel Command)
             html.Div(
                 dash.html.Iframe(
-                    srcDoc='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="54" height="54">
+                    srcDoc='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 260" width="56" height="72">
   <defs>
-    <linearGradient id="gArmor" x1="0" y1="0" x2="0.5" y2="1">
+    <linearGradient id="gBody" x1="0.3" y1="0" x2="0.7" y2="1">
       <stop offset="0%" stop-color="#f5ecd0"/>
-      <stop offset="35%" stop-color="#d4a843"/>
-      <stop offset="70%" stop-color="#b8922e"/>
-      <stop offset="100%" stop-color="#4a6ea0"/>
+      <stop offset="25%" stop-color="#dfc060"/>
+      <stop offset="55%" stop-color="#c49a30"/>
+      <stop offset="100%" stop-color="#3a5a8a"/>
     </linearGradient>
-    <linearGradient id="gWingL" x1="1" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#f0e6c0"/>
-      <stop offset="30%" stop-color="#d4a843"/>
-      <stop offset="60%" stop-color="#4a8ecc"/>
-      <stop offset="100%" stop-color="#2a5a8a"/>
+    <linearGradient id="gWL" x1="1" y1="0.2" x2="0" y2="0.8">
+      <stop offset="0%" stop-color="#fffef0"/>
+      <stop offset="25%" stop-color="#e8d890"/>
+      <stop offset="55%" stop-color="#4a8ecc"/>
+      <stop offset="100%" stop-color="#1e3d6a"/>
     </linearGradient>
-    <linearGradient id="gWingR" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f0e6c0"/>
-      <stop offset="30%" stop-color="#d4a843"/>
-      <stop offset="60%" stop-color="#4a8ecc"/>
-      <stop offset="100%" stop-color="#2a5a8a"/>
+    <linearGradient id="gWR" x1="0" y1="0.2" x2="1" y2="0.8">
+      <stop offset="0%" stop-color="#fffef0"/>
+      <stop offset="25%" stop-color="#e8d890"/>
+      <stop offset="55%" stop-color="#4a8ecc"/>
+      <stop offset="100%" stop-color="#1e3d6a"/>
     </linearGradient>
     <linearGradient id="gHelm" x1="0.5" y1="0" x2="0.5" y2="1">
-      <stop offset="0%" stop-color="#4a8ecc"/>
-      <stop offset="50%" stop-color="#2a5a8a"/>
-      <stop offset="100%" stop-color="#1a3a5a"/>
+      <stop offset="0%" stop-color="#5a9ed6"/>
+      <stop offset="60%" stop-color="#2a5a8a"/>
+      <stop offset="100%" stop-color="#142a4a"/>
     </linearGradient>
-    <radialGradient id="gOrb" cx="0.5" cy="0.5" r="0.5">
+    <linearGradient id="gCape" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#4a8ecc"/>
+      <stop offset="50%" stop-color="#2a5580"/>
+      <stop offset="100%" stop-color="#0e1e3a"/>
+    </linearGradient>
+    <radialGradient id="gOrb" cx="0.5" cy="0.4" r="0.5">
       <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="40%" stop-color="#fffbe6"/>
+      <stop offset="30%" stop-color="#fffde6"/>
       <stop offset="100%" stop-color="#d4a843"/>
     </radialGradient>
-    <filter id="glow"><feGaussianBlur stdDeviation="1.5" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    <filter id="aura"><feGaussianBlur stdDeviation="3" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <radialGradient id="gHalo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="rgba(255,250,220,0)"/>
+      <stop offset="60%" stop-color="rgba(212,168,67,0.08)"/>
+      <stop offset="100%" stop-color="rgba(212,168,67,0.22)"/>
+    </radialGradient>
+    <filter id="gl"><feGaussianBlur stdDeviation="1.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="au"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="ws"><feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#4a8ecc" flood-opacity="0.25"/></filter>
   </defs>
-  <!-- WINGS — 5 blade-feather spikes each side -->
-  <!-- Left wing blades -->
-  <path d="M40 48 L6 10 L16 30 L26 42 Z" fill="url(#gWingL)" opacity="0.92"/>
-  <path d="M38 52 L2 22 L12 38 L28 50 Z" fill="url(#gWingL)" opacity="0.85"/>
-  <path d="M36 56 L4 36 L14 46 L30 56 Z" fill="url(#gWingL)" opacity="0.78"/>
-  <path d="M38 60 L8 46 L18 54 L32 60 Z" fill="url(#gWingL)" opacity="0.70"/>
-  <path d="M40 64 L14 56 L24 62 L36 66 Z" fill="url(#gWingL)" opacity="0.60"/>
-  <!-- Right wing blades -->
-  <path d="M80 48 L114 10 L104 30 L94 42 Z" fill="url(#gWingR)" opacity="0.92"/>
-  <path d="M82 52 L118 22 L108 38 L92 50 Z" fill="url(#gWingR)" opacity="0.85"/>
-  <path d="M84 56 L116 36 L106 46 L90 56 Z" fill="url(#gWingR)" opacity="0.78"/>
-  <path d="M82 60 L112 46 L102 54 L88 60 Z" fill="url(#gWingR)" opacity="0.70"/>
-  <path d="M80 64 L106 56 L96 62 L84 66 Z" fill="url(#gWingR)" opacity="0.60"/>
-  <!-- Wing inner membrane -->
-  <path d="M42 50 L20 18 L30 40 L42 55 Z" fill="#4a8ecc" opacity="0.25"/>
-  <path d="M78 50 L100 18 L90 40 L78 55 Z" fill="#4a8ecc" opacity="0.25"/>
-  <!-- BODY ARMOR -->
-  <path d="M60 30 L48 48 L44 74 L50 92 L60 98 L70 92 L76 74 L72 48 Z" fill="url(#gArmor)" stroke="#c0a864" stroke-width="0.7" filter="url(#glow)"/>
-  <!-- Chest plate lines -->
-  <path d="M54 48 L60 44 L66 48" fill="none" stroke="#f0e6c0" stroke-width="0.5" opacity="0.6"/>
-  <path d="M52 55 L60 50 L68 55" fill="none" stroke="#f0e6c0" stroke-width="0.4" opacity="0.5"/>
-  <!-- SHOULDER SPIKES — golden blades -->
-  <path d="M48 46 L28 34 L42 48 Z" fill="#d4a843" stroke="#c0a864" stroke-width="0.4"/>
-  <path d="M46 42 L22 26 L40 44 Z" fill="#b8922e" stroke="#c0a864" stroke-width="0.3" opacity="0.85"/>
-  <path d="M44 40 L26 22 L38 42 Z" fill="#d4a843" opacity="0.7"/>
-  <path d="M72 46 L92 34 L78 48 Z" fill="#d4a843" stroke="#c0a864" stroke-width="0.4"/>
-  <path d="M74 42 L98 26 L80 44 Z" fill="#b8922e" stroke="#c0a864" stroke-width="0.3" opacity="0.85"/>
-  <path d="M76 40 L94 22 L82 42 Z" fill="#d4a843" opacity="0.7"/>
-  <!-- HIP / WAIST SPIKES -->
-  <path d="M46 72 L32 76 L44 74 Z" fill="#b8922e" opacity="0.7"/>
-  <path d="M74 72 L88 76 L76 74 Z" fill="#b8922e" opacity="0.7"/>
-  <!-- HELM — angular blue with gold trim -->
-  <path d="M60 22 L50 34 L54 38 L60 36 L66 38 L70 34 Z" fill="url(#gHelm)" stroke="#d4a843" stroke-width="0.8"/>
-  <!-- Helm visor slit -->
-  <line x1="54" y1="32" x2="66" y2="32" stroke="#f0e6c0" stroke-width="0.6" opacity="0.8"/>
-  <!-- Helm crest — tall golden blade -->
-  <path d="M60 22 L57 8 L60 14 L63 8 Z" fill="#d4a843" stroke="#f0e6c0" stroke-width="0.4" filter="url(#glow)"/>
-  <!-- Helm side horns -->
-  <path d="M52 30 L44 18 L50 28 Z" fill="#d4a843" opacity="0.8"/>
-  <path d="M68 30 L76 18 L70 28 Z" fill="#d4a843" opacity="0.8"/>
-  <!-- CORE ORB — divine light sphere -->
-  <circle cx="60" cy="58" r="7" fill="url(#gOrb)" filter="url(#aura)" opacity="0.95"/>
-  <circle cx="60" cy="58" r="3.5" fill="#fff" opacity="0.98"/>
-  <!-- Orb energy rays -->
-  <line x1="60" y1="50" x2="60" y2="44" stroke="#f0e6c0" stroke-width="1" opacity="0.7" filter="url(#glow)"/>
-  <line x1="67" y1="54" x2="74" y2="48" stroke="#f0e6c0" stroke-width="0.8" opacity="0.6"/>
-  <line x1="53" y1="54" x2="46" y2="48" stroke="#f0e6c0" stroke-width="0.8" opacity="0.6"/>
-  <line x1="67" y1="62" x2="74" y2="68" stroke="#f0e6c0" stroke-width="0.8" opacity="0.5"/>
-  <line x1="53" y1="62" x2="46" y2="68" stroke="#f0e6c0" stroke-width="0.8" opacity="0.5"/>
-  <line x1="60" y1="66" x2="60" y2="72" stroke="#f0e6c0" stroke-width="0.6" opacity="0.4"/>
-  <line x1="65" y1="52" x2="70" y2="50" stroke="#fffbe6" stroke-width="0.5" opacity="0.5"/>
-  <line x1="55" y1="52" x2="50" y2="50" stroke="#fffbe6" stroke-width="0.5" opacity="0.5"/>
-  <!-- CAPE / lower drape -->
-  <path d="M50 88 L46 108 L54 100 L60 110 L66 100 L74 108 L70 88" fill="none" stroke="#4a8ecc" stroke-width="0.6" opacity="0.4"/>
+  <!-- DIVINE HALO — ring of light behind head -->
+  <ellipse cx="100" cy="42" rx="28" ry="6" fill="none" stroke="#d4a843" stroke-width="1.8" opacity="0.55" filter="url(#gl)"/>
+  <ellipse cx="100" cy="42" rx="22" ry="4.5" fill="none" stroke="#f0e6c0" stroke-width="0.8" opacity="0.35"/>
+  <!-- LARGE WINGS — sweeping blade-feathered (Light civilization signature) -->
+  <!-- Left wing: 6 blade-feathers fanning upward & outward -->
+  <path d="M78 80 L8 14 L22 42 L52 70 Z" fill="url(#gWL)" opacity="0.92" filter="url(#ws)"/>
+  <path d="M76 88 L4 32 L18 54 L50 82 Z" fill="url(#gWL)" opacity="0.84"/>
+  <path d="M74 96 L6 52 L20 68 L52 92 Z" fill="url(#gWL)" opacity="0.76"/>
+  <path d="M76 104 L12 68 L26 82 L56 100 Z" fill="url(#gWL)" opacity="0.65"/>
+  <path d="M78 110 L20 84 L36 96 L60 108 Z" fill="url(#gWL)" opacity="0.55"/>
+  <path d="M80 116 L30 98 L46 108 L66 116 Z" fill="url(#gWL)" opacity="0.42"/>
+  <!-- Right wing -->
+  <path d="M122 80 L192 14 L178 42 L148 70 Z" fill="url(#gWR)" opacity="0.92" filter="url(#ws)"/>
+  <path d="M124 88 L196 32 L182 54 L150 82 Z" fill="url(#gWR)" opacity="0.84"/>
+  <path d="M126 96 L194 52 L180 68 L148 92 Z" fill="url(#gWR)" opacity="0.76"/>
+  <path d="M124 104 L188 68 L174 82 L144 100 Z" fill="url(#gWR)" opacity="0.65"/>
+  <path d="M122 110 L180 84 L164 96 L140 108 Z" fill="url(#gWR)" opacity="0.55"/>
+  <path d="M120 116 L170 98 L154 108 L134 116 Z" fill="url(#gWR)" opacity="0.42"/>
+  <!-- Wing inner glow membrane -->
+  <path d="M80 82 L30 28 L50 60 L80 90 Z" fill="#4a8ecc" opacity="0.12"/>
+  <path d="M120 82 L170 28 L150 60 L120 90 Z" fill="#4a8ecc" opacity="0.12"/>
+  <!-- CAPE — flowing behind and below -->
+  <path d="M82 130 L68 210 L78 195 L88 230 L100 210 L112 230 L122 195 L132 210 L118 130 Z" fill="url(#gCape)" opacity="0.7" stroke="#4a8ecc" stroke-width="0.4"/>
+  <path d="M86 140 L76 195 L86 180 Z" fill="#3a6a9a" opacity="0.35"/>
+  <path d="M114 140 L124 195 L114 180 Z" fill="#3a6a9a" opacity="0.35"/>
+  <!-- LEGS — armored greaves -->
+  <path d="M92 170 L88 215 L95 218 L98 175 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.5"/>
+  <path d="M108 170 L112 215 L105 218 L102 175 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.5"/>
+  <!-- Knee guards -->
+  <ellipse cx="93" cy="185" rx="5" ry="4" fill="#dfc060" stroke="#c49a30" stroke-width="0.5"/>
+  <ellipse cx="107" cy="185" rx="5" ry="4" fill="#dfc060" stroke="#c49a30" stroke-width="0.5"/>
+  <!-- Feet / sabatons -->
+  <path d="M86 214 L83 224 L97 224 L96 216 Z" fill="#b8922e" stroke="#a8841e" stroke-width="0.4"/>
+  <path d="M114 214 L117 224 L103 224 L104 216 Z" fill="#b8922e" stroke="#a8841e" stroke-width="0.4"/>
+  <!-- BODY — torso armor (golden plate mail) -->
+  <path d="M100 52 L82 78 L78 120 L86 155 L100 168 L114 155 L122 120 L118 78 Z" fill="url(#gBody)" stroke="#c0a864" stroke-width="0.8" filter="url(#gl)"/>
+  <!-- Chest plate v-lines -->
+  <path d="M90 78 L100 70 L110 78" fill="none" stroke="#f0e6c0" stroke-width="0.8" opacity="0.65"/>
+  <path d="M88 88 L100 80 L112 88" fill="none" stroke="#f0e6c0" stroke-width="0.6" opacity="0.5"/>
+  <path d="M90 98 L100 92 L110 98" fill="none" stroke="#f0e6c0" stroke-width="0.5" opacity="0.4"/>
+  <!-- Waist / belt -->
+  <rect x="84" y="142" width="32" height="6" rx="2" fill="#dfc060" stroke="#c49a30" stroke-width="0.5"/>
+  <circle cx="100" cy="145" r="3" fill="#f0e6c0" stroke="#c49a30" stroke-width="0.5"/>
+  <!-- ARMS — extended with gauntlets -->
+  <path d="M82 80 L62 100 L58 115 L64 118 L72 105 L82 90 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.5"/>
+  <path d="M118 80 L138 100 L142 115 L136 118 L128 105 L118 90 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.5"/>
+  <!-- Forearm guards -->
+  <path d="M62 102 L56 112 L60 116 L66 108 Z" fill="#dfc060" stroke="#c49a30" stroke-width="0.4"/>
+  <path d="M138 102 L144 112 L140 116 L134 108 Z" fill="#dfc060" stroke="#c49a30" stroke-width="0.4"/>
+  <!-- SHOULDER PAULDRONS — spiked golden -->
+  <path d="M82 74 L56 56 L74 72 Z" fill="#dfc060" stroke="#c49a30" stroke-width="0.5"/>
+  <path d="M80 70 L48 46 L70 68 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.4" opacity="0.85"/>
+  <path d="M78 66 L52 38 L68 64 Z" fill="#dfc060" opacity="0.7"/>
+  <path d="M118 74 L144 56 L126 72 Z" fill="#dfc060" stroke="#c49a30" stroke-width="0.5"/>
+  <path d="M120 70 L152 46 L130 68 Z" fill="#c49a30" stroke="#a8841e" stroke-width="0.4" opacity="0.85"/>
+  <path d="M122 66 L148 38 L132 64 Z" fill="#dfc060" opacity="0.7"/>
+  <!-- FLOATING WEAPONS — levitated light sabers (Angel Command signature) -->
+  <g filter="url(#gl)" opacity="0.75">
+    <rect x="44" y="118" width="3" height="30" rx="1" fill="#f0e6c0" transform="rotate(-15 45 133)"/>
+    <rect x="44" y="118" width="3" height="5" rx="1" fill="#d4a843" transform="rotate(-15 45 120)"/>
+  </g>
+  <g filter="url(#gl)" opacity="0.75">
+    <rect x="153" y="118" width="3" height="30" rx="1" fill="#f0e6c0" transform="rotate(15 154 133)"/>
+    <rect x="153" y="118" width="3" height="5" rx="1" fill="#d4a843" transform="rotate(15 154 120)"/>
+  </g>
+  <!-- FLOATING ORBS around body (weapons hovering untouched) -->
+  <circle cx="52" cy="140" r="4" fill="url(#gOrb)" filter="url(#gl)" opacity="0.7"/>
+  <circle cx="148" cy="140" r="4" fill="url(#gOrb)" filter="url(#gl)" opacity="0.7"/>
+  <circle cx="42" cy="100" r="3" fill="#fffbe6" filter="url(#gl)" opacity="0.5"/>
+  <circle cx="158" cy="100" r="3" fill="#fffbe6" filter="url(#gl)" opacity="0.5"/>
+  <!-- HELM — ornate blue with golden crest & side horns -->
+  <path d="M100 36 L84 54 L88 62 L100 58 L112 62 L116 54 Z" fill="url(#gHelm)" stroke="#d4a843" stroke-width="1"/>
+  <!-- Visor — glowing slit -->
+  <line x1="90" y1="52" x2="110" y2="52" stroke="#f0e6c0" stroke-width="1.2" opacity="0.9" filter="url(#gl)"/>
+  <!-- Central crest — tall golden blade -->
+  <path d="M100 36 L96 12 L100 24 L104 12 Z" fill="#d4a843" stroke="#f0e6c0" stroke-width="0.6" filter="url(#gl)"/>
+  <!-- Side horn blades -->
+  <path d="M86 48 L72 26 L84 44 Z" fill="#d4a843" opacity="0.85"/>
+  <path d="M114 48 L128 26 L116 44 Z" fill="#d4a843" opacity="0.85"/>
+  <!-- Small inner horns -->
+  <path d="M90 44 L80 30 L88 42 Z" fill="#b8922e" opacity="0.65"/>
+  <path d="M110 44 L120 30 L112 42 Z" fill="#b8922e" opacity="0.65"/>
+  <!-- CORE ORB — divine light at chest center -->
+  <circle cx="100" cy="95" r="10" fill="url(#gOrb)" filter="url(#au)" opacity="0.92"/>
+  <circle cx="100" cy="95" r="5" fill="#fff" opacity="0.97"/>
+  <!-- Energy rays from orb -->
+  <line x1="100" y1="83" x2="100" y2="74" stroke="#f0e6c0" stroke-width="1.2" opacity="0.6" filter="url(#gl)"/>
+  <line x1="110" y1="89" x2="120" y2="82" stroke="#f0e6c0" stroke-width="0.9" opacity="0.5"/>
+  <line x1="90" y1="89" x2="80" y2="82" stroke="#f0e6c0" stroke-width="0.9" opacity="0.5"/>
+  <line x1="110" y1="101" x2="118" y2="108" stroke="#f0e6c0" stroke-width="0.7" opacity="0.4"/>
+  <line x1="90" y1="101" x2="82" y2="108" stroke="#f0e6c0" stroke-width="0.7" opacity="0.4"/>
+  <!-- BASE PLATFORM — radiant light disc -->
+  <ellipse cx="100" cy="228" rx="38" ry="8" fill="url(#gHalo)" filter="url(#au)"/>
+  <ellipse cx="100" cy="228" rx="24" ry="4" fill="none" stroke="#d4a843" stroke-width="0.5" opacity="0.3"/>
 </svg>''',
                     style={
-                        'border': 'none', 'width': '54px', 'height': '54px',
+                        'border': 'none', 'width': '56px', 'height': '72px',
                         'background': 'transparent', 'display': 'block',
                         'overflow': 'hidden',
                     },
                 ),
                 className='mascot-container',
                 style={
-                    'width': '58px', 'height': '58px',
-                    'background': 'radial-gradient(circle, rgba(212,168,67,0.10) 0%, rgba(74,142,204,0.05) 50%, transparent 75%)',
+                    'width': '60px', 'height': '76px',
+                    'background': 'radial-gradient(circle, rgba(212,168,67,0.08) 0%, rgba(74,142,204,0.04) 50%, transparent 75%)',
                     'marginRight': '14px', 'flexShrink': '0',
                 },
             ),
