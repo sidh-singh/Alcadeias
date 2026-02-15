@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import glob
@@ -24,6 +25,14 @@ from constants import (
 JSON_DIR = OUTPUT_DIR
 DAILY_TRADE_DIR = os.path.join(JSON_DIR, DAILY_TRADE_SUBDIR)
 REFRESH_INTERVAL = DASHBOARD_REFRESH_INTERVAL
+
+# ─── Mascot Image (base64 encoded for reliable loading) ───
+_MASCOT_IMG_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'alcadeias.png')
+try:
+    with open(_MASCOT_IMG_PATH, 'rb') as _f:
+        _MASCOT_B64 = 'data:image/png;base64,' + base64.b64encode(_f.read()).decode()
+except FileNotFoundError:
+    _MASCOT_B64 = ''
 
 # ─── Alcadeias Lord of Spirits — Blue / Gold / White Angel Theme ───
 COLORS = {
@@ -1569,6 +1578,7 @@ app.index_string = '''<!DOCTYPE html>
 {%metas%}
 <title>{%title%}</title>
 <link rel="icon" type="image/png" href="/assets/alcadeias.png">
+<link rel="shortcut icon" type="image/png" href="/assets/alcadeias.png">
 {%css%}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1946,7 +1956,7 @@ app.layout = html.Div([
             # Alcadeias, Lord of Spirits — mascot image
             html.Div(
                 html.Img(
-                    src='/assets/alcadeias.png',
+                    src=_MASCOT_B64,
                     style={
                         'width': '64px', 'height': '64px',
                         'objectFit': 'contain',
