@@ -1283,15 +1283,12 @@ def build_daily_trades_section(symbol):
         options=available_dates if available_dates else [{'label': f'Today ({datetime.now(tz=timezone.utc).strftime("%d %b %Y")})', 'value': today_str}],
         value=default_date,
         clearable=False,
-        searchable=False,
+        searchable=True,
         placeholder='Select day...',
         style={
-            'width': '240px',
-            'fontSize': '12px',
-            'background': 'transparent',
-            'backgroundColor': 'transparent',
+            'width': '260px',
+            'fontSize': '13px',
         },
-        className='dash-dropdown',
     )
 
     return html.Div([
@@ -1856,7 +1853,7 @@ app.index_string = '''<!DOCTYPE html>
     #symbol-selector .Select-control,
     #symbol-selector > div > .Select > .Select-control,
     .dash-dropdown .Select-control,
-    .Select-control,
+    :not(#daily-day-selector) > .Select > .Select-control,
     #symbol-selector [class*="control"],
     #symbol-selector [class*="ValueContainer"],
     #symbol-selector [class*="multiValue"] {
@@ -1873,7 +1870,7 @@ app.index_string = '''<!DOCTYPE html>
     /* Menu / dropdown list */
     #symbol-selector .Select-menu-outer,
     .dash-dropdown .Select-menu-outer,
-    .Select-menu-outer,
+    :not(#daily-day-selector) > .Select > .Select-menu-outer,
     #symbol-selector [class*="menu"],
     #symbol-selector [class*="MenuList"],
     .dash-dropdown [class*="menu"] {
@@ -1886,8 +1883,8 @@ app.index_string = '''<!DOCTYPE html>
     #symbol-selector .Select-option,
     #symbol-selector .VirtualizedSelectOption,
     .dash-dropdown .Select-option,
-    .Select-option,
-    .VirtualizedSelectOption,
+    :not(#daily-day-selector) > .Select .Select-option,
+    :not(#daily-day-selector) > .Select .VirtualizedSelectOption,
     #symbol-selector [class*="option"] {
         background-color: #0c1328 !important;
         background: #0c1328 !important;
@@ -1895,8 +1892,8 @@ app.index_string = '''<!DOCTYPE html>
     }
     #symbol-selector .VirtualizedSelectFocusedOption,
     #symbol-selector .Select-option.is-focused,
-    .VirtualizedSelectFocusedOption,
-    .Select-option.is-focused,
+    :not(#daily-day-selector) > .Select .VirtualizedSelectFocusedOption,
+    :not(#daily-day-selector) > .Select .Select-option.is-focused,
     #symbol-selector [class*="option"]:hover {
         background-color: #1a2540 !important;
         background: #1a2540 !important;
@@ -1905,7 +1902,7 @@ app.index_string = '''<!DOCTYPE html>
     #symbol-selector .Select-value,
     .dash-dropdown .Select-value,
     .dash-dropdown .Select--multi .Select-value,
-    .Select-value,
+    :not(#daily-day-selector) > .Select .Select-value,
     #symbol-selector [class*="multiValue"],
     #symbol-selector [class*="multi-value"],
     #symbol-selector [class*="tag"],
@@ -1918,7 +1915,7 @@ app.index_string = '''<!DOCTYPE html>
     /* Value labels — WHITE TEXT */
     #symbol-selector .Select-value-label,
     .dash-dropdown .Select-value-label,
-    .Select-value-label,
+    :not(#daily-day-selector) > .Select .Select-value-label,
     .Select--multi .Select-value-label,
     #symbol-selector [class*="multiValue"] [class*="label"],
     #symbol-selector [class*="singleValue"],
@@ -1930,20 +1927,20 @@ app.index_string = '''<!DOCTYPE html>
     /* Input text */
     #symbol-selector .Select-input input,
     .dash-dropdown .Select-input input,
-    .Select-input input,
+    :not(#daily-day-selector) > .Select .Select-input input,
     #symbol-selector input {
         color: #f0ede4 !important;
         background: transparent !important;
     }
     /* Placeholder */
     #symbol-selector .Select-placeholder,
-    .Select-placeholder,
+    :not(#daily-day-selector) > .Select .Select-placeholder,
     #symbol-selector [class*="placeholder"] {
         color: #5c6478 !important;
     }
     /* Arrow / chevron */
     #symbol-selector .Select-arrow-zone .Select-arrow,
-    .Select-arrow-zone .Select-arrow,
+    :not(#daily-day-selector) > .Select .Select-arrow-zone .Select-arrow,
     #symbol-selector [class*="indicator"],
     #symbol-selector svg {
         color: #5c6478 !important;
@@ -1954,12 +1951,12 @@ app.index_string = '''<!DOCTYPE html>
     }
     /* Clear button */
     #symbol-selector .Select-clear-zone,
-    .Select-clear-zone {
+    :not(#daily-day-selector) > .Select .Select-clear-zone {
         color: #5c6478 !important;
     }
     /* Remove (x) on individual tags */
     #symbol-selector .Select-value .Select-value-icon,
-    .Select-multi-value-wrapper .Select-value .Select-value-icon,
+    .dash-dropdown .Select-multi-value-wrapper .Select-value .Select-value-icon,
     #symbol-selector [class*="multiValue"] [class*="remove"],
     #symbol-selector [class*="Remove"] {
         border-right: 1px solid rgba(212, 168, 67, 0.35) !important;
@@ -1967,14 +1964,14 @@ app.index_string = '''<!DOCTYPE html>
         background: transparent !important;
     }
     #symbol-selector .Select-value .Select-value-icon:hover,
-    .Select-multi-value-wrapper .Select-value .Select-value-icon:hover {
+    .dash-dropdown .Select-multi-value-wrapper .Select-value .Select-value-icon:hover {
         color: #e05555 !important;
         background-color: rgba(224, 85, 85, 0.15) !important;
         background: rgba(224, 85, 85, 0.15) !important;
     }
     /* No results text */
     #symbol-selector .Select-noresults,
-    .Select-noresults {
+    :not(#daily-day-selector) > .Select .Select-noresults {
         background-color: #0c1328 !important;
         background: #0c1328 !important;
         color: #5c6478 !important;
@@ -2021,69 +2018,134 @@ app.index_string = '''<!DOCTYPE html>
         justify-content: center;
     }
 
-    /* === Daily Day Selector & Drawdown Selector — WHITE list overrides === */
-    #daily-day-selector .Select-menu-outer,
-    #drawdown-day-selector .Select-menu-outer {
+    /* === Daily Day Selector — FULL WHITE THEME (like clean dropdown) === */
+    #daily-day-selector,
+    #daily-day-selector * {
+        box-sizing: border-box !important;
+    }
+    #daily-day-selector .Select-control {
+        background-color: #0d1530 !important;
+        background: #0d1530 !important;
+        border: 1px solid rgba(192, 168, 100, 0.3) !important;
+        border-radius: 20px !important;
+        cursor: pointer !important;
+        min-height: 36px !important;
+    }
+    #daily-day-selector .Select-value {
+        background: transparent !important;
+        background-color: transparent !important;
+        border: none !important;
+    }
+    #daily-day-selector .Select-value-label {
+        color: #f0ede4 !important;
+        font-weight: 600 !important;
+        font-size: 13px !important;
+    }
+    #daily-day-selector .Select-placeholder {
+        color: #5c6478 !important;
+    }
+    #daily-day-selector .Select-input,
+    #daily-day-selector .Select-input > input,
+    #daily-day-selector input {
+        color: #1a1a2e !important;
+        background: transparent !important;
+    }
+    #daily-day-selector .Select-multi-value-wrapper {
+        background: transparent !important;
+    }
+    #daily-day-selector .Select-arrow-zone .Select-arrow {
+        border-color: #7a7060 transparent transparent !important;
+    }
+    /* WHITE menu & options */
+    #daily-day-selector .Select-menu-outer {
         background-color: #ffffff !important;
         background: #ffffff !important;
-        border: 1px solid #d0c8a8 !important;
-        border-radius: 8px !important;
+        border: 1px solid #d0d0d0 !important;
+        border-radius: 10px !important;
+        z-index: 99999 !important;
+        box-shadow: 0 6px 24px rgba(0   ,0,0,0.18) !important;
+        margin-top: 4px !important;
         overflow: hidden !important;
     }
-    #daily-day-selector .Select-menu,
-    #drawdown-day-selector .Select-menu {
+    #daily-day-selector .Select-menu {
         background-color: #ffffff !important;
         background: #ffffff !important;
+        max-height: 300px !important;
     }
     #daily-day-selector .Select-option,
-    #daily-day-selector .VirtualizedSelectOption,
-    #drawdown-day-selector .Select-option,
-    #drawdown-day-selector .VirtualizedSelectOption {
+    #daily-day-selector .VirtualizedSelectOption {
         background-color: #ffffff !important;
         background: #ffffff !important;
         color: #1a1a2e !important;
-        font-size: 13px !important;
+        font-size: 14px !important;
         font-weight: 500 !important;
-        padding: 10px 14px !important;
-        border-bottom: 1px solid #eeeeee !important;
+        padding: 11px 16px !important;
+        border-bottom: 1px solid #f0f0f0 !important;
+        cursor: pointer !important;
     }
     #daily-day-selector .VirtualizedSelectFocusedOption,
     #daily-day-selector .Select-option.is-focused,
     #daily-day-selector .Select-option:hover,
-    #daily-day-selector .VirtualizedSelectOption:hover,
-    #drawdown-day-selector .VirtualizedSelectFocusedOption,
-    #drawdown-day-selector .Select-option.is-focused,
-    #drawdown-day-selector .Select-option:hover,
-    #drawdown-day-selector .VirtualizedSelectOption:hover {
-        background-color: #f5f0e0 !important;
-        background: #f5f0e0 !important;
-        color: #8b6914 !important;
+    #daily-day-selector .VirtualizedSelectOption:hover {
+        background-color: #f3f0ff !important;
+        background: #f3f0ff !important;
+        color: #5b21b6 !important;
     }
-    #daily-day-selector div[role="option"],
-    #drawdown-day-selector div[role="option"] {
+    #daily-day-selector .Select-option.is-selected {
+        background-color: #f3f0ff !important;
+        background: #f3f0ff !important;
+        color: #5b21b6 !important;
+        font-weight: 600 !important;
+    }
+    #daily-day-selector .Select-noresults {
+        background: #ffffff !important;
+        color: #999 !important;
+    }
+    /* ARIA role targets (for portaled menus) */
+    #daily-day-selector div[role="listbox"],
+    #daily-day-selector div[role="listbox"] * {
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+    }
+    #daily-day-selector div[role="option"] {
         background-color: #ffffff !important;
         background: #ffffff !important;
         color: #1a1a2e !important;
+        font-size: 14px !important;
+        padding: 11px 16px !important;
     }
     #daily-day-selector div[role="option"]:hover,
-    #daily-day-selector div[role="option"][class*="isFocused"],
-    #drawdown-day-selector div[role="option"]:hover,
-    #drawdown-day-selector div[role="option"][class*="isFocused"] {
-        background-color: #f5f0e0 !important;
-        background: #f5f0e0 !important;
-        color: #8b6914 !important;
+    #daily-day-selector div[role="option"][class*="isFocused"] {
+        background-color: #f3f0ff !important;
+        background: #f3f0ff !important;
+        color: #5b21b6 !important;
     }
-    #daily-day-selector div[role="option"][aria-selected="true"],
-    #drawdown-day-selector div[role="option"][aria-selected="true"] {
-        background-color: #ede5cc !important;
-        background: #ede5cc !important;
-        color: #6b4f0a !important;
+    #daily-day-selector div[role="option"][aria-selected="true"] {
+        background-color: #f3f0ff !important;
+        background: #f3f0ff !important;
+        color: #5b21b6 !important;
         font-weight: 600 !important;
     }
-    #daily-day-selector div[role="listbox"],
-    #drawdown-day-selector div[role="listbox"] {
-        background-color: #ffffff !important;
-        background: #ffffff !important;
+    /* Scrollbar inside dropdown */
+    #daily-day-selector .Select-menu::-webkit-scrollbar {
+        width: 6px !important;
+    }
+    #daily-day-selector .Select-menu::-webkit-scrollbar-track {
+        background: #f5f5f5 !important;
+    }
+    #daily-day-selector .Select-menu::-webkit-scrollbar-thumb {
+        background: #ccc !important;
+        border-radius: 10px !important;
+    }
+    #daily-day-selector .Select-menu-outer::-webkit-scrollbar {
+        width: 6px !important;
+    }
+    #daily-day-selector .Select-menu-outer::-webkit-scrollbar-track {
+        background: #f5f5f5 !important;
+    }
+    #daily-day-selector .Select-menu-outer::-webkit-scrollbar-thumb {
+        background: #ccc !important;
+        border-radius: 10px !important;
     }
 </style>
 </head>
