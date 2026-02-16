@@ -1211,21 +1211,19 @@ def build_daily_trades_section(symbol):
     # Build the chart for today's data (default)
     chart = _build_daily_chart(today_deals)
 
-    # Day selector dropdown — last 7 days
-    available_dates = get_available_daily_dates(symbol, max_days=7)
-    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
-    # Default to today if available, otherwise first available
-    default_date = today_str
+    # Day selector — calendar date picker (last 7 days)
+    today = datetime.now(tz=timezone.utc).date()
+    min_date = today - timedelta(days=6)
 
-    day_dropdown = dcc.Dropdown(
+    day_picker = dcc.DatePickerSingle(
         id='daily-day-selector',
-        options=available_dates if available_dates else [{'label': f'Today ({datetime.now(tz=timezone.utc).strftime("%d %b %Y")})', 'value': today_str}],
-        value=default_date,
-        clearable=False,
-        searchable=False,
+        date=today,
+        min_date_allowed=min_date,
+        max_date_allowed=today,
+        display_format='DD MMM YYYY',
         placeholder='Select day...',
-        style={'width': '240px', 'fontSize': '12px'},
-        className='dash-dropdown',
+        first_day_of_week=1,
+        style={'display': 'inline-block'},
     )
 
     return html.Div([
@@ -1234,7 +1232,10 @@ def build_daily_trades_section(symbol):
                 html.Span('📈', style={'fontSize': '14px'}),
                 html.Span('Daily Trade Log', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
             ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px'}),
-            day_dropdown,
+            html.Div([
+                html.Span('📅', style={'fontSize': '13px', 'marginRight': '6px', 'opacity': '0.6'}),
+                day_picker,
+            ], style={'display': 'flex', 'alignItems': 'center'}),
         ], style={
             'display': 'flex', 'justifyContent': 'space-between',
             'alignItems': 'center', 'marginBottom': '10px',
@@ -1955,87 +1956,125 @@ app.index_string = '''<!DOCTYPE html>
         justify-content: center;
     }
 
-    /* === Daily Day Selector Dropdown — dark theme === */
-    #daily-day-selector .Select-control,
-    #daily-day-selector > div > div {
-        background-color: #0a1025 !important;
+    /* === Daily Date Picker Calendar — Alcadeias Dark Theme === */
+    .DateInput,
+    .DateInput_input {
+        background: #0a1025 !important;
+        color: #f0ede4 !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        border: none !important;
+        padding: 6px 10px !important;
+        letter-spacing: 0.5px !important;
+    }
+    .DateInput_input__focused {
+        border-bottom: 2px solid #d4a843 !important;
+    }
+    .SingleDatePickerInput {
         background: #0a1025 !important;
         border: 1px solid rgba(192,168,100,0.25) !important;
-        box-shadow: none !important;
-        cursor: pointer !important;
+        border-radius: 8px !important;
+        overflow: hidden !important;
     }
-    #daily-day-selector .Select-value-label,
-    #daily-day-selector span[class],
-    #daily-day-selector [class*="singleValue"],
-    #daily-day-selector div > div > div > div:not([class*="indicator"]):not([class*="Input"]) {
-        color: #ffffff !important;
-    }
-    #daily-day-selector .Select-placeholder,
-    #daily-day-selector [class*="placeholder"] {
-        color: #5c6478 !important;
-    }
-    #daily-day-selector .Select-menu-outer,
-    #daily-day-selector [class*="menu"],
-    #daily-day-selector [class*="MenuList"] {
-        background-color: #0c1328 !important;
-        background: #0c1328 !important;
+    .SingleDatePickerInput__withBorder {
         border: 1px solid rgba(192,168,100,0.25) !important;
         border-radius: 8px !important;
-        z-index: 9999 !important;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
     }
-    #daily-day-selector .Select-option,
-    #daily-day-selector .VirtualizedSelectOption,
-    #daily-day-selector [class*="option"] {
-        background-color: #0c1328 !important;
-        background: #0c1328 !important;
-        color: #f0ede4 !important;
-        cursor: pointer !important;
-    }
-    #daily-day-selector .VirtualizedSelectFocusedOption,
-    #daily-day-selector .Select-option.is-focused,
-    #daily-day-selector [class*="option"]:hover {
-        background-color: #1a2540 !important;
-        background: #1a2540 !important;
-        color: #ffffff !important;
-    }
-    #daily-day-selector .Select-input input,
-    #daily-day-selector input {
-        color: #f0ede4 !important;
-        background: transparent !important;
-    }
-    #daily-day-selector [class*="indicator"],
-    #daily-day-selector svg {
-        color: #5c6478 !important;
-        fill: #5c6478 !important;
-    }
-    /* Global portal-based menu overrides (react-select v5 renders menus outside component tree) */
-    div[role="listbox"],
-    div[role="listbox"] > div {
-        background-color: #0c1328 !important;
+    /* Calendar popup */
+    .SingleDatePicker_picker,
+    .DayPicker,
+    .DayPicker__withBorder {
         background: #0c1328 !important;
         border: 1px solid rgba(192,168,100,0.25) !important;
-        border-radius: 8px !important;
-        z-index: 9999 !important;
+        border-radius: 10px !important;
         box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+        z-index: 9999 !important;
     }
-    div[role="option"] {
-        background-color: #0c1328 !important;
+    .CalendarMonth,
+    .CalendarMonthGrid {
         background: #0c1328 !important;
+    }
+    /* Month caption */
+    .CalendarMonth_caption {
         color: #f0ede4 !important;
-        cursor: pointer !important;
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        padding-bottom: 40px !important;
     }
-    div[role="option"]:hover,
-    div[role="option"][aria-selected="false"]:hover {
-        background-color: #1a2540 !important;
-        background: #1a2540 !important;
-        color: #ffffff !important;
-    }
-    div[role="option"][aria-selected="true"] {
-        background-color: rgba(212,168,67,0.18) !important;
-        background: rgba(212,168,67,0.18) !important;
-        color: #d4a843 !important;
+    /* Weekday headers */
+    .DayPicker_weekHeader_li small {
+        color: #7a7060 !important;
+        font-size: 11px !important;
         font-weight: 600 !important;
+    }
+    /* Day cells — default */
+    .CalendarDay__default {
+        background: #0c1328 !important;
+        color: #b8b0a0 !important;
+        border: 1px solid rgba(192,168,100,0.08) !important;
+        font-size: 12px !important;
+    }
+    /* Day hover */
+    .CalendarDay__default:hover {
+        background: #1a2540 !important;
+        color: #ffffff !important;
+        border-color: rgba(212,168,67,0.3) !important;
+    }
+    /* Selected day — gold */
+    .CalendarDay__selected,
+    .CalendarDay__selected:active,
+    .CalendarDay__selected:hover {
+        background: rgba(212,168,67,0.25) !important;
+        color: #d4a843 !important;
+        border: 1px solid #d4a843 !important;
+        font-weight: 700 !important;
+    }
+    /* Today */
+    .CalendarDay__today {
+        font-weight: 700 !important;
+        color: #4a8ecc !important;
+    }
+    /* Blocked / outside days */
+    .CalendarDay__blocked_out_of_range,
+    .CalendarDay__blocked_out_of_range:hover,
+    .CalendarDay__blocked_calendar,
+    .CalendarDay__blocked_calendar:hover {
+        background: #080e1e !important;
+        color: #2a2a3a !important;
+        border: 1px solid rgba(192,168,100,0.04) !important;
+        cursor: not-allowed !important;
+    }
+    /* Navigation arrows */
+    .DayPickerNavigation_button {
+        background: #0a1025 !important;
+        border: 1px solid rgba(192,168,100,0.2) !important;
+        border-radius: 6px !important;
+    }
+    .DayPickerNavigation_button:hover {
+        background: #1a2540 !important;
+        border-color: rgba(212,168,67,0.4) !important;
+    }
+    .DayPickerNavigation_svg__horizontal {
+        fill: #d4a843 !important;
+    }
+    /* Calendar icon button */
+    .SingleDatePickerInput_calendarIcon {
+        padding: 6px 8px !important;
+        margin: 0 !important;
+    }
+    .SingleDatePickerInput_calendarIcon svg {
+        fill: #7a7060 !important;
+    }
+    .SingleDatePickerInput_calendarIcon:hover svg {
+        fill: #d4a843 !important;
+    }
+    /* Clear button */
+    .SingleDatePickerInput_clearDate svg {
+        fill: #7a7060 !important;
+    }
+    .SingleDatePickerInput_clearDate:hover svg {
+        fill: #e05555 !important;
     }
 </style>
 </head>
@@ -2361,7 +2400,7 @@ def update_symbol_tabs(selected_symbols):
 @app.callback(
     [Output('daily-metrics-container', 'children'),
      Output('daily-chart-container', 'children')],
-    [Input('daily-day-selector', 'value'),
+    [Input('daily-day-selector', 'date'),
      Input('symbol-tabs', 'value')],
     prevent_initial_call=True,
 )
@@ -2369,6 +2408,10 @@ def update_daily_day(selected_date, selected_symbol):
     """Update daily trade chart and metrics when a different day is selected."""
     if not selected_symbol:
         return dash.no_update, dash.no_update
+
+    # DatePickerSingle may return 'YYYY-MM-DD' or 'YYYY-MM-DDT00:00:00'
+    if selected_date and 'T' in selected_date:
+        selected_date = selected_date.split('T')[0]
 
     today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
     is_today = (not selected_date) or (selected_date == today_str)
