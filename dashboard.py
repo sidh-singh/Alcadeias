@@ -1164,6 +1164,204 @@ def _build_daily_chart(deals):
     )
 
 
+def _build_drawdown_chart(deals):
+    """Build a drawdown chart from a list of deals. Returns a Dash component."""
+    if not deals:
+        return html.Div([
+            html.Div('📭', style={'fontSize': '32px', 'marginBottom': '8px', 'opacity': '0.5'}),
+            html.Div('No closed deals for this day', style={
+                'color': COLORS['text_dim'], 'fontSize': '13px',
+            }),
+        ], style={'textAlign': 'center', 'padding': '48px 0'})
+
+    sorted_deals = sorted(deals, key=lambda d: d.get('time', ''))
+
+    labels = []
+    cum_pls = []
+    peaks = []
+    drawdowns = []
+    dd_pcts = []
+    hover_texts = []
+    cumulative = 0
+    peak = 0
+
+    for i, deal in enumerate(sorted_deals, 1):
+        try:
+            t = datetime.fromisoformat(deal['time']).strftime('%H:%M')
+        except (ValueError, TypeError):
+            t = f'#{i}'
+        labels.append(t)
+        profit = deal.get('net_profit', deal.get('profit', 0))
+        cumulative += profit
+        cum_pls.append(round(cumulative, 2))
+        if cumulative > peak:
+            peak = cumulative
+        peaks.append(round(peak, 2))
+        dd = peak - cumulative
+        drawdowns.append(round(dd, 2))
+        dd_pct = (dd / peak * 100) if peak > 0 else 0
+        dd_pcts.append(round(dd_pct, 2))
+        hover_texts.append(
+            f"Time: {t}<br>"
+            f"Cumulative P/L: ${cumulative:.2f}<br>"
+            f"Peak P/L: ${peak:.2f}<br>"
+            f"Drawdown: ${dd:.2f}<br>"
+            f"Drawdown %: {dd_pct:.1f}%"
+        )
+
+    max_dd = max(drawdowns) if drawdowns else 0
+    max_dd_pct = max(dd_pcts) if dd_pcts else 0
+
+    fig = make_subplots(
+        rows=2, cols=1,
+        row_heights=[0.5, 0.5],
+        vertical_spacing=0.14,
+        subplot_titles=['Cumulative P/L vs Peak', 'Drawdown ($)'],
+    )
+
+    # Cumulative P/L line
+    cum_color = COLORS['positive'] if cumulative >= 0 else COLORS['negative']
+    fig.add_trace(go.Scatter(
+        x=labels, y=cum_pls,
+        mode='lines',
+        line=dict(color=cum_color, width=2, shape='spline'),
+        name='Cumulative P/L',
+        showlegend=True,
+        fill='tozeroy',
+        fillcolor=f'rgba({int(cum_color[1:3],16)},{int(cum_color[3:5],16)},{int(cum_color[5:7],16)},0.05)',
+    ), row=1, col=1)
+
+    # Peak line
+    fig.add_trace(go.Scatter(
+        x=labels, y=peaks,
+        mode='lines',
+        line=dict(color=COLORS['accent'], width=1.5, dash='dot'),
+        name='Peak',
+        showlegend=True,
+    ), row=1, col=1)
+
+    # Drawdown area (inverted — shown as negative for visual impact)
+    neg_dd = [-d for d in drawdowns]
+    fig.add_trace(go.Scatter(
+        x=labels, y=neg_dd,
+        mode='lines',
+        line=dict(color=COLORS['sell'], width=2, shape='spline'),
+        fill='tozeroy',
+        fillcolor=f'rgba(224,85,85,0.12)',
+        hovertext=hover_texts,
+        hoverinfo='text',
+        name='Drawdown',
+        showlegend=True,
+    ), row=2, col=1)
+
+    fig.add_hline(y=0, line_dash='dot', line_color=COLORS['text_muted'],
+                  opacity=0.5, row=2, col=1)
+
+    n_deals = len(sorted_deals)
+    fig.update_layout(
+        height=420,
+        margin=dict(l=50, r=20, t=30, b=30),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color=COLORS['text_secondary'], size=11, family="'Inter', sans-serif"),
+        legend=dict(
+            orientation='h', yanchor='bottom', y=1.08, xanchor='right', x=1,
+            font=dict(size=10, color=COLORS['text_secondary']),
+            bgcolor='rgba(0,0,0,0)',
+        ),
+    )
+    tick_step = max(1, n_deals // 30) if n_deals > 40 else None
+    for i in range(1, 3):
+        fig.update_xaxes(showgrid=False, row=i, col=1,
+                         tickfont=dict(size=9, color=COLORS['text_dim']),
+                         dtick=tick_step,
+                         tickangle=-45 if n_deals > 40 else 0)
+        fig.update_yaxes(
+            showgrid=True, gridcolor=COLORS['chart_grid'],
+            gridwidth=0.5, zeroline=True,
+            zerolinecolor=COLORS['text_muted'], zerolinewidth=0.5,
+            row=i, col=1,
+            tickfont=dict(size=10, color=COLORS['text_dim']),
+        )
+    for ann in fig['layout']['annotations']:
+        ann['font'] = dict(size=11, color=COLORS['text_dim'], family="'Inter', sans-serif")
+
+    # Summary metrics below chart
+    summary = html.Div([
+        html.Div([
+            html.Span('Max Drawdown: ', style={'color': COLORS['text_dim'], 'fontSize': '11px'}),
+            html.Span(f'${max_dd:.2f}', style={'color': COLORS['sell'], 'fontSize': '12px', 'fontWeight': '700',
+                                                'fontFamily': "'JetBrains Mono', monospace"}),
+            html.Span(f'  ({max_dd_pct:.1f}%)', style={'color': COLORS['text_dim'], 'fontSize': '11px', 'marginLeft': '4px'}),
+        ], style={'display': 'inline-flex', 'alignItems': 'center', 'gap': '2px', 'marginRight': '24px'}),
+        html.Div([
+            html.Span('Final P/L: ', style={'color': COLORS['text_dim'], 'fontSize': '11px'}),
+            html.Span(f'${cumulative:.2f}', style={
+                'color': COLORS['positive'] if cumulative >= 0 else COLORS['negative'],
+                'fontSize': '12px', 'fontWeight': '700',
+                'fontFamily': "'JetBrains Mono', monospace",
+            }),
+        ], style={'display': 'inline-flex', 'alignItems': 'center', 'gap': '2px'}),
+    ], style={'padding': '8px 14px', 'borderTop': f'1px solid {COLORS["divider"]}', 'marginTop': '4px'})
+
+    return html.Div([
+        dcc.Graph(
+            figure=fig,
+            config={'displayModeBar': False},
+            style={'height': '420px'},
+        ),
+        summary,
+    ])
+
+
+def build_drawdown_section(symbol):
+    """Build drawdown chart section with day selector dropdown."""
+    daily_data = load_daily_trade_data(symbol)
+    today_deals = daily_data.get('deals', []) if daily_data else []
+
+    # Day selector dropdown — last 7 days (reuse same date helper)
+    available_dates = get_available_daily_dates(symbol, max_days=7)
+    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
+    default_date = today_str
+
+    day_dropdown = dcc.Dropdown(
+        id='drawdown-day-selector',
+        options=available_dates if available_dates else [{'label': f'Today ({datetime.now(tz=timezone.utc).strftime("%d %b %Y")})', 'value': today_str}],
+        value=default_date,
+        clearable=False,
+        searchable=False,
+        placeholder='Select day...',
+        style={
+            'width': '240px',
+            'fontSize': '12px',
+            'background': 'transparent',
+            'backgroundColor': 'transparent',
+        },
+        className='dash-dropdown',
+    )
+
+    chart = _build_drawdown_chart(today_deals)
+
+    return html.Div([
+        html.Div([
+            html.Div([
+                html.Span('📉', style={'fontSize': '14px'}),
+                html.Span('Drawdown Analysis', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px'}),
+            day_dropdown,
+        ], style={
+            'display': 'flex', 'justifyContent': 'space-between',
+            'alignItems': 'center', 'marginBottom': '10px',
+        }),
+        html.Div(id='drawdown-chart-container', children=[chart], style={
+            'background': COLORS['card'],
+            'border': f'1px solid {COLORS["card_border"]}',
+            'borderRadius': '10px',
+            'padding': '12px 14px',
+        }),
+    ])
+
+
 def build_daily_trades_section(symbol):
     """Build daily trades chart and metrics for a symbol — premium version with day selector"""
     daily_data = load_daily_trade_data(symbol)
@@ -1636,6 +1834,11 @@ def build_symbol_tab_content(symbol):
 
         html.Div(style={'height': '16px'}),
 
+        # Drawdown Analysis section
+        build_drawdown_section(symbol),
+
+        html.Div(style={'height': '16px'}),
+
         # Strategy Log section
         build_strategy_log_section(symbol),
 
@@ -1959,6 +2162,71 @@ app.index_string = '''<!DOCTYPE html>
         align-items: center;
         justify-content: center;
     }
+
+    /* === Daily Day Selector & Drawdown Selector — WHITE list overrides === */
+    #daily-day-selector .Select-menu-outer,
+    #drawdown-day-selector .Select-menu-outer {
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+        border: 1px solid #d0c8a8 !important;
+        border-radius: 8px !important;
+        overflow: hidden !important;
+    }
+    #daily-day-selector .Select-menu,
+    #drawdown-day-selector .Select-menu {
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+    }
+    #daily-day-selector .Select-option,
+    #daily-day-selector .VirtualizedSelectOption,
+    #drawdown-day-selector .Select-option,
+    #drawdown-day-selector .VirtualizedSelectOption {
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+        color: #1a1a2e !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        padding: 10px 14px !important;
+        border-bottom: 1px solid #eeeeee !important;
+    }
+    #daily-day-selector .VirtualizedSelectFocusedOption,
+    #daily-day-selector .Select-option.is-focused,
+    #daily-day-selector .Select-option:hover,
+    #daily-day-selector .VirtualizedSelectOption:hover,
+    #drawdown-day-selector .VirtualizedSelectFocusedOption,
+    #drawdown-day-selector .Select-option.is-focused,
+    #drawdown-day-selector .Select-option:hover,
+    #drawdown-day-selector .VirtualizedSelectOption:hover {
+        background-color: #f5f0e0 !important;
+        background: #f5f0e0 !important;
+        color: #8b6914 !important;
+    }
+    #daily-day-selector div[role="option"],
+    #drawdown-day-selector div[role="option"] {
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+        color: #1a1a2e !important;
+    }
+    #daily-day-selector div[role="option"]:hover,
+    #daily-day-selector div[role="option"][class*="isFocused"],
+    #drawdown-day-selector div[role="option"]:hover,
+    #drawdown-day-selector div[role="option"][class*="isFocused"] {
+        background-color: #f5f0e0 !important;
+        background: #f5f0e0 !important;
+        color: #8b6914 !important;
+    }
+    #daily-day-selector div[role="option"][aria-selected="true"],
+    #drawdown-day-selector div[role="option"][aria-selected="true"] {
+        background-color: #ede5cc !important;
+        background: #ede5cc !important;
+        color: #6b4f0a !important;
+        font-weight: 600 !important;
+    }
+    #daily-day-selector div[role="listbox"],
+    #drawdown-day-selector div[role="listbox"] {
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+    }
 </style>
 </head>
 <body>
@@ -2276,6 +2544,31 @@ def update_symbol_tabs(selected_symbols):
     save_active_config(config)
 
     return _build_tabs(selected_symbols)
+
+
+# ─── Drawdown Day Selector Callback ───
+@app.callback(
+    Output('drawdown-chart-container', 'children'),
+    [Input('drawdown-day-selector', 'value'),
+     Input('symbol-tabs', 'value')],
+    prevent_initial_call=True,
+)
+def update_drawdown_day(selected_date, selected_symbol):
+    """Update drawdown chart when a different day is selected."""
+    if not selected_symbol:
+        return dash.no_update
+
+    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
+    is_today = (not selected_date) or (selected_date == today_str)
+
+    if is_today:
+        daily_data = load_daily_trade_data(selected_symbol)
+    else:
+        daily_data = load_daily_trade_data_for_date(selected_symbol, selected_date)
+
+    deals = daily_data.get('deals', []) if daily_data else []
+    chart = _build_drawdown_chart(deals)
+    return [chart]
 
 
 # ─── Daily Day Selector Callback ───
