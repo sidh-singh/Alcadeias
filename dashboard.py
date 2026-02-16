@@ -1224,7 +1224,12 @@ def build_daily_trades_section(symbol):
         clearable=False,
         searchable=False,
         placeholder='Select day...',
-        style={'width': '240px', 'fontSize': '12px'},
+        style={
+            'width': '240px',
+            'fontSize': '12px',
+            'background': 'transparent',
+            'backgroundColor': 'transparent',
+        },
         className='dash-dropdown',
     )
 

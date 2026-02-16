@@ -263,6 +263,96 @@ div[class*="Group"] {
 
 
 /* ══════════════════════════════════════════════════════════
+   DAILY DAY SELECTOR — ID-specific overrides
+   Highest specificity to beat any inline/emotion styles.
+   ═══════════════════════════════════════════════════════ */
+
+#daily-day-selector {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+#daily-day-selector .Select,
+#daily-day-selector .Select > .Select-control,
+#daily-day-selector .Select-control {
+    background-color: #0a1025 !important;
+    background: #0a1025 !important;
+    border: 1px solid rgba(192, 168, 100, 0.25) !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    cursor: pointer !important;
+    color: #f0ede4 !important;
+}
+
+#daily-day-selector .Select-value {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+}
+
+#daily-day-selector .Select-value-label {
+    color: #f0ede4 !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+}
+
+#daily-day-selector .Select-placeholder {
+    color: #5c6478 !important;
+}
+
+#daily-day-selector .Select-arrow-zone .Select-arrow {
+    border-color: #7a7060 transparent transparent !important;
+}
+
+#daily-day-selector .Select-menu-outer {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+    border: 1px solid rgba(192, 168, 100, 0.25) !important;
+    border-radius: 8px !important;
+    z-index: 9999 !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+    margin-top: 2px !important;
+}
+
+#daily-day-selector .Select-menu {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+}
+
+#daily-day-selector .Select-option,
+#daily-day-selector .VirtualizedSelectOption {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+    color: #f0ede4 !important;
+    cursor: pointer !important;
+}
+
+#daily-day-selector .VirtualizedSelectFocusedOption,
+#daily-day-selector .Select-option.is-focused,
+#daily-day-selector .Select-option:hover {
+    background-color: #1a2540 !important;
+    background: #1a2540 !important;
+    color: #ffffff !important;
+}
+
+#daily-day-selector .Select-input,
+#daily-day-selector .Select-input > input {
+    color: #f0ede4 !important;
+    background: transparent !important;
+}
+
+#daily-day-selector .Select-multi-value-wrapper {
+    background: transparent !important;
+}
+
+#daily-day-selector .Select-noresults {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+    color: #5c6478 !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════
    Plotly & Misc
    ═══════════════════════════════════════════════════════ */
 
