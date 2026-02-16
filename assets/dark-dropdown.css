@@ -78,6 +78,23 @@
     font-size: 12px !important;
 }
 
+/* ─── Single-select selected value (day selector etc.) ─── */
+.dash-dropdown .Select--single > .Select-control .Select-value,
+#daily-day-selector .Select-value,
+#daily-day-selector .Select--single > .Select-control .Select-value {
+    background-color: #0a1025 !important;
+    background: #0a1025 !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown .Select--single > .Select-control .Select-value .Select-value-label,
+#daily-day-selector .Select-value-label,
+#daily-day-selector .Select--single .Select-value-label {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+}
+
 /* ─── Input / typing area ─── */
 #symbol-selector .Select-input,
 .dash-dropdown .Select-input,
