@@ -305,19 +305,19 @@ div[class*="Group"] {
 }
 
 #daily-day-selector .Select-menu-outer {
-    background-color: #0c1328 !important;
-    background: #0c1328 !important;
-    border: 1px solid rgba(192, 168, 100, 0.25) !important;
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    border: 1px solid rgba(192, 168, 100, 0.35) !important;
     border-radius: 8px !important;
     z-index: 9999 !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
     margin-top: 2px !important;
     overflow: hidden !important;
 }
 
 #daily-day-selector .Select-menu {
-    background-color: #0c1328 !important;
-    background: #0c1328 !important;
+    background-color: #ffffff !important;
+    background: #ffffff !important;
     max-height: 280px !important;
     overflow-y: auto !important;
 }
@@ -327,40 +327,41 @@ div[class*="Group"] {
     width: 5px !important;
 }
 #daily-day-selector .Select-menu::-webkit-scrollbar-track {
-    background: #0c1328 !important;
+    background: #f0f0f0 !important;
 }
 #daily-day-selector .Select-menu::-webkit-scrollbar-thumb {
-    background: rgba(212, 168, 67, 0.25) !important;
+    background: rgba(212, 168, 67, 0.45) !important;
     border-radius: 10px !important;
 }
 #daily-day-selector .Select-menu-outer::-webkit-scrollbar {
     width: 5px !important;
 }
 #daily-day-selector .Select-menu-outer::-webkit-scrollbar-track {
-    background: #0c1328 !important;
+    background: #f0f0f0 !important;
 }
 #daily-day-selector .Select-menu-outer::-webkit-scrollbar-thumb {
-    background: rgba(212, 168, 67, 0.25) !important;
+    background: rgba(212, 168, 67, 0.45) !important;
     border-radius: 10px !important;
 }
 
 #daily-day-selector .Select-option,
 #daily-day-selector .VirtualizedSelectOption {
-    background-color: #0c1328 !important;
-    background: #0c1328 !important;
-    color: #ffffff !important;
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #1a1a2e !important;
     cursor: pointer !important;
     font-size: 13px !important;
     font-weight: 500 !important;
     padding: 10px 14px !important;
+    border-bottom: 1px solid #e8e8e8 !important;
 }
 
 #daily-day-selector .VirtualizedSelectFocusedOption,
 #daily-day-selector .Select-option.is-focused,
 #daily-day-selector .Select-option:hover {
-    background-color: rgba(212, 168, 67, 0.12) !important;
-    background: rgba(212, 168, 67, 0.12) !important;
-    color: #d4a843 !important;
+    background-color: #f5f0e0 !important;
+    background: #f5f0e0 !important;
+    color: #8b6914 !important;
 }
 
 #daily-day-selector .Select-input,
