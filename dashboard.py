@@ -2038,6 +2038,55 @@ def _mode_btn_style(mode, is_active):
 
 
 app.layout = html.Div([
+    # ── Inline CSS override for Dash dropdown (emotion/CSS-in-JS proof) ──
+    html.Style('''
+        /* Control box */
+        #daily-day-selector .Select-control,
+        #daily-day-selector > div > div {
+            background-color: #0a1025 !important;
+            background: #0a1025 !important;
+            border: 1px solid rgba(192,168,100,0.25) !important;
+            box-shadow: none !important;
+            cursor: pointer !important;
+        }
+        /* Selected value text */
+        #daily-day-selector .Select-value-label,
+        #daily-day-selector span[class],
+        #daily-day-selector div > div > div > div:not([class*="indicator"]):not([class*="Input"]) {
+            color: #ffffff !important;
+        }
+        /* Placeholder */
+        #daily-day-selector .Select-placeholder { color: #5c6478 !important; }
+        /* Dropdown menu + options - GLOBAL to catch portaled menus */
+        div[role="listbox"],
+        div[role="listbox"] > div {
+            background-color: #0c1328 !important;
+            background: #0c1328 !important;
+            border: 1px solid rgba(192,168,100,0.25) !important;
+            border-radius: 8px !important;
+            z-index: 9999 !important;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+        }
+        div[role="option"] {
+            background-color: #0c1328 !important;
+            background: #0c1328 !important;
+            color: #f0ede4 !important;
+            cursor: pointer !important;
+        }
+        div[role="option"]:hover,
+        div[role="option"][aria-selected="false"]:hover {
+            background-color: #1a2540 !important;
+            background: #1a2540 !important;
+            color: #ffffff !important;
+        }
+        div[role="option"][aria-selected="true"] {
+            background-color: rgba(212,168,67,0.18) !important;
+            background: rgba(212,168,67,0.18) !important;
+            color: #d4a843 !important;
+            font-weight: 600 !important;
+        }
+    '''),
+
     # Auto-refresh
     dcc.Interval(id='refresh-interval', interval=REFRESH_INTERVAL, n_intervals=0),
     # Cache to skip redundant DOM rebuilds
