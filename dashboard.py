@@ -3,7 +3,7 @@ import json
 import os
 import glob
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import dash
 from dash import dcc, html, callback_context
@@ -937,6 +937,80 @@ def load_daily_trade_data(symbol):
         return None
 
 
+def load_daily_trade_data_for_date(symbol, date_str):
+    """Load daily trade data for a specific date (YYYY-MM-DD) for a symbol."""
+    try:
+        symbol_dir = os.path.join(DAILY_TRADE_DIR, symbol)
+        if not os.path.isdir(symbol_dir):
+            return None
+        # Try matching by server_date inside each JSON file
+        pattern = os.path.join(symbol_dir, '*.json')
+        files = [
+            f for f in glob.glob(pattern)
+            if os.path.basename(f) != HISTORICAL_SUMMARY_FILENAME
+        ]
+        for fpath in files:
+            try:
+                with open(fpath, 'r') as f:
+                    data = json.load(f)
+                if data.get('server_date', '') == date_str:
+                    return data
+            except (json.JSONDecodeError, IOError):
+                continue
+        return None
+    except Exception:
+        return None
+
+
+def get_available_daily_dates(symbol, max_days=7):
+    """Return a list of (date_str, label) for the last `max_days` days that have trade data."""
+    try:
+        symbol_dir = os.path.join(DAILY_TRADE_DIR, symbol)
+        if not os.path.isdir(symbol_dir):
+            return []
+        pattern = os.path.join(symbol_dir, '*.json')
+        files = [
+            f for f in glob.glob(pattern)
+            if os.path.basename(f) != HISTORICAL_SUMMARY_FILENAME
+        ]
+        # Collect server_date from each file
+        date_set = set()
+        for fpath in files:
+            try:
+                with open(fpath, 'r') as f:
+                    data = json.load(f)
+                sd = data.get('server_date', '')
+                if sd:
+                    date_set.add(sd)
+            except (json.JSONDecodeError, IOError):
+                continue
+        # Filter to last max_days from today and sort descending
+        today = datetime.now(tz=timezone.utc).date()
+        cutoff = today - timedelta(days=max_days - 1)
+        valid = []
+        for ds in date_set:
+            try:
+                d = datetime.strptime(ds, '%Y-%m-%d').date()
+                if cutoff <= d <= today:
+                    valid.append(d)
+            except ValueError:
+                continue
+        valid.sort(reverse=True)
+        result = []
+        for d in valid:
+            ds = d.strftime('%Y-%m-%d')
+            if d == today:
+                label = f'Today ({d.strftime("%d %b %Y")})'
+            elif d == today - timedelta(days=1):
+                label = f'Yesterday ({d.strftime("%d %b %Y")})'
+            else:
+                label = d.strftime('%A, %d %b %Y')
+            result.append({'label': label, 'value': ds})
+        return result
+    except Exception:
+        return []
+
+
 def load_historical_summary(symbol):
     """Load the historical summary (last 10 years) for a specific symbol"""
     path = os.path.join(DAILY_TRADE_DIR, symbol, HISTORICAL_SUMMARY_FILENAME)
@@ -967,8 +1041,131 @@ def load_today_all_symbols_pl():
     return round(total_pl, 2), total_deals
 
 
+def _build_daily_chart(deals):
+    """Build the Plotly chart (bar + cumulative) from a list of deals. Returns a Dash component."""
+    if not deals:
+        return html.Div([
+            html.Div('📭', style={'fontSize': '32px', 'marginBottom': '8px', 'opacity': '0.5'}),
+            html.Div('No closed deals for this day', style={
+                'color': COLORS['text_dim'], 'fontSize': '13px',
+            }),
+        ], style={'textAlign': 'center', 'padding': '48px 0'})
+
+    sorted_deals = sorted(deals, key=lambda d: d.get('time', ''))
+
+    labels = []
+    profits = []
+    volumes = []
+    colors = []
+    hover_texts = []
+    cumulative_profit = 0
+    cum_profits = []
+
+    for i, deal in enumerate(sorted_deals, 1):
+        try:
+            t = datetime.fromisoformat(deal['time']).strftime('%H:%M')
+        except (ValueError, TypeError):
+            t = f'#{i}'
+        labels.append(f'{t}')
+        profit = deal.get('net_profit', deal.get('profit', 0))
+        profits.append(profit)
+        vol = deal.get('volume', 0)
+        volumes.append(vol)
+        colors.append(COLORS['buy'] if profit >= 0 else COLORS['sell'])
+        cumulative_profit += profit
+        cum_profits.append(round(cumulative_profit, 2))
+        raw_profit = deal.get('profit', 0)
+        commission = deal.get('commission', 0)
+        swap = deal.get('swap', 0)
+        fee = deal.get('fee', 0)
+        hover_texts.append(
+            f"Time: {t}<br>"
+            f"Type: {deal.get('type', 'N/A')}<br>"
+            f"Volume: {vol}<br>"
+            f"Gross Profit: ${raw_profit:.2f}<br>"
+            f"Commission: ${commission:.2f}<br>"
+            f"Swap: ${swap:.2f}<br>"
+            f"Fee: ${fee:.2f}<br>"
+            f"Net P/L: ${profit:.2f}<br>"
+            f"Cumulative: ${cumulative_profit:.2f}"
+        )
+
+    fig = make_subplots(
+        rows=2, cols=1,
+        row_heights=[0.55, 0.45],
+        vertical_spacing=0.14,
+        subplot_titles=['Profit/Loss per Deal', 'Cumulative P/L'],
+    )
+
+    n_deals = len(sorted_deals)
+    show_bar_text = n_deals <= GRAPH_TEXT_LABEL_THRESHOLD
+    show_cum_text = n_deals <= GRAPH_CUM_LABEL_THRESHOLD
+
+    fig.add_trace(go.Bar(
+        x=labels, y=profits,
+        marker=dict(color=colors, line=dict(width=0)),
+        text=[f'${p:.2f}' for p in profits] if show_bar_text else None,
+        textposition='outside' if show_bar_text else None,
+        textfont=dict(size=10, color=COLORS['text_secondary'], family="'Inter', sans-serif") if show_bar_text else None,
+        hovertext=hover_texts,
+        hoverinfo='text',
+        showlegend=False,
+    ), row=1, col=1)
+
+    cum_color = COLORS['positive'] if cumulative_profit >= 0 else COLORS['negative']
+    _r, _g, _b = int(cum_color[1:3], 16), int(cum_color[3:5], 16), int(cum_color[5:7], 16)
+    cum_fill = f'rgba({_r},{_g},{_b},0.05)'
+
+    cum_mode = 'lines+markers+text' if show_cum_text else 'lines'
+    cum_marker = dict(size=5, color=cum_color, line=dict(width=1, color=COLORS['bg'])) if show_cum_text else dict(size=0)
+    fig.add_trace(go.Scatter(
+        x=labels, y=cum_profits,
+        mode=cum_mode,
+        line=dict(color=cum_color, width=2, shape='spline'),
+        marker=cum_marker,
+        text=[f'${c:.0f}' for c in cum_profits] if show_cum_text else None,
+        textposition='top center' if show_cum_text else None,
+        textfont=dict(size=9, color=COLORS['text_dim'], family="'Inter', sans-serif") if show_cum_text else None,
+        showlegend=False,
+        fill='tozeroy',
+        fillcolor=cum_fill,
+    ), row=2, col=1)
+
+    fig.add_hline(y=0, line_dash='dot', line_color=COLORS['text_muted'],
+                   opacity=0.5, row=2, col=1)
+
+    fig.update_layout(
+        height=420,
+        margin=dict(l=50, r=20, t=30, b=30),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color=COLORS['text_secondary'], size=11, family="'Inter', sans-serif"),
+    )
+    tick_step = max(1, n_deals // 30) if n_deals > 40 else None
+    for i in range(1, 3):
+        fig.update_xaxes(showgrid=False, row=i, col=1,
+                         tickfont=dict(size=9, color=COLORS['text_dim']),
+                         dtick=tick_step,
+                         tickangle=-45 if n_deals > 40 else 0)
+        fig.update_yaxes(
+            showgrid=True, gridcolor=COLORS['chart_grid'],
+            gridwidth=0.5, zeroline=True,
+            zerolinecolor=COLORS['text_muted'], zerolinewidth=0.5,
+            row=i, col=1,
+            tickfont=dict(size=10, color=COLORS['text_dim']),
+        )
+    for ann in fig['layout']['annotations']:
+        ann['font'] = dict(size=11, color=COLORS['text_dim'], family="'Inter', sans-serif")
+
+    return dcc.Graph(
+        figure=fig,
+        config={'displayModeBar': False},
+        style={'height': '420px'},
+    )
+
+
 def build_daily_trades_section(symbol):
-    """Build daily trades chart and metrics for a symbol — premium version"""
+    """Build daily trades chart and metrics for a symbol — premium version with day selector"""
     daily_data = load_daily_trade_data(symbol)
     historical = load_historical_summary(symbol)
 
@@ -1011,140 +1208,39 @@ def build_daily_trades_section(symbol):
         ),
     ], style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap', 'marginBottom': '16px'})
 
-    if today_deals:
-        sorted_deals = sorted(today_deals, key=lambda d: d.get('time', ''))
+    # Build the chart for today's data (default)
+    chart = _build_daily_chart(today_deals)
 
-        labels = []
-        profits = []
-        volumes = []
-        colors = []
-        hover_texts = []
-        cumulative_profit = 0
-        cum_profits = []
+    # Day selector dropdown — last 7 days
+    available_dates = get_available_daily_dates(symbol, max_days=7)
+    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
+    # Default to today if available, otherwise first available
+    default_date = today_str
 
-        for i, deal in enumerate(sorted_deals, 1):
-            try:
-                t = datetime.fromisoformat(deal['time']).strftime('%H:%M')
-            except (ValueError, TypeError):
-                t = f'#{i}'
-            labels.append(f'{t}')
-            profit = deal.get('net_profit', deal.get('profit', 0))
-            profits.append(profit)
-            vol = deal.get('volume', 0)
-            volumes.append(vol)
-            colors.append(COLORS['buy'] if profit >= 0 else COLORS['sell'])
-            cumulative_profit += profit
-            cum_profits.append(round(cumulative_profit, 2))
-            raw_profit = deal.get('profit', 0)
-            commission = deal.get('commission', 0)
-            swap = deal.get('swap', 0)
-            fee = deal.get('fee', 0)
-            hover_texts.append(
-                f"Time: {t}<br>"
-                f"Type: {deal.get('type', 'N/A')}<br>"
-                f"Volume: {vol}<br>"
-                f"Gross Profit: ${raw_profit:.2f}<br>"
-                f"Commission: ${commission:.2f}<br>"
-                f"Swap: ${swap:.2f}<br>"
-                f"Fee: ${fee:.2f}<br>"
-                f"Net P/L: ${profit:.2f}<br>"
-                f"Cumulative: ${cumulative_profit:.2f}"
-            )
-
-        fig = make_subplots(
-            rows=2, cols=1,
-            row_heights=[0.55, 0.45],
-            vertical_spacing=0.14,
-            subplot_titles=['Profit/Loss per Deal', 'Cumulative P/L'],
-        )
-
-        n_deals = len(sorted_deals)
-        show_bar_text = n_deals <= GRAPH_TEXT_LABEL_THRESHOLD
-        show_cum_text = n_deals <= GRAPH_CUM_LABEL_THRESHOLD
-
-        fig.add_trace(go.Bar(
-            x=labels, y=profits,
-            marker=dict(
-                color=colors,
-                line=dict(width=0),
-            ),
-            text=[f'${p:.2f}' for p in profits] if show_bar_text else None,
-            textposition='outside' if show_bar_text else None,
-            textfont=dict(size=10, color=COLORS['text_secondary'], family="'Inter', sans-serif") if show_bar_text else None,
-            hovertext=hover_texts,
-            hoverinfo='text',
-            showlegend=False,
-        ), row=1, col=1)
-
-        cum_color = COLORS['positive'] if cumulative_profit >= 0 else COLORS['negative']
-        # Convert hex to rgba for fillcolor (Plotly doesn't support 8-digit hex)
-        _r, _g, _b = int(cum_color[1:3], 16), int(cum_color[3:5], 16), int(cum_color[5:7], 16)
-        cum_fill = f'rgba({_r},{_g},{_b},0.05)'
-
-        cum_mode = 'lines+markers+text' if show_cum_text else 'lines'
-        cum_marker = dict(size=5, color=cum_color, line=dict(width=1, color=COLORS['bg'])) if show_cum_text else dict(size=0)
-        fig.add_trace(go.Scatter(
-            x=labels, y=cum_profits,
-            mode=cum_mode,
-            line=dict(color=cum_color, width=2, shape='spline'),
-            marker=cum_marker,
-            text=[f'${c:.0f}' for c in cum_profits] if show_cum_text else None,
-            textposition='top center' if show_cum_text else None,
-            textfont=dict(size=9, color=COLORS['text_dim'], family="'Inter', sans-serif") if show_cum_text else None,
-            showlegend=False,
-            fill='tozeroy',
-            fillcolor=cum_fill,
-        ), row=2, col=1)
-
-        fig.add_hline(y=0, line_dash='dot', line_color=COLORS['text_muted'],
-                       opacity=0.5, row=2, col=1)
-
-        fig.update_layout(
-            height=420,
-            margin=dict(l=50, r=20, t=30, b=30),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(color=COLORS['text_secondary'], size=11, family="'Inter', sans-serif"),
-        )
-        # Reduce x-axis tick density for many deals
-        tick_step = max(1, n_deals // 30) if n_deals > 40 else None
-        for i in range(1, 3):
-            fig.update_xaxes(showgrid=False, row=i, col=1,
-                             tickfont=dict(size=9, color=COLORS['text_dim']),
-                             dtick=tick_step,
-                             tickangle=-45 if n_deals > 40 else 0)
-            fig.update_yaxes(
-                showgrid=True, gridcolor=COLORS['chart_grid'],
-                gridwidth=0.5, zeroline=True,
-                zerolinecolor=COLORS['text_muted'], zerolinewidth=0.5,
-                row=i, col=1,
-                tickfont=dict(size=10, color=COLORS['text_dim']),
-            )
-        for ann in fig['layout']['annotations']:
-            ann['font'] = dict(size=11, color=COLORS['text_dim'], family="'Inter', sans-serif")
-
-        chart = dcc.Graph(
-            figure=fig,
-            config={'displayModeBar': False},
-            style={'height': '420px'},
-        )
-    else:
-        chart = html.Div([
-            html.Div('📭', style={'fontSize': '32px', 'marginBottom': '8px', 'opacity': '0.5'}),
-            html.Div('No closed deals today for this symbol', style={
-                'color': COLORS['text_dim'], 'fontSize': '13px',
-            }),
-        ], style={
-            'textAlign': 'center', 'padding': '48px 0',
-        })
+    day_dropdown = dcc.Dropdown(
+        id='daily-day-selector',
+        options=available_dates if available_dates else [{'label': f'Today ({datetime.now(tz=timezone.utc).strftime("%d %b %Y")})', 'value': today_str}],
+        value=default_date,
+        clearable=False,
+        searchable=False,
+        placeholder='Select day...',
+        style={'width': '240px', 'fontSize': '12px'},
+        className='dash-dropdown',
+    )
 
     return html.Div([
         html.Div([
-            html.Span('📈', style={'fontSize': '14px'}),
-            html.Span('Daily Trade Log', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
-        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
-        metrics_row,
-        html.Div([chart], style={
+            html.Div([
+                html.Span('📈', style={'fontSize': '14px'}),
+                html.Span('Daily Trade Log', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px'}),
+            day_dropdown,
+        ], style={
+            'display': 'flex', 'justifyContent': 'space-between',
+            'alignItems': 'center', 'marginBottom': '10px',
+        }),
+        html.Div(id='daily-metrics-container', children=[metrics_row]),
+        html.Div([chart], id='daily-chart-container', style={
             'background': COLORS['card'],
             'border': f'1px solid {COLORS["card_border"]}',
             'borderRadius': '10px',
@@ -2175,6 +2271,80 @@ def update_symbol_tabs(selected_symbols):
     save_active_config(config)
 
     return _build_tabs(selected_symbols)
+
+
+# ─── Daily Day Selector Callback ───
+@app.callback(
+    [Output('daily-metrics-container', 'children'),
+     Output('daily-chart-container', 'children')],
+    [Input('daily-day-selector', 'value'),
+     Input('symbol-tabs', 'value')],
+    prevent_initial_call=True,
+)
+def update_daily_day(selected_date, selected_symbol):
+    """Update daily trade chart and metrics when a different day is selected."""
+    if not selected_symbol:
+        return dash.no_update, dash.no_update
+
+    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
+    is_today = (not selected_date) or (selected_date == today_str)
+
+    if is_today:
+        daily_data = load_daily_trade_data(selected_symbol)
+    else:
+        daily_data = load_daily_trade_data_for_date(selected_symbol, selected_date)
+
+    historical = load_historical_summary(selected_symbol)
+
+    deals = daily_data.get('deals', []) if daily_data else []
+    sym_total = daily_data.get('total_profit', 0) if daily_data else 0
+    sym_avg = daily_data.get('avg_profit', 0) if daily_data else 0
+    sym_count = daily_data.get('deal_count', 0) if daily_data else 0
+    hist_total = historical.get('total_profit', 0) if historical else 0
+    hist_count = historical.get('total_deals', 0) if historical else 0
+
+    all_sym_pl, all_sym_deals = load_today_all_symbols_pl()
+
+    # Date label for the metrics cards
+    if is_today:
+        day_label = 'Today'
+    else:
+        try:
+            d = datetime.strptime(selected_date, '%Y-%m-%d')
+            day_label = d.strftime('%d %b')
+        except (ValueError, TypeError):
+            day_label = selected_date
+
+    metrics_row = html.Div([
+        make_metric_card(
+            f'{selected_symbol} P/L {day_label}',
+            f'${sym_total:,.2f}',
+            COLORS['positive'] if sym_total >= 0 else COLORS['negative'],
+            f'{sym_count} deals', icon='📊',
+        ),
+        make_metric_card(
+            f'{selected_symbol} Avg Profit',
+            f'${sym_avg:,.2f}',
+            COLORS['positive'] if sym_avg >= 0 else COLORS['negative'],
+            'per deal', icon='📉',
+        ),
+        make_metric_card(
+            f'{selected_symbol} Lifetime P/L',
+            f'${hist_total:,.2f}',
+            COLORS['positive'] if hist_total >= 0 else COLORS['negative'],
+            f'{hist_count} deals (10y)', icon='🏦',
+        ),
+        make_metric_card(
+            'All Symbols Today',
+            f'${all_sym_pl:,.2f}',
+            COLORS['positive'] if all_sym_pl >= 0 else COLORS['negative'],
+            f'{all_sym_deals} deals total', icon='🌐',
+        ),
+    ], style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap', 'marginBottom': '16px'})
+
+    chart = _build_daily_chart(deals)
+
+    return [metrics_row], [chart]
 
 
 # ─── Main Content Callback ───
