@@ -1060,6 +1060,10 @@ def _build_daily_chart(deals):
     hover_texts = []
     cumulative_profit = 0
     cum_profits = []
+    peak = 0
+    peaks = []
+    drawdowns = []
+    dd_pcts = []
 
     for i, deal in enumerate(sorted_deals, 1):
         try:
@@ -1074,6 +1078,13 @@ def _build_daily_chart(deals):
         colors.append(COLORS['buy'] if profit >= 0 else COLORS['sell'])
         cumulative_profit += profit
         cum_profits.append(round(cumulative_profit, 2))
+        if cumulative_profit > peak:
+            peak = cumulative_profit
+        peaks.append(round(peak, 2))
+        dd = peak - cumulative_profit
+        drawdowns.append(round(dd, 2))
+        dd_pct = (dd / peak * 100) if peak > 0 else 0
+        dd_pcts.append(round(dd_pct, 2))
         raw_profit = deal.get('profit', 0)
         commission = deal.get('commission', 0)
         swap = deal.get('swap', 0)
@@ -1087,14 +1098,19 @@ def _build_daily_chart(deals):
             f"Swap: ${swap:.2f}<br>"
             f"Fee: ${fee:.2f}<br>"
             f"Net P/L: ${profit:.2f}<br>"
-            f"Cumulative: ${cumulative_profit:.2f}"
+            f"Cumulative: ${cumulative_profit:.2f}<br>"
+            f"Peak: ${peak:.2f}<br>"
+            f"Drawdown: ${dd:.2f} ({dd_pct:.1f}%)"
         )
+
+    max_dd = max(drawdowns) if drawdowns else 0
+    max_dd_pct = max(dd_pcts) if dd_pcts else 0
 
     fig = make_subplots(
         rows=2, cols=1,
-        row_heights=[0.55, 0.45],
+        row_heights=[0.45, 0.55],
         vertical_spacing=0.14,
-        subplot_titles=['Profit/Loss per Deal', 'Cumulative P/L'],
+        subplot_titles=['Profit/Loss per Deal', 'Cumulative P/L & Drawdown'],
     )
 
     n_deals = len(sorted_deals)
@@ -1129,13 +1145,43 @@ def _build_daily_chart(deals):
         showlegend=False,
         fill='tozeroy',
         fillcolor=cum_fill,
+        name='Cumulative P/L',
+    ), row=2, col=1)
+
+    # Peak line (gold dashed)
+    fig.add_trace(go.Scatter(
+        x=labels, y=peaks,
+        mode='lines',
+        line=dict(color=COLORS['accent'], width=1.5, dash='dot'),
+        showlegend=False,
+        name='Peak',
+        hoverinfo='skip',
+    ), row=2, col=1)
+
+    # Drawdown fill — shade between peak and cumulative P/L
+    fig.add_trace(go.Scatter(
+        x=labels, y=peaks,
+        mode='lines',
+        line=dict(width=0),
+        showlegend=False,
+        hoverinfo='skip',
+    ), row=2, col=1)
+    fig.add_trace(go.Scatter(
+        x=labels, y=cum_profits,
+        mode='lines',
+        line=dict(width=0),
+        fill='tonexty',
+        fillcolor='rgba(224, 85, 85, 0.15)',
+        showlegend=False,
+        hoverinfo='skip',
+        name='Drawdown',
     ), row=2, col=1)
 
     fig.add_hline(y=0, line_dash='dot', line_color=COLORS['text_muted'],
                    opacity=0.5, row=2, col=1)
 
     fig.update_layout(
-        height=420,
+        height=480,
         margin=dict(l=50, r=20, t=30, b=30),
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
@@ -1157,150 +1203,26 @@ def _build_daily_chart(deals):
     for ann in fig['layout']['annotations']:
         ann['font'] = dict(size=11, color=COLORS['text_dim'], family="'Inter', sans-serif")
 
-    return dcc.Graph(
-        figure=fig,
-        config={'displayModeBar': False},
-        style={'height': '420px'},
-    )
-
-
-def _build_drawdown_chart(deals):
-    """Build a drawdown chart from a list of deals. Returns a Dash component."""
-    if not deals:
-        return html.Div([
-            html.Div('📭', style={'fontSize': '32px', 'marginBottom': '8px', 'opacity': '0.5'}),
-            html.Div('No closed deals for this day', style={
-                'color': COLORS['text_dim'], 'fontSize': '13px',
-            }),
-        ], style={'textAlign': 'center', 'padding': '48px 0'})
-
-    sorted_deals = sorted(deals, key=lambda d: d.get('time', ''))
-
-    labels = []
-    cum_pls = []
-    peaks = []
-    drawdowns = []
-    dd_pcts = []
-    hover_texts = []
-    cumulative = 0
-    peak = 0
-
-    for i, deal in enumerate(sorted_deals, 1):
-        try:
-            t = datetime.fromisoformat(deal['time']).strftime('%H:%M')
-        except (ValueError, TypeError):
-            t = f'#{i}'
-        labels.append(t)
-        profit = deal.get('net_profit', deal.get('profit', 0))
-        cumulative += profit
-        cum_pls.append(round(cumulative, 2))
-        if cumulative > peak:
-            peak = cumulative
-        peaks.append(round(peak, 2))
-        dd = peak - cumulative
-        drawdowns.append(round(dd, 2))
-        dd_pct = (dd / peak * 100) if peak > 0 else 0
-        dd_pcts.append(round(dd_pct, 2))
-        hover_texts.append(
-            f"Time: {t}<br>"
-            f"Cumulative P/L: ${cumulative:.2f}<br>"
-            f"Peak P/L: ${peak:.2f}<br>"
-            f"Drawdown: ${dd:.2f}<br>"
-            f"Drawdown %: {dd_pct:.1f}%"
-        )
-
-    max_dd = max(drawdowns) if drawdowns else 0
-    max_dd_pct = max(dd_pcts) if dd_pcts else 0
-
-    n_deals = len(sorted_deals)
-    show_text = n_deals <= GRAPH_CUM_LABEL_THRESHOLD
-
-    fig = go.Figure()
-
-    # Drawdown area (shown as negative values for visual impact)
-    neg_dd = [-d for d in drawdowns]
-    fig.add_trace(go.Scatter(
-        x=labels, y=neg_dd,
-        mode='lines+markers' if show_text else 'lines',
-        line=dict(color=COLORS['sell'], width=2, shape='spline'),
-        marker=dict(size=4, color=COLORS['sell']) if show_text else dict(size=0),
-        fill='tozeroy',
-        fillcolor='rgba(224,85,85,0.12)',
-        hovertext=hover_texts,
-        hoverinfo='text',
-        name='Drawdown',
-        showlegend=False,
-    ))
-
-    fig.add_hline(y=0, line_dash='dot', line_color=COLORS['text_muted'], opacity=0.5)
-
-    fig.update_layout(
-        title=dict(text='Drawdown ($)', font=dict(size=11, color=COLORS['text_dim'], family="'Inter', sans-serif"), x=0.5),
-        height=280,
-        margin=dict(l=50, r=20, t=40, b=30),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color=COLORS['text_secondary'], size=11, family="'Inter', sans-serif"),
-    )
-    tick_step = max(1, n_deals // 30) if n_deals > 40 else None
-    fig.update_xaxes(showgrid=False,
-                     tickfont=dict(size=9, color=COLORS['text_dim']),
-                     dtick=tick_step,
-                     tickangle=-45 if n_deals > 40 else 0)
-    fig.update_yaxes(
-        showgrid=True, gridcolor=COLORS['chart_grid'],
-        gridwidth=0.5, zeroline=True,
-        zerolinecolor=COLORS['text_muted'], zerolinewidth=0.5,
-        tickfont=dict(size=10, color=COLORS['text_dim']),
-    )
-
-    # Summary metrics below chart
-    summary = html.Div([
-        html.Div([
-            html.Span('Max Drawdown: ', style={'color': COLORS['text_dim'], 'fontSize': '11px'}),
-            html.Span(f'${max_dd:.2f}', style={'color': COLORS['sell'], 'fontSize': '12px', 'fontWeight': '700',
-                                                'fontFamily': "'JetBrains Mono', monospace"}),
-            html.Span(f'  ({max_dd_pct:.1f}%)', style={'color': COLORS['text_dim'], 'fontSize': '11px', 'marginLeft': '4px'}),
-        ], style={'display': 'inline-flex', 'alignItems': 'center', 'gap': '2px', 'marginRight': '24px'}),
-        html.Div([
-            html.Span('Final P/L: ', style={'color': COLORS['text_dim'], 'fontSize': '11px'}),
-            html.Span(f'${cumulative:.2f}', style={
-                'color': COLORS['positive'] if cumulative >= 0 else COLORS['negative'],
-                'fontSize': '12px', 'fontWeight': '700',
-                'fontFamily': "'JetBrains Mono', monospace",
-            }),
-        ], style={'display': 'inline-flex', 'alignItems': 'center', 'gap': '2px'}),
-    ], style={'padding': '8px 14px', 'borderTop': f'1px solid {COLORS["divider"]}', 'marginTop': '4px'})
+    # Max drawdown summary strip
+    dd_summary = html.Div([
+        html.Span('Max Drawdown: ', style={'color': COLORS['text_dim'], 'fontSize': '11px'}),
+        html.Span(f'${max_dd:.2f}', style={'color': COLORS['sell'], 'fontSize': '12px', 'fontWeight': '700',
+                                            'fontFamily': "'JetBrains Mono', monospace"}),
+        html.Span(f'  ({max_dd_pct:.1f}%)', style={'color': COLORS['text_dim'], 'fontSize': '11px', 'marginLeft': '4px'}),
+    ], style={'padding': '6px 14px 2px', 'display': 'flex', 'alignItems': 'center', 'gap': '2px'}) if max_dd > 0 else None
 
     return html.Div([
         dcc.Graph(
             figure=fig,
             config={'displayModeBar': False},
-            style={'height': '280px'},
+            style={'height': '480px'},
         ),
-        summary,
-    ])
-
-
-def build_drawdown_section(symbol):
-    """Build drawdown chart section (date controlled by daily-day-selector)."""
-    daily_data = load_daily_trade_data(symbol)
-    today_deals = daily_data.get('deals', []) if daily_data else []
-
-    chart = _build_drawdown_chart(today_deals)
-
-    return html.Div([
-        html.Div([
-            html.Span('📉', style={'fontSize': '14px'}),
-            html.Span('Drawdown Analysis', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
-        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
-        html.Div(id='drawdown-chart-container', children=[chart], style={
-            'background': COLORS['card'],
-            'border': f'1px solid {COLORS["card_border"]}',
-            'borderRadius': '10px',
-            'padding': '12px 14px',
-        }),
-    ])
+        dd_summary,
+    ]) if dd_summary else dcc.Graph(
+        figure=fig,
+        config={'displayModeBar': False},
+        style={'height': '480px'},
+    )
 
 
 def build_daily_trades_section(symbol):
@@ -1772,11 +1694,6 @@ def build_symbol_tab_content(symbol):
 
         # Daily Trade Log section
         build_daily_trades_section(symbol),
-
-        html.Div(style={'height': '16px'}),
-
-        # Drawdown Analysis section
-        build_drawdown_section(symbol),
 
         html.Div(style={'height': '16px'}),
 
@@ -2487,19 +2404,18 @@ def update_symbol_tabs(selected_symbols):
     return _build_tabs(selected_symbols)
 
 
-# ─── Daily Day Selector Callback (also updates drawdown) ───
+# ─── Daily Day Selector Callback ───
 @app.callback(
     [Output('daily-metrics-container', 'children'),
-     Output('daily-chart-container', 'children'),
-     Output('drawdown-chart-container', 'children')],
+     Output('daily-chart-container', 'children')],
     [Input('daily-day-selector', 'value'),
      Input('symbol-tabs', 'value')],
     prevent_initial_call=True,
 )
 def update_daily_day(selected_date, selected_symbol):
-    """Update daily trade chart, metrics, and drawdown when a different day is selected."""
+    """Update daily trade chart and metrics when a different day is selected."""
     if not selected_symbol:
-        return dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update
 
     today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
     is_today = (not selected_date) or (selected_date == today_str)
@@ -2558,9 +2474,8 @@ def update_daily_day(selected_date, selected_symbol):
     ], style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap', 'marginBottom': '16px'})
 
     chart = _build_daily_chart(deals)
-    drawdown_chart = _build_drawdown_chart(deals)
 
-    return [metrics_row], [chart], [drawdown_chart]
+    return [metrics_row], [chart]
 
 
 # ─── Main Content Callback ───
