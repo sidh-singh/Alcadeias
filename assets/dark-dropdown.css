@@ -2,12 +2,16 @@
    Alcadeias Dark Dropdown Override
    This file is auto-loaded by Dash from the assets/ folder
    AFTER all component CSS, ensuring our styles win.
+   Covers both legacy react-select v1 (.Select-*) and
+   modern react-select v5 (Dash 2.18+) with ARIA roles.
    ========================================================== */
 
-/* ─── Symbol Selector + ALL Dropdowns ─── */
-#symbol-selector .Select-control,
-.dash-dropdown .Select-control,
-.Select-control {
+/* ══════════════════════════════════════════════════════════
+   LEGACY react-select v1 (.Select-*) — for older Dash
+   ═══════════════════════════════════════════════════════ */
+
+.Select-control,
+.dash-dropdown .Select-control {
     background-color: #0a1025 !important;
     background: #0a1025 !important;
     border: 1px solid rgba(192, 168, 100, 0.25) !important;
@@ -15,16 +19,13 @@
     cursor: pointer !important;
 }
 
-#symbol-selector .Select-multi-value-wrapper,
-.dash-dropdown .Select-multi-value-wrapper,
-.Select-multi-value-wrapper {
+.Select-multi-value-wrapper,
+.dash-dropdown .Select-multi-value-wrapper {
     background: transparent !important;
 }
 
-/* ─── Menu / Dropdown list ─── */
-#symbol-selector .Select-menu-outer,
-.dash-dropdown .Select-menu-outer,
-.Select-menu-outer {
+.Select-menu-outer,
+.dash-dropdown .Select-menu-outer {
     background-color: #0c1328 !important;
     background: #0c1328 !important;
     border: 1px solid rgba(192, 168, 100, 0.25) !important;
@@ -36,19 +37,14 @@
     background: #0c1328 !important;
 }
 
-/* ─── Options in the dropdown list ─── */
-#symbol-selector .Select-option,
-#symbol-selector .VirtualizedSelectOption,
-.dash-dropdown .Select-option,
 .Select-option,
-.VirtualizedSelectOption {
+.VirtualizedSelectOption,
+.dash-dropdown .Select-option {
     background-color: #0c1328 !important;
     background: #0c1328 !important;
     color: #f0ede4 !important;
 }
 
-#symbol-selector .VirtualizedSelectFocusedOption,
-#symbol-selector .Select-option.is-focused,
 .VirtualizedSelectFocusedOption,
 .Select-option.is-focused,
 .Select-option:hover {
@@ -56,11 +52,6 @@
     background: #1a2540 !important;
 }
 
-/* ─── Selected value chips/tags — DARK BG + WHITE TEXT ─── */
-#symbol-selector .Select-value,
-.dash-dropdown .Select-value,
-.dash-dropdown .Select--multi .Select-value,
-.Select--multi .Select-value,
 .Select-value {
     background-color: #162040 !important;
     background: #162040 !important;
@@ -69,56 +60,27 @@
     color: #ffffff !important;
 }
 
-#symbol-selector .Select-value-label,
-.dash-dropdown .Select-value-label,
-.Select-value-label,
-.Select--multi .Select-value-label {
+.Select-value-label {
     color: #ffffff !important;
     font-weight: 600 !important;
     font-size: 12px !important;
 }
 
-/* ─── Single-select selected value (day selector etc.) ─── */
-.dash-dropdown .Select--single > .Select-control .Select-value,
-#daily-day-selector .Select-value,
-#daily-day-selector .Select--single > .Select-control .Select-value {
-    background-color: #0a1025 !important;
-    background: #0a1025 !important;
-    color: #ffffff !important;
-}
-
-.dash-dropdown .Select--single > .Select-control .Select-value .Select-value-label,
-#daily-day-selector .Select-value-label,
-#daily-day-selector .Select--single .Select-value-label {
-    color: #ffffff !important;
-    font-weight: 600 !important;
-    font-size: 13px !important;
-}
-
-/* ─── Input / typing area ─── */
-#symbol-selector .Select-input,
-.dash-dropdown .Select-input,
-.Select-input {
+.Select-input,
+.dash-dropdown .Select-input {
     background: transparent !important;
 }
 
-#symbol-selector .Select-input > input,
-.dash-dropdown .Select-input > input,
 .Select-input > input,
-#symbol-selector input,
 .dash-dropdown input {
     color: #f0ede4 !important;
     background: transparent !important;
 }
 
-/* ─── Placeholder ─── */
-#symbol-selector .Select-placeholder,
-.dash-dropdown .Select-placeholder,
 .Select-placeholder {
     color: #5c6478 !important;
 }
 
-/* ─── Arrow / chevron ─── */
 .Select-arrow-zone .Select-arrow {
     border-color: #7a7060 transparent transparent !important;
 }
@@ -128,7 +90,6 @@
     color: #7a7060 !important;
 }
 
-/* ─── Remove icon on chips ─── */
 .Select-value .Select-value-icon {
     border-right: 1px solid rgba(212, 168, 67, 0.35) !important;
     color: #b8b0a0 !important;
@@ -138,167 +99,173 @@
 .Select-value .Select-value-icon:hover {
     color: #e05555 !important;
     background-color: rgba(224, 85, 85, 0.15) !important;
-    background: rgba(224, 85, 85, 0.15) !important;
 }
 
-/* ─── No results ─── */
 .Select-noresults {
     background-color: #0c1328 !important;
     background: #0c1328 !important;
     color: #5c6478 !important;
 }
 
-/* ===========================================================
-   Modern Dash 2.x Dropdown (react-select v3+) — Dark Theme
-   These override the newer .dash-dropdown, [role=listbox] etc.
-   =========================================================== */
 
-/* ─── Outer control (the box showing the selected value) ─── */
-.dash-dropdown .Select-control,
-.dash-dropdown > div > div:first-child,
-#daily-day-selector > div > div:first-child,
-.dash-dropdown .css-1s2u09g-control,
-.dash-dropdown .css-1pahdxg-control,
-.dash-dropdown [class*="-control"] {
+/* ══════════════════════════════════════════════════════════
+   MODERN Dash 2.18+ / react-select v5
+   Uses ARIA roles + wildcard class selectors for maximum
+   reliability, including portaled menus. These selectors
+   are GLOBAL on purpose — the menu may render outside its
+   parent container as a portal appended to <body>.
+   ═══════════════════════════════════════════════════════ */
+
+/* ─── Control (the box showing the selected value) ─── */
+.dash-dropdown div[class*="control"] {
     background-color: #0a1025 !important;
     background: #0a1025 !important;
-    border: 1px solid rgba(192, 168, 100, 0.25) !important;
-    border-radius: 6px !important;
+    border-color: rgba(192, 168, 100, 0.25) !important;
     min-height: 36px !important;
     box-shadow: none !important;
+    cursor: pointer !important;
 }
 
-/* ─── The selected single value text ─── */
-.dash-dropdown .Select-value-label,
-.dash-dropdown [class*="-singleValue"],
-#daily-day-selector [class*="-singleValue"],
-.dash-dropdown .css-1dimb5e-singleValue,
-.dash-dropdown .css-qc6sy-singleValue {
+/* ─── Selected single value text — WHITE on dark ─── */
+.dash-dropdown div[class*="singleValue"],
+.dash-dropdown div[class*="SingleValue"],
+.dash-dropdown span[class*="singleValue"],
+.dash-dropdown span[class*="SingleValue"] {
     color: #ffffff !important;
     font-weight: 600 !important;
     font-size: 13px !important;
 }
 
+/* ─── Multi-value chips ─── */
+.dash-dropdown div[class*="multiValue"] {
+    background-color: #162040 !important;
+    border: 1px solid rgba(212, 168, 67, 0.40) !important;
+    border-radius: 4px !important;
+}
+
+.dash-dropdown div[class*="multiValue"] div[class*="label"] {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+}
+
+.dash-dropdown div[class*="multiValue"] div[class*="remove"]:hover {
+    background-color: rgba(224, 85, 85, 0.20) !important;
+    color: #e05555 !important;
+}
+
 /* ─── Placeholder ─── */
-.dash-dropdown [class*="-placeholder"],
-#daily-day-selector [class*="-placeholder"] {
+.dash-dropdown div[class*="placeholder"],
+.dash-dropdown div[class*="Placeholder"] {
     color: #5c6478 !important;
 }
 
-/* ─── Dropdown indicator (arrow / chevron) ─── */
-.dash-dropdown [class*="-indicatorContainer"],
-#daily-day-selector [class*="-indicatorContainer"] {
+/* ─── Indicators (arrow, clear, separator) ─── */
+.dash-dropdown div[class*="indicatorContainer"],
+.dash-dropdown div[class*="IndicatorContainer"],
+.dash-dropdown div[class*="Indicator"] {
     color: #7a7060 !important;
 }
 
-.dash-dropdown [class*="-indicatorContainer"]:hover,
-#daily-day-selector [class*="-indicatorContainer"]:hover {
+.dash-dropdown div[class*="indicatorContainer"]:hover,
+.dash-dropdown div[class*="Indicator"]:hover {
     color: #d4a843 !important;
 }
 
-/* Separator line between value and arrow */
-.dash-dropdown [class*="-indicatorSeparator"],
-#daily-day-selector [class*="-indicatorSeparator"] {
+.dash-dropdown span[class*="indicatorSeparator"],
+.dash-dropdown span[class*="IndicatorSeparator"] {
     background-color: rgba(192, 168, 100, 0.20) !important;
 }
 
-/* ─── Dropdown menu (the popup list) ─── */
-.dash-dropdown [class*="-menu"],
-#daily-day-selector [class*="-menu"] {
+/* ─── Input ─── */
+.dash-dropdown div[class*="Input"],
+.dash-dropdown div[class*="input"],
+.dash-dropdown input {
+    color: #f0ede4 !important;
+    background: transparent !important;
+}
+
+/* ─── Value container ─── */
+.dash-dropdown div[class*="ValueContainer"],
+.dash-dropdown div[class*="valueContainer"] {
+    background: transparent !important;
+}
+
+/* ──────────────────────────────────────────────
+   GLOBAL MENU & OPTIONS — these target portaled
+   menus outside the dropdown container.
+   Uses [role] ARIA attributes that react-select
+   always sets regardless of CSS-in-JS class names.
+   ────────────────────────────────────────────── */
+
+/* Menu container — match by role or class wildcard */
+div[class*="-menu"]:not(.modebar-btn):not(.modebar-container),
+div[class*="MenuList"],
+div[class*="menuList"],
+.dash-dropdown div[class*="menu"] {
     background-color: #0c1328 !important;
     background: #0c1328 !important;
     border: 1px solid rgba(192, 168, 100, 0.25) !important;
     border-radius: 8px !important;
     z-index: 9999 !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
 }
 
-.dash-dropdown [class*="-menuList"],
-#daily-day-selector [class*="-menuList"] {
-    background-color: #0c1328 !important;
-    background: #0c1328 !important;
-    padding: 4px 0 !important;
-}
-
-/* ─── Options in the dropdown list ─── */
-.dash-dropdown [class*="-option"],
-#daily-day-selector [class*="-option"],
-.dash-dropdown div[role="option"],
-#daily-day-selector div[role="option"] {
+/* Option items — use [role="option"] which is always present */
+div[role="option"] {
     background-color: #0c1328 !important;
     background: #0c1328 !important;
     color: #f0ede4 !important;
     font-size: 13px !important;
-    padding: 10px 14px !important;
     cursor: pointer !important;
 }
 
-/* Hovered / focused option */
-.dash-dropdown [class*="-option"]:hover,
-#daily-day-selector [class*="-option"]:hover,
-.dash-dropdown div[role="option"]:hover,
-#daily-day-selector div[role="option"]:hover,
-.dash-dropdown [class*="-option"][class*="isFocused"],
-#daily-day-selector [class*="-option"][class*="isFocused"] {
+div[role="option"]:hover {
     background-color: #1a2540 !important;
     background: #1a2540 !important;
     color: #ffffff !important;
 }
 
-/* Selected / active option */
-.dash-dropdown [class*="-option"][class*="isSelected"],
-#daily-day-selector [class*="-option"][class*="isSelected"],
-.dash-dropdown [class*="-option"][aria-selected="true"],
-#daily-day-selector [class*="-option"][aria-selected="true"] {
+/* Focused option (keyboard navigation) */
+div[role="option"][class*="isFocused"],
+div[role="option"][aria-selected="false"]:hover {
+    background-color: #1a2540 !important;
+    background: #1a2540 !important;
+    color: #ffffff !important;
+}
+
+/* Currently selected option — gold highlight */
+div[role="option"][aria-selected="true"] {
     background-color: rgba(212, 168, 67, 0.18) !important;
     background: rgba(212, 168, 67, 0.18) !important;
     color: #d4a843 !important;
     font-weight: 600 !important;
 }
 
-/* ─── Search / input inside modern dropdown ─── */
-.dash-dropdown [class*="-input"],
-#daily-day-selector [class*="-input"],
-.dash-dropdown [class*="-input"] input,
-#daily-day-selector [class*="-input"] input {
-    color: #f0ede4 !important;
-    background: transparent !important;
+/* Listbox container */
+div[role="listbox"] {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
 }
 
-/* ─── Value container ─── */
-.dash-dropdown [class*="-ValueContainer"],
-#daily-day-selector [class*="-ValueContainer"],
-.dash-dropdown [class*="-valueContainer"],
-#daily-day-selector [class*="-valueContainer"] {
-    background: transparent !important;
-}
-
-/* ─── Multi-value tags (for multi-select) ─── */
-.dash-dropdown [class*="-multiValue"] {
-    background-color: #162040 !important;
-    border: 1px solid rgba(212, 168, 67, 0.40) !important;
-    border-radius: 4px !important;
-}
-
-.dash-dropdown [class*="-multiValue"] [class*="-label"] {
-    color: #ffffff !important;
-    font-weight: 600 !important;
-    font-size: 12px !important;
-}
-
-.dash-dropdown [class*="-multiValue"] [class*="-remove"]:hover {
-    background-color: rgba(224, 85, 85, 0.20) !important;
-    color: #e05555 !important;
-}
-
-/* ─── No options message ─── */
-.dash-dropdown [class*="-noOptionsMessage"],
-#daily-day-selector [class*="-noOptionsMessage"] {
+/* No options message */
+div[class*="noOptions"],
+div[class*="NoOptions"] {
     color: #5c6478 !important;
     background: #0c1328 !important;
 }
 
-/* ─── Plotly Modebar & Date Selectors (dark theme) ─── */
+/* Group heading (if grouped options) */
+div[class*="group"],
+div[class*="Group"] {
+    color: #7a7060 !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   Plotly & Misc
+   ═══════════════════════════════════════════════════════ */
+
 .modebar-container {
     background: transparent !important;
 }
@@ -311,14 +278,12 @@
     fill: #d4a843 !important;
 }
 
-/* Plotly rangeselector buttons */
 .rangeselector .button {
     background-color: #0c1328 !important;
     color: #f0ede4 !important;
     border-color: rgba(192, 168, 100, 0.25) !important;
 }
 
-/* ─── Native HTML select/input elements fallback ─── */
 select,
 select option,
 input[type="date"],
