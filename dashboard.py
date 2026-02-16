@@ -1211,19 +1211,21 @@ def build_daily_trades_section(symbol):
     # Build the chart for today's data (default)
     chart = _build_daily_chart(today_deals)
 
-    # Day selector — calendar date picker (last 7 days)
-    today = datetime.now(tz=timezone.utc).date()
-    min_date = today - timedelta(days=6)
+    # Day selector dropdown — last 7 days
+    available_dates = get_available_daily_dates(symbol, max_days=7)
+    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
+    # Default to today if available, otherwise first available
+    default_date = today_str
 
-    day_picker = dcc.DatePickerSingle(
+    day_dropdown = dcc.Dropdown(
         id='daily-day-selector',
-        date=today,
-        min_date_allowed=min_date,
-        max_date_allowed=today,
-        display_format='DD MMM YYYY',
+        options=available_dates if available_dates else [{'label': f'Today ({datetime.now(tz=timezone.utc).strftime("%d %b %Y")})', 'value': today_str}],
+        value=default_date,
+        clearable=False,
+        searchable=False,
         placeholder='Select day...',
-        first_day_of_week=1,
-        style={'display': 'inline-block'},
+        style={'width': '240px', 'fontSize': '12px'},
+        className='dash-dropdown',
     )
 
     return html.Div([
@@ -1232,7 +1234,7 @@ def build_daily_trades_section(symbol):
                 html.Span('📈', style={'fontSize': '14px'}),
                 html.Span('Daily Trade Log', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
             ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px'}),
-            day_picker,
+            day_dropdown,
         ], style={
             'display': 'flex', 'justifyContent': 'space-between',
             'alignItems': 'center', 'marginBottom': '10px',
@@ -1952,175 +1954,6 @@ app.index_string = '''<!DOCTYPE html>
         align-items: center;
         justify-content: center;
     }
-
-    /* === Daily Date Picker — NUCLEAR dark override === */
-    /* Kill every white background on every element in the picker */
-    .SingleDatePicker,
-    .SingleDatePicker > div,
-    .SingleDatePickerInput,
-    .SingleDatePickerInput__withBorder,
-    .SingleDatePickerInput > *,
-    .DateInput,
-    .DateInput *,
-    .DateInput_input,
-    .DateInput_input__focused,
-    .DateInput_input__disabled,
-    #daily-day-selector,
-    #daily-day-selector *,
-    #daily-day-selector > div,
-    #daily-day-selector > div > div,
-    #daily-day-selector > div > div > div {
-        background: transparent !important;
-        background-color: transparent !important;
-        border: none !important;
-        border-color: transparent !important;
-        box-shadow: none !important;
-        outline: none !important;
-    }
-    .DateInput {
-        width: 120px !important;
-    }
-    .DateInput_input {
-        color: #d4a843 !important;
-        font-family: 'Inter', sans-serif !important;
-        font-size: 12px !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.8px !important;
-        padding: 2px 0 !important;
-        cursor: pointer !important;
-        line-height: 1.4 !important;
-    }
-    .DateInput_input__focused {
-        border-bottom: 1px solid rgba(212,168,67,0.4) !important;
-    }
-    .DateInput_fang,
-    .DateInput_fangShape,
-    .DateInput_fangStroke {
-        display: none !important;
-    }
-    .SingleDatePickerInput_arrow,
-    .SingleDatePickerInput_arrow svg {
-        color: #5c6478 !important;
-        fill: #5c6478 !important;
-    }
-    /* Calendar popup */
-    .SingleDatePicker_picker {
-        background: #0c1328 !important;
-        background-color: #0c1328 !important;
-        border: 1px solid rgba(192,168,100,0.20) !important;
-        border-radius: 10px !important;
-        box-shadow: 0 12px 40px rgba(0,0,0,0.7) !important;
-        z-index: 9999 !important;
-        margin-top: 4px !important;
-        overflow: hidden !important;
-    }
-    .SingleDatePicker_picker *:not(.CalendarDay__selected):not(.CalendarDay__default):not(.CalendarDay__blocked_out_of_range):not(.DayPickerNavigation_button) {
-        background: #0c1328 !important;
-        background-color: #0c1328 !important;
-    }
-    .DayPicker,
-    .DayPicker > div,
-    .DayPicker > div > div,
-    .DayPicker__withBorder,
-    .DayPicker__horizontal,
-    .DayPicker_portal__horizontal {
-        background: #0c1328 !important;
-        background-color: #0c1328 !important;
-        border: none !important;
-        box-shadow: none !important;
-    }
-    .CalendarMonth,
-    .CalendarMonth_table,
-    .CalendarMonthGrid,
-    .CalendarMonthGrid_month__horizontal {
-        background: #0c1328 !important;
-        background-color: #0c1328 !important;
-    }
-    .CalendarMonth_caption {
-        color: #f0ede4 !important;
-        font-size: 13px !important;
-        font-weight: 700 !important;
-        padding-bottom: 40px !important;
-        font-family: 'Inter', sans-serif !important;
-    }
-    .DayPicker_weekHeader,
-    .DayPicker_weekHeader_ul,
-    .DayPicker_weekHeader_li {
-        background: #0c1328 !important;
-    }
-    .DayPicker_weekHeader_li small {
-        color: #5c6478 !important;
-        font-size: 10px !important;
-        font-weight: 600 !important;
-        font-family: 'Inter', sans-serif !important;
-    }
-    .CalendarDay__default {
-        background: #0c1328 !important;
-        background-color: #0c1328 !important;
-        color: #8a8378 !important;
-        border: 1px solid rgba(255,255,255,0.03) !important;
-        font-size: 12px !important;
-        font-family: 'Inter', sans-serif !important;
-    }
-    .CalendarDay__default:hover {
-        background: #1a2540 !important;
-        background-color: #1a2540 !important;
-        color: #ffffff !important;
-        border-color: rgba(212,168,67,0.2) !important;
-    }
-    .CalendarDay__selected,
-    .CalendarDay__selected:active,
-    .CalendarDay__selected:hover {
-        background: rgba(212,168,67,0.20) !important;
-        background-color: rgba(212,168,67,0.20) !important;
-        color: #d4a843 !important;
-        border: 1px solid rgba(212,168,67,0.5) !important;
-        font-weight: 700 !important;
-    }
-    .CalendarDay__today {
-        font-weight: 700 !important;
-        color: #4a8ecc !important;
-    }
-    .CalendarDay__blocked_out_of_range,
-    .CalendarDay__blocked_out_of_range:hover,
-    .CalendarDay__blocked_calendar,
-    .CalendarDay__blocked_calendar:hover {
-        background: #080e1e !important;
-        background-color: #080e1e !important;
-        color: #1e2030 !important;
-        border: 1px solid rgba(255,255,255,0.02) !important;
-        cursor: not-allowed !important;
-    }
-    .DayPickerNavigation_button {
-        background: transparent !important;
-        background-color: transparent !important;
-        border: 1px solid rgba(192,168,100,0.15) !important;
-        border-radius: 6px !important;
-        padding: 6px !important;
-    }
-    .DayPickerNavigation_button:hover {
-        background: rgba(212,168,67,0.10) !important;
-        background-color: rgba(212,168,67,0.10) !important;
-        border-color: rgba(212,168,67,0.3) !important;
-    }
-    .DayPickerNavigation_svg__horizontal {
-        fill: #7a7060 !important;
-    }
-    .DayPickerNavigation_button:hover .DayPickerNavigation_svg__horizontal {
-        fill: #d4a843 !important;
-    }
-    .SingleDatePickerInput_calendarIcon,
-    .SingleDatePickerInput_clearDate,
-    .DayPickerKeyboardShortcuts_buttonReset,
-    .DayPickerKeyboardShortcuts_show {
-        display: none !important;
-    }
-    .DayPicker_transitionContainer,
-    .DayPicker_focusRegion {
-        background: #0c1328 !important;
-        background-color: #0c1328 !important;
-        outline: none !important;
-    }
 </style>
 </head>
 <body>
@@ -2205,7 +2038,6 @@ def _mode_btn_style(mode, is_active):
 
 
 app.layout = html.Div([
-
     # Auto-refresh
     dcc.Interval(id='refresh-interval', interval=REFRESH_INTERVAL, n_intervals=0),
     # Cache to skip redundant DOM rebuilds
@@ -2445,7 +2277,7 @@ def update_symbol_tabs(selected_symbols):
 @app.callback(
     [Output('daily-metrics-container', 'children'),
      Output('daily-chart-container', 'children')],
-    [Input('daily-day-selector', 'date'),
+    [Input('daily-day-selector', 'value'),
      Input('symbol-tabs', 'value')],
     prevent_initial_call=True,
 )
@@ -2453,10 +2285,6 @@ def update_daily_day(selected_date, selected_symbol):
     """Update daily trade chart and metrics when a different day is selected."""
     if not selected_symbol:
         return dash.no_update, dash.no_update
-
-    # DatePickerSingle may return 'YYYY-MM-DD' or 'YYYY-MM-DDT00:00:00'
-    if selected_date and 'T' in selected_date:
-        selected_date = selected_date.split('T')[0]
 
     today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
     is_today = (not selected_date) or (selected_date == today_str)
