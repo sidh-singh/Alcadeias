@@ -1212,79 +1212,47 @@ def _build_drawdown_chart(deals):
     max_dd = max(drawdowns) if drawdowns else 0
     max_dd_pct = max(dd_pcts) if dd_pcts else 0
 
-    fig = make_subplots(
-        rows=2, cols=1,
-        row_heights=[0.5, 0.5],
-        vertical_spacing=0.14,
-        subplot_titles=['Cumulative P/L vs Peak', 'Drawdown ($)'],
-    )
+    n_deals = len(sorted_deals)
+    show_text = n_deals <= GRAPH_CUM_LABEL_THRESHOLD
 
-    # Cumulative P/L line
-    cum_color = COLORS['positive'] if cumulative >= 0 else COLORS['negative']
-    fig.add_trace(go.Scatter(
-        x=labels, y=cum_pls,
-        mode='lines',
-        line=dict(color=cum_color, width=2, shape='spline'),
-        name='Cumulative P/L',
-        showlegend=True,
-        fill='tozeroy',
-        fillcolor=f'rgba({int(cum_color[1:3],16)},{int(cum_color[3:5],16)},{int(cum_color[5:7],16)},0.05)',
-    ), row=1, col=1)
+    fig = go.Figure()
 
-    # Peak line
-    fig.add_trace(go.Scatter(
-        x=labels, y=peaks,
-        mode='lines',
-        line=dict(color=COLORS['accent'], width=1.5, dash='dot'),
-        name='Peak',
-        showlegend=True,
-    ), row=1, col=1)
-
-    # Drawdown area (inverted — shown as negative for visual impact)
+    # Drawdown area (shown as negative values for visual impact)
     neg_dd = [-d for d in drawdowns]
     fig.add_trace(go.Scatter(
         x=labels, y=neg_dd,
-        mode='lines',
+        mode='lines+markers' if show_text else 'lines',
         line=dict(color=COLORS['sell'], width=2, shape='spline'),
+        marker=dict(size=4, color=COLORS['sell']) if show_text else dict(size=0),
         fill='tozeroy',
-        fillcolor=f'rgba(224,85,85,0.12)',
+        fillcolor='rgba(224,85,85,0.12)',
         hovertext=hover_texts,
         hoverinfo='text',
         name='Drawdown',
-        showlegend=True,
-    ), row=2, col=1)
+        showlegend=False,
+    ))
 
-    fig.add_hline(y=0, line_dash='dot', line_color=COLORS['text_muted'],
-                  opacity=0.5, row=2, col=1)
+    fig.add_hline(y=0, line_dash='dot', line_color=COLORS['text_muted'], opacity=0.5)
 
-    n_deals = len(sorted_deals)
     fig.update_layout(
-        height=420,
-        margin=dict(l=50, r=20, t=30, b=30),
+        title=dict(text='Drawdown ($)', font=dict(size=11, color=COLORS['text_dim'], family="'Inter', sans-serif"), x=0.5),
+        height=280,
+        margin=dict(l=50, r=20, t=40, b=30),
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color=COLORS['text_secondary'], size=11, family="'Inter', sans-serif"),
-        legend=dict(
-            orientation='h', yanchor='bottom', y=1.08, xanchor='right', x=1,
-            font=dict(size=10, color=COLORS['text_secondary']),
-            bgcolor='rgba(0,0,0,0)',
-        ),
     )
     tick_step = max(1, n_deals // 30) if n_deals > 40 else None
-    for i in range(1, 3):
-        fig.update_xaxes(showgrid=False, row=i, col=1,
-                         tickfont=dict(size=9, color=COLORS['text_dim']),
-                         dtick=tick_step,
-                         tickangle=-45 if n_deals > 40 else 0)
-        fig.update_yaxes(
-            showgrid=True, gridcolor=COLORS['chart_grid'],
-            gridwidth=0.5, zeroline=True,
-            zerolinecolor=COLORS['text_muted'], zerolinewidth=0.5,
-            row=i, col=1,
-            tickfont=dict(size=10, color=COLORS['text_dim']),
-        )
-    for ann in fig['layout']['annotations']:
-        ann['font'] = dict(size=11, color=COLORS['text_dim'], family="'Inter', sans-serif")
+    fig.update_xaxes(showgrid=False,
+                     tickfont=dict(size=9, color=COLORS['text_dim']),
+                     dtick=tick_step,
+                     tickangle=-45 if n_deals > 40 else 0)
+    fig.update_yaxes(
+        showgrid=True, gridcolor=COLORS['chart_grid'],
+        gridwidth=0.5, zeroline=True,
+        zerolinecolor=COLORS['text_muted'], zerolinewidth=0.5,
+        tickfont=dict(size=10, color=COLORS['text_dim']),
+    )
 
     # Summary metrics below chart
     summary = html.Div([
@@ -1308,51 +1276,24 @@ def _build_drawdown_chart(deals):
         dcc.Graph(
             figure=fig,
             config={'displayModeBar': False},
-            style={'height': '420px'},
+            style={'height': '280px'},
         ),
         summary,
     ])
 
 
 def build_drawdown_section(symbol):
-    """Build drawdown chart section with day selector dropdown."""
+    """Build drawdown chart section (date controlled by daily-day-selector)."""
     daily_data = load_daily_trade_data(symbol)
     today_deals = daily_data.get('deals', []) if daily_data else []
-
-    # Day selector dropdown — last 7 days (reuse same date helper)
-    available_dates = get_available_daily_dates(symbol, max_days=7)
-    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
-    default_date = today_str
-
-    day_dropdown = dcc.Dropdown(
-        id='drawdown-day-selector',
-        options=available_dates if available_dates else [{'label': f'Today ({datetime.now(tz=timezone.utc).strftime("%d %b %Y")})', 'value': today_str}],
-        value=default_date,
-        clearable=False,
-        searchable=False,
-        placeholder='Select day...',
-        style={
-            'width': '240px',
-            'fontSize': '12px',
-            'background': 'transparent',
-            'backgroundColor': 'transparent',
-        },
-        className='dash-dropdown',
-    )
 
     chart = _build_drawdown_chart(today_deals)
 
     return html.Div([
         html.Div([
-            html.Div([
-                html.Span('📉', style={'fontSize': '14px'}),
-                html.Span('Drawdown Analysis', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
-            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px'}),
-            day_dropdown,
-        ], style={
-            'display': 'flex', 'justifyContent': 'space-between',
-            'alignItems': 'center', 'marginBottom': '10px',
-        }),
+            html.Span('📉', style={'fontSize': '14px'}),
+            html.Span('Drawdown Analysis', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
         html.Div(id='drawdown-chart-container', children=[chart], style={
             'background': COLORS['card'],
             'border': f'1px solid {COLORS["card_border"]}',
@@ -2546,43 +2487,19 @@ def update_symbol_tabs(selected_symbols):
     return _build_tabs(selected_symbols)
 
 
-# ─── Drawdown Day Selector Callback ───
-@app.callback(
-    Output('drawdown-chart-container', 'children'),
-    [Input('drawdown-day-selector', 'value'),
-     Input('symbol-tabs', 'value')],
-    prevent_initial_call=True,
-)
-def update_drawdown_day(selected_date, selected_symbol):
-    """Update drawdown chart when a different day is selected."""
-    if not selected_symbol:
-        return dash.no_update
-
-    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
-    is_today = (not selected_date) or (selected_date == today_str)
-
-    if is_today:
-        daily_data = load_daily_trade_data(selected_symbol)
-    else:
-        daily_data = load_daily_trade_data_for_date(selected_symbol, selected_date)
-
-    deals = daily_data.get('deals', []) if daily_data else []
-    chart = _build_drawdown_chart(deals)
-    return [chart]
-
-
-# ─── Daily Day Selector Callback ───
+# ─── Daily Day Selector Callback (also updates drawdown) ───
 @app.callback(
     [Output('daily-metrics-container', 'children'),
-     Output('daily-chart-container', 'children')],
+     Output('daily-chart-container', 'children'),
+     Output('drawdown-chart-container', 'children')],
     [Input('daily-day-selector', 'value'),
      Input('symbol-tabs', 'value')],
     prevent_initial_call=True,
 )
 def update_daily_day(selected_date, selected_symbol):
-    """Update daily trade chart and metrics when a different day is selected."""
+    """Update daily trade chart, metrics, and drawdown when a different day is selected."""
     if not selected_symbol:
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
 
     today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
     is_today = (not selected_date) or (selected_date == today_str)
@@ -2641,8 +2558,9 @@ def update_daily_day(selected_date, selected_symbol):
     ], style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap', 'marginBottom': '16px'})
 
     chart = _build_daily_chart(deals)
+    drawdown_chart = _build_drawdown_chart(deals)
 
-    return [metrics_row], [chart]
+    return [metrics_row], [chart], [drawdown_chart]
 
 
 # ─── Main Content Callback ───
