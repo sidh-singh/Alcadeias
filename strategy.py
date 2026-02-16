@@ -197,7 +197,7 @@ class Strategy:
         elif buy_count > 0 and sell_count == 0:
             if buy_profit > hedge:
                 buy_status = Signal.CLOSE_BUY
-            elif (lt_trend_power_list[0] == 0) and (buy_count >= 5):
+            elif (lt_trend_power_list[0] == 0) and (buy_count >= 4):
                 buy_status = Signal.CLOSE_BUY
             elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** 3):
                 buy_status = Signal.BUY_MORE
@@ -206,7 +206,7 @@ class Strategy:
         elif buy_count == 0 and sell_count > 0:
             if sell_profit > hedge:
                 sell_status = Signal.CLOSE_SELL
-            elif (lt_trend_power_list[0] == 1) and (sell_count >= 5):
+            elif (lt_trend_power_list[0] == 1) and (sell_count >= 4):
                 sell_status = Signal.CLOSE_SELL
             elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** 3):
                 sell_status = Signal.SELL_MORE
