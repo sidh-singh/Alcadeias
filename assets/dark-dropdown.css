@@ -148,6 +148,156 @@
     color: #5c6478 !important;
 }
 
+/* ===========================================================
+   Modern Dash 2.x Dropdown (react-select v3+) — Dark Theme
+   These override the newer .dash-dropdown, [role=listbox] etc.
+   =========================================================== */
+
+/* ─── Outer control (the box showing the selected value) ─── */
+.dash-dropdown .Select-control,
+.dash-dropdown > div > div:first-child,
+#daily-day-selector > div > div:first-child,
+.dash-dropdown .css-1s2u09g-control,
+.dash-dropdown .css-1pahdxg-control,
+.dash-dropdown [class*="-control"] {
+    background-color: #0a1025 !important;
+    background: #0a1025 !important;
+    border: 1px solid rgba(192, 168, 100, 0.25) !important;
+    border-radius: 6px !important;
+    min-height: 36px !important;
+    box-shadow: none !important;
+}
+
+/* ─── The selected single value text ─── */
+.dash-dropdown .Select-value-label,
+.dash-dropdown [class*="-singleValue"],
+#daily-day-selector [class*="-singleValue"],
+.dash-dropdown .css-1dimb5e-singleValue,
+.dash-dropdown .css-qc6sy-singleValue {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+}
+
+/* ─── Placeholder ─── */
+.dash-dropdown [class*="-placeholder"],
+#daily-day-selector [class*="-placeholder"] {
+    color: #5c6478 !important;
+}
+
+/* ─── Dropdown indicator (arrow / chevron) ─── */
+.dash-dropdown [class*="-indicatorContainer"],
+#daily-day-selector [class*="-indicatorContainer"] {
+    color: #7a7060 !important;
+}
+
+.dash-dropdown [class*="-indicatorContainer"]:hover,
+#daily-day-selector [class*="-indicatorContainer"]:hover {
+    color: #d4a843 !important;
+}
+
+/* Separator line between value and arrow */
+.dash-dropdown [class*="-indicatorSeparator"],
+#daily-day-selector [class*="-indicatorSeparator"] {
+    background-color: rgba(192, 168, 100, 0.20) !important;
+}
+
+/* ─── Dropdown menu (the popup list) ─── */
+.dash-dropdown [class*="-menu"],
+#daily-day-selector [class*="-menu"] {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+    border: 1px solid rgba(192, 168, 100, 0.25) !important;
+    border-radius: 8px !important;
+    z-index: 9999 !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+}
+
+.dash-dropdown [class*="-menuList"],
+#daily-day-selector [class*="-menuList"] {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+    padding: 4px 0 !important;
+}
+
+/* ─── Options in the dropdown list ─── */
+.dash-dropdown [class*="-option"],
+#daily-day-selector [class*="-option"],
+.dash-dropdown div[role="option"],
+#daily-day-selector div[role="option"] {
+    background-color: #0c1328 !important;
+    background: #0c1328 !important;
+    color: #f0ede4 !important;
+    font-size: 13px !important;
+    padding: 10px 14px !important;
+    cursor: pointer !important;
+}
+
+/* Hovered / focused option */
+.dash-dropdown [class*="-option"]:hover,
+#daily-day-selector [class*="-option"]:hover,
+.dash-dropdown div[role="option"]:hover,
+#daily-day-selector div[role="option"]:hover,
+.dash-dropdown [class*="-option"][class*="isFocused"],
+#daily-day-selector [class*="-option"][class*="isFocused"] {
+    background-color: #1a2540 !important;
+    background: #1a2540 !important;
+    color: #ffffff !important;
+}
+
+/* Selected / active option */
+.dash-dropdown [class*="-option"][class*="isSelected"],
+#daily-day-selector [class*="-option"][class*="isSelected"],
+.dash-dropdown [class*="-option"][aria-selected="true"],
+#daily-day-selector [class*="-option"][aria-selected="true"] {
+    background-color: rgba(212, 168, 67, 0.18) !important;
+    background: rgba(212, 168, 67, 0.18) !important;
+    color: #d4a843 !important;
+    font-weight: 600 !important;
+}
+
+/* ─── Search / input inside modern dropdown ─── */
+.dash-dropdown [class*="-input"],
+#daily-day-selector [class*="-input"],
+.dash-dropdown [class*="-input"] input,
+#daily-day-selector [class*="-input"] input {
+    color: #f0ede4 !important;
+    background: transparent !important;
+}
+
+/* ─── Value container ─── */
+.dash-dropdown [class*="-ValueContainer"],
+#daily-day-selector [class*="-ValueContainer"],
+.dash-dropdown [class*="-valueContainer"],
+#daily-day-selector [class*="-valueContainer"] {
+    background: transparent !important;
+}
+
+/* ─── Multi-value tags (for multi-select) ─── */
+.dash-dropdown [class*="-multiValue"] {
+    background-color: #162040 !important;
+    border: 1px solid rgba(212, 168, 67, 0.40) !important;
+    border-radius: 4px !important;
+}
+
+.dash-dropdown [class*="-multiValue"] [class*="-label"] {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+}
+
+.dash-dropdown [class*="-multiValue"] [class*="-remove"]:hover {
+    background-color: rgba(224, 85, 85, 0.20) !important;
+    color: #e05555 !important;
+}
+
+/* ─── No options message ─── */
+.dash-dropdown [class*="-noOptionsMessage"],
+#daily-day-selector [class*="-noOptionsMessage"] {
+    color: #5c6478 !important;
+    background: #0c1328 !important;
+}
+
 /* ─── Plotly Modebar & Date Selectors (dark theme) ─── */
 .modebar-container {
     background: transparent !important;
