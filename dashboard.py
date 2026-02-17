@@ -693,6 +693,7 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     src_last_time = analysis.get('last_source_candle_time', '-')
     rates_source = analysis.get('rates_source', 'unknown')
     synthetic_bar = analysis.get('synthetic_bar', False)
+    tick_rebuilt = analysis.get('tick_rebuilt', False)
 
     # Overall bias (includes trend)
     total_buy = sha_buy + price_buy + trend_buy
@@ -895,7 +896,7 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
             ),
             # ── Footer timestamp ──
             html.Div(
-                f'{last_updated}  |  LKB:{lookback_used}  SRC:{src_count}  LAST:{src_last_time}  |  SRC_API:{rates_source}  SYN:{synthetic_bar}',
+                f'{last_updated}  |  LKB:{lookback_used}  SRC:{src_count}  LAST:{src_last_time}  |  SRC_API:{rates_source}  SYN:{synthetic_bar}  REBUILD:{tick_rebuilt}',
                 style={
                 'fontSize': '0.65rem', 'color': COLORS['text_muted'],
                 'padding': '4px 16px 8px', 'textAlign': 'right',

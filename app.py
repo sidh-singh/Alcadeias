@@ -418,8 +418,8 @@ class MT5TradingBot:
                         last_candle_time = source_df['time'].iloc[-1]
                         if getattr(last_candle_time, 'tzinfo', None) is None:
                             last_candle_time = last_candle_time.replace(tzinfo=timezone.utc)
-                        if market_status and market_status.get('minutes_since_last') is not None:
-                            candle_age_min = float(market_status.get('minutes_since_last'))
+                        if market_status and market_status.get('minutes_since_last_candle') is not None:
+                            candle_age_min = float(market_status.get('minutes_since_last_candle'))
                         else:
                             candle_age_min = (server_time - last_candle_time).total_seconds() / 60.0
                         candle_is_fresh = candle_age_min <= max(MARKET_LOOKBACK_MINUTES + 1, 4)
@@ -478,6 +478,7 @@ class MT5TradingBot:
                     analysis_data['source_candle_count'] = int(len(source_df))
                     analysis_data['rates_source'] = source_df.attrs.get('rates_source', 'unknown')
                     analysis_data['synthetic_bar'] = bool(source_df.attrs.get('synthetic_appended', False))
+                    analysis_data['tick_rebuilt'] = bool(source_df.attrs.get('tick_rebuilt', False))
                     try:
                         analysis_data['last_source_candle_time'] = source_df['time'].iloc[-1].isoformat()
                     except Exception:
@@ -487,6 +488,7 @@ class MT5TradingBot:
                 else:
                     analysis_data['rates_source'] = source_df.attrs.get('rates_source', 'unknown') if has_candle_data else 'none'
                     analysis_data['synthetic_bar'] = bool(source_df.attrs.get('synthetic_appended', False)) if has_candle_data else False
+                    analysis_data['tick_rebuilt'] = bool(source_df.attrs.get('tick_rebuilt', False)) if has_candle_data else False
                     analysis_data['candle_age_min'] = round(float(candle_age_min), 2) if candle_age_min is not None else None
                     analysis_data['candle_fresh'] = False
                 
