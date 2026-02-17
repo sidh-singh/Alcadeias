@@ -409,6 +409,8 @@ class MT5TradingBot:
                         buy_positions, sell_positions, times, gap_range=symbol_gap_range
                     )
                     analysis_data['source_candle_count'] = int(len(source_df))
+                    analysis_data['rates_source'] = source_df.attrs.get('rates_source', 'unknown')
+                    analysis_data['synthetic_bar'] = bool(source_df.attrs.get('synthetic_appended', False))
                     try:
                         analysis_data['last_source_candle_time'] = source_df['time'].iloc[-1].isoformat()
                     except Exception:
@@ -416,6 +418,8 @@ class MT5TradingBot:
                     analysis_data['candle_age_min'] = round(float(candle_age_min), 2) if candle_age_min is not None else None
                     analysis_data['candle_fresh'] = True
                 else:
+                    analysis_data['rates_source'] = source_df.attrs.get('rates_source', 'unknown') if has_candle_data else 'none'
+                    analysis_data['synthetic_bar'] = bool(source_df.attrs.get('synthetic_appended', False)) if has_candle_data else False
                     analysis_data['candle_age_min'] = round(float(candle_age_min), 2) if candle_age_min is not None else None
                     analysis_data['candle_fresh'] = False
                 
