@@ -140,14 +140,14 @@ def load_symbols_config():
 
 
 def load_active_config():
-    """Load active configuration (mode + per-mode selected symbols)"""
+    """Load active configuration (mode + selected symbols)"""
     try:
         with open(ACTIVE_CONFIG_PATH, 'r') as f:
             cfg = json.load(f)
-        # Migrate old format (single active_symbols list) → per-mode lists
-        if 'active_symbols' in cfg and 'demo_symbols' not in cfg:
-            cfg['demo_symbols'] = cfg.pop('active_symbols')
-            cfg.setdefault('live_symbols', cfg['demo_symbols'][:])
+        # Migrate old per-mode format to single active_symbols list
+        if 'active_symbols' not in cfg:
+            mode = cfg.get('mode', 'demo')
+            cfg['active_symbols'] = cfg.get(f'{mode}_symbols', [])
             save_active_config(cfg)
         return cfg
     except (FileNotFoundError, json.JSONDecodeError):
@@ -155,8 +155,7 @@ def load_active_config():
         all_syms = symbols_cfg.get('symbols', [])
         return {
             'mode': 'demo',
-            'demo_symbols': all_syms[:],
-            'live_symbols': all_syms[:],
+            'active_symbols': all_syms[:],
         }
 
 
@@ -1993,21 +1992,7 @@ app.index_string = '''<!DOCTYPE html>
     }
 
     /* === Mode Toggle Buttons === */
-    .mode-btn {
-        border: none;
-        padding: 6px 18px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 1.2px;
-        cursor: pointer;
-        border-radius: 8px;
-        transition: all 0.25s ease;
-        font-family: 'Inter', sans-serif;
-        outline: none;
-    }
-    .mode-btn:hover {
-        filter: brightness(1.15);
-    }
+    /* (removed — mode is now read-only, set via start_job.bat) */
 
     /* === Mascot container glow === */
     .mascot-container {
@@ -2161,12 +2146,8 @@ _symbols_config = load_symbols_config()
 _all_symbols = _symbols_config.get('symbols', [])
 _active_config = load_active_config()
 _current_mode = _active_config.get('mode', 'demo')
-# Per-mode symbol lists
-_demo_symbols = _active_config.get('demo_symbols', _all_symbols[:])
-_live_symbols = _active_config.get('live_symbols', _all_symbols[:])
-_demo_symbols = [s for s in _demo_symbols if s in _all_symbols] or _all_symbols[:]
-_live_symbols = [s for s in _live_symbols if s in _all_symbols] or _all_symbols[:]
-_active_symbols = _demo_symbols if _current_mode == 'demo' else _live_symbols
+_active_symbols = _active_config.get('active_symbols', _all_symbols[:])
+_active_symbols = [s for s in _active_symbols if s in _all_symbols] or _all_symbols[:]
 
 
 def _build_tabs(symbols):
@@ -2211,23 +2192,6 @@ def _build_tabs(symbols):
         ],
         style={'borderBottom': f'1px solid {COLORS["divider"]}', 'background': COLORS['tab_bg']},
     )
-
-
-def _mode_btn_style(mode, is_active):
-    """Return inline style dict for a mode toggle button"""
-    if mode == 'demo':
-        active_bg, active_glow = COLORS['buy'], COLORS['buy_glow']
-    else:
-        active_bg, active_glow = COLORS['sell'], COLORS['sell_glow']
-    if is_active:
-        return {
-            'background': active_bg, 'color': '#fff',
-            'boxShadow': f'0 0 14px {active_glow}',
-        }
-    return {
-        'background': 'transparent', 'color': COLORS['text_dim'],
-        'boxShadow': 'none',
-    }
 
 
 app.layout = html.Div([
@@ -2295,38 +2259,26 @@ app.layout = html.Div([
         'color': COLORS['text'],
     }),
 
-    # ── Control Bar: Mode Toggle + Symbol Selector ──
+    # ── Control Bar: Mode Badge (read-only) + Symbol Selector ──
     html.Div([
-        # Left: Mode toggle
+        # Left: Mode badge (read-only — set by start_job.bat)
         html.Div([
             html.Span('MODE', style={
                 'fontSize': '9px', 'fontWeight': '600', 'color': COLORS['text_dim'],
                 'letterSpacing': '1.5px', 'marginRight': '12px',
             }),
-            html.Div([
-                html.Button('DEMO', id='btn-mode-demo', n_clicks=0, className='mode-btn',
-                            style=_mode_btn_style('demo', _current_mode == 'demo')),
-                html.Button('LIVE', id='btn-mode-live', n_clicks=0, className='mode-btn',
-                            style=_mode_btn_style('live', _current_mode == 'live')),
-            ], style={
-                'display': 'flex', 'gap': '4px',
-                'background': 'rgba(255,255,255,0.03)',
-                'borderRadius': '10px', 'padding': '3px',
-                'border': f'1px solid {COLORS["card_border"]}',
-            }),
             html.Span(_current_mode.upper(), id='mode-indicator', style={
-                'fontSize': '9px', 'fontWeight': '700', 'letterSpacing': '1px',
-                'marginLeft': '10px',
+                'fontSize': '11px', 'fontWeight': '700', 'letterSpacing': '1.2px',
                 'color': COLORS['buy'] if _current_mode == 'demo' else COLORS['sell'],
                 'background': f'{COLORS["buy"] if _current_mode == "demo" else COLORS["sell"]}18',
-                'padding': '2px 8px', 'borderRadius': '8px',
+                'padding': '4px 14px', 'borderRadius': '8px',
                 'border': f'1px solid {COLORS["buy"] if _current_mode == "demo" else COLORS["sell"]}33',
             }),
         ], style={'display': 'flex', 'alignItems': 'center'}),
 
-        # Right: Symbol selector dropdown (per-mode)
+        # Right: Symbol selector dropdown
         html.Div([
-            html.Span(id='symbols-label', children=f'SYMBOLS ({_current_mode.upper()})', style={
+            html.Span(id='symbols-label', children='SYMBOLS', style={
                 'fontSize': '9px', 'fontWeight': '600', 'color': COLORS['text_dim'],
                 'letterSpacing': '1.5px', 'marginRight': '12px', 'flexShrink': '0',
                 'whiteSpace': 'nowrap',
@@ -2399,53 +2351,6 @@ app.layout = html.Div([
 })
 
 
-# ─── Mode Toggle Callback ───
-@app.callback(
-    [Output('btn-mode-demo', 'style'),
-     Output('btn-mode-live', 'style'),
-     Output('mode-indicator', 'children'),
-     Output('mode-indicator', 'style'),
-     Output('symbol-selector', 'value'),
-     Output('symbols-label', 'children'),
-     Output('tabs-container', 'children')],
-    [Input('btn-mode-demo', 'n_clicks'),
-     Input('btn-mode-live', 'n_clicks')],
-    prevent_initial_call=True,
-)
-def toggle_mode(demo_clicks, live_clicks):
-    """Toggle between DEMO and LIVE mode, swap symbol dropdown values, and persist."""
-    triggered = callback_context.triggered[0]['prop_id'] if callback_context.triggered else ''
-    config = load_active_config()
-    if 'btn-mode-live' in triggered:
-        config['mode'] = 'live'
-    elif 'btn-mode-demo' in triggered:
-        config['mode'] = 'demo'
-    mode = config.get('mode', 'demo')
-    save_active_config(config)
-
-    demo_style = _mode_btn_style('demo', mode == 'demo')
-    live_style = _mode_btn_style('live', mode == 'live')
-
-    indicator_color = COLORS['buy'] if mode == 'demo' else COLORS['sell']
-    indicator_style = {
-        'fontSize': '9px', 'fontWeight': '700', 'letterSpacing': '1px',
-        'marginLeft': '10px',
-        'color': indicator_color,
-        'background': f'{indicator_color}18',
-        'padding': '2px 8px', 'borderRadius': '8px',
-        'border': f'1px solid {indicator_color}33',
-    }
-
-    # Load the correct per-mode symbol list
-    key = 'demo_symbols' if mode == 'demo' else 'live_symbols'
-    syms = config.get(key, _all_symbols[:])
-    syms = [s for s in syms if s in _all_symbols] or _all_symbols[:]
-    label = f'SYMBOLS ({mode.upper()})'
-    tabs = _build_tabs(syms)
-
-    return demo_style, live_style, mode.upper(), indicator_style, syms, label, tabs
-
-
 # ─── Symbol Selector Callback ───
 @app.callback(
     Output('tabs-container', 'children', allow_duplicate=True),
@@ -2453,14 +2358,12 @@ def toggle_mode(demo_clicks, live_clicks):
     prevent_initial_call=True,
 )
 def update_symbol_tabs(selected_symbols):
-    """Update tabs when symbols are selected/deselected and persist per-mode to active_config.json."""
+    """Update tabs when symbols are selected/deselected and persist to active_config.json."""
     if not selected_symbols:
         selected_symbols = []
 
     config = load_active_config()
-    mode = config.get('mode', 'demo')
-    key = 'demo_symbols' if mode == 'demo' else 'live_symbols'
-    config[key] = selected_symbols
+    config['active_symbols'] = selected_symbols
     save_active_config(config)
 
     return _build_tabs(selected_symbols)
@@ -2545,7 +2448,9 @@ def update_daily_day(selected_date, selected_symbol):
     [Output('tab-content', 'children'),
      Output('account-info', 'children'),
      Output('header-time', 'children'),
-     Output('data-hash', 'data')],
+     Output('data-hash', 'data'),
+     Output('mode-indicator', 'children'),
+     Output('mode-indicator', 'style')],
     [Input('symbol-tabs', 'value'),
      Input('refresh-interval', 'n_intervals')],
     [dash.State('data-hash', 'data')],
@@ -2553,6 +2458,18 @@ def update_daily_day(selected_date, selected_symbol):
 def update_content(selected_symbol, n, prev_hash):
     """Single callback: refreshes content only when data changes or tab switches"""
     import hashlib
+
+    # Read current mode from active_config (bot writes this)
+    _cfg = load_active_config()
+    _mode = _cfg.get('mode', 'demo')
+    _mode_color = COLORS['buy'] if _mode == 'demo' else COLORS['sell']
+    _mode_style = {
+        'fontSize': '11px', 'fontWeight': '700', 'letterSpacing': '1.2px',
+        'color': _mode_color,
+        'background': f'{_mode_color}18',
+        'padding': '4px 14px', 'borderRadius': '8px',
+        'border': f'1px solid {_mode_color}33',
+    }
 
     if not selected_symbol:
         return html.Div([
@@ -2562,7 +2479,7 @@ def update_content(selected_symbol, n, prev_hash):
             }),
         ], style={
             'textAlign': 'center', 'marginTop': '120px',
-        }), html.Div(), '', ''
+        }), html.Div(), '', '', _mode.upper(), _mode_style
 
     # Load raw data to check if anything changed
     symbol_data = load_symbol_data(selected_symbol)
@@ -2581,7 +2498,7 @@ def update_content(selected_symbol, n, prev_hash):
     is_tab_switch = 'symbol-tabs' in triggered
 
     if not is_tab_switch and current_hash == prev_hash:
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, _mode.upper(), _mode_style
 
     # Build account info display
     balance = account.get('balance', 0)
@@ -2638,7 +2555,7 @@ def update_content(selected_symbol, n, prev_hash):
     else:
         time_display = datetime.now().strftime('Refresh  %H:%M:%S')
 
-    return content, account_display, time_display, current_hash
+    return content, account_display, time_display, current_hash, _mode.upper(), _mode_style
 
 
 if __name__ == '__main__':

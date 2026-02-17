@@ -44,7 +44,6 @@ class MT5TradingBot:
         self.indicator = Indicator()
         self.strategy = Strategy()
         self._stop_event = threading.Event()     # Signal workers to stop
-        self._mode_changed = threading.Event()   # Signal that mode has changed
         
     def load_credentials(self):
         """Step 1: Load MT5 credentials from JSON file"""
@@ -482,36 +481,8 @@ class MT5TradingBot:
                 if self._stop_event.is_set():
                     return
     
-    def _read_config_mode(self):
-        """Read the current mode from active_config.json"""
-        _acfg_path = os.path.join(OUTPUT_DIR, ACTIVE_CONFIG_FILENAME)
-        try:
-            with open(_acfg_path, 'r') as _af:
-                _acfg = json.load(_af)
-            return _acfg.get('mode', 'demo').lower()
-        except (FileNotFoundError, json.JSONDecodeError):
-            return self.mode
-
-    def _watch_mode(self, check_interval=2):
-        """Background thread: poll active_config.json for mode changes.
-        When mode differs from self.mode, signal workers to stop so the
-        supervisor in execute_job() can re-initialise MT5."""
-        while not self._stop_event.is_set():
-            time.sleep(check_interval)
-            new_mode = self._read_config_mode()
-            if new_mode in ('demo', 'live') and new_mode != self.mode:
-                print(f"\n{'='*60}")
-                print(f"  ⚡ MODE CHANGE DETECTED: {self.mode.upper()} → {new_mode.upper()}")
-                print(f"  Re-initialising MT5 with {new_mode.upper()} account...")
-                print(f"{'='*60}\n")
-                self._mode_changed.set()
-                self._stop_event.set()     # Tell all workers to exit
-                return
-
     def run_multithreaded_processing(self):
-        """Step 4: Start infinite multithreaded processing for all symbols.
-        Returns normally when a mode-change is detected so the supervisor
-        can re-initialise MT5."""
+        """Step 4: Start infinite multithreaded processing for all symbols."""
         print(f"\n{'='*60}")
         print(f"  Starting Continuous Multithreaded Processing")
         print(f"{'='*60}\n")
@@ -521,13 +492,8 @@ class MT5TradingBot:
         print(f"Launching {max_workers} threads (1 per symbol)...")
         print(f"Press Ctrl+C to stop\n")
 
-        # Reset stop / mode-changed events for this run
+        # Reset stop event for this run
         self._stop_event.clear()
-        self._mode_changed.clear()
-
-        # Start mode-watching thread
-        watcher = threading.Thread(target=self._watch_mode, daemon=True, name='ModeWatcher')
-        watcher.start()
         
         # Start threads - they will run until stop_event is set
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='Symbol') as executor:
@@ -548,8 +514,6 @@ class MT5TradingBot:
                 self._stop_event.set()
                 executor.shutdown(wait=False, cancel_futures=True)
                 raise
-
-        watcher.join(timeout=5)
     
     def cleanup(self):
         """Step 5: Cleanup and shutdown MT5"""
@@ -560,24 +524,28 @@ class MT5TradingBot:
     
     def _init_cycle(self):
         """
-        Single initialisation cycle: read config → load credentials → load
-        symbols → initialise MT5.  Returns True on success.
+        Single initialisation cycle: write mode to config → load credentials
+        → load symbols → initialise MT5.  Returns True on success.
         """
-        # ── Read dashboard active config (mode + symbols override) ──
+        # ── Write current mode to active_config so dashboard can display it ──
         _acfg_path = os.path.join(OUTPUT_DIR, ACTIVE_CONFIG_FILENAME)
         try:
             with open(_acfg_path, 'r') as _af:
                 _acfg = json.load(_af)
-            _dash_mode = _acfg.get('mode', '').lower()
-            if _dash_mode in ('demo', 'live'):
-                self.mode = _dash_mode
-                print(f"✓ Mode set from dashboard config: {self.mode.upper()}")
-            self._dashboard_active_symbols = _acfg.get(
-                f'{self.mode}_symbols',
-                _acfg.get('active_symbols', [])   # fallback for old format
-            )
         except (FileNotFoundError, json.JSONDecodeError):
-            self._dashboard_active_symbols = []
+            _acfg = {}
+        _acfg['mode'] = self.mode
+        try:
+            os.makedirs(os.path.dirname(_acfg_path) or '.', exist_ok=True)
+            with open(_acfg_path, 'w') as _af:
+                json.dump(_acfg, _af, indent=2)
+        except OSError:
+            pass
+        # Read selected symbols from config (dashboard may change these)
+        self._dashboard_active_symbols = _acfg.get(
+            'active_symbols',
+            _acfg.get(f'{self.mode}_symbols', [])
+        )
 
         print(f"\n{'#'*60}")
         print(f"#  JOB STARTED - {self.mode.upper()} MODE")
@@ -602,50 +570,29 @@ class MT5TradingBot:
 
     def execute_job(self):
         """
-        Main Job Orchestrator — supervisor loop.
-        Initialises MT5, starts worker threads, and watches for mode changes.
-        On mode change: stops workers, shuts down MT5, re-initialises with
-        the new account, and restarts — all automatically.
+        Main Job Orchestrator.
+        Initialises MT5, starts worker threads, and runs until Ctrl+C.
+        Mode is fixed from the command line — use start_job.bat to switch.
         """
         try:
-            while True:
-                # ── Initialise (or re-initialise after mode change) ──
-                for _attempt in range(1, 4):      # Retry up to 3 times
-                    if self._init_cycle():
-                        break
-                    print(f"\n⚠ Init attempt {_attempt}/3 failed, retrying in 5s...")
-                    time.sleep(5)
-                else:
-                    print("\n✗ All init attempts failed — waiting for mode change...")
-                    # Don't exit — wait for a mode switch from dashboard
-                    self._stop_event.clear()
-                    self._mode_changed.clear()
-                    self._watch_mode(check_interval=3)
-                    if self._mode_changed.is_set():
-                        self.cleanup()
-                        time.sleep(3)
-                        continue
-                    return False
+            # ── Initialise (retry up to 3 times) ──
+            for _attempt in range(1, 4):
+                if self._init_cycle():
+                    break
+                print(f"\n⚠ Init attempt {_attempt}/3 failed, retrying in 5s...")
+                time.sleep(5)
+            else:
+                print("\n✗ All init attempts failed. Restart start_job.bat to try again.")
+                return False
 
-                # ── Run processing (blocks until stop_event or Ctrl+C) ──
-                self.run_multithreaded_processing()
+            # ── Run processing (blocks until Ctrl+C) ──
+            self.run_multithreaded_processing()
 
-                if self._mode_changed.is_set():
-                    # Graceful re-init: shut down current MT5 connection
-                    self.cleanup()
-                    new_mode = self._read_config_mode().upper()
-                    print(f"\n{'='*60}")
-                    print(f"  ♻ Re-initialising MT5 for {new_mode} account...")
-                    print(f"{'='*60}\n")
-                    time.sleep(3)   # Give MT5 terminal time to disconnect
-                    continue   # Loop back to _init_cycle with new mode
-                else:
-                    # Normal shutdown (Ctrl+C or no mode change)
-                    self.cleanup()
-                    print(f"\n{'#'*60}")
-                    print(f"#  JOB COMPLETED SUCCESSFULLY")
-                    print(f"{'#'*60}\n")
-                    return True
+            self.cleanup()
+            print(f"\n{'#'*60}")
+            print(f"#  JOB COMPLETED SUCCESSFULLY")
+            print(f"{'#'*60}\n")
+            return True
 
         except KeyboardInterrupt:
             print("\n\n⚠ Job interrupted by user")
