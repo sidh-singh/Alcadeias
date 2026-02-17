@@ -42,9 +42,65 @@ class MT5TradingBot:
         self.thread_lock = threading.Lock()       # For file I/O
         self.mt5_lock = threading.Lock()           # For MT5 API calls (not thread-safe)
         self.position_helper = None
+        self.symbol_map = {}
         self.indicator = Indicator()
         self.strategy = Strategy()
         self._stop_event = threading.Event()     # Signal workers to stop
+
+    def _resolve_symbol_alias(self, symbol):
+        """Resolve configured symbol to the best matching broker symbol name."""
+        info = mt5.symbol_info(symbol)
+        if info is not None:
+            return symbol
+
+        base = symbol.rstrip('mM')
+        patterns = [f"{symbol}*", f"{base}*", f"*{base}*"]
+        candidates = []
+        seen = set()
+        for pattern in patterns:
+            for cand in (mt5.symbols_get(pattern) or []):
+                if cand.name in seen:
+                    continue
+                seen.add(cand.name)
+                candidates.append(cand)
+
+        if not candidates:
+            return symbol
+
+        disabled_mode = getattr(mt5, 'SYMBOL_TRADE_MODE_DISABLED', None)
+
+        def _score(cand):
+            name = cand.name
+            score = 0
+            if name == symbol:
+                score += 200
+            if name.startswith(symbol):
+                score += 120
+            if name.startswith(base):
+                score += 90
+            if base and base in name:
+                score += 50
+            if getattr(cand, 'visible', False):
+                score += 15
+            if getattr(cand, 'select', False):
+                score += 10
+            if disabled_mode is not None and getattr(cand, 'trade_mode', None) != disabled_mode:
+                score += 8
+            return (score, -len(name))
+
+        best = max(candidates, key=_score)
+        return best.name
+
+    def _build_symbol_map(self):
+        """Build configured→resolved MT5 symbol map for this session."""
+        self.symbol_map = {}
+        for symbol in self.symbols:
+            resolved = self._resolve_symbol_alias(symbol)
+            self.symbol_map[symbol] = resolved
+            if resolved == symbol:
+                print(f"✓ Symbol mapped: {symbol}")
+            else:
+                print(f"✓ Symbol mapped: {symbol} -> {resolved}")
         
     def load_credentials(self):
         """Step 1: Load MT5 credentials from JSON file"""
@@ -136,9 +192,13 @@ class MT5TradingBot:
         # Initialize position helper with mt5 instance
         self.position_helper = MT5PositionHelper(mt5)
 
+        # Resolve configured symbols to broker symbol names (suffix/alias safe)
+        self._build_symbol_map()
+
         # Subscribe all traded symbols + EURUSD (used for server-time)
         # symbol_select adds a symbol to Market Watch so live data flows
-        for sym in self.symbols + ['EURUSD']:
+        subscribe_symbols = list(set(self.symbol_map.values())) + ['EURUSD']
+        for sym in subscribe_symbols:
             selected = mt5.symbol_select(sym, True)
             if selected:
                 print(f"✓ Subscribed to {sym}")
@@ -172,7 +232,7 @@ class MT5TradingBot:
             with open(json_path, 'w') as f:
                 json.dump(account_info, f, indent=2, default=str)
     
-    def _save_daily_trades(self, symbol):
+    def _save_daily_trades(self, symbol, mt5_symbol=None):
         """Fetch today's closed deals for a symbol and save to per-symbol daily_trade folder (thread-safe)"""
         import os
         from datetime import datetime
@@ -188,8 +248,9 @@ class MT5TradingBot:
         json_path = os.path.join(output_dir, filename)
         
         # Fetch today's closed deals for this symbol (server-time aware)
+        deal_symbol = mt5_symbol or symbol
         with self.mt5_lock:
-            today_deals = self.position_helper.get_today_deals(symbol)
+            today_deals = self.position_helper.get_today_deals(deal_symbol)
         
         # Calculate summary using net_profit (includes commission+swap+fee)
         total_net = sum(d.get('net_profit', d['profit']) for d in today_deals)
@@ -213,7 +274,7 @@ class MT5TradingBot:
             with open(json_path, 'w') as f:
                 json.dump(data, f, indent=2, default=str)
     
-    def _save_historical_summary(self, symbol):
+    def _save_historical_summary(self, symbol, mt5_symbol=None):
         """Fetch last 10 years of deal history for a specific symbol and save to its folder (thread-safe)"""
         import os
         from datetime import datetime
@@ -224,8 +285,9 @@ class MT5TradingBot:
         json_path = os.path.join(output_dir, HISTORICAL_SUMMARY_FILENAME)
         
         # Fetch only this symbol's deals for the configured history period
+        deal_symbol = mt5_symbol or symbol
         with self.mt5_lock:
-            all_deals = self.position_helper.get_deals_since(days=HISTORICAL_SUMMARY_DAYS, symbol=symbol)
+            all_deals = self.position_helper.get_deals_since(days=HISTORICAL_SUMMARY_DAYS, symbol=deal_symbol)
         
         total_net = sum(d.get('net_profit', d['profit']) for d in all_deals)
         total_volume = sum(d['volume'] for d in all_deals)
@@ -306,6 +368,7 @@ class MT5TradingBot:
         mtqty = self.symbols_config.get('mtqty', 0.01)
         gap_ranges = self.symbols_config.get('gap_range', {})
         symbol_gap_range = gap_ranges.get(symbol, DEFAULT_GAP_RANGE)
+        trade_symbol = self.symbol_map.get(symbol, symbol)
 
         # Throttle expensive saves so they don't block other threads
         _last_daily_save = 0.0
@@ -320,15 +383,15 @@ class MT5TradingBot:
                 # ── Gather MT5 data under lock (split into small windows for fairness) ──
                 with self.mt5_lock:
                     # Ensure symbol stays subscribed in Market Watch
-                    mt5.symbol_select(symbol, True)
-                    source_df = self.position_helper.get_rates(symbol, getattr(mt5, CANDLE_TIMEFRAME), CANDLE_COUNT)
+                    mt5.symbol_select(trade_symbol, True)
+                    source_df = self.position_helper.get_rates(trade_symbol, getattr(mt5, CANDLE_TIMEFRAME), CANDLE_COUNT)
                     market_status = self.position_helper.get_market_status(
-                        symbol, getattr(mt5, MARKET_STATUS_TIMEFRAME), lookback_minutes=MARKET_LOOKBACK_MINUTES
+                        trade_symbol, getattr(mt5, MARKET_STATUS_TIMEFRAME), lookback_minutes=MARKET_LOOKBACK_MINUTES
                     )
                 time.sleep(0)  # yield so other symbol-threads can acquire the lock
                 with self.mt5_lock:
-                    buy_positions = self.position_helper.get_buy_positions(symbol)
-                    sell_positions = self.position_helper.get_sell_positions(symbol)
+                    buy_positions = self.position_helper.get_buy_positions(trade_symbol)
+                    sell_positions = self.position_helper.get_sell_positions(trade_symbol)
                     account_info = self.position_helper.get_account_info()
                     server_time = self.position_helper._get_server_time()
 
@@ -426,6 +489,7 @@ class MT5TradingBot:
                 # ── Build JSON data (always saved so dashboard stays current) ──
                 symbol_data = {
                     'symbol': symbol,
+                    'mt5_symbol': trade_symbol,
                     'last_updated': datetime.now(tz=timezone.utc).isoformat(),
                     'server_time': server_time.isoformat(),
                     'market_status': market_status,
@@ -464,8 +528,9 @@ class MT5TradingBot:
                 if has_candle_data and candle_is_fresh and buy_signal == Signal.BUY:
                     if not brake:
                         with self.mt5_lock:
-                            order_response = self.position_helper.buy(symbol, times * mtqty)
+                            order_response = self.position_helper.buy(trade_symbol, times * mtqty)
                         self._log_event(symbol, 'BUY_EXECUTED', 'ENTRY', {
+                            'mt5_symbol': trade_symbol,
                             'qty': times * mtqty,
                             'response': str(order_response),
                         }, server_time=server_time)
@@ -476,8 +541,9 @@ class MT5TradingBot:
                 elif buy_signal == Signal.BUY_MORE:
                     vol = self.strategy._get_next_fibo_volume(buy_positions['count'], times)
                     with self.mt5_lock:
-                        order_response = self.position_helper.buy(symbol, vol)
+                        order_response = self.position_helper.buy(trade_symbol, vol)
                     self._log_event(symbol, 'BUY_MORE_EXECUTED', 'ENTRY', {
+                        'mt5_symbol': trade_symbol,
                         'qty': vol,
                         'fibo_level': buy_positions['count'] + 1,
                         'total_volume': buy_positions['total_volume'],
@@ -488,8 +554,9 @@ class MT5TradingBot:
                     time.sleep(ORDER_COOLDOWN_SECONDS)  # Wait for MT5 to register position
                 elif buy_signal == Signal.CLOSE_BUY:
                     with self.mt5_lock:
-                        close_response = self.position_helper.close_by_type(symbol, 0)
+                        close_response = self.position_helper.close_by_type(trade_symbol, 0)
                     self._log_event(symbol, 'CLOSE_BUY', 'EXIT', {
+                        'mt5_symbol': trade_symbol,
                         'positions_closed': close_response.get('closed_count', 0),
                         'total_profit': buy_positions['total_profit'] if buy_positions else 0,
                         'response': close_response,
@@ -499,8 +566,9 @@ class MT5TradingBot:
                 if has_candle_data and candle_is_fresh and sell_signal == Signal.SELL:
                     if not brake:
                         with self.mt5_lock:
-                            order_response = self.position_helper.sell(symbol, times * mtqty)
+                            order_response = self.position_helper.sell(trade_symbol, times * mtqty)
                         self._log_event(symbol, 'SELL_EXECUTED', 'ENTRY', {
+                            'mt5_symbol': trade_symbol,
                             'qty': times * mtqty,
                             'response': str(order_response),
                         }, server_time=server_time)
@@ -511,8 +579,9 @@ class MT5TradingBot:
                 elif sell_signal == Signal.SELL_MORE:
                     vol = self.strategy._get_next_fibo_volume(sell_positions['count'], times)
                     with self.mt5_lock:
-                        order_response = self.position_helper.sell(symbol, vol)
+                        order_response = self.position_helper.sell(trade_symbol, vol)
                     self._log_event(symbol, 'SELL_MORE_EXECUTED', 'ENTRY', {
+                        'mt5_symbol': trade_symbol,
                         'qty': vol,
                         'fibo_level': sell_positions['count'] + 1,
                         'total_volume': sell_positions['total_volume'],
@@ -523,8 +592,9 @@ class MT5TradingBot:
                     time.sleep(ORDER_COOLDOWN_SECONDS)  # Wait for MT5 to register position
                 elif sell_signal == Signal.CLOSE_SELL:
                     with self.mt5_lock:
-                        close_response = self.position_helper.close_by_type(symbol, 1)
+                        close_response = self.position_helper.close_by_type(trade_symbol, 1)
                     self._log_event(symbol, 'CLOSE_SELL', 'EXIT', {
+                        'mt5_symbol': trade_symbol,
                         'positions_closed': close_response.get('closed_count', 0),
                         'total_profit': sell_positions['total_profit'] if sell_positions else 0,
                         'response': close_response,
@@ -546,10 +616,10 @@ class MT5TradingBot:
                 if has_candle_data and candle_is_fresh:
                     try:
                         if _now_ts - _last_daily_save >= _DAILY_SAVE_INTERVAL:
-                            self._save_daily_trades(symbol)
+                            self._save_daily_trades(symbol, mt5_symbol=trade_symbol)
                             _last_daily_save = _now_ts
                         if _now_ts - _last_hist_save >= _HIST_SAVE_INTERVAL:
-                            self._save_historical_summary(symbol)
+                            self._save_historical_summary(symbol, mt5_symbol=trade_symbol)
                             _last_hist_save = _now_ts
                     except Exception:
                         pass  # Non-critical, don't break the main loop
