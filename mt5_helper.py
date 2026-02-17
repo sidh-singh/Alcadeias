@@ -585,7 +585,7 @@ class MT5PositionHelper:
             List of deal dicts (see get_deal_history)
         """
         # Use server time to define "today" boundaries
-        server_now = self._get_server_time()
+        server_now = self._get_server_time(symbol)
         today_start = server_now.replace(hour=0, minute=0, second=0, microsecond=0)
         # Fetch a wider window then filter by server-time date
         deals = self.get_deal_history(today_start, server_now, symbol)
@@ -596,22 +596,38 @@ class MT5PositionHelper:
             if datetime.fromtimestamp(d['time_server'], tz=timezone.utc).date() == today_date
         ]
 
-    def _get_server_time(self) -> datetime:
+    def _get_server_time(self, symbol: str = None) -> datetime:
         """
         Get the MT5 broker's server time by reading the latest tick or candle timestamp.
         Returns UTC datetime (matches broker's displayed server time).
         Falls back to UTC now if unavailable.
         """
         try:
-            # Use EURUSD (always available) or any active symbol to get server time
-            # tick.time is Unix epoch (UTC seconds) — use utcfromtimestamp to keep it in UTC
-            tick = self.mt5.symbol_info_tick('EURUSD')
-            if tick is not None and tick.time > 0:
-                return datetime.fromtimestamp(tick.time, tz=timezone.utc)
-            # Fallback: try getting time from M1 rates
-            rates = self.mt5.copy_rates_from_pos('EURUSD', self.mt5.TIMEFRAME_M1, 0, 1)
-            if rates is not None and len(rates) > 0:
-                return datetime.fromtimestamp(rates[-1][0], tz=timezone.utc)
+            candidates = []
+            if symbol:
+                candidates.append(symbol)
+                base = symbol.rstrip('mM')
+                if base and base != symbol:
+                    candidates.append(base)
+            candidates.extend(['EURUSDm', 'EURUSD', 'BTCUSDm', 'XAUUSDm', 'XAGUSDm'])
+
+            # Deduplicate while keeping order
+            seen = set()
+            ordered = []
+            for cand in candidates:
+                if cand and cand not in seen:
+                    seen.add(cand)
+                    ordered.append(cand)
+
+            for cand in ordered:
+                tick = self.mt5.symbol_info_tick(cand)
+                if tick is not None and getattr(tick, 'time', 0) > 0:
+                    return datetime.fromtimestamp(tick.time, tz=timezone.utc)
+
+            for cand in ordered:
+                rates = self.mt5.copy_rates_from_pos(cand, self.mt5.TIMEFRAME_M1, 0, 1)
+                if rates is not None and len(rates) > 0:
+                    return datetime.fromtimestamp(rates[-1][0], tz=timezone.utc)
         except Exception:
             pass
         return datetime.now(tz=timezone.utc)

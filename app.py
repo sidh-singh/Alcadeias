@@ -194,10 +194,11 @@ class MT5TradingBot:
 
         # Resolve configured symbols to broker symbol names (suffix/alias safe)
         self._build_symbol_map()
+        heartbeat_symbol = self._resolve_symbol_alias('EURUSD')
 
         # Subscribe all traded symbols + EURUSD (used for server-time)
         # symbol_select adds a symbol to Market Watch so live data flows
-        subscribe_symbols = list(set(self.symbol_map.values())) + ['EURUSD']
+        subscribe_symbols = list(set(self.symbol_map.values())) + [heartbeat_symbol]
         for sym in subscribe_symbols:
             selected = mt5.symbol_select(sym, True)
             if selected:
@@ -393,7 +394,7 @@ class MT5TradingBot:
                     buy_positions = self.position_helper.get_buy_positions(trade_symbol)
                     sell_positions = self.position_helper.get_sell_positions(trade_symbol)
                     account_info = self.position_helper.get_account_info()
-                    server_time = self.position_helper._get_server_time()
+                    server_time = self.position_helper._get_server_time(trade_symbol)
 
                 # Save account data regardless of candle availability
                 if account_info:
@@ -417,7 +418,10 @@ class MT5TradingBot:
                         last_candle_time = source_df['time'].iloc[-1]
                         if getattr(last_candle_time, 'tzinfo', None) is None:
                             last_candle_time = last_candle_time.replace(tzinfo=timezone.utc)
-                        candle_age_min = (server_time - last_candle_time).total_seconds() / 60.0
+                        if market_status and market_status.get('minutes_since_last') is not None:
+                            candle_age_min = float(market_status.get('minutes_since_last'))
+                        else:
+                            candle_age_min = (server_time - last_candle_time).total_seconds() / 60.0
                         candle_is_fresh = candle_age_min <= max(MARKET_LOOKBACK_MINUTES + 1, 4)
                     except Exception:
                         candle_is_fresh = False
