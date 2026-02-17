@@ -77,13 +77,6 @@ class MT5TradingBot:
             if not self.symbols:
                 print("✗ Warning: No symbols found in symbols.json")
                 return False
-            
-            # Narrow to dashboard-selected symbols if available
-            if hasattr(self, '_dashboard_active_symbols') and self._dashboard_active_symbols:
-                valid = [s for s in self._dashboard_active_symbols if s in self.symbols]
-                if valid:
-                    self.symbols = valid
-                    print(f"✓ Active symbols from dashboard: {', '.join(self.symbols)}")
 
             print(f"✓ Loaded {len(self.symbols)} symbols: {', '.join(self.symbols)}")
             return True
@@ -581,11 +574,6 @@ class MT5TradingBot:
                 json.dump(_acfg, _af, indent=2)
         except OSError:
             pass
-        # Read selected symbols from config (dashboard may change these)
-        self._dashboard_active_symbols = _acfg.get(
-            'active_symbols',
-            _acfg.get(f'{self.mode}_symbols', [])
-        )
 
         print(f"\n{'#'*60}")
         print(f"#  JOB STARTED - {self.mode.upper()} MODE")

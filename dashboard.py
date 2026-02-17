@@ -1840,38 +1840,25 @@ app.index_string = '''<!DOCTYPE html>
         font-family: 'Inter', sans-serif !important;
     }
 
-    /* === NUCLEAR Dark Dropdown Override — Alcadeias Gold Theme === */
-    /* Target EVERY element inside any dropdown container */
-    #symbol-selector,
-    #symbol-selector *,
+    /* === Dark Dropdown Override — Alcadeias Gold Theme === */
     .dash-dropdown,
     .dash-dropdown * {
         box-sizing: border-box !important;
     }
     /* Main dropdown container / input area */
-    #symbol-selector .Select-control,
-    #symbol-selector > div > .Select > .Select-control,
     .dash-dropdown .Select-control,
-    :not(#daily-day-selector) > .Select > .Select-control,
-    #symbol-selector [class*="control"],
-    #symbol-selector [class*="ValueContainer"],
-    #symbol-selector [class*="multiValue"] {
+    :not(#daily-day-selector) > .Select > .Select-control {
         background-color: #0a1025 !important;
         background: #0a1025 !important;
         border: 1px solid rgba(192, 168, 100, 0.25) !important;
         color: #f0ede4 !important;
     }
-    #symbol-selector .Select-multi-value-wrapper,
-    .dash-dropdown .Select-multi-value-wrapper,
-    #symbol-selector [class*="ValueContainer"] {
+    .dash-dropdown .Select-multi-value-wrapper {
         background: transparent !important;
     }
     /* Menu / dropdown list */
-    #symbol-selector .Select-menu-outer,
     .dash-dropdown .Select-menu-outer,
     :not(#daily-day-selector) > .Select > .Select-menu-outer,
-    #symbol-selector [class*="menu"],
-    #symbol-selector [class*="MenuList"],
     .dash-dropdown [class*="menu"] {
         background-color: #0c1328 !important;
         background: #0c1328 !important;
@@ -1879,97 +1866,52 @@ app.index_string = '''<!DOCTYPE html>
         z-index: 999 !important;
     }
     /* Options in the list */
-    #symbol-selector .Select-option,
-    #symbol-selector .VirtualizedSelectOption,
     .dash-dropdown .Select-option,
     :not(#daily-day-selector) > .Select .Select-option,
-    :not(#daily-day-selector) > .Select .VirtualizedSelectOption,
-    #symbol-selector [class*="option"] {
+    :not(#daily-day-selector) > .Select .VirtualizedSelectOption {
         background-color: #0c1328 !important;
         background: #0c1328 !important;
         color: #f0ede4 !important;
     }
-    #symbol-selector .VirtualizedSelectFocusedOption,
-    #symbol-selector .Select-option.is-focused,
     :not(#daily-day-selector) > .Select .VirtualizedSelectFocusedOption,
-    :not(#daily-day-selector) > .Select .Select-option.is-focused,
-    #symbol-selector [class*="option"]:hover {
+    :not(#daily-day-selector) > .Select .Select-option.is-focused {
         background-color: #1a2540 !important;
         background: #1a2540 !important;
     }
     /* Selected value chips / tags */
-    #symbol-selector .Select-value,
     .dash-dropdown .Select-value,
-    .dash-dropdown .Select--multi .Select-value,
-    :not(#daily-day-selector) > .Select .Select-value,
-    #symbol-selector [class*="multiValue"],
-    #symbol-selector [class*="multi-value"],
-    #symbol-selector [class*="tag"],
-    #symbol-selector span[class] {
+    :not(#daily-day-selector) > .Select .Select-value {
         background-color: #162040 !important;
         background: #162040 !important;
         border: 1px solid rgba(212, 168, 67, 0.40) !important;
         color: #ffffff !important;
     }
-    /* Value labels — WHITE TEXT */
-    #symbol-selector .Select-value-label,
+    /* Value labels */
     .dash-dropdown .Select-value-label,
-    :not(#daily-day-selector) > .Select .Select-value-label,
-    .Select--multi .Select-value-label,
-    #symbol-selector [class*="multiValue"] [class*="label"],
-    #symbol-selector [class*="singleValue"],
-    #symbol-selector span {
+    :not(#daily-day-selector) > .Select .Select-value-label {
         color: #ffffff !important;
         font-weight: 600 !important;
         font-size: 12px !important;
     }
     /* Input text */
-    #symbol-selector .Select-input input,
     .dash-dropdown .Select-input input,
-    :not(#daily-day-selector) > .Select .Select-input input,
-    #symbol-selector input {
+    :not(#daily-day-selector) > .Select .Select-input input {
         color: #f0ede4 !important;
         background: transparent !important;
     }
     /* Placeholder */
-    #symbol-selector .Select-placeholder,
-    :not(#daily-day-selector) > .Select .Select-placeholder,
-    #symbol-selector [class*="placeholder"] {
+    :not(#daily-day-selector) > .Select .Select-placeholder {
         color: #5c6478 !important;
     }
     /* Arrow / chevron */
-    #symbol-selector .Select-arrow-zone .Select-arrow,
-    :not(#daily-day-selector) > .Select .Select-arrow-zone .Select-arrow,
-    #symbol-selector [class*="indicator"],
-    #symbol-selector svg {
-        color: #5c6478 !important;
-        fill: #5c6478 !important;
-    }
-    #symbol-selector .Select-arrow-zone .Select-arrow {
+    :not(#daily-day-selector) > .Select .Select-arrow-zone .Select-arrow {
         border-color: #5c6478 transparent transparent !important;
     }
     /* Clear button */
-    #symbol-selector .Select-clear-zone,
     :not(#daily-day-selector) > .Select .Select-clear-zone {
         color: #5c6478 !important;
     }
-    /* Remove (x) on individual tags */
-    #symbol-selector .Select-value .Select-value-icon,
-    .dash-dropdown .Select-multi-value-wrapper .Select-value .Select-value-icon,
-    #symbol-selector [class*="multiValue"] [class*="remove"],
-    #symbol-selector [class*="Remove"] {
-        border-right: 1px solid rgba(212, 168, 67, 0.35) !important;
-        color: #b8b0a0 !important;
-        background: transparent !important;
-    }
-    #symbol-selector .Select-value .Select-value-icon:hover,
-    .dash-dropdown .Select-multi-value-wrapper .Select-value .Select-value-icon:hover {
-        color: #e05555 !important;
-        background-color: rgba(224, 85, 85, 0.15) !important;
-        background: rgba(224, 85, 85, 0.15) !important;
-    }
     /* No results text */
-    #symbol-selector .Select-noresults,
     :not(#daily-day-selector) > .Select .Select-noresults {
         background-color: #0c1328 !important;
         background: #0c1328 !important;
@@ -2146,8 +2088,6 @@ _symbols_config = load_symbols_config()
 _all_symbols = _symbols_config.get('symbols', [])
 _active_config = load_active_config()
 _current_mode = _active_config.get('mode', 'demo')
-_active_symbols = _active_config.get('active_symbols', _all_symbols[:])
-_active_symbols = [s for s in _active_symbols if s in _all_symbols] or _all_symbols[:]
 
 
 def _build_tabs(symbols):
@@ -2276,23 +2216,24 @@ app.layout = html.Div([
             }),
         ], style={'display': 'flex', 'alignItems': 'center'}),
 
-        # Right: Symbol selector dropdown
+        # Right: Symbols badge (read-only — set by symbols.json)
         html.Div([
-            html.Span(id='symbols-label', children='SYMBOLS', style={
+            html.Span('SYMBOLS', style={
                 'fontSize': '9px', 'fontWeight': '600', 'color': COLORS['text_dim'],
                 'letterSpacing': '1.5px', 'marginRight': '12px', 'flexShrink': '0',
                 'whiteSpace': 'nowrap',
             }),
-            dcc.Dropdown(
-                id='symbol-selector',
-                options=[{'label': s, 'value': s} for s in _all_symbols],
-                value=_active_symbols,
-                multi=True,
-                placeholder='Select symbols to trade...',
-                style={'minWidth': '320px', 'flex': '1'},
-                className='dash-dropdown',
+            html.Span(
+                ', '.join(_all_symbols),
+                style={
+                    'fontSize': '11px', 'fontWeight': '600', 'letterSpacing': '0.5px',
+                    'color': COLORS['text'],
+                    'background': 'rgba(192, 168, 100, 0.10)',
+                    'padding': '6px 16px', 'borderRadius': '8px',
+                    'border': '1px solid rgba(192, 168, 100, 0.25)',
+                },
             ),
-        ], style={'display': 'flex', 'alignItems': 'center', 'flex': '1', 'maxWidth': '580px'}),
+        ], style={'display': 'flex', 'alignItems': 'center'}),
     ], style={
         'display': 'flex',
         'justifyContent': 'space-between',
@@ -2303,9 +2244,9 @@ app.layout = html.Div([
         'gap': '24px',
     }),
 
-    # ── Tabs (dynamic – updated by symbol-selector callback) ──
+    # ── Tabs (always shows all symbols from symbols.json) ──
     html.Div(
-        _build_tabs(_active_symbols),
+        _build_tabs(_all_symbols),
         id='tabs-container',
         style={'padding': '0 32px', 'background': COLORS['tab_bg']},
     ),
@@ -2349,24 +2290,6 @@ app.layout = html.Div([
     'fontFamily': "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     'color': COLORS['text'],
 })
-
-
-# ─── Symbol Selector Callback ───
-@app.callback(
-    Output('tabs-container', 'children', allow_duplicate=True),
-    [Input('symbol-selector', 'value')],
-    prevent_initial_call=True,
-)
-def update_symbol_tabs(selected_symbols):
-    """Update tabs when symbols are selected/deselected and persist to active_config.json."""
-    if not selected_symbols:
-        selected_symbols = []
-
-    config = load_active_config()
-    config['active_symbols'] = selected_symbols
-    save_active_config(config)
-
-    return _build_tabs(selected_symbols)
 
 
 # ─── Daily Day Selector Callback ───
