@@ -422,7 +422,14 @@ class MT5TradingBot:
                         if getattr(last_candle_time, 'tzinfo', None) is None:
                             last_candle_time = last_candle_time.replace(tzinfo=timezone.utc)
                         candle_age_min = (server_time - last_candle_time).total_seconds() / 60.0
-                        candle_is_fresh = candle_age_min <= max(MARKET_LOOKBACK_MINUTES + 1, 4)
+
+                        # When bars were rebuilt from ticks, the rebuild IS our
+                        # freshest available data — always treat as fresh so SHA
+                        # analysis runs instead of being permanently blocked.
+                        if source_df.attrs.get('tick_rebuilt', False):
+                            candle_is_fresh = True
+                        else:
+                            candle_is_fresh = candle_age_min <= max(MARKET_LOOKBACK_MINUTES + 1, 4)
                     except Exception:
                         candle_is_fresh = False
 

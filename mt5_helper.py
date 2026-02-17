@@ -188,10 +188,13 @@ class MT5PositionHelper:
             return rates_frame, False
 
         try:
-            now_ts = datetime.now(tz=timezone.utc)
-            lookback_minutes = max(count + 20, 120)
-            from_time = now_ts - timedelta(minutes=lookback_minutes)
-            ticks = self.mt5.copy_ticks_from(symbol, from_time, max(10000, count * 300), copy_ticks_all)
+            # Start fetching ticks from the last known bar time (not a fixed
+            # lookback).  This avoids wasting the tick budget on data we
+            # already have and ensures we reach the current minute even for
+            # very liquid instruments like XAUUSD.
+            last_bar_ts = int(rates_frame['time'].iloc[-1])
+            from_time = datetime.fromtimestamp(last_bar_ts, tz=timezone.utc)
+            ticks = self.mt5.copy_ticks_from(symbol, from_time, 500_000, copy_ticks_all)
             if ticks is None or len(ticks) == 0:
                 return rates_frame, False
 
