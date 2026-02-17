@@ -130,13 +130,17 @@ ACTIVE_CONFIG_PATH = os.path.join(JSON_DIR, ACTIVE_CONFIG_FILENAME)
 
 
 def load_symbols_config():
-    """Load all available symbols from symbols.json"""
+    """Load symbols configuration from symbols.json (array-of-objects format)"""
     try:
         config_path = os.path.join(os.path.dirname(__file__), 'symbols.json')
         with open(config_path, 'r') as f:
-            return json.load(f)
+            cfg = json.load(f)
+        # Extract symbol name list from the array for dashboard usage
+        sym_list = cfg.get('symbols', [])
+        cfg['_symbol_names'] = [s.get('symbol', '') for s in sym_list if s.get('symbol')]
+        return cfg
     except (FileNotFoundError, json.JSONDecodeError):
-        return {'symbols': []}
+        return {'symbols': [], '_symbol_names': []}
 
 
 def load_active_config():
@@ -152,7 +156,7 @@ def load_active_config():
         return cfg
     except (FileNotFoundError, json.JSONDecodeError):
         symbols_cfg = load_symbols_config()
-        all_syms = symbols_cfg.get('symbols', [])
+        all_syms = symbols_cfg.get('_symbol_names', [])
         return {
             'mode': 'demo',
             'active_symbols': all_syms[:],
@@ -2093,7 +2097,7 @@ app.index_string = '''<!DOCTYPE html>
 
 # ─── Load symbols configuration at startup ───
 _symbols_config = load_symbols_config()
-_all_symbols = _symbols_config.get('symbols', [])
+_all_symbols = _symbols_config.get('_symbol_names', [])
 _active_config = load_active_config()
 _current_mode = _active_config.get('mode', 'demo')
 

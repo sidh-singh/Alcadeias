@@ -38,6 +38,7 @@ class MT5TradingBot:
         self.credentials = None
         self.symbols_config = None
         self.symbols = []
+        self.symbol_configs = {}      # Per-symbol config lookup
         self.mt5_initialized = False
         self.thread_lock = threading.Lock()       # For file I/O
         self.mt5_lock = threading.Lock()           # For MT5 API calls (not thread-safe)
@@ -129,9 +130,30 @@ class MT5TradingBot:
             with open(json_path, 'r') as f:
                 self.symbols_config = json.load(f)
             
-            self.symbols = self.symbols_config.get('symbols', [])
-            if not self.symbols:
+            sym_list = self.symbols_config.get('symbols', [])
+            if not sym_list:
                 print("✗ Warning: No symbols found in symbols.json")
+                return False
+
+            # Build per-symbol config lookup from the array (only active symbols)
+            self.symbols = []
+            self.symbol_configs = {}
+            skipped = []
+            for entry in sym_list:
+                name = entry.get('symbol', '')
+                if not name:
+                    continue
+                if not entry.get('is_active', True):
+                    skipped.append(name)
+                    continue
+                self.symbols.append(name)
+                self.symbol_configs[name] = entry
+
+            if skipped:
+                print(f"⊘ Skipped inactive symbols: {', '.join(skipped)}")
+
+            if not self.symbols:
+                print("✗ Warning: No valid symbols in symbols.json")
                 return False
 
             print(f"✓ Loaded {len(self.symbols)} symbols: {', '.join(self.symbols)}")
@@ -362,15 +384,13 @@ class MT5TradingBot:
         """
         from datetime import datetime
         
-        # Get configuration once before loop
+        # Get configuration once before loop (per-symbol config from array)
+        sym_cfg = self.symbol_configs.get(symbol, {})
         brake = self.symbols_config.get('brake', 0)
-        times_cfg = self.symbols_config.get('times', 1)
-        times = times_cfg.get(symbol, 1) if isinstance(times_cfg, dict) else times_cfg
+        times = sym_cfg.get('times', 1)
         mtqty = self.symbols_config.get('mtqty', 0.01)
-        gap_ranges = self.symbols_config.get('gap_range', {})
-        symbol_gap_range = gap_ranges.get(symbol, DEFAULT_GAP_RANGE)
-        fibo_powers = self.symbols_config.get('fibo_power', {})
-        symbol_fibo_power = fibo_powers.get(symbol, None)
+        symbol_gap_range = sym_cfg.get('gap_range', DEFAULT_GAP_RANGE)
+        symbol_fibo_power = sym_cfg.get('fibo_power', None)
         trade_symbol = self.symbol_map.get(symbol, symbol)
 
         # Throttle expensive saves so they don't block other threads
@@ -671,7 +691,7 @@ class MT5TradingBot:
         # Reset stop event for this run
         self._stop_event.clear()
         
-        # Start threads - they will run until stop_event is set
+        # Start threads — they will run until stop_event is set
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='Symbol') as executor:
             # Submit all symbol processing tasks (infinite loops)
             futures = [

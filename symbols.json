@@ -1,20 +1,27 @@
 {
-    "symbols" : ["BTCUSDm","XAUUSDm", "XAGUSDm"],
-    "times": {
-        "BTCUSDm": 10,
-        "XAUUSDm": 1,
-        "XAGUSDm": 1
-    },
-    "brake" : 0,
-    "mtqty" : 0.01,
-    "gap_range": {
-        "BTCUSDm": [0.0008, 0.0032],
-        "XAUUSDm": [0.0008, 0.0025],
-        "XAGUSDm": [0.0012, 0.0050]
-    },
-    "fibo_power": {
-        "BTCUSDm": 4,
-        "XAUUSDm": 4,
-        "XAGUSDm": 4
-    }
+    "brake": 0,
+    "mtqty": 0.01,
+    "symbols": [
+        {
+            "symbol": "BTCUSDm",
+            "is_active": true,
+            "times": 10,
+            "gap_range": [0.0012, 0.0032],
+            "fibo_power": 4
+        },
+        {
+            "symbol": "XAUUSDm",
+            "is_active": true,
+            "times": 1,
+            "gap_range": [0.0008, 0.0025],
+            "fibo_power": 4
+        },
+        {
+            "symbol": "XAGUSDm",
+            "is_active": true,
+            "times": 1,
+            "gap_range": [0.0015, 0.0050],
+            "fibo_power": 4
+        }
+    ]
 }
