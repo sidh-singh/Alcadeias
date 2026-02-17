@@ -9,8 +9,8 @@
     "mtqty" : 0.01,
     "gap_range": {
         "BTCUSDm": [0.0008, 0.0032],
-        "XAUUSDm": [0.0005, 0.0020],
-        "XAGUSDm": [0.0005, 0.0036]
+        "XAUUSDm": [0.0008, 0.0025],
+        "XAGUSDm": [0.0012, 0.0050]
     },
     "fibo_power": {
         "BTCUSDm": 2,
