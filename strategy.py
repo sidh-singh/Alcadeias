@@ -248,7 +248,7 @@ class Strategy:
                 buy_status = Signal.CLOSE_BUY
             elif (lt_trend_power_list[0] == 0) and (buy_first_profit <= -25):
                 buy_status = Signal.CLOSE_BUY
-            elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** fibo_power):
+            elif buy_first_profit < -(self._get_fibo_qty(buy_count, 1) ** fibo_power):
                 buy_status = Signal.BUY_MORE
         
         # Only SELL positions open → exit when trend SHA flips bullish
@@ -257,7 +257,7 @@ class Strategy:
                 sell_status = Signal.CLOSE_SELL
             elif (lt_trend_power_list[0] == 1) and (sell_first_profit <= -25):
                 sell_status = Signal.CLOSE_SELL
-            elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** fibo_power):
+            elif sell_first_profit < -(self._get_fibo_qty(sell_count, 1) ** fibo_power):
                 sell_status = Signal.SELL_MORE
         
         analysis_data = {
