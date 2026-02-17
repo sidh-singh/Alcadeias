@@ -415,13 +415,13 @@ class MT5TradingBot:
 
                 if has_candle_data:
                     try:
+                        # Always derive freshness from the ACTUAL source_df we will
+                        # use (which may contain tick-rebuilt bars), NOT from
+                        # market_status that fetches its own (possibly stale) bars.
                         last_candle_time = source_df['time'].iloc[-1]
                         if getattr(last_candle_time, 'tzinfo', None) is None:
                             last_candle_time = last_candle_time.replace(tzinfo=timezone.utc)
-                        if market_status and market_status.get('minutes_since_last_candle') is not None:
-                            candle_age_min = float(market_status.get('minutes_since_last_candle'))
-                        else:
-                            candle_age_min = (server_time - last_candle_time).total_seconds() / 60.0
+                        candle_age_min = (server_time - last_candle_time).total_seconds() / 60.0
                         candle_is_fresh = candle_age_min <= max(MARKET_LOOKBACK_MINUTES + 1, 4)
                     except Exception:
                         candle_is_fresh = False
@@ -475,6 +475,12 @@ class MT5TradingBot:
                         source_df, sha_df, sha_trend_df, gap_pct_series,
                         buy_positions, sell_positions, times, gap_range=symbol_gap_range
                     )
+                    analysis_data['candle_fresh'] = True
+                else:
+                    analysis_data['candle_fresh'] = False
+
+                # Always populate source metadata (regardless of fresh/stale)
+                if has_candle_data:
                     analysis_data['source_candle_count'] = int(len(source_df))
                     analysis_data['rates_source'] = source_df.attrs.get('rates_source', 'unknown')
                     analysis_data['synthetic_bar'] = bool(source_df.attrs.get('synthetic_appended', False))
@@ -483,14 +489,13 @@ class MT5TradingBot:
                         analysis_data['last_source_candle_time'] = source_df['time'].iloc[-1].isoformat()
                     except Exception:
                         analysis_data['last_source_candle_time'] = None
-                    analysis_data['candle_age_min'] = round(float(candle_age_min), 2) if candle_age_min is not None else None
-                    analysis_data['candle_fresh'] = True
                 else:
-                    analysis_data['rates_source'] = source_df.attrs.get('rates_source', 'unknown') if has_candle_data else 'none'
-                    analysis_data['synthetic_bar'] = bool(source_df.attrs.get('synthetic_appended', False)) if has_candle_data else False
-                    analysis_data['tick_rebuilt'] = bool(source_df.attrs.get('tick_rebuilt', False)) if has_candle_data else False
-                    analysis_data['candle_age_min'] = round(float(candle_age_min), 2) if candle_age_min is not None else None
-                    analysis_data['candle_fresh'] = False
+                    analysis_data['source_candle_count'] = 0
+                    analysis_data['rates_source'] = 'none'
+                    analysis_data['synthetic_bar'] = False
+                    analysis_data['tick_rebuilt'] = False
+                    analysis_data['last_source_candle_time'] = None
+                analysis_data['candle_age_min'] = round(float(candle_age_min), 2) if candle_age_min is not None else None
                 
                 # ── Build JSON data (always saved so dashboard stays current) ──
                 symbol_data = {

@@ -225,7 +225,7 @@ class MT5PositionHelper:
             base = rates_frame.copy()
             base['time'] = pd.to_datetime(base['time'], unit='s', utc=True).dt.floor('min')
             last_base_time = base['time'].iloc[-1]
-            new_bars = bars[bars['time'] > last_base_time]
+            new_bars = bars[bars['time'] > last_base_time].copy()
             if new_bars.empty:
                 return rates_frame, False
 
