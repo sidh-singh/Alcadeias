@@ -180,6 +180,66 @@ class MT5PositionHelper:
                 self.mt5.copy_ticks_from(symbol, from_time, 200, copy_ticks_all)
         except Exception:
             pass
+
+    def _rebuild_m1_from_ticks(self, symbol: str, rates_frame: pd.DataFrame, count: int):
+        """Rebuild/extend M1 bars from ticks when MT5 bar feed is stale."""
+        copy_ticks_all = getattr(self.mt5, 'COPY_TICKS_ALL', None)
+        if copy_ticks_all is None:
+            return rates_frame, False
+
+        try:
+            now_ts = datetime.now(tz=timezone.utc)
+            lookback_minutes = max(count + 20, 120)
+            from_time = now_ts - timedelta(minutes=lookback_minutes)
+            ticks = self.mt5.copy_ticks_from(symbol, from_time, max(10000, count * 300), copy_ticks_all)
+            if ticks is None or len(ticks) == 0:
+                return rates_frame, False
+
+            tdf = pd.DataFrame(ticks)
+            if tdf.empty or 'time' not in tdf.columns:
+                return rates_frame, False
+
+            tdf['time'] = pd.to_datetime(tdf['time'], unit='s', utc=True).dt.floor('min')
+
+            if 'last' in tdf.columns and (tdf['last'] != 0).any():
+                tdf['price'] = tdf['last']
+            elif 'bid' in tdf.columns and (tdf['bid'] != 0).any():
+                tdf['price'] = tdf['bid']
+            elif 'ask' in tdf.columns and (tdf['ask'] != 0).any():
+                tdf['price'] = tdf['ask']
+            else:
+                return rates_frame, False
+
+            bars = tdf.groupby('time')['price'].agg(['first', 'max', 'min', 'last', 'count']).reset_index()
+            if bars.empty:
+                return rates_frame, False
+
+            bars.rename(columns={
+                'first': 'open',
+                'max': 'high',
+                'min': 'low',
+                'last': 'close',
+                'count': 'tick_volume',
+            }, inplace=True)
+
+            base = rates_frame.copy()
+            base['time'] = pd.to_datetime(base['time'], unit='s', utc=True).dt.floor('min')
+            last_base_time = base['time'].iloc[-1]
+            new_bars = bars[bars['time'] > last_base_time]
+            if new_bars.empty:
+                return rates_frame, False
+
+            spread_val = int(base['spread'].iloc[-1]) if 'spread' in base.columns else 0
+            new_bars['spread'] = spread_val
+            new_bars['real_volume'] = 0
+
+            keep_cols = ['time', 'open', 'high', 'low', 'close', 'tick_volume', 'spread', 'real_volume']
+            merged = pd.concat([base[keep_cols], new_bars[keep_cols]], ignore_index=True)
+            merged = merged.tail(count).reset_index(drop=True)
+            merged['time'] = (merged['time'].astype('int64') // 10**9).astype('int64')
+            return merged, True
+        except Exception:
+            return rates_frame, False
     
     def get_rates(self, symbol: str, timeframe: int, count: int):
         """
@@ -227,6 +287,7 @@ class MT5PositionHelper:
 
         rates_frame = pd.DataFrame(rates)
         synthetic_appended = False
+        tick_rebuilt = False
 
         # If bar stream lags but tick stream is live, add a provisional latest M1 bar
         # so downstream SHA can continue updating for this symbol.
@@ -260,9 +321,26 @@ class MT5PositionHelper:
             except Exception:
                 pass
 
+        # Last-resort fallback for stalled M1 stream: rebuild new minute bars from ticks
+        try:
+            tick = self.mt5.symbol_info_tick(symbol)
+            tick_time = datetime.fromtimestamp(tick.time, tz=timezone.utc) if tick is not None and getattr(tick, 'time', 0) else None
+            last_bar_time = datetime.fromtimestamp(int(rates_frame['time'].iloc[-1]), tz=timezone.utc)
+            if timeframe == self.mt5.TIMEFRAME_M1 and tick_time is not None:
+                stale_minutes = (tick_time - last_bar_time).total_seconds() / 60.0
+                if stale_minutes >= 2:
+                    rebuilt_frame, rebuilt = self._rebuild_m1_from_ticks(symbol, rates_frame, count)
+                    if rebuilt:
+                        rates_frame = rebuilt_frame
+                        tick_rebuilt = True
+                        rates_source = 'ticks_rebuild_m1'
+        except Exception:
+            pass
+
         rates_frame["time"] = pd.to_datetime(rates_frame["time"], unit="s", utc=True)
         rates_frame.attrs['rates_source'] = rates_source
         rates_frame.attrs['synthetic_appended'] = synthetic_appended
+        rates_frame.attrs['tick_rebuilt'] = tick_rebuilt
         return rates_frame
     
     def get_market_status(self, symbol: str, timeframe: int, lookback_minutes: int = 15) -> Dict:
@@ -320,18 +398,22 @@ class MT5PositionHelper:
                 tick_time = datetime.fromtimestamp(tick.time, tz=timezone.utc)
 
             now = datetime.now(tz=timezone.utc)
-            reference_time = max(last_candle_time, tick_time) if tick_time else last_candle_time
-            elapsed = (now - reference_time).total_seconds() / 60.0
-            is_open = elapsed <= lookback_minutes
+            minutes_since_candle = (now - last_candle_time).total_seconds() / 60.0
+            minutes_since_tick = (now - tick_time).total_seconds() / 60.0 if tick_time else None
+            activity_ref = max(last_candle_time, tick_time) if tick_time else last_candle_time
+            minutes_since_activity = (now - activity_ref).total_seconds() / 60.0
+            is_open = minutes_since_activity <= lookback_minutes
             
             return {
                 'is_open': is_open,
                 'status': 'OPEN' if is_open else 'CLOSED',
                 'last_candle_time': last_candle_time.isoformat(),
                 'last_tick_time': tick_time.isoformat() if tick_time else None,
-                'minutes_since_last': round(elapsed, 1),
+                'minutes_since_last': round(minutes_since_activity, 1),
+                'minutes_since_last_candle': round(minutes_since_candle, 1),
+                'minutes_since_last_tick': round(minutes_since_tick, 1) if minutes_since_tick is not None else None,
                 'lookback_minutes': lookback_minutes,
-                'message': f'Market {"open" if is_open else "closed"} — last activity {round(elapsed, 1)}m ago',
+                'message': f'Market {"open" if is_open else "closed"} — last activity {round(minutes_since_activity, 1)}m ago',
             }
         except Exception as e:
             return {
