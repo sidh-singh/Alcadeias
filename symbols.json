@@ -1,7 +1,7 @@
 {
     "symbols" : ["BTCUSDm","XAUUSDm", "XAGUSDm"],
     "times": {
-        "BTCUSDm": 1,
+        "BTCUSDm": 10,
         "XAUUSDm": 1,
         "XAGUSDm": 1
     },
@@ -13,7 +13,7 @@
         "XAGUSDm": [0.0012, 0.0050]
     },
     "fibo_power": {
-        "BTCUSDm": 3,
+        "BTCUSDm": 4,
         "XAUUSDm": 4,
         "XAGUSDm": 4
     }
