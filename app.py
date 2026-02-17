@@ -39,7 +39,8 @@ class MT5TradingBot:
         self.symbols_config = None
         self.symbols = []
         self.mt5_initialized = False
-        self.thread_lock = threading.Lock()
+        self.thread_lock = threading.Lock()       # For file I/O
+        self.mt5_lock = threading.Lock()           # For MT5 API calls (not thread-safe)
         self.position_helper = None
         self.indicator = Indicator()
         self.strategy = Strategy()
@@ -176,12 +177,14 @@ class MT5TradingBot:
         os.makedirs(output_dir, exist_ok=True)
         
         # Use server time for the filename so it matches broker's trading day
-        server_now = self.position_helper._get_server_time()
+        with self.mt5_lock:
+            server_now = self.position_helper._get_server_time()
         filename = server_now.strftime('%d_%b_%Y').lower() + '.json'
         json_path = os.path.join(output_dir, filename)
         
         # Fetch today's closed deals for this symbol (server-time aware)
-        today_deals = self.position_helper.get_today_deals(symbol)
+        with self.mt5_lock:
+            today_deals = self.position_helper.get_today_deals(symbol)
         
         # Calculate summary using net_profit (includes commission+swap+fee)
         total_net = sum(d.get('net_profit', d['profit']) for d in today_deals)
@@ -216,7 +219,8 @@ class MT5TradingBot:
         json_path = os.path.join(output_dir, HISTORICAL_SUMMARY_FILENAME)
         
         # Fetch only this symbol's deals for the configured history period
-        all_deals = self.position_helper.get_deals_since(days=HISTORICAL_SUMMARY_DAYS, symbol=symbol)
+        with self.mt5_lock:
+            all_deals = self.position_helper.get_deals_since(days=HISTORICAL_SUMMARY_DAYS, symbol=symbol)
         
         total_net = sum(d.get('net_profit', d['profit']) for d in all_deals)
         total_volume = sum(d['volume'] for d in all_deals)
@@ -248,7 +252,8 @@ class MT5TradingBot:
         import os
         from datetime import datetime
 
-        server_time = self.position_helper._get_server_time()
+        with self.mt5_lock:
+            server_time = self.position_helper._get_server_time()
 
         entry = {
             'time': server_time.isoformat(),
@@ -298,60 +303,57 @@ class MT5TradingBot:
         
         while True:
             try:
-                # Fetch candle data using configured timeframe and count
-                source_df = self.position_helper.get_rates(symbol, getattr(mt5, CANDLE_TIMEFRAME), CANDLE_COUNT)
-                
-                if source_df is None or len(source_df) == 0:
-                    time.sleep(max(brake, 1))  # At least 1s sleep to avoid tight loop
-                    if self._stop_event.is_set():
-                        return
-                    continue
-                
-                # Capitalize columns for indicator compatibility
-                source_df.rename(columns={
-                    'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'
-                }, inplace=True)
-                
-                # Calculate SHA signal indicator
-                sha_df = self.indicator.calculate_sha_v3(
-                    source_df, 
-                    length=SHA_LENGTH, 
-                    ma_type=SHA_MA_TYPE,
-                )
-                
-                # Calculate SHA trend indicator
-                sha_trend_df = self.indicator.calculate_sha_v3(
-                    source_df, 
-                    length=SHA_TREND_LENGTH, 
-                    ma_type=SHA_TREND_MA_TYPE,
-                )
-                
-                # Calculate gap% between signal SHA and trend SHA
-                gap_pct_series = self.indicator.calculate_sha_gap(sha_df, sha_trend_df)
-                
-                # Check market status using configured timeframe & lookback
-                market_status = self.position_helper.get_market_status(
-                    symbol, getattr(mt5, MARKET_STATUS_TIMEFRAME), lookback_minutes=MARKET_LOOKBACK_MINUTES
-                )
-                
-                # Get buy and sell positions
-                buy_positions = self.position_helper.get_buy_positions(symbol)
-                sell_positions = self.position_helper.get_sell_positions(symbol)
-                
-                # Get account info and save to dedicated file
-                account_info = self.position_helper.get_account_info()
+                # ── Gather all MT5 data under lock (API is not thread-safe) ──
+                with self.mt5_lock:
+                    source_df = self.position_helper.get_rates(symbol, getattr(mt5, CANDLE_TIMEFRAME), CANDLE_COUNT)
+                    market_status = self.position_helper.get_market_status(
+                        symbol, getattr(mt5, MARKET_STATUS_TIMEFRAME), lookback_minutes=MARKET_LOOKBACK_MINUTES
+                    )
+                    buy_positions = self.position_helper.get_buy_positions(symbol)
+                    sell_positions = self.position_helper.get_sell_positions(symbol)
+                    account_info = self.position_helper.get_account_info()
+                    server_time = self.position_helper._get_server_time()
+
+                # Save account data regardless of candle availability
                 if account_info:
                     self._save_account_data(account_info)
+
+                # ── Indicators & signals (only when candle data is available) ──
+                buy_signal = Signal.DO_NOTHING
+                sell_signal = Signal.DO_NOTHING
+                analysis_data = {}
+                has_candle_data = source_df is not None and len(source_df) > 0
+
+                if has_candle_data:
+                    # Capitalize columns for indicator compatibility
+                    source_df.rename(columns={
+                        'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'
+                    }, inplace=True)
+                    
+                    # Calculate SHA signal indicator
+                    sha_df = self.indicator.calculate_sha_v3(
+                        source_df, 
+                        length=SHA_LENGTH, 
+                        ma_type=SHA_MA_TYPE,
+                    )
+                    
+                    # Calculate SHA trend indicator
+                    sha_trend_df = self.indicator.calculate_sha_v3(
+                        source_df, 
+                        length=SHA_TREND_LENGTH, 
+                        ma_type=SHA_TREND_MA_TYPE,
+                    )
+                    
+                    # Calculate gap% between signal SHA and trend SHA
+                    gap_pct_series = self.indicator.calculate_sha_gap(sha_df, sha_trend_df)
+                    
+                    # Calculate signal
+                    buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
+                        source_df, sha_df, sha_trend_df, gap_pct_series,
+                        buy_positions, sell_positions, times, gap_range=symbol_gap_range
+                    )
                 
-                # Calculate signal
-                buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
-                    source_df, sha_df, sha_trend_df, gap_pct_series,
-                    buy_positions, sell_positions, times, gap_range=symbol_gap_range
-                )
-                
-                # Build JSON data
-                # Get server time for consistency with broker
-                server_time = self.position_helper._get_server_time()
+                # ── Build JSON data (always saved so dashboard stays current) ──
                 symbol_data = {
                     'symbol': symbol,
                     'last_updated': datetime.now(tz=timezone.utc).isoformat(),
@@ -389,9 +391,10 @@ class MT5TradingBot:
                 # Execute buy signal
                 order_response = None
                 close_response = None
-                if buy_signal == Signal.BUY:
+                if has_candle_data and buy_signal == Signal.BUY:
                     if not brake:
-                        order_response = self.position_helper.buy(symbol, times * mtqty)
+                        with self.mt5_lock:
+                            order_response = self.position_helper.buy(symbol, times * mtqty)
                         self._log_event(symbol, 'BUY_EXECUTED', 'ENTRY', {
                             'qty': times * mtqty,
                             'response': str(order_response),
@@ -402,7 +405,8 @@ class MT5TradingBot:
                         })
                 elif buy_signal == Signal.BUY_MORE:
                     vol = self.strategy._get_next_fibo_volume(buy_positions['count'], times)
-                    order_response = self.position_helper.buy(symbol, vol)
+                    with self.mt5_lock:
+                        order_response = self.position_helper.buy(symbol, vol)
                     self._log_event(symbol, 'BUY_MORE_EXECUTED', 'ENTRY', {
                         'qty': vol,
                         'fibo_level': buy_positions['count'] + 1,
@@ -413,7 +417,8 @@ class MT5TradingBot:
                     })
                     time.sleep(ORDER_COOLDOWN_SECONDS)  # Wait for MT5 to register position
                 elif buy_signal == Signal.CLOSE_BUY:
-                    close_response = self.position_helper.close_by_type(symbol, 0)
+                    with self.mt5_lock:
+                        close_response = self.position_helper.close_by_type(symbol, 0)
                     self._log_event(symbol, 'CLOSE_BUY', 'EXIT', {
                         'positions_closed': close_response.get('closed_count', 0),
                         'total_profit': buy_positions['total_profit'] if buy_positions else 0,
@@ -421,9 +426,10 @@ class MT5TradingBot:
                     })
                 
                 # Execute sell signal
-                if sell_signal == Signal.SELL:
+                if has_candle_data and sell_signal == Signal.SELL:
                     if not brake:
-                        order_response = self.position_helper.sell(symbol, times * mtqty)
+                        with self.mt5_lock:
+                            order_response = self.position_helper.sell(symbol, times * mtqty)
                         self._log_event(symbol, 'SELL_EXECUTED', 'ENTRY', {
                             'qty': times * mtqty,
                             'response': str(order_response),
@@ -434,7 +440,8 @@ class MT5TradingBot:
                         })
                 elif sell_signal == Signal.SELL_MORE:
                     vol = self.strategy._get_next_fibo_volume(sell_positions['count'], times)
-                    order_response = self.position_helper.sell(symbol, vol)
+                    with self.mt5_lock:
+                        order_response = self.position_helper.sell(symbol, vol)
                     self._log_event(symbol, 'SELL_MORE_EXECUTED', 'ENTRY', {
                         'qty': vol,
                         'fibo_level': sell_positions['count'] + 1,
@@ -445,7 +452,8 @@ class MT5TradingBot:
                     })
                     time.sleep(ORDER_COOLDOWN_SECONDS)  # Wait for MT5 to register position
                 elif sell_signal == Signal.CLOSE_SELL:
-                    close_response = self.position_helper.close_by_type(symbol, 1)
+                    with self.mt5_lock:
+                        close_response = self.position_helper.close_by_type(symbol, 1)
                     self._log_event(symbol, 'CLOSE_SELL', 'EXIT', {
                         'positions_closed': close_response.get('closed_count', 0),
                         'total_profit': sell_positions['total_profit'] if sell_positions else 0,
@@ -464,19 +472,21 @@ class MT5TradingBot:
                 self._save_symbol_data(symbol, symbol_data)
                 
                 # Save daily trade logs
-                try:
-                    self._save_daily_trades(symbol)
-                    self._save_historical_summary(symbol)
-                except Exception:
-                    pass  # Non-critical, don't break the main loop
+                if has_candle_data:
+                    try:
+                        self._save_daily_trades(symbol)
+                        self._save_historical_summary(symbol)
+                    except Exception:
+                        pass  # Non-critical, don't break the main loop
                 
-                time.sleep(brake)
+                time.sleep(max(brake, 1))  # At least 1s between cycles
                 
                 # Check if supervisor requested shutdown (mode change)
                 if self._stop_event.is_set():
                     return
                 
             except Exception as e:
+                print(f"[{symbol}] Error: {e}")
                 time.sleep(1)
                 if self._stop_event.is_set():
                     return
