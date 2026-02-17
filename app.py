@@ -142,6 +142,15 @@ class MT5TradingBot:
         
         # Initialize position helper with mt5 instance
         self.position_helper = MT5PositionHelper(mt5)
+
+        # Subscribe all traded symbols + EURUSD (used for server-time)
+        # symbol_select adds a symbol to Market Watch so live data flows
+        for sym in self.symbols + ['EURUSD']:
+            selected = mt5.symbol_select(sym, True)
+            if selected:
+                print(f"✓ Subscribed to {sym}")
+            else:
+                print(f"✗ Failed to subscribe {sym}: {mt5.last_error()}")
         
         return True
     
@@ -312,6 +321,8 @@ class MT5TradingBot:
             try:
                 # ── Gather MT5 data under lock (split into small windows for fairness) ──
                 with self.mt5_lock:
+                    # Ensure symbol stays subscribed in Market Watch
+                    mt5.symbol_select(symbol, True)
                     source_df = self.position_helper.get_rates(symbol, getattr(mt5, CANDLE_TIMEFRAME), CANDLE_COUNT)
                     market_status = self.position_helper.get_market_status(
                         symbol, getattr(mt5, MARKET_STATUS_TIMEFRAME), lookback_minutes=MARKET_LOOKBACK_MINUTES
@@ -332,6 +343,11 @@ class MT5TradingBot:
                 sell_signal = Signal.DO_NOTHING
                 analysis_data = {}
                 has_candle_data = source_df is not None and len(source_df) > 0
+
+                if not has_candle_data:
+                    print(f"[{symbol}] WARNING: No candle data returned by MT5")
+                elif market_status and not market_status.get('is_open'):
+                    print(f"[{symbol}] Market {market_status.get('status')} — {market_status.get('minutes_since_last')}m since last candle")
 
                 if has_candle_data:
                     # Capitalize columns for indicator compatibility
