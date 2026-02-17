@@ -21,8 +21,8 @@ CANDLE_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe for price data (resolved via mt5
 CANDLE_COUNT = 50                   # Number of candles to fetch per cycle
 
 # ─── Market Status ───
-MARKET_STATUS_TIMEFRAME = 'TIMEFRAME_M5'   # Timeframe used to check market open/closed
-MARKET_LOOKBACK_MINUTES = 15               # Max minutes since last candle → still "open"
+MARKET_STATUS_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe used to check market open/closed
+MARKET_LOOKBACK_MINUTES = 3                # Max minutes since last candle → still "open"
 
 # ─── Strategy Parameters ───
 STRATEGY_HEDGE = 1                  # Hedge / profit target multiplier
