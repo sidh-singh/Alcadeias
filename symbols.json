@@ -11,5 +11,10 @@
         "BTCUSDm": [0.0008, 0.0032],
         "XAUUSDm": [0.0005, 0.0020],
         "XAGUSDm": [0.0005, 0.0036]
+    },
+    "fibo_power": {
+        "BTCUSDm": 2,
+        "XAUUSDm": 3,
+        "XAGUSDm": 4
     }
 }

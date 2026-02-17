@@ -1,7 +1,7 @@
 from enum import Enum
 from constants import (
     STRATEGY_HEDGE, STRATEGY_LOOKBACK, STRATEGY_SHA_THRESHOLD,
-    FIBO_SEQUENCE_LENGTH, DEFAULT_GAP_RANGE,
+    FIBO_SEQUENCE_LENGTH, DEFAULT_GAP_RANGE, FIBO_POWER_DEFAULT,
 )
 
 
@@ -144,7 +144,8 @@ class Strategy:
         return trend_power_list
     
     def calculate_signal(self, source_df, sha_df, sha_trend_df, gap_pct_series,
-                         buy_positions, sell_positions, times, gap_range=None):
+                         buy_positions, sell_positions, times, gap_range=None,
+                         fibo_power=None):
         """
         Calculate entry/exit signals based on SHA power and crossover
         
@@ -157,6 +158,7 @@ class Strategy:
             sell_positions: Dict from get_sell_positions() or None
             times: Hedge/multiplier from symbols config
             gap_range: [min, max] gap% range for this symbol (default from constants)
+            fibo_power: Exponent for fibo DCA threshold (default from constants, per-symbol override)
         
         Returns:
             tuple: (buy_signal, sell_signal, analysis_data)
@@ -203,6 +205,10 @@ class Strategy:
         if gap_range is None:
             gap_range = DEFAULT_GAP_RANGE
         
+        # Fibo power
+        if fibo_power is None:
+            fibo_power = FIBO_POWER_DEFAULT
+        
         buy_status = Signal.DO_NOTHING
         sell_status = Signal.DO_NOTHING
 
@@ -242,7 +248,7 @@ class Strategy:
                 buy_status = Signal.CLOSE_BUY
             elif (lt_trend_power_list[0] == 0) and (buy_count >= 5):
                 buy_status = Signal.CLOSE_BUY
-            elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** 3):
+            elif buy_first_profit < -(self._get_fibo_qty(buy_count, times) ** fibo_power):
                 buy_status = Signal.BUY_MORE
         
         # Only SELL positions open → exit when trend SHA flips bullish
@@ -251,7 +257,7 @@ class Strategy:
                 sell_status = Signal.CLOSE_SELL
             elif (lt_trend_power_list[0] == 1) and (sell_count >= 5):
                 sell_status = Signal.CLOSE_SELL
-            elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** 3):
+            elif sell_first_profit < -(self._get_fibo_qty(sell_count, times) ** fibo_power):
                 sell_status = Signal.SELL_MORE
         
         analysis_data = {

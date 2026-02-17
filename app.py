@@ -369,6 +369,8 @@ class MT5TradingBot:
         mtqty = self.symbols_config.get('mtqty', 0.01)
         gap_ranges = self.symbols_config.get('gap_range', {})
         symbol_gap_range = gap_ranges.get(symbol, DEFAULT_GAP_RANGE)
+        fibo_powers = self.symbols_config.get('fibo_power', {})
+        symbol_fibo_power = fibo_powers.get(symbol, None)
         trade_symbol = self.symbol_map.get(symbol, symbol)
 
         # Throttle expensive saves so they don't block other threads
@@ -480,7 +482,8 @@ class MT5TradingBot:
                     # Calculate signal
                     buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
                         source_df, sha_df, sha_trend_df, gap_pct_series,
-                        buy_positions, sell_positions, times, gap_range=symbol_gap_range
+                        buy_positions, sell_positions, times, gap_range=symbol_gap_range,
+                        fibo_power=symbol_fibo_power
                     )
                     analysis_data['candle_fresh'] = True
                 else:

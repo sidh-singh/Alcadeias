@@ -30,6 +30,7 @@ STRATEGY_HEDGE = 1                  # Hedge / profit target multiplier
 STRATEGY_LOOKBACK = 7               # Number of candles to analyse for signal
 STRATEGY_SHA_THRESHOLD = 0          # Min SHA ratio to classify candle as bullish
 FIBO_SEQUENCE_LENGTH = 25           # Fibonacci sequence length (first 2 dropped)
+FIBO_POWER_DEFAULT = 3              # Default exponent for fibo-based DCA threshold
 
 # ─── Risk Management ───
 RISK_REWARD_RATIO = [1, 1]          # [risk, reward] multiplier for auto SL/TP calculation
