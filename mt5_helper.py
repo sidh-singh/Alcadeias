@@ -224,7 +224,38 @@ class MT5PositionHelper:
             pass
 
         rates_frame = pd.DataFrame(rates)
-        rates_frame["time"] = pd.to_datetime(rates_frame["time"], unit="s")
+
+        # If bar stream lags but tick stream is live, add a provisional latest M1 bar
+        # so downstream SHA can continue updating for this symbol.
+        try:
+            tick = self.mt5.symbol_info_tick(symbol)
+            if tick is not None and getattr(tick, 'time', 0):
+                tick_time = datetime.fromtimestamp(tick.time, tz=timezone.utc).replace(second=0, microsecond=0)
+                last_bar_time = datetime.fromtimestamp(int(rates_frame['time'].iloc[-1]), tz=timezone.utc).replace(second=0, microsecond=0)
+
+                if tick_time > last_bar_time:
+                    prev_close = float(rates_frame['close'].iloc[-1])
+                    tick_price = float(tick.bid if getattr(tick, 'bid', 0) else getattr(tick, 'ask', prev_close))
+                    spread_val = int(rates_frame['spread'].iloc[-1]) if 'spread' in rates_frame.columns else 0
+
+                    synthetic = {
+                        'time': int(tick_time.timestamp()),
+                        'open': prev_close,
+                        'high': max(prev_close, tick_price),
+                        'low': min(prev_close, tick_price),
+                        'close': tick_price,
+                        'tick_volume': 0,
+                        'spread': spread_val,
+                        'real_volume': 0,
+                    }
+
+                    rates_frame = pd.concat([rates_frame, pd.DataFrame([synthetic])], ignore_index=True)
+                    if len(rates_frame) > count:
+                        rates_frame = rates_frame.tail(count).reset_index(drop=True)
+        except Exception:
+            pass
+
+        rates_frame["time"] = pd.to_datetime(rates_frame["time"], unit="s", utc=True)
         return rates_frame
     
     def get_market_status(self, symbol: str, timeframe: int, lookback_minutes: int = 15) -> Dict:

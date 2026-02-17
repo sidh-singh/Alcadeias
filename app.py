@@ -341,6 +341,8 @@ class MT5TradingBot:
                 sell_signal = Signal.DO_NOTHING
                 analysis_data = {}
                 has_candle_data = source_df is not None and len(source_df) > 0
+                candle_is_fresh = False
+                candle_age_min = None
 
                 if not has_candle_data:
                     print(f"[{symbol}] WARNING: No candle data returned by MT5")
@@ -349,17 +351,36 @@ class MT5TradingBot:
 
                 if has_candle_data:
                     try:
+                        last_candle_time = source_df['time'].iloc[-1]
+                        if getattr(last_candle_time, 'tzinfo', None) is None:
+                            last_candle_time = last_candle_time.replace(tzinfo=timezone.utc)
+                        candle_age_min = (server_time - last_candle_time).total_seconds() / 60.0
+                        candle_is_fresh = candle_age_min <= max(MARKET_LOOKBACK_MINUTES + 1, 4)
+                    except Exception:
+                        candle_is_fresh = False
+
+                    try:
                         current_candle_time = source_df['time'].iloc[-1]
                         if _last_seen_candle_time is not None and current_candle_time == _last_seen_candle_time:
                             _same_candle_count += 1
                             if _same_candle_count % 30 == 0:
-                                print(f"[{symbol}] Candle time not advancing: {current_candle_time} (same for {_same_candle_count} cycles)")
+                                tick_time = None
+                                if market_status:
+                                    tick_time = market_status.get('last_tick_time')
+                                print(
+                                    f"[{symbol}] Candle time not advancing: {current_candle_time} "
+                                    f"(same for {_same_candle_count} cycles) | age={candle_age_min}m | tick={tick_time}"
+                                )
                         else:
                             _last_seen_candle_time = current_candle_time
                             _same_candle_count = 0
                     except Exception:
                         pass
 
+                    if not candle_is_fresh:
+                        print(f"[{symbol}] WARNING: Stale candle stream (age={candle_age_min}m) — SHA/trading skipped this cycle")
+
+                if has_candle_data and candle_is_fresh:
                     # Capitalize columns for indicator compatibility
                     source_df.rename(columns={
                         'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'
@@ -392,6 +413,11 @@ class MT5TradingBot:
                         analysis_data['last_source_candle_time'] = source_df['time'].iloc[-1].isoformat()
                     except Exception:
                         analysis_data['last_source_candle_time'] = None
+                    analysis_data['candle_age_min'] = round(float(candle_age_min), 2) if candle_age_min is not None else None
+                    analysis_data['candle_fresh'] = True
+                else:
+                    analysis_data['candle_age_min'] = round(float(candle_age_min), 2) if candle_age_min is not None else None
+                    analysis_data['candle_fresh'] = False
                 
                 # ── Build JSON data (always saved so dashboard stays current) ──
                 symbol_data = {
@@ -431,7 +457,7 @@ class MT5TradingBot:
                 # Execute buy signal
                 order_response = None
                 close_response = None
-                if has_candle_data and buy_signal == Signal.BUY:
+                if has_candle_data and candle_is_fresh and buy_signal == Signal.BUY:
                     if not brake:
                         with self.mt5_lock:
                             order_response = self.position_helper.buy(symbol, times * mtqty)
@@ -466,7 +492,7 @@ class MT5TradingBot:
                     }, server_time=server_time)
                 
                 # Execute sell signal
-                if has_candle_data and sell_signal == Signal.SELL:
+                if has_candle_data and candle_is_fresh and sell_signal == Signal.SELL:
                     if not brake:
                         with self.mt5_lock:
                             order_response = self.position_helper.sell(symbol, times * mtqty)
@@ -513,7 +539,7 @@ class MT5TradingBot:
                 
                 # Save daily trade logs (throttled to reduce MT5 lock contention)
                 _now_ts = time.time()
-                if has_candle_data:
+                if has_candle_data and candle_is_fresh:
                     try:
                         if _now_ts - _last_daily_save >= _DAILY_SAVE_INTERVAL:
                             self._save_daily_trades(symbol)
