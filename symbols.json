@@ -13,7 +13,7 @@
         "XAGUSDm": [0.0012, 0.0050]
     },
     "fibo_power": {
-        "BTCUSDm": 2,
+        "BTCUSDm": 3,
         "XAUUSDm": 3,
         "XAGUSDm": 4
     }
