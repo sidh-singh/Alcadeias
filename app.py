@@ -303,7 +303,9 @@ class MT5TradingBot:
                 source_df = self.position_helper.get_rates(symbol, getattr(mt5, CANDLE_TIMEFRAME), CANDLE_COUNT)
                 
                 if source_df is None or len(source_df) == 0:
-                    time.sleep(brake)
+                    time.sleep(max(brake, 1))  # At least 1s sleep to avoid tight loop
+                    if self._stop_event.is_set():
+                        return
                     continue
                 
                 # Capitalize columns for indicator compatibility
@@ -553,6 +555,7 @@ class MT5TradingBot:
         """Step 5: Cleanup and shutdown MT5"""
         if self.mt5_initialized:
             mt5.shutdown()
+            self.mt5_initialized = False
             print("\n✓ MT5 connection closed")
     
     def _init_cycle(self):
@@ -607,7 +610,21 @@ class MT5TradingBot:
         try:
             while True:
                 # ── Initialise (or re-initialise after mode change) ──
-                if not self._init_cycle():
+                for _attempt in range(1, 4):      # Retry up to 3 times
+                    if self._init_cycle():
+                        break
+                    print(f"\n⚠ Init attempt {_attempt}/3 failed, retrying in 5s...")
+                    time.sleep(5)
+                else:
+                    print("\n✗ All init attempts failed — waiting for mode change...")
+                    # Don't exit — wait for a mode switch from dashboard
+                    self._stop_event.clear()
+                    self._mode_changed.clear()
+                    self._watch_mode(check_interval=3)
+                    if self._mode_changed.is_set():
+                        self.cleanup()
+                        time.sleep(3)
+                        continue
                     return False
 
                 # ── Run processing (blocks until stop_event or Ctrl+C) ──
@@ -616,9 +633,11 @@ class MT5TradingBot:
                 if self._mode_changed.is_set():
                     # Graceful re-init: shut down current MT5 connection
                     self.cleanup()
+                    new_mode = self._read_config_mode().upper()
                     print(f"\n{'='*60}")
-                    print(f"  ♻ Re-initialising MT5 for {self._read_config_mode().upper()} account...")
+                    print(f"  ♻ Re-initialising MT5 for {new_mode} account...")
                     print(f"{'='*60}\n")
+                    time.sleep(3)   # Give MT5 terminal time to disconnect
                     continue   # Loop back to _init_cycle with new mode
                 else:
                     # Normal shutdown (Ctrl+C or no mode change)

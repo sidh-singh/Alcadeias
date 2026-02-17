@@ -171,10 +171,12 @@ class MT5PositionHelper:
             count: Number of candles to fetch
         
         Returns:
-            Numpy array with OHLCV data or None if failed
+            DataFrame with OHLCV data or None if failed
             Each row contains: time, open, high, low, close, tick_volume, spread, real_volume
         """
         rates = self.mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
+        if rates is None or len(rates) == 0:
+            return None
         rates_frame = pd.DataFrame(rates)
         rates_frame["time"] = pd.to_datetime(rates_frame["time"], unit="s")
         return rates_frame
