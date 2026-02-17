@@ -312,6 +312,8 @@ class MT5TradingBot:
         _last_hist_save = 0.0
         _DAILY_SAVE_INTERVAL = 60       # seconds between daily-trade saves
         _HIST_SAVE_INTERVAL = 300       # seconds between historical-summary saves
+        _last_seen_candle_time = None
+        _same_candle_count = 0
         
         while True:
             try:
@@ -346,6 +348,18 @@ class MT5TradingBot:
                     print(f"[{symbol}] Market {market_status.get('status')} — {market_status.get('minutes_since_last')}m since last candle")
 
                 if has_candle_data:
+                    try:
+                        current_candle_time = source_df['time'].iloc[-1]
+                        if _last_seen_candle_time is not None and current_candle_time == _last_seen_candle_time:
+                            _same_candle_count += 1
+                            if _same_candle_count % 30 == 0:
+                                print(f"[{symbol}] Candle time not advancing: {current_candle_time} (same for {_same_candle_count} cycles)")
+                        else:
+                            _last_seen_candle_time = current_candle_time
+                            _same_candle_count = 0
+                    except Exception:
+                        pass
+
                     # Capitalize columns for indicator compatibility
                     source_df.rename(columns={
                         'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'

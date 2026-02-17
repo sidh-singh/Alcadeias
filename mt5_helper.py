@@ -209,13 +209,16 @@ class MT5PositionHelper:
         if rates is None or len(rates) == 0:
             return None
 
-        # Fallback: if returned bars are stale, retry using time-based fetch
+        # Compare with time-based fetch and keep the freshest stream.
+        # Some brokers/symbols return stale bars on copy_rates_from_pos while
+        # copy_rates_from(symbol, now, ...) is fresh.
         try:
-            last_ts = datetime.fromtimestamp(rates[-1][0], tz=timezone.utc)
             now_ts = datetime.now(tz=timezone.utc)
-            if (now_ts - last_ts).total_seconds() > 600:
-                alt_rates = self.mt5.copy_rates_from(symbol, timeframe, now_ts, count)
-                if alt_rates is not None and len(alt_rates) > 0:
+            alt_rates = self.mt5.copy_rates_from(symbol, timeframe, now_ts, count)
+            if alt_rates is not None and len(alt_rates) > 0:
+                pos_last = datetime.fromtimestamp(rates[-1][0], tz=timezone.utc)
+                alt_last = datetime.fromtimestamp(alt_rates[-1][0], tz=timezone.utc)
+                if alt_last >= pos_last:
                     rates = alt_rates
         except Exception:
             pass
