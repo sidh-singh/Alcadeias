@@ -63,8 +63,12 @@ class Strategy:
         lt_sha_power_list = []
         ct_power_list = []
         crossover = []
+
+        max_lookback = min(self.lookback, len(source_df), len(sha_df))
+        if max_lookback <= 0:
+            return lt_sha_power_list, ct_power_list, crossover
         
-        for i in range(self.lookback):
+        for i in range(max_lookback):
             idx = -(i + 1)
             
             # SHA candle
@@ -94,6 +98,13 @@ class Strategy:
             p_high = source_df['High'].iloc[idx]
             s_low = sha_df['Low'].iloc[idx]
             s_high = sha_df['High'].iloc[idx]
+
+            values = [sha_diff, sha_range, price_diff, price_range, p_low, p_high, s_low, s_high]
+            if any(v != v for v in values):
+                lt_sha_power_list.append(0)
+                ct_power_list.append(0)
+                crossover.append(0)
+                continue
             
             if sha_bullish:
                 if p_low >= s_high:
@@ -115,10 +126,17 @@ class Strategy:
     def _analyze_trend(self, sha_trend_df):
         """Analyze last N candles of trend SHA for power (bullish/bearish)."""
         trend_power_list = []
-        for i in range(self.lookback):
+        max_lookback = min(self.lookback, len(sha_trend_df))
+        if max_lookback <= 0:
+            return trend_power_list
+
+        for i in range(max_lookback):
             idx = -(i + 1)
             sha_diff = sha_trend_df['Close'].iloc[idx] - sha_trend_df['Open'].iloc[idx]
             sha_range = sha_trend_df['High'].iloc[idx] - sha_trend_df['Low'].iloc[idx]
+            if sha_diff != sha_diff or sha_range != sha_range:
+                trend_power_list.append(0)
+                continue
             if sha_range != 0 and (sha_diff / sha_range) >= self.sha_threshold:
                 trend_power_list.append(1)
             else:
@@ -172,7 +190,14 @@ class Strategy:
         lt_trend_sell_power = sum(1 for x in lt_trend_power_list if x == 0)
         
         # Current candle gap%
-        current_gap_pct = round(float(gap_pct_series.iloc[-1]), 4) if len(gap_pct_series) > 0 else 0.0
+        current_gap_pct = 0.0
+        if len(gap_pct_series) > 0:
+            try:
+                gap_value = float(gap_pct_series.iloc[-1])
+                if gap_value == gap_value:  # not NaN
+                    current_gap_pct = round(gap_value, 4)
+            except (TypeError, ValueError):
+                current_gap_pct = 0.0
         
         # Gap range
         if gap_range is None:
@@ -180,6 +205,24 @@ class Strategy:
         
         buy_status = Signal.DO_NOTHING
         sell_status = Signal.DO_NOTHING
+
+        if not lt_sha_power_list or not lt_trend_power_list:
+            analysis_data = {
+                'sha_power_list': lt_sha_power_list,
+                'price_power_list': ct_power_list,
+                'crossover': crossover,
+                'sha_buy_strength': lt_buy_power,
+                'sha_sell_strength': lt_sell_power,
+                'price_buy_strength': ct_buy_power,
+                'price_sell_strength': ct_sell_power,
+                'sha_trend_power_list': lt_trend_power_list,
+                'sha_trend_buy_strength': lt_trend_buy_power,
+                'sha_trend_sell_strength': lt_trend_sell_power,
+                'current_gap_pct': current_gap_pct,
+                'gap_range': gap_range,
+                'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
+            }
+            return buy_status, sell_status, analysis_data
         
         # ─── Entry/Exit Logic ───
         
@@ -224,6 +267,7 @@ class Strategy:
             'sha_trend_sell_strength': lt_trend_sell_power,
             'current_gap_pct': current_gap_pct,
             'gap_range': gap_range,
+            'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
         }
         
         return buy_status, sell_status, analysis_data

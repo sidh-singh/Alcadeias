@@ -373,6 +373,11 @@ class MT5TradingBot:
                         source_df, sha_df, sha_trend_df, gap_pct_series,
                         buy_positions, sell_positions, times, gap_range=symbol_gap_range
                     )
+                    analysis_data['source_candle_count'] = int(len(source_df))
+                    try:
+                        analysis_data['last_source_candle_time'] = source_df['time'].iloc[-1].isoformat()
+                    except Exception:
+                        analysis_data['last_source_candle_time'] = None
                 
                 # ── Build JSON data (always saved so dashboard stays current) ──
                 symbol_data = {

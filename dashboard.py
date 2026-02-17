@@ -688,6 +688,9 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     # Gap% data
     gap_pct = analysis.get('current_gap_pct', 0)
     gap_range_val = analysis.get('gap_range', [0.1, 0.30])
+    lookback_used = analysis.get('lookback_used', len(sha_list))
+    src_count = analysis.get('source_candle_count', 0)
+    src_last_time = analysis.get('last_source_candle_time', '-')
 
     # Overall bias (includes trend)
     total_buy = sha_buy + price_buy + trend_buy
@@ -889,7 +892,9 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                 ],
             ),
             # ── Footer timestamp ──
-            html.Div(last_updated, style={
+            html.Div(
+                f'{last_updated}  |  LKB:{lookback_used}  SRC:{src_count}  LAST:{src_last_time}',
+                style={
                 'fontSize': '0.65rem', 'color': COLORS['text_muted'],
                 'padding': '4px 16px 8px', 'textAlign': 'right',
                 'fontFamily': "'JetBrains Mono', monospace",
