@@ -160,6 +160,26 @@ class MT5PositionHelper:
             'profit': round(account.profit, 2),
             'drawdown': round(drawdown_pct, 2),
         }
+
+    def _ensure_symbol_ready(self, symbol: str) -> bool:
+        """Ensure symbol is visible/subscribed in Market Watch before reads."""
+        info = self.mt5.symbol_info(symbol)
+        if info is None:
+            return False
+        if not info.visible and not self.mt5.symbol_select(symbol, True):
+            return False
+        return True
+
+    def _warm_symbol_feed(self, symbol: str):
+        """Touch tick/rates endpoints to force terminal history sync for symbol."""
+        try:
+            self.mt5.symbol_info_tick(symbol)
+            copy_ticks_all = getattr(self.mt5, 'COPY_TICKS_ALL', None)
+            if copy_ticks_all is not None:
+                from_time = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
+                self.mt5.copy_ticks_from(symbol, from_time, 200, copy_ticks_all)
+        except Exception:
+            pass
     
     def get_rates(self, symbol: str, timeframe: int, count: int):
         """
@@ -174,9 +194,32 @@ class MT5PositionHelper:
             DataFrame with OHLCV data or None if failed
             Each row contains: time, open, high, low, close, tick_volume, spread, real_volume
         """
-        rates = self.mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
+        if not self._ensure_symbol_ready(symbol):
+            return None
+
+        rates = None
+        for attempt in range(3):
+            self._warm_symbol_feed(symbol)
+            rates = self.mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
+            if rates is not None and len(rates) > 0:
+                break
+            if attempt < 2:
+                time.sleep(0.2)
+
         if rates is None or len(rates) == 0:
             return None
+
+        # Fallback: if returned bars are stale, retry using time-based fetch
+        try:
+            last_ts = datetime.fromtimestamp(rates[-1][0], tz=timezone.utc)
+            now_ts = datetime.now(tz=timezone.utc)
+            if (now_ts - last_ts).total_seconds() > 600:
+                alt_rates = self.mt5.copy_rates_from(symbol, timeframe, now_ts, count)
+                if alt_rates is not None and len(alt_rates) > 0:
+                    rates = alt_rates
+        except Exception:
+            pass
+
         rates_frame = pd.DataFrame(rates)
         rates_frame["time"] = pd.to_datetime(rates_frame["time"], unit="s")
         return rates_frame
@@ -200,7 +243,25 @@ class MT5PositionHelper:
                 - lookback_minutes: int, the threshold used
         """
         try:
-            rates = self.mt5.copy_rates_from_pos(symbol, timeframe, 0, 3)
+            if not self._ensure_symbol_ready(symbol):
+                return {
+                    'is_open': False,
+                    'status': 'CLOSED',
+                    'last_candle_time': None,
+                    'minutes_since_last': None,
+                    'lookback_minutes': lookback_minutes,
+                    'message': f'Symbol not available/visible: {symbol}',
+                }
+
+            rates = None
+            for attempt in range(3):
+                self._warm_symbol_feed(symbol)
+                rates = self.mt5.copy_rates_from_pos(symbol, timeframe, 0, 3)
+                if rates is not None and len(rates) > 0:
+                    break
+                if attempt < 2:
+                    time.sleep(0.2)
+
             if rates is None or len(rates) == 0:
                 return {
                     'is_open': False,
@@ -212,17 +273,24 @@ class MT5PositionHelper:
                 }
             
             last_candle_time = datetime.fromtimestamp(rates[-1][0], tz=timezone.utc)
+            tick = self.mt5.symbol_info_tick(symbol)
+            tick_time = None
+            if tick is not None and getattr(tick, 'time', 0):
+                tick_time = datetime.fromtimestamp(tick.time, tz=timezone.utc)
+
             now = datetime.now(tz=timezone.utc)
-            elapsed = (now - last_candle_time).total_seconds() / 60.0
+            reference_time = max(last_candle_time, tick_time) if tick_time else last_candle_time
+            elapsed = (now - reference_time).total_seconds() / 60.0
             is_open = elapsed <= lookback_minutes
             
             return {
                 'is_open': is_open,
                 'status': 'OPEN' if is_open else 'CLOSED',
                 'last_candle_time': last_candle_time.isoformat(),
+                'last_tick_time': tick_time.isoformat() if tick_time else None,
                 'minutes_since_last': round(elapsed, 1),
                 'lookback_minutes': lookback_minutes,
-                'message': f'Market {"open" if is_open else "closed"} — last candle {round(elapsed, 1)}m ago',
+                'message': f'Market {"open" if is_open else "closed"} — last activity {round(elapsed, 1)}m ago',
             }
         except Exception as e:
             return {

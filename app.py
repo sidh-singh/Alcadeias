@@ -143,7 +143,10 @@ class MT5TradingBot:
             if selected:
                 print(f"✓ Subscribed to {sym}")
             else:
-                print(f"✗ Failed to subscribe {sym}: {mt5.last_error()}")
+                prefix = sym[:6] if len(sym) >= 6 else sym
+                matches = mt5.symbols_get(f"{prefix}*") or []
+                candidates = ', '.join(s.name for s in matches[:8]) if matches else 'none'
+                print(f"✗ Failed to subscribe {sym}: {mt5.last_error()} | candidates: {candidates}")
         
         return True
     
