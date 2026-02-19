@@ -31,7 +31,7 @@ class Strategy:
     def _get_fibo_qty(self, qty_count, times):
         fib = [self._recur_fibo(i) for i in range(FIBO_SEQUENCE_LENGTH)][2:]
         try:
-            return fib[qty_count + 1] * times
+            return fib[qty_count] * times
         except (IndexError, ValueError):
             return times
     
