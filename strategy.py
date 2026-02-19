@@ -49,7 +49,7 @@ class Strategy:
         """
         fib = [self._recur_fibo(i) for i in range(FIBO_SEQUENCE_LENGTH)][2:]
         try:
-            return round(fib[position_count] * times / 100, 2)
+            return round(fib[position_count + 1] * times / 100, 2)
         except IndexError:
             return 0.01 * times
     
