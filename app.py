@@ -500,10 +500,12 @@ class MT5TradingBot:
                     gap_pct_series = self.indicator.calculate_sha_gap(sha_df, sha_trend_df)
                     
                     # Calculate signal
+                    symbol_cfg = self.symbol_configs.get(symbol, {})
+                    symbol_close = symbol_cfg.get('close', 2)
                     buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
                         source_df, sha_df, sha_trend_df, gap_pct_series,
                         buy_positions, sell_positions, times, gap_range=symbol_gap_range,
-                        fibo_power=symbol_fibo_power
+                        fibo_power=symbol_fibo_power, close_threshold=symbol_close
                     )
                     analysis_data['candle_fresh'] = True
                 else:

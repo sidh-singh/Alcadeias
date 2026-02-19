@@ -7,21 +7,24 @@
             "is_active": true,
             "times": 10,
             "gap_range": [0.0012, 0.0032],
-            "fibo_power": 4
+            "fibo_power": 4,
+            "close": 10
         },
         {
             "symbol": "XAUUSDm",
             "is_active": true,
             "times": 1,
             "gap_range": [0.0008, 0.0025],
-            "fibo_power": 4
+            "fibo_power": 4,
+            "close": 2
         },
         {
             "symbol": "XAGUSDm",
             "is_active": true,
             "times": 1,
             "gap_range": [0.0015, 0.0050],
-            "fibo_power": 4
+            "fibo_power": 4,
+            "close": 2
         }
     ]
 }

@@ -145,7 +145,7 @@ class Strategy:
     
     def calculate_signal(self, source_df, sha_df, sha_trend_df, gap_pct_series,
                          buy_positions, sell_positions, times, gap_range=None,
-                         fibo_power=None):
+                         fibo_power=None, close_threshold=2):
         """
         Calculate entry/exit signals based on SHA power and crossover
         
@@ -244,7 +244,7 @@ class Strategy:
         
         # Only BUY positions open → exit when trend SHA flips bearish
         elif buy_count > 0 and sell_count == 0:
-            if buy_profit > 2:
+            if buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
             elif (lt_trend_power_list[0] == 0) and (buy_first_profit <= -45):
                 buy_status = Signal.CLOSE_BUY
@@ -253,7 +253,7 @@ class Strategy:
         
         # Only SELL positions open → exit when trend SHA flips bullish
         elif buy_count == 0 and sell_count > 0:
-            if sell_profit > 2:
+            if sell_profit > close_threshold:
                 sell_status = Signal.CLOSE_SELL
             elif (lt_trend_power_list[0] == 1) and (sell_first_profit <= -45):
                 sell_status = Signal.CLOSE_SELL
