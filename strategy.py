@@ -31,7 +31,7 @@ class Strategy:
     def _get_fibo_qty(self, qty_count, times):
         fib = [self._recur_fibo(i) for i in range(FIBO_SEQUENCE_LENGTH)][2:]
         try:
-            return fib[qty_count] * times
+            return fib[qty_count + 1] * times
         except (IndexError, ValueError):
             return times
     
@@ -244,7 +244,7 @@ class Strategy:
         
         # Only BUY positions open → exit when trend SHA flips bearish
         elif buy_count > 0 and sell_count == 0:
-            if buy_profit > hedge:
+            if buy_profit > 2:
                 buy_status = Signal.CLOSE_BUY
             elif (lt_trend_power_list[0] == 0) and (buy_first_profit <= -35):
                 buy_status = Signal.CLOSE_BUY
@@ -253,7 +253,7 @@ class Strategy:
         
         # Only SELL positions open → exit when trend SHA flips bullish
         elif buy_count == 0 and sell_count > 0:
-            if sell_profit > hedge:
+            if sell_profit > 2:
                 sell_status = Signal.CLOSE_SELL
             elif (lt_trend_power_list[0] == 1) and (sell_first_profit <= -35):
                 sell_status = Signal.CLOSE_SELL
