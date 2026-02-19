@@ -1202,15 +1202,20 @@ def _build_daily_chart(deals):
     )
 
 
-def build_daily_trades_section(symbol):
+def build_daily_trades_section(symbol, selected_date=None):
     """Build daily trades chart and metrics for a symbol — premium version with day selector"""
-    daily_data = load_daily_trade_data(symbol)
+    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
+    active_date = selected_date if selected_date else today_str
+    is_today = (active_date == today_str)
+
+    if is_today:
+        daily_data = load_daily_trade_data(symbol)
+    else:
+        daily_data = load_daily_trade_data_for_date(symbol, active_date)
+
     historical = load_historical_summary(symbol)
 
-    today_deals = []
-    if daily_data:
-        today_deals = daily_data.get('deals', [])
-
+    deals = daily_data.get('deals', []) if daily_data else []
     sym_total = daily_data.get('total_profit', 0) if daily_data else 0
     sym_avg = daily_data.get('avg_profit', 0) if daily_data else 0
     sym_count = daily_data.get('deal_count', 0) if daily_data else 0
@@ -1219,9 +1224,18 @@ def build_daily_trades_section(symbol):
 
     all_sym_pl, all_sym_deals = load_today_all_symbols_pl()
 
+    if is_today:
+        day_label = 'Today'
+    else:
+        try:
+            d = datetime.strptime(active_date, '%Y-%m-%d')
+            day_label = d.strftime('%d %b')
+        except (ValueError, TypeError):
+            day_label = active_date
+
     metrics_row = html.Div([
         make_metric_card(
-            f'{symbol} P/L Today',
+            f'{symbol} P/L {day_label}',
             f'${sym_total:,.2f}',
             COLORS['positive'] if sym_total >= 0 else COLORS['negative'],
             f'{sym_count} deals', icon='📊',
@@ -1246,14 +1260,12 @@ def build_daily_trades_section(symbol):
         ),
     ], style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap', 'marginBottom': '16px'})
 
-    # Build the chart for today's data (default)
-    chart = _build_daily_chart(today_deals)
+    # Build the chart for the selected date
+    chart = _build_daily_chart(deals)
 
     # Day selector dropdown — last 7 days
     available_dates = get_available_daily_dates(symbol, max_days=7)
-    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
-    # Default to today if available, otherwise first available
-    default_date = today_str
+    default_date = active_date
 
     day_dropdown = dcc.Dropdown(
         id='daily-day-selector',
@@ -1547,7 +1559,7 @@ def build_strategy_log_section(symbol):
     ])
 
 
-def build_symbol_tab_content(symbol):
+def build_symbol_tab_content(symbol, selected_date=None):
     """Build complete content for a single symbol tab — premium version"""
     data = load_symbol_data(symbol)
 
@@ -1667,7 +1679,7 @@ def build_symbol_tab_content(symbol):
         html.Div(style={'height': '16px'}),
 
         # Daily Trade Log section
-        build_daily_trades_section(symbol),
+        build_daily_trades_section(symbol, selected_date=selected_date),
 
         html.Div(style={'height': '16px'}),
 
@@ -2117,6 +2129,8 @@ app.layout = html.Div([
     dcc.Interval(id='refresh-interval', interval=REFRESH_INTERVAL, n_intervals=0),
     # Cache to skip redundant DOM rebuilds
     dcc.Store(id='data-hash', data=''),
+    # Persist selected daily date across refreshes
+    dcc.Store(id='selected-daily-date', data=None),
 
     # ── Top gradient accent line — divine gold/blue ──
     html.Div(className='gradient-bar'),
@@ -2273,7 +2287,8 @@ app.layout = html.Div([
 # ─── Daily Day Selector Callback ───
 @app.callback(
     [Output('daily-metrics-container', 'children'),
-     Output('daily-chart-container', 'children')],
+     Output('daily-chart-container', 'children'),
+     Output('selected-daily-date', 'data')],
     [Input('daily-day-selector', 'value'),
      Input('symbol-tabs', 'value')],
     prevent_initial_call=True,
@@ -2281,7 +2296,7 @@ app.layout = html.Div([
 def update_daily_day(selected_date, selected_symbol):
     """Update daily trade chart and metrics when a different day is selected."""
     if not selected_symbol:
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
 
     today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
     is_today = (not selected_date) or (selected_date == today_str)
@@ -2341,7 +2356,7 @@ def update_daily_day(selected_date, selected_symbol):
 
     chart = _build_daily_chart(deals)
 
-    return [metrics_row], [chart]
+    return [metrics_row], [chart], selected_date
 
 
 # ─── Main Content Callback ───
@@ -2354,9 +2369,10 @@ def update_daily_day(selected_date, selected_symbol):
      Output('mode-indicator', 'style')],
     [Input('symbol-tabs', 'value'),
      Input('refresh-interval', 'n_intervals')],
-    [dash.State('data-hash', 'data')],
+    [dash.State('data-hash', 'data'),
+     dash.State('selected-daily-date', 'data')],
 )
-def update_content(selected_symbol, n, prev_hash):
+def update_content(selected_symbol, n, prev_hash, stored_date):
     """Single callback: refreshes content only when data changes or tab switches"""
     import hashlib
 
@@ -2443,7 +2459,9 @@ def update_content(selected_symbol, n, prev_hash):
         account_stat('Drawdown', f'{drawdown:.2f}%', drawdown_color),
     ], style={'display': 'flex', 'gap': '20px', 'alignItems': 'center'})
 
-    content = build_symbol_tab_content(selected_symbol)
+    # On tab switch reset to today, otherwise preserve selected date
+    active_date = None if is_tab_switch else stored_date
+    content = build_symbol_tab_content(selected_symbol, selected_date=active_date)
 
     # Use server time from symbol data if available
     server_time_str = symbol_data.get('server_time') if symbol_data else None
