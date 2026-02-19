@@ -12,14 +12,14 @@
         {
             "symbol": "XAUUSDm",
             "is_active": true,
-            "times": 1,
+            "times": 2,
             "gap_range": [0.0008, 0.0025],
             "fibo_power": 4
         },
         {
             "symbol": "XAGUSDm",
             "is_active": true,
-            "times": 1,
+            "times": 2,
             "gap_range": [0.0015, 0.0050],
             "fibo_power": 4
         }
