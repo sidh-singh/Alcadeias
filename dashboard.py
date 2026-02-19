@@ -974,52 +974,18 @@ def load_daily_trade_data_for_date(symbol, date_str):
 
 
 def get_available_daily_dates(symbol, max_days=7):
-    """Return a list of (date_str, label) for the last `max_days` days that have trade data."""
-    try:
-        symbol_dir = os.path.join(DAILY_TRADE_DIR, symbol)
-        if not os.path.isdir(symbol_dir):
-            return []
-        pattern = os.path.join(symbol_dir, '*.json')
-        files = [
-            f for f in glob.glob(pattern)
-            if os.path.basename(f) != HISTORICAL_SUMMARY_FILENAME
-        ]
-        # Collect server_date from each file
-        date_set = set()
-        for fpath in files:
-            try:
-                with open(fpath, 'r') as f:
-                    data = json.load(f)
-                sd = data.get('server_date', '')
-                if sd:
-                    date_set.add(sd)
-            except (json.JSONDecodeError, IOError):
-                continue
-        # Filter to last max_days from today and sort descending
-        today = datetime.now(tz=timezone.utc).date()
-        cutoff = today - timedelta(days=max_days - 1)
-        valid = []
-        for ds in date_set:
-            try:
-                d = datetime.strptime(ds, '%Y-%m-%d').date()
-                if cutoff <= d <= today:
-                    valid.append(d)
-            except ValueError:
-                continue
-        valid.sort(reverse=True)
-        result = []
-        for d in valid:
-            ds = d.strftime('%Y-%m-%d')
-            if d == today:
-                label = f'Today ({d.strftime("%d %b %Y")})'
-            elif d == today - timedelta(days=1):
-                label = f'Yesterday ({d.strftime("%d %b %Y")})'
-            else:
-                label = d.strftime('%A, %d %b %Y')
-            result.append({'label': label, 'value': ds})
-        return result
-    except Exception:
-        return []
+    """Return a list of (date_str, label) for the last `max_days` days."""
+    today = datetime.now(tz=timezone.utc).date()
+    result = []
+    for i in range(max_days):
+        d = today - timedelta(days=i)
+        ds = d.strftime('%Y-%m-%d')
+        if d == today:
+            label = f'Today ({ds})'
+        else:
+            label = ds
+        result.append({'label': label, 'value': ds})
+    return result
 
 
 def load_historical_summary(symbol):
@@ -1291,7 +1257,7 @@ def build_daily_trades_section(symbol):
 
     day_dropdown = dcc.Dropdown(
         id='daily-day-selector',
-        options=available_dates if available_dates else [{'label': f'Today ({datetime.now(tz=timezone.utc).strftime("%d %b %Y")})', 'value': today_str}],
+        options=available_dates,
         value=default_date,
         clearable=False,
         searchable=True,
