@@ -23,7 +23,7 @@
             "is_active": true,
             "times": 1,
             "gap_range": [0.0010, 0.0050],
-            "fibo_power": 4,
+            "fibo_power": 4.5,
             "close": 1
         }
     ]
