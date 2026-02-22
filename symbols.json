@@ -5,10 +5,10 @@
         {
             "symbol": "BTCUSDm",
             "is_active": true,
-            "times": 7,
+            "times": 10,
             "gap_range": [0.0012, 0.0032],
             "fibo_power": 5,
-            "close": 7
+            "close": 10
         },
         {
             "symbol": "XAUUSDm",
