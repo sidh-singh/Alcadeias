@@ -6,11 +6,11 @@ Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
 # ─── SHA Signal Indicator ───
-SHA_LENGTH = 3                      # Smoothing length for signal SHA (pre & post)
+SHA_LENGTH = 15                      # Smoothing length for signal SHA (pre & post)
 SHA_MA_TYPE = 'RMA'                 # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
 
 # ─── SHA Trend Indicator ───
-SHA_TREND_LENGTH = 11               # Smoothing length for trend SHA (pre & post)
+SHA_TREND_LENGTH = 55               # Smoothing length for trend SHA (pre & post)
 SHA_TREND_MA_TYPE = 'RMA'           # MA type for trend SHA
 
 # ─── SHA Gap ───
@@ -18,7 +18,7 @@ DEFAULT_GAP_RANGE = [0.001, 0.003]   # Default gap range [min, max] as raw ratio
 
 # ─── Data Fetching ───
 CANDLE_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe for price data (resolved via mt5 at runtime)
-CANDLE_COUNT = 50                   # Number of candles to fetch per cycle
+CANDLE_COUNT = 200                   # Number of candles to fetch per cycle
 ALLOW_SYNTHETIC_TICK_BAR = False    # When True, append provisional bar from tick if MT5 bar feed lags
 
 # ─── Market Status ───
