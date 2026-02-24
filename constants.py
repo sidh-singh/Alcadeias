@@ -18,7 +18,7 @@ DEFAULT_GAP_RANGE = [0.001, 0.003]   # Default gap range [min, max] as raw ratio
 
 # ─── Data Fetching ───
 CANDLE_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe for price data (resolved via mt5 at runtime)
-CANDLE_COUNT = 350                   # Number of candles to fetch per cycle (needs ≥ 2×SHA_TREND_LENGTH warmup)
+CANDLE_COUNT = 1000                  # Must be large for RMA convergence (~140 warmup + ~640 convergence for RMA(70))
 ALLOW_SYNTHETIC_TICK_BAR = True     # Append provisional bar from tick when MT5 bar feed lags
 
 # ─── Market Status ───

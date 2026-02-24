@@ -52,6 +52,37 @@ class Indicator:
 
         return pd.Series(result, index=series.index)
 
+    @staticmethod
+    def _tv_exp_ma_first_seed(series, length, alpha):
+        """
+        Exponential MA that seeds with the first non-NaN value (Pine SMMA style).
+        Unlike _tv_exp_ma which seeds with SMA, this seeds immediately.
+        Matches Pine:  smma := na(smma[1]) ? src : (smma[1]*(length-1) + src) / length
+        """
+        values = series.values.astype(float)
+        n = len(values)
+        result = np.full(n, np.nan)
+
+        # Find first non-NaN value
+        first_valid = -1
+        for i in range(n):
+            if not np.isnan(values[i]):
+                first_valid = i
+                break
+
+        if first_valid == -1:
+            return pd.Series(result, index=series.index)
+
+        result[first_valid] = values[first_valid]
+        for i in range(first_valid + 1, n):
+            v = values[i]
+            if np.isnan(v):
+                result[i] = result[i - 1]
+            else:
+                result[i] = alpha * v + (1.0 - alpha) * result[i - 1]
+
+        return pd.Series(result, index=series.index)
+
     def calculate_sha_v3(self, df, length=10, ma_type='EMA'):
         """
         Calculate Smoothed Heiken Ashi v3
@@ -211,9 +242,16 @@ class Indicator:
                 lambda x: np.dot(x, weights), raw=True
             )
         
-        elif ma_type == 'SMMA' or ma_type == 'SWMA':
-            # SMMA is equivalent to RMA in TradingView
-            return self._tv_exp_ma(series, length, alpha=1.0 / length)
+        elif ma_type == 'SMMA':
+            # Pine SMMA: seeds with first value (NOT SMA), then
+            # smma = (smma[1] * (length-1) + src) / length  (alpha = 1/length)
+            return self._tv_exp_ma_first_seed(series, length, alpha=1.0 / length)
+        
+        elif ma_type == 'SWMA':
+            # SWMA in Pine is ta.swma() which is a 4-bar symmetric weighted avg
+            # Approximate with WMA(4) for short series; length param is ignored
+            w = np.array([1, 2, 2, 1], dtype=float)
+            return series.rolling(window=4).apply(lambda x: np.dot(x, w) / w.sum(), raw=True)
         
         elif ma_type == 'LSMA':
             return series.rolling(window=length).apply(
