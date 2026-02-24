@@ -6,8 +6,8 @@ Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
 # ─── SHA Signal Indicator ───
-SHA_LENGTH = 2                      # Smoothing length for signal SHA (pre & post)
-SHA_MA_TYPE = 'EMA'                 # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
+SHA_LENGTH = 5                      # Smoothing length for signal SHA (pre & post)
+SHA_MA_TYPE = 'RMA'                 # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
 
 # ─── SHA Trend Indicator ───
 SHA_TREND_LENGTH = 55               # Smoothing length for trend SHA (pre & post)
