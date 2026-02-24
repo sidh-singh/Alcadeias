@@ -10,8 +10,8 @@ SHA_LENGTH = 2                      # Smoothing length for signal SHA (pre & pos
 SHA_MA_TYPE = 'EMA'                 # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
 
 # ─── SHA Trend Indicator ───
-SHA_TREND_LENGTH = 11               # Smoothing length for trend SHA (pre & post)
-SHA_TREND_MA_TYPE = 'RMA'           # MA type for trend SHA
+SHA_TREND_LENGTH = 4               # Smoothing length for trend SHA (pre & post)
+SHA_TREND_MA_TYPE = 'EMA'           # MA type for trend SHA
 
 # ─── SHA Gap ───
 DEFAULT_GAP_RANGE = [0.001, 0.003]   # Default gap range [min, max] as raw ratio (not ×100)
