@@ -178,6 +178,9 @@ class MT5PositionHelper:
             if copy_ticks_all is not None:
                 from_time = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
                 self.mt5.copy_ticks_from(symbol, from_time, 200, copy_ticks_all)
+            # Also poke the bar cache — requesting a fresh rate nudges the
+            # terminal to sync its internal history for this symbol.
+            self.mt5.copy_rates_from_pos(symbol, self.mt5.TIMEFRAME_M1, 0, 1)
         except Exception:
             pass
 
@@ -276,8 +279,14 @@ class MT5PositionHelper:
         # Compare with time-based fetch and keep the freshest stream.
         # Some brokers/symbols return stale bars on copy_rates_from_pos while
         # copy_rates_from(symbol, now, ...) is fresh.
+        # Use tick-derived broker server time instead of local UTC to avoid
+        # clock-skew issues that cause the latest bar to be missed.
         try:
-            now_ts = datetime.now(tz=timezone.utc)
+            _tick = self.mt5.symbol_info_tick(symbol)
+            if _tick is not None and getattr(_tick, 'time', 0) > 0:
+                now_ts = datetime.fromtimestamp(_tick.time, tz=timezone.utc)
+            else:
+                now_ts = datetime.now(tz=timezone.utc)
             alt_rates = self.mt5.copy_rates_from(symbol, timeframe, now_ts, count)
             if alt_rates is not None and len(alt_rates) > 0:
                 pos_last = datetime.fromtimestamp(rates[-1][0], tz=timezone.utc)
@@ -331,7 +340,7 @@ class MT5PositionHelper:
             last_bar_time = datetime.fromtimestamp(int(rates_frame['time'].iloc[-1]), tz=timezone.utc)
             if timeframe == self.mt5.TIMEFRAME_M1 and tick_time is not None:
                 stale_minutes = (tick_time - last_bar_time).total_seconds() / 60.0
-                if stale_minutes >= 2:
+                if stale_minutes >= 1.5:
                     rebuilt_frame, rebuilt = self._rebuild_m1_from_ticks(symbol, rates_frame, count)
                     if rebuilt:
                         rates_frame = rebuilt_frame

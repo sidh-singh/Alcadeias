@@ -474,7 +474,9 @@ class MT5TradingBot:
                         current_candle_time = source_df['time'].iloc[-1]
                         if _last_seen_candle_time is not None and current_candle_time == _last_seen_candle_time:
                             _same_candle_count += 1
-                            if _same_candle_count % 30 == 0:
+                            # Only warn when candle is actually stale (>90s for M1)
+                            # M1 bars naturally hold the same time for up to 60s
+                            if _same_candle_count == 90 or (_same_candle_count > 90 and _same_candle_count % 60 == 0):
                                 tick_time = None
                                 if market_status:
                                     tick_time = market_status.get('last_tick_time')
@@ -482,6 +484,14 @@ class MT5TradingBot:
                                     f"[{symbol}] Candle time not advancing: {current_candle_time} "
                                     f"(same for {_same_candle_count} cycles) | age={candle_age_min}m | tick={tick_time}"
                                 )
+                            # Force re-subscribe after ~3 min of same candle
+                            # to reset MT5 terminal's internal cache for this symbol
+                            if _same_candle_count > 0 and _same_candle_count % 180 == 0:
+                                with self.mt5_lock:
+                                    mt5.symbol_select(trade_symbol, False)
+                                    time.sleep(0.1)
+                                    mt5.symbol_select(trade_symbol, True)
+                                print(f"[{symbol}] Forced re-subscribe to {trade_symbol} (stuck {_same_candle_count} cycles)")
                         else:
                             _last_seen_candle_time = current_candle_time
                             _same_candle_count = 0
