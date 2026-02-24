@@ -6,7 +6,7 @@
             "symbol": "BTCUSDm",
             "is_active": true,
             "times": 10,
-            "gap_range": [0.0008, 0.0032],
+            "gap_range": [0.0008, 0.0044],
             "fibo_power": 4,
             "close": 10
         },
@@ -14,7 +14,7 @@
             "symbol": "XAUUSDm",
             "is_active": true,
             "times": 1,
-            "gap_range": [0.0006, 0.0025],
+            "gap_range": [0.0006, 0.0035],
             "fibo_power": 4,
             "close": 1
         },
@@ -22,7 +22,7 @@
             "symbol": "XAGUSDm",
             "is_active": true,
             "times": 1,
-            "gap_range": [0.0012, 0.0050],
+            "gap_range": [0.0012, 0.0070],
             "fibo_power": 4,
             "close": 1
         }
