@@ -27,14 +27,17 @@ from constants import (
 class MT5TradingBot:
     """Main Trading Bot Class with Clean Architecture"""
     
-    def __init__(self, mode='demo'):
+    def __init__(self, mode='demo', target_symbol=None):
         """
         Initialize the trading bot
         
         Args:
             mode (str): Either 'demo' or 'live'
+            target_symbol (str): If set, only process this single symbol.
+                                 Recommended to avoid MT5 threading issues.
         """
         self.mode = mode.lower()
+        self.target_symbol = target_symbol.strip().upper() if target_symbol else None
         self.credentials = None
         self.symbols_config = None
         self.symbols = []
@@ -151,6 +154,18 @@ class MT5TradingBot:
 
             if skipped:
                 print(f"⊘ Skipped inactive symbols: {', '.join(skipped)}")
+
+            # ── Single-symbol mode: filter to target_symbol only ──
+            if self.target_symbol:
+                # Match case-insensitively against configured symbol names
+                matched = [s for s in self.symbols if s.upper() == self.target_symbol]
+                if not matched:
+                    print(f"✗ Error: Symbol '{self.target_symbol}' not found in symbols.json")
+                    print(f"  Available: {', '.join(self.symbols)}")
+                    return False
+                self.symbols = matched
+                self.symbol_configs = {s: self.symbol_configs[s] for s in matched}
+                print(f"⚡ Single-symbol mode: {matched[0]}")
 
             if not self.symbols:
                 print("✗ Warning: No valid symbols in symbols.json")
@@ -680,18 +695,40 @@ class MT5TradingBot:
                     return
     
     def run_multithreaded_processing(self):
-        """Step 4: Start infinite multithreaded processing for all symbols."""
+        """Step 4: Start processing for all symbols.
+        
+        Single-symbol mode: runs directly on the main thread (no threading overhead).
+        Multi-symbol mode: spawns one thread per symbol (legacy, not recommended).
+        """
+        # Reset stop event for this run
+        self._stop_event.clear()
+
+        # ── Single-symbol: run directly on main thread (no threading) ──
+        if len(self.symbols) == 1:
+            symbol = self.symbols[0]
+            print(f"\n{'='*60}")
+            print(f"  Running single-symbol process: {symbol}")
+            print(f"{'='*60}")
+            print(f"Press Ctrl+C to stop\n")
+            try:
+                self.process_symbol(symbol)
+            except KeyboardInterrupt:
+                print("\n\n⚠ Stopping...")
+                self._stop_event.set()
+                raise
+            return
+
+        # ── Multi-symbol: threaded (legacy fallback) ──
         print(f"\n{'='*60}")
         print(f"  Starting Continuous Multithreaded Processing")
+        print(f"  ⚠ Running {len(self.symbols)} symbols in threads — consider")
+        print(f"    running separate processes with --symbol for each instead.")
         print(f"{'='*60}\n")
         
         max_workers = len(self.symbols)
         
         print(f"Launching {max_workers} threads (1 per symbol)...")
         print(f"Press Ctrl+C to stop\n")
-
-        # Reset stop event for this run
-        self._stop_event.clear()
         
         # Start threads — they will run until stop_event is set
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='Symbol') as executor:
@@ -802,20 +839,28 @@ class MT5TradingBot:
 def main():
     """
     Main entry point for the application
+    
+    Usage:
+        app.py [mode]                      # Run all active symbols (legacy)
+        app.py [mode] --symbol SYMBOL      # Run a SINGLE symbol only (recommended)
+    
+    Running one symbol per process avoids MT5 threading issues
+    where SHA candle data can overlap between symbols.
     """
-    # Get mode from command line argument (default: demo)
-    mode = sys.argv[1] if len(sys.argv) > 1 else 'demo'
-    mode = mode.lower()
-    
-    # Validate mode
-    if mode not in ['demo', 'live']:
-        print(f"✗ Error: Invalid mode '{mode}'. Must be 'demo' or 'live'")
-        sys.exit(1)
-    
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Alcadeias Trading Bot')
+    parser.add_argument('mode', nargs='?', default='demo', choices=['demo', 'live'],
+                        help='Account mode (default: demo)')
+    parser.add_argument('--symbol', '-s', type=str, default=None,
+                        help='Run only this symbol (e.g. BTCUSDm). '
+                             'Recommended: run one process per symbol.')
+    args = parser.parse_args()
+
     # Create bot instance and execute job
-    bot = MT5TradingBot(mode=mode)
+    bot = MT5TradingBot(mode=args.mode, target_symbol=args.symbol)
     success = bot.execute_job()
-    
+
     # Exit with appropriate code
     sys.exit(0 if success else 1)
 
