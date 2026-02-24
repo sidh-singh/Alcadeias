@@ -8,7 +8,50 @@ class Indicator:
     def __init__(self):
         """Initialize SHA Indicator"""
         pass
-    
+
+    # ─── TradingView-compatible exponential MA core ───
+    @staticmethod
+    def _tv_exp_ma(series, length, alpha):
+        """
+        TradingView-compatible exponential MA.
+        Seeds with SMA of the first `length` non-NaN values, then
+        applies the standard exponential recursion.  This matches
+        ta.ema() (alpha=2/(len+1)) and ta.rma() (alpha=1/len) in Pine.
+        """
+        values = series.values.astype(float)
+        n = len(values)
+        result = np.full(n, np.nan)
+
+        # Find first window of `length` consecutive non-NaN values
+        run = 0
+        seed_end = -1
+        for i in range(n):
+            if not np.isnan(values[i]):
+                run += 1
+                if run >= length:
+                    seed_end = i
+                    break
+            else:
+                run = 0
+
+        if seed_end == -1:
+            # Not enough data — return NaN series
+            return pd.Series(result, index=series.index)
+
+        # SMA seed
+        seed_start = seed_end - length + 1
+        result[seed_end] = np.mean(values[seed_start:seed_end + 1])
+
+        # Exponential recursion
+        for i in range(seed_end + 1, n):
+            v = values[i]
+            if np.isnan(v):
+                result[i] = result[i - 1]
+            else:
+                result[i] = alpha * v + (1.0 - alpha) * result[i - 1]
+
+        return pd.Series(result, index=series.index)
+
     def calculate_sha_v3(self, df, length=10, ma_type='EMA'):
         """
         Calculate Smoothed Heiken Ashi v3
@@ -31,12 +74,21 @@ class Indicator:
 
         # Step 2: Heiken Ashi Calculation
         ha_close = (o + h + l + c) / 4
-        ha_open = pd.Series(index=df.index, dtype=float)
-        ha_open.iloc[0] = (o.iloc[0] + c.iloc[0]) / 2
 
-        # Recursive calculation
-        for i in range(1, len(df)):
-            ha_open.iloc[i] = (ha_open.iloc[i-1] + ha_close.iloc[i-1]) / 2
+        # Find first bar where ALL pre-smoothed values are valid.
+        # With TV-compatible MAs the first (length-1) bars are NaN.
+        valid_mask = o.notna() & h.notna() & l.notna() & c.notna()
+        ha_open = pd.Series(np.nan, index=df.index, dtype=float)
+
+        if valid_mask.any():
+            first_valid_pos = int(valid_mask.values.argmax())  # first True
+            ha_open.iloc[first_valid_pos] = (
+                o.iloc[first_valid_pos] + c.iloc[first_valid_pos]
+            ) / 2
+
+            # Recursive calculation from first valid bar onward
+            for i in range(first_valid_pos + 1, len(df)):
+                ha_open.iloc[i] = (ha_open.iloc[i - 1] + ha_close.iloc[i - 1]) / 2
 
         ha_high = pd.concat([h, ha_open, ha_close], axis=1).max(axis=1)
         ha_low = pd.concat([l, ha_open, ha_close], axis=1).min(axis=1)
@@ -96,7 +148,8 @@ class Indicator:
             return series.rolling(window=length).mean()
         
         elif ma_type == 'EMA':
-            return series.ewm(span=length, adjust=False).mean()
+            # TradingView ta.ema(): SMA-seeded, alpha = 2/(length+1)
+            return self._tv_exp_ma(series, length, alpha=2.0 / (length + 1))
         
         elif ma_type == 'WMA':
             weights = np.arange(1, length + 1)
@@ -105,30 +158,30 @@ class Indicator:
             )
         
         elif ma_type == 'RMA':
-            alpha = 1.0 / length
-            return series.ewm(alpha=alpha, adjust=False).mean()
+            # TradingView ta.rma(): SMA-seeded, alpha = 1/length
+            return self._tv_exp_ma(series, length, alpha=1.0 / length)
         
         elif ma_type == 'VWMA':
             if volume is None:
-                return series.ewm(span=length, adjust=False).mean()
+                return self._tv_exp_ma(series, length, alpha=2.0 / (length + 1))
             pv = series * volume
             return pv.rolling(window=length).sum() / volume.rolling(window=length).sum()
         
         elif ma_type == 'DEMA':
-            ema1 = series.ewm(span=length, adjust=False).mean()
-            ema2 = ema1.ewm(span=length, adjust=False).mean()
+            ema1 = self._tv_exp_ma(series, length, alpha=2.0 / (length + 1))
+            ema2 = self._tv_exp_ma(ema1, length, alpha=2.0 / (length + 1))
             return 2 * ema1 - ema2
         
         elif ma_type == 'TEMA':
-            ema1 = series.ewm(span=length, adjust=False).mean()
-            ema2 = ema1.ewm(span=length, adjust=False).mean()
-            ema3 = ema2.ewm(span=length, adjust=False).mean()
+            ema1 = self._tv_exp_ma(series, length, alpha=2.0 / (length + 1))
+            ema2 = self._tv_exp_ma(ema1, length, alpha=2.0 / (length + 1))
+            ema3 = self._tv_exp_ma(ema2, length, alpha=2.0 / (length + 1))
             return 3 * ema1 - 3 * ema2 + ema3
         
         elif ma_type == 'ZLEMA':
             lag = (length - 1) // 2
             zlema_series = 2 * series - series.shift(lag)
-            return zlema_series.ewm(span=length, adjust=False).mean()
+            return self._tv_exp_ma(zlema_series, length, alpha=2.0 / (length + 1))
         
         elif ma_type == 'HMA':
             half_length = length // 2
@@ -159,8 +212,8 @@ class Indicator:
             )
         
         elif ma_type == 'SMMA' or ma_type == 'SWMA':
-            alpha = 1.0 / length
-            return series.ewm(alpha=alpha, adjust=False).mean()
+            # SMMA is equivalent to RMA in TradingView
+            return self._tv_exp_ma(series, length, alpha=1.0 / length)
         
         elif ma_type == 'LSMA':
             return series.rolling(window=length).apply(
@@ -172,4 +225,5 @@ class Indicator:
             return (series.rolling(window=length).max() + series.rolling(window=length).min()) / 2
         
         else:
-            return series.ewm(span=length, adjust=False).mean()
+            # Unknown MA type → fall back to TV-compatible EMA
+            return self._tv_exp_ma(series, length, alpha=2.0 / (length + 1))
