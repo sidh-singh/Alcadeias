@@ -2,6 +2,7 @@ from enum import Enum
 from constants import (
     STRATEGY_HEDGE, STRATEGY_LOOKBACK, STRATEGY_SHA_THRESHOLD,
     FIBO_SEQUENCE_LENGTH, DEFAULT_GAP_RANGE, FIBO_POWER_DEFAULT,
+    SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
 )
 
 
@@ -145,7 +146,7 @@ class Strategy:
     
     def calculate_signal(self, source_df, sha_df, sha_trend_df, gap_pct_series,
                          buy_positions, sell_positions, times, gap_range=None,
-                         fibo_power=None, close_threshold=2):
+                         fibo_power=None, close_threshold=2, convergence=None):
         """
         Calculate entry/exit signals based on SHA power and crossover
         
@@ -209,6 +210,11 @@ class Strategy:
         if fibo_power is None:
             fibo_power = FIBO_POWER_DEFAULT
         
+        # Convergence state
+        if convergence is None:
+            convergence = {'state': 'UNKNOWN', 'gap_now': 0.0, 'gap_prev': 0.0, 'gap_delta': 0.0}
+        conv_state = convergence.get('state', 'UNKNOWN')
+
         buy_status = Signal.DO_NOTHING
         sell_status = Signal.DO_NOTHING
 
@@ -226,6 +232,7 @@ class Strategy:
                 'sha_trend_sell_strength': lt_trend_sell_power,
                 'current_gap_pct': current_gap_pct,
                 'gap_range': gap_range,
+                'convergence': convergence,
                 'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
             }
             return buy_status, sell_status, analysis_data
@@ -233,13 +240,15 @@ class Strategy:
         # ─── Entry/Exit Logic ───
         
         gap_in_range = gap_range[0] <= current_gap_pct <= gap_range[1]
-        below_gap = current_gap_pct < gap_range[0] 
+        below_gap = current_gap_pct < gap_range[0]
+        entry_conv_ok = conv_state in ('DIVERGING', 'PARALLEL')
         
-        # No positions open → look for entry (gap% must be in range)
+        # No positions open → look for entry
+        # Requires: signal+trend agree, gap in range, and convergence is DIVERGING or PARALLEL
         if buy_count == 0 and sell_count == 0:
-            if lt_sha_power_list[0] == 1 and lt_trend_power_list[0] == 1:
+            if lt_sha_power_list[0] == 1 and lt_trend_power_list[0] == 1 and gap_in_range and entry_conv_ok:
                 buy_status = Signal.BUY
-            elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0:
+            elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0 and gap_in_range and entry_conv_ok:
                 sell_status = Signal.SELL
         
         # Only BUY positions open → exit when trend SHA flips bearish
@@ -273,6 +282,7 @@ class Strategy:
             'sha_trend_sell_strength': lt_trend_sell_power,
             'current_gap_pct': current_gap_pct,
             'gap_range': gap_range,
+            'convergence': convergence,
             'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
         }
         

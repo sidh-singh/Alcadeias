@@ -14,6 +14,7 @@ from constants import (
     SHA_LENGTH, SHA_MA_TYPE,
     SHA_TREND_LENGTH, SHA_TREND_MA_TYPE,
     DEFAULT_GAP_RANGE,
+    SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
@@ -524,13 +525,22 @@ class MT5TradingBot:
                     # Calculate gap% between signal SHA and trend SHA
                     gap_pct_series = self.indicator.calculate_sha_gap(sha_df, sha_trend_df)
                     
+                    # Detect SHA convergence/divergence state
+                    convergence = self.indicator.calculate_sha_convergence(
+                        sha_df, sha_trend_df,
+                        lookback=SHA_CONVERGENCE_LOOKBACK,
+                        close_threshold=SHA_CLOSE_THRESHOLD,
+                        convergence_threshold=SHA_CONVERGENCE_THRESHOLD,
+                    )
+                    
                     # Calculate signal
                     symbol_cfg = self.symbol_configs.get(symbol, {})
                     symbol_close = symbol_cfg.get('close', 2)
                     buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
                         source_df, sha_df, sha_trend_df, gap_pct_series,
                         buy_positions, sell_positions, times, gap_range=symbol_gap_range,
-                        fibo_power=symbol_fibo_power, close_threshold=symbol_close
+                        fibo_power=symbol_fibo_power, close_threshold=symbol_close,
+                        convergence=convergence
                     )
                     analysis_data['candle_fresh'] = True
                 else:

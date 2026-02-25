@@ -157,6 +157,58 @@ class Indicator:
         gap_pct = ((sha_mean - trend_mean) / trend_mean).abs()
         return gap_pct
     
+    def calculate_sha_convergence(self, sha_df, sha_trend_df,
+                                   lookback=5, close_threshold=0.0003,
+                                   convergence_threshold=0.0001):
+        """
+        Detect whether signal SHA and trend SHA are converging, diverging,
+        parallel, or close (stuck together).
+
+        Compares the absolute gap ratio at the current bar vs `lookback` bars ago.
+
+        Args:
+            sha_df: Signal SHA DataFrame (Open, High, Low, Close)
+            sha_trend_df: Trend SHA DataFrame (Open, High, Low, Close)
+            lookback: Number of bars to measure gap change over
+            close_threshold: Gap below this -> CLOSE (raw ratio, e.g. 0.0003 = 0.03%)
+            convergence_threshold: Dead-zone for PARALLEL (raw ratio)
+
+        Returns:
+            dict:
+              state: 'CONVERGING' | 'DIVERGING' | 'PARALLEL' | 'CLOSE'
+              gap_now: current absolute gap ratio
+              gap_prev: gap ratio `lookback` bars ago
+              gap_delta: gap_now - gap_prev (positive = widening)
+        """
+        sha_mean = (sha_df['Open'] + sha_df['High'] + sha_df['Low'] + sha_df['Close']) / 4
+        trend_mean = (sha_trend_df['Open'] + sha_trend_df['High'] + sha_trend_df['Low'] + sha_trend_df['Close']) / 4
+
+        gap_series = ((sha_mean - trend_mean) / trend_mean).abs()
+
+        valid = gap_series.dropna()
+        if len(valid) < lookback + 1:
+            return {'state': 'UNKNOWN', 'gap_now': 0.0, 'gap_prev': 0.0, 'gap_delta': 0.0}
+
+        gap_now = float(valid.iloc[-1])
+        gap_prev = float(valid.iloc[-(lookback + 1)])
+        gap_delta = gap_now - gap_prev
+
+        if gap_now < close_threshold:
+            state = 'CLOSE'
+        elif gap_delta > convergence_threshold:
+            state = 'DIVERGING'
+        elif gap_delta < -convergence_threshold:
+            state = 'CONVERGING'
+        else:
+            state = 'PARALLEL'
+
+        return {
+            'state': state,
+            'gap_now': round(gap_now, 6),
+            'gap_prev': round(gap_prev, 6),
+            'gap_delta': round(gap_delta, 6),
+        }
+
     def _ma(self, series, length, ma_type='EMA', volume=None):
         """
         Calculate moving average

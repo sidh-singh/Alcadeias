@@ -621,8 +621,8 @@ def _signal_row(label, icon, color, power, lst):
     )
 
 
-def _build_gap_row(gap_pct, gap_range):
-    """Build the SHA gap% row with range indicator."""
+def _build_gap_row(gap_pct, gap_range, convergence=None):
+    """Build the SHA gap% row with range indicator and convergence state."""
     # Convert raw ratio to display percentage
     display_gap = gap_pct * 100
     gap_min = gap_range[0] if gap_range and len(gap_range) >= 2 else 0.001
@@ -636,40 +636,92 @@ def _build_gap_row(gap_pct, gap_range):
     range_badge_color = '#00d2a0' if in_range else '#ffd93d'
     range_badge_text = '✓ IN RANGE' if in_range else '○ OUT'
 
+    # Convergence state
+    conv = convergence or {}
+    conv_state = conv.get('state', 'UNKNOWN')
+    conv_delta = conv.get('gap_delta', 0)
+    _conv_cfg = {
+        'DIVERGING':  ('↗ DIVERGING',  '#f39c12', 'rgba(243,156,18,0.12)'),
+        'CONVERGING': ('↘ CONVERGING', '#3cc48e', 'rgba(60,196,142,0.12)'),
+        'PARALLEL':   ('↔ PARALLEL',   '#5dade2', 'rgba(93,173,226,0.12)'),
+        'CLOSE':      ('● CLOSE',      '#a78bfa', 'rgba(167,139,250,0.12)'),
+    }
+    conv_label, conv_color, conv_bg = _conv_cfg.get(
+        conv_state, ('─ UNKNOWN', '#5c6478', 'rgba(92,100,120,0.08)'),
+    )
+    conv_delta_display = f'{conv_delta * 100:+.4f}%' if conv_delta else ''
+
     return html.Div(
         style={
-            'display': 'grid',
-            'gridTemplateColumns': '64px 1fr 1fr',
-            'gap': '8px', 'alignItems': 'center',
-            'padding': '8px 0',
+            'display': 'flex', 'flexDirection': 'column',
+            'gap': '6px', 'padding': '8px 0',
         },
         children=[
-            html.Span('📊 Gap', style={
-                'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#a78bfa',
-            }),
-            html.Span(f'{display_gap:.4f}%', style={
-                'fontWeight': '800',
-                'fontSize': '1.05rem',
-                'color': gap_color,
-                'fontFamily': "'JetBrains Mono', monospace",
-            }),
-            html.Div([
-                html.Span(f'{display_min:.2f}% – {display_max:.2f}%', style={
-                    'fontSize': '0.72rem',
-                    'color': COLORS['text_secondary'],
-                    'fontFamily': "'JetBrains Mono', monospace",
-                    'marginRight': '8px',
-                }),
-                html.Span(range_badge_text, style={
-                    'fontSize': '0.6rem',
-                    'fontWeight': '700',
-                    'color': range_badge_color,
-                    'background': f'{range_badge_color}18',
-                    'padding': '2px 8px',
-                    'borderRadius': '8px',
-                    'border': f'1px solid {range_badge_color}33',
-                }),
-            ], style={'display': 'flex', 'alignItems': 'center'}),
+            # Row 1: Gap value + range
+            html.Div(
+                style={
+                    'display': 'grid',
+                    'gridTemplateColumns': '64px 1fr 1fr',
+                    'gap': '8px', 'alignItems': 'center',
+                },
+                children=[
+                    html.Span('📊 Gap', style={
+                        'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#a78bfa',
+                    }),
+                    html.Span(f'{display_gap:.4f}%', style={
+                        'fontWeight': '800',
+                        'fontSize': '1.05rem',
+                        'color': gap_color,
+                        'fontFamily': "'JetBrains Mono', monospace",
+                    }),
+                    html.Div([
+                        html.Span(f'{display_min:.2f}% – {display_max:.2f}%', style={
+                            'fontSize': '0.72rem',
+                            'color': COLORS['text_secondary'],
+                            'fontFamily': "'JetBrains Mono', monospace",
+                            'marginRight': '8px',
+                        }),
+                        html.Span(range_badge_text, style={
+                            'fontSize': '0.6rem',
+                            'fontWeight': '700',
+                            'color': range_badge_color,
+                            'background': f'{range_badge_color}18',
+                            'padding': '2px 8px',
+                            'borderRadius': '8px',
+                            'border': f'1px solid {range_badge_color}33',
+                        }),
+                    ], style={'display': 'flex', 'alignItems': 'center'}),
+                ],
+            ),
+            # Row 2: Convergence state
+            html.Div(
+                style={
+                    'display': 'grid',
+                    'gridTemplateColumns': '64px 1fr 1fr',
+                    'gap': '8px', 'alignItems': 'center',
+                },
+                children=[
+                    html.Span('🔀 State', style={
+                        'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#a78bfa',
+                    }),
+                    html.Span(conv_label, style={
+                        'fontWeight': '800',
+                        'fontSize': '0.9rem',
+                        'color': conv_color,
+                        'background': conv_bg,
+                        'padding': '3px 12px',
+                        'borderRadius': '10px',
+                        'border': f'1px solid {conv_color}33',
+                        'display': 'inline-block',
+                        'width': 'fit-content',
+                    }),
+                    html.Span(conv_delta_display, style={
+                        'fontSize': '0.72rem',
+                        'color': COLORS['text_secondary'],
+                        'fontFamily': "'JetBrains Mono', monospace",
+                    }) if conv_delta_display else html.Span(),
+                ],
+            ),
         ],
     )
 
@@ -692,6 +744,7 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     # Gap% data
     gap_pct = analysis.get('current_gap_pct', 0)
     gap_range_val = analysis.get('gap_range', [0.1, 0.30])
+    convergence = analysis.get('convergence', {})
     lookback_used = analysis.get('lookback_used', len(sha_list))
     src_count = analysis.get('source_candle_count', 0)
     src_last_time = analysis.get('last_source_candle_time', '-')
@@ -790,7 +843,7 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                 row_divider,
                 cross_row,
                 row_divider,
-                _build_gap_row(gap_pct, gap_range_val),
+                _build_gap_row(gap_pct, gap_range_val, convergence),
             ]),
             # ── Legend ──
             html.Div(

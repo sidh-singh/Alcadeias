@@ -16,6 +16,11 @@ SHA_TREND_MA_TYPE = 'RMA'           # MA type for trend SHA
 # ─── SHA Gap ───
 DEFAULT_GAP_RANGE = [0.001, 0.003]   # Default gap range [min, max] as raw ratio (not ×100)
 
+# ─── SHA Convergence ───
+SHA_CONVERGENCE_LOOKBACK = 5         # Bars to measure gap direction
+SHA_CLOSE_THRESHOLD = 0.0003        # Gap below this = CLOSE (raw ratio, 0.03%)
+SHA_CONVERGENCE_THRESHOLD = 0.0001  # Dead zone for PARALLEL (raw ratio, 0.01%)
+
 # ─── Data Fetching ───
 CANDLE_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe for price data (resolved via mt5 at runtime)
 CANDLE_COUNT = 1000                  # Must be large for RMA convergence (~140 warmup + ~640 convergence for RMA(70))
