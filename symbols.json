@@ -6,7 +6,7 @@
             "symbol": "XAGUSDm",
             "is_active": true,
             "times": 1,
-            "gap_range": [0.0040, 0.0150],
+            "gap_range": [0.0025, 0.0150],
             "fibo_power": 4,
             "close": 3
         }
