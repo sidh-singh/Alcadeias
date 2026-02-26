@@ -256,7 +256,7 @@ class Strategy:
         elif buy_count > 0 and sell_count == 0:
             if buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
-            elif (buy_first_profit < -100):
+            elif (buy_first_profit < -100) or exit_conv_ok:
                 buy_status = Signal.CLOSE_BUY
             elif buy_first_profit < -(self._get_fibo_qty(buy_count, 1) ** fibo_power):
                 buy_status = Signal.BUY_MORE
@@ -265,7 +265,7 @@ class Strategy:
         elif buy_count == 0 and sell_count > 0:
             if sell_profit > close_threshold:
                 sell_status = Signal.CLOSE_SELL
-            elif (sell_first_profit < -100):
+            elif (sell_first_profit < -100) or exit_conv_ok:
                 sell_status = Signal.CLOSE_SELL
             elif sell_first_profit < -(self._get_fibo_qty(sell_count, 1) ** fibo_power):
                 sell_status = Signal.SELL_MORE
