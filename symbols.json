@@ -6,7 +6,7 @@
             "symbol": "BTCUSDm",
             "is_active": true,
             "times": 10,
-            "gap_range": [0.0025, 0.0200],
+            "gap_range": [0.0030, 0.0200],
             "fibo_power": 5,
             "close": 10
         }
