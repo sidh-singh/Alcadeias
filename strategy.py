@@ -253,7 +253,7 @@ class Strategy:
                 sell_status = Signal.SELL
         
         # Only BUY positions open → exit when trend SHA flips bearish
-                elif buy_count > 0 and sell_count == 0:
+        elif buy_count > 0 and sell_count == 0:
             if buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
             elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0 and gap_in_range and entry_conv_ok:
