@@ -7,7 +7,7 @@
             "is_active": true,
             "times": 10,
             "gap_range": [0.0040, 0.0200],
-            "fibo_power": 5,
+            "fibo_power": 6,
             "close": 10
         }
     ]
