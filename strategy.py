@@ -241,7 +241,7 @@ class Strategy:
         
         gap_in_range = gap_range[0] <= current_gap_pct <= gap_range[1]
         below_gap = current_gap_pct < gap_range[0]
-        entry_conv_ok = conv_state in ('DIVERGING', 'PARALLEL')
+        entry_conv_ok = conv_state in ('DIVERGING')
         exit_conv_ok = conv_state == 'CONVERGING'
         
         # No positions open → look for entry
