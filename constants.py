@@ -37,6 +37,13 @@ STRATEGY_SHA_THRESHOLD = 0          # Min SHA ratio to classify candle as bullis
 FIBO_SEQUENCE_LENGTH = 25           # Fibonacci sequence length (first 2 dropped)
 FIBO_POWER_DEFAULT = 3              # Default exponent for fibo-based DCA threshold
 
+# ─── RSI Indicator ───
+RSI_LENGTH = 14                     # RSI period
+RSI_MA_TYPE = 'RMA'                 # MA type for RSI smoothing (RMA = Wilder's, matches TradingView default)
+RSI_OVERSOLD = 30                   # Oversold threshold (BUY_MORE when RSI <= this)
+RSI_OVERBOUGHT = 70                 # Overbought threshold (SELL_MORE when RSI >= this)
+RSI_DCA_MAX_POSITIONS = 1           # Max additional DCA positions allowed via RSI signal
+
 # ─── Risk Management ───
 RISK_REWARD_RATIO = [1, 1]          # [risk, reward] multiplier for auto SL/TP calculation
 

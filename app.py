@@ -15,6 +15,7 @@ from constants import (
     SHA_TREND_LENGTH, SHA_TREND_MA_TYPE,
     DEFAULT_GAP_RANGE,
     SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
+    RSI_LENGTH, RSI_MA_TYPE,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
@@ -533,6 +534,12 @@ class MT5TradingBot:
                         convergence_threshold=SHA_CONVERGENCE_THRESHOLD,
                     )
                     
+                    # Calculate RSI
+                    rsi_series = self.indicator.calculate_rsi(
+                        source_df['Close'], length=RSI_LENGTH, ma_type=RSI_MA_TYPE
+                    )
+                    current_rsi = float(rsi_series.iloc[-1]) if len(rsi_series) > 0 else 50.0
+                    
                     # Calculate signal
                     symbol_cfg = self.symbol_configs.get(symbol, {})
                     symbol_close = symbol_cfg.get('close', 2)
@@ -540,7 +547,7 @@ class MT5TradingBot:
                         source_df, sha_df, sha_trend_df, gap_pct_series,
                         buy_positions, sell_positions, times, gap_range=symbol_gap_range,
                         fibo_power=symbol_fibo_power, close_threshold=symbol_close,
-                        convergence=convergence
+                        convergence=convergence, rsi_value=current_rsi
                     )
                     analysis_data['candle_fresh'] = True
                 else:

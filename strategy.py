@@ -3,6 +3,7 @@ from constants import (
     STRATEGY_HEDGE, STRATEGY_LOOKBACK, STRATEGY_SHA_THRESHOLD,
     FIBO_SEQUENCE_LENGTH, DEFAULT_GAP_RANGE, FIBO_POWER_DEFAULT,
     SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
+    RSI_OVERSOLD, RSI_OVERBOUGHT, RSI_DCA_MAX_POSITIONS,
 )
 
 
@@ -146,7 +147,8 @@ class Strategy:
     
     def calculate_signal(self, source_df, sha_df, sha_trend_df, gap_pct_series,
                          buy_positions, sell_positions, times, gap_range=None,
-                         fibo_power=None, close_threshold=2, convergence=None):
+                         fibo_power=None, close_threshold=2, convergence=None,
+                         rsi_value=None):
         """
         Calculate entry/exit signals based on SHA power and crossover
         
@@ -160,6 +162,7 @@ class Strategy:
             times: Hedge/multiplier from symbols config
             gap_range: [min, max] gap% range for this symbol (default from constants)
             fibo_power: Exponent for fibo DCA threshold (default from constants, per-symbol override)
+            rsi_value: Current RSI value (float 0-100) for DCA entry decisions
         
         Returns:
             tuple: (buy_signal, sell_signal, analysis_data)
@@ -210,6 +213,9 @@ class Strategy:
         if fibo_power is None:
             fibo_power = FIBO_POWER_DEFAULT
         
+        # RSI value
+        current_rsi = rsi_value if rsi_value is not None else 50.0
+
         # Convergence state
         if convergence is None:
             convergence = {'state': 'UNKNOWN', 'gap_now': 0.0, 'gap_prev': 0.0, 'gap_delta': 0.0}
@@ -233,6 +239,7 @@ class Strategy:
                 'current_gap_pct': current_gap_pct,
                 'gap_range': gap_range,
                 'convergence': convergence,
+                'rsi_value': round(current_rsi, 2),
                 'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
             }
             return buy_status, sell_status, analysis_data
@@ -252,22 +259,18 @@ class Strategy:
             elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0 and gap_in_range and entry_conv_ok:
                 sell_status = Signal.SELL
         
-        # Only BUY positions open → exit when trend SHA flips bearish
+        # Only BUY positions open → exit or DCA
         elif buy_count > 0 and sell_count == 0:
             if buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
-            elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0 and gap_in_range and entry_conv_ok:
-                buy_status = Signal.CLOSE_BUY
-            elif buy_first_profit < -(self._get_fibo_qty(buy_count, 1) ** fibo_power):
+            elif current_rsi <= RSI_OVERSOLD and buy_count <= RSI_DCA_MAX_POSITIONS:
                 buy_status = Signal.BUY_MORE
         
-        # Only SELL positions open → exit when trend SHA flips bullish
+        # Only SELL positions open → exit or DCA
         elif buy_count == 0 and sell_count > 0:
             if sell_profit > close_threshold:
                 sell_status = Signal.CLOSE_SELL
-            elif lt_sha_power_list[0] == 1 and lt_trend_power_list[0] == 1 and gap_in_range and entry_conv_ok:
-                sell_status = Signal.CLOSE_SELL
-            elif sell_first_profit < -(self._get_fibo_qty(sell_count, 1) ** fibo_power):
+            elif current_rsi >= RSI_OVERBOUGHT and sell_count <= RSI_DCA_MAX_POSITIONS:
                 sell_status = Signal.SELL_MORE
         
         analysis_data = {
@@ -284,6 +287,7 @@ class Strategy:
             'current_gap_pct': current_gap_pct,
             'gap_range': gap_range,
             'convergence': convergence,
+            'rsi_value': round(current_rsi, 2),
             'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
         }
         
