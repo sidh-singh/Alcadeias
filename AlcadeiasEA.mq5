@@ -11,7 +11,7 @@
 //
 //  Entry:  Signal + Trend agree, gap in range, convergence OK
 //  Exit:   Profit target OR opposite signal/trend flip
-//  DCA:    Fibonacci-martingale on first-position drawdown
+//  DCA:    RSI oversold/overbought with position count limit
 //
 //  Attach to M1 chart for faithful reproduction of the Python bot.
 //  All key hyper-parameters are exposed as inputs for optimization.
@@ -81,6 +81,14 @@ input int    Inp_Fibo_Power   = 3;                         // DCA Fibo Power Exp
 input double Inp_Close_Profit = 2.0;                       // Profit Close Threshold ($)
 input int    Inp_Fibo_SeqLen  = 25;                        // Fibonacci Sequence Length
 
+//--- RSI Indicator
+input group           "═══ RSI Indicator ═══"
+input int              Inp_RSI_Len       = 14;             // RSI Period
+input ENUM_SHA_MA_TYPE Inp_RSI_MA        = SHA_MA_RMA;     // RSI MA Type (RMA = Wilder's)
+input double           Inp_RSI_Oversold  = 30.0;           // RSI Oversold (BUY_MORE when <=)
+input double           Inp_RSI_Overbought = 70.0;          // RSI Overbought (SELL_MORE when >=)
+input int              Inp_RSI_DCA_Max   = 1;              // Max DCA positions via RSI signal
+
 //--- Lot sizing
 input group           "═══ Lots ═══"
 input double Inp_Lot_Size = 0.01;                          // Base Lot (mtqty)
@@ -127,6 +135,9 @@ int OnInit()
                Inp_Conv_LB, Inp_Conv_CloseTh, Inp_Conv_DeadZ);
    PrintFormat("[Alcadeias] Lookback=%d | SHA_Thr=%.2f | FiboPow=%d | CloseProfit=$%.1f",
                Inp_Lookback, Inp_SHA_Thr, Inp_Fibo_Power, Inp_Close_Profit);
+   PrintFormat("[Alcadeias] RSI(%d, %s) | OS=%.0f | OB=%.0f | DCA_Max=%d",
+               Inp_RSI_Len, EnumToString(Inp_RSI_MA),
+               Inp_RSI_Oversold, Inp_RSI_Overbought, Inp_RSI_DCA_Max);
    PrintFormat("[Alcadeias] Lot=%.2f × %.1f | Magic=%d | Bars=%d",
                Inp_Lot_Size, Inp_Times, Inp_Magic, Inp_Bar_Count);
 
@@ -224,6 +235,15 @@ void OnTick()
    int trdPow = BarPower(trdO[last], trdH[last], trdL[last], trdC[last]);
 
    // ════════════════════════════════════════════════════════════════
+   //  6b. RSI INDICATOR
+   // ════════════════════════════════════════════════════════════════
+   double rsiArr[];
+   CalcRSI(C, rsiArr, Inp_RSI_Len, Inp_RSI_MA, n);
+   double curRSI = 50.0;  // default neutral
+   if(rsiArr[last] != EMPTY_VALUE)
+      curRSI = rsiArr[last];
+
+   // ════════════════════════════════════════════════════════════════
    //  7. POSITIONS
    // ════════════════════════════════════════════════════════════════
    int    bCnt = 0, sCnt = 0;
@@ -247,25 +267,21 @@ void OnTick()
       else if(sigPow == 0 && trdPow == 0 && gapInRange && entryConvOk)
          sellSig = 2;                                // SELL
    }
-   // ── Only BUY positions open ──
+   // ── Only BUY positions open ── exit or RSI DCA
    else if(bCnt > 0 && sCnt == 0)
    {
       if(bProf > Inp_Close_Profit)
          buySig = 3;                                 // CLOSE_BUY  (profit target)
-      else if(sigPow == 0 && trdPow == 0 && gapInRange && entryConvOk)
-         buySig = 3;                                 // CLOSE_BUY  (trend flip)
-      else if(bFirst < -MathPow(FiboQty(bCnt, 1.0), Inp_Fibo_Power))
-         buySig = 5;                                 // BUY_MORE   (DCA)
+      else if(curRSI <= Inp_RSI_Oversold && bCnt <= Inp_RSI_DCA_Max)
+         buySig = 5;                                 // BUY_MORE   (RSI oversold DCA)
    }
-   // ── Only SELL positions open ──
+   // ── Only SELL positions open ── exit or RSI DCA
    else if(bCnt == 0 && sCnt > 0)
    {
       if(sProf > Inp_Close_Profit)
          sellSig = 4;                                // CLOSE_SELL (profit target)
-      else if(sigPow == 1 && trdPow == 1 && gapInRange && entryConvOk)
-         sellSig = 4;                                // CLOSE_SELL (trend flip)
-      else if(sFirst < -MathPow(FiboQty(sCnt, 1.0), Inp_Fibo_Power))
-         sellSig = 6;                                // SELL_MORE  (DCA)
+      else if(curRSI >= Inp_RSI_Overbought && sCnt <= Inp_RSI_DCA_Max)
+         sellSig = 6;                                // SELL_MORE  (RSI overbought DCA)
    }
    // ── Both sides open → do nothing (matches Python) ──
 
@@ -291,10 +307,9 @@ void OnTick()
       double vol = NormLots(FiboVolume(bCnt, Inp_Times));
       double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
       if(g_trade.Buy(vol, _Symbol, ask, 0, 0,
-                      StringFormat("Alcadeias DCA BUY #%d", bCnt + 1)))
-         PrintFormat("[Alcadeias] BUY_MORE #%d  %.2f lots @ %.5f  (1st P/L=%.2f, thr=%.2f)",
-                     bCnt + 1, vol, ask, bFirst,
-                     -MathPow(FiboQty(bCnt, 1.0), Inp_Fibo_Power));
+                      StringFormat("Alcadeias RSI DCA BUY #%d", bCnt + 1)))
+         PrintFormat("[Alcadeias] BUY_MORE #%d  %.2f lots @ %.5f  (RSI=%.1f <= %.0f)",
+                     bCnt + 1, vol, ask, curRSI, Inp_RSI_Oversold);
    }
 
    // ── SELL signals ──
@@ -314,10 +329,9 @@ void OnTick()
       double vol = NormLots(FiboVolume(sCnt, Inp_Times));
       double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
       if(g_trade.Sell(vol, _Symbol, bid, 0, 0,
-                       StringFormat("Alcadeias DCA SELL #%d", sCnt + 1)))
-         PrintFormat("[Alcadeias] SELL_MORE #%d  %.2f lots @ %.5f  (1st P/L=%.2f, thr=%.2f)",
-                     sCnt + 1, vol, bid, sFirst,
-                     -MathPow(FiboQty(sCnt, 1.0), Inp_Fibo_Power));
+                       StringFormat("Alcadeias RSI DCA SELL #%d", sCnt + 1)))
+         PrintFormat("[Alcadeias] SELL_MORE #%d  %.2f lots @ %.5f  (RSI=%.1f >= %.0f)",
+                     sCnt + 1, vol, bid, curRSI, Inp_RSI_Overbought);
    }
 
    // ════════════════════════════════════════════════════════════════
@@ -332,7 +346,7 @@ void OnTick()
       "BUY:  n=%d   P/L=$%.2f   1st=$%.2f\n"
       "SELL: n=%d   P/L=$%.2f   1st=$%.2f\n"
       "--------------------------------------\n"
-      "DCA threshold: BUY=%.1f  SELL=%.1f\n"
+      "RSI(%d): %.1f   OS=%.0f  OB=%.0f  DCA_Max=%d\n"
       "Next DCA vol:  BUY=%.2f  SELL=%.2f\n"
       "--------------------------------------\n"
       ">> %s",
@@ -347,9 +361,9 @@ void OnTick()
       //--- row 4-5
       bCnt, bProf, bFirst,
       sCnt, sProf, sFirst,
-      //--- row 6-7
-      bCnt > 0 ? -MathPow(FiboQty(bCnt, 1.0), Inp_Fibo_Power) : 0.0,
-      sCnt > 0 ? -MathPow(FiboQty(sCnt, 1.0), Inp_Fibo_Power) : 0.0,
+      //--- row 6: RSI
+      Inp_RSI_Len, curRSI, Inp_RSI_Oversold, Inp_RSI_Overbought, Inp_RSI_DCA_Max,
+      //--- row 7: Next DCA vol
       bCnt > 0 ? NormLots(FiboVolume(bCnt, Inp_Times)) : 0.0,
       sCnt > 0 ? NormLots(FiboVolume(sCnt, Inp_Times)) : 0.0,
       //--- action
@@ -823,6 +837,57 @@ void CalcSHA(const double &rawO[], const double &rawH[],
    CalcMA(haH, shaH, len, mt, n);
    CalcMA(haL, shaL, len, mt, n);
    CalcMA(haC, shaC, len, mt, n);
+}
+
+
+//╔══════════════════════════════════════════════════════════════════╗
+//║                     RSI CALCULATION                             ║
+//║  Matches: indicator.py calculate_rsi                             ║
+//╚══════════════════════════════════════════════════════════════════╝
+
+//+------------------------------------------------------------------+
+//| CalcRSI — Relative Strength Index                                 |
+//| delta = close[i] - close[i-1]                                    |
+//| gain  = max(delta, 0),  loss = max(-delta, 0)                   |
+//| avg_gain / avg_loss smoothed with MA(len, maType)                |
+//| RSI = 100 - 100 / (1 + RS)                                      |
+//+------------------------------------------------------------------+
+void CalcRSI(const double &close[], double &rsi[],
+             int len, ENUM_SHA_MA_TYPE maType, int n)
+{
+   ArrayResize(rsi, n);
+   ArrayInitialize(rsi, EMPTY_VALUE);
+   if(len <= 0 || n < 2) return;
+
+   // Calculate delta, gain, loss
+   double gain[], loss[];
+   ArrayResize(gain, n);
+   ArrayResize(loss, n);
+   gain[0] = EMPTY_VALUE;
+   loss[0] = EMPTY_VALUE;
+
+   for(int i = 1; i < n; i++)
+   {
+      double delta = close[i] - close[i - 1];
+      gain[i] = (delta > 0) ? delta : 0.0;
+      loss[i] = (delta < 0) ? -delta : 0.0;
+   }
+
+   // Smooth gain and loss with the chosen MA
+   double avgGain[], avgLoss[];
+   CalcMA(gain, avgGain, len, maType, n);
+   CalcMA(loss, avgLoss, len, maType, n);
+
+   // RSI = 100 - 100 / (1 + RS)
+   for(int i = 0; i < n; i++)
+   {
+      if(avgGain[i] == EMPTY_VALUE || avgLoss[i] == EMPTY_VALUE)
+         continue;
+      if(avgLoss[i] == 0.0)
+         rsi[i] = 100.0;   // no losses → RSI = 100
+      else
+         rsi[i] = 100.0 - 100.0 / (1.0 + avgGain[i] / avgLoss[i]);
+   }
 }
 
 
