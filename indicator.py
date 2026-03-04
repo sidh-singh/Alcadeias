@@ -157,6 +157,33 @@ class Indicator:
         gap_pct = ((sha_mean - trend_mean) / trend_mean).abs()
         return gap_pct
     
+    def calculate_rsi(self, series, length=14, ma_type='RMA'):
+        """
+        Calculate RSI (Relative Strength Index).
+
+        Matches TradingView's ta.rsi() when ma_type='RMA'.
+
+        Args:
+            series: pd.Series of close prices
+            length: RSI period (default 14)
+            ma_type: MA type used to smooth gains/losses (default 'RMA')
+
+        Returns:
+            pd.Series: RSI values (0–100)
+        """
+        delta = series.diff()
+        gain = delta.clip(lower=0)
+        loss = (-delta).clip(lower=0)
+
+        avg_gain = self._ma(gain, length, ma_type)
+        avg_loss = self._ma(loss, length, ma_type)
+
+        rs = avg_gain / avg_loss
+        rsi = 100.0 - (100.0 / (1.0 + rs))
+        # Where avg_loss is 0, RSI should be 100
+        rsi = rsi.fillna(100.0)
+        return rsi
+    
     def calculate_sha_convergence(self, sha_df, sha_trend_df,
                                    lookback=5, close_threshold=0.0003,
                                    convergence_threshold=0.0001):
