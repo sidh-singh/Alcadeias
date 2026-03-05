@@ -15,7 +15,7 @@ from constants import (
     SHA_TREND_LENGTH, SHA_TREND_MA_TYPE,
     DEFAULT_GAP_RANGE,
     SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
-    RSI_LENGTH, RSI_MA_TYPE,
+    RSI_LENGTH, RSI_MA_TYPE, RSI_MTF_TIMEFRAMES,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
@@ -534,11 +534,32 @@ class MT5TradingBot:
                         convergence_threshold=SHA_CONVERGENCE_THRESHOLD,
                     )
                     
-                    # Calculate RSI
-                    rsi_series = self.indicator.calculate_rsi(
-                        source_df['Close'], length=RSI_LENGTH, ma_type=RSI_MA_TYPE
-                    )
-                    current_rsi = float(rsi_series.iloc[-1]) if len(rsi_series) > 0 else 50.0
+                    # Calculate RSI for multiple timeframes (entry filter)
+                    rsi_mtf = {}
+                    for tf_name in RSI_MTF_TIMEFRAMES:
+                        if tf_name == CANDLE_TIMEFRAME:
+                            tf_close = source_df['Close']
+                        else:
+                            with self.mt5_lock:
+                                tf_df = self.position_helper.get_rates(
+                                    trade_symbol, getattr(mt5, tf_name), CANDLE_COUNT
+                                )
+                            if tf_df is not None and len(tf_df) > 0:
+                                tf_df.rename(columns={
+                                    'open': 'Open', 'high': 'High',
+                                    'low': 'Low', 'close': 'Close'
+                                }, inplace=True)
+                                tf_close = tf_df['Close']
+                            else:
+                                tf_close = None
+                        if tf_close is not None and len(tf_close) > 0:
+                            rsi_s = self.indicator.calculate_rsi(
+                                tf_close, length=RSI_LENGTH, ma_type=RSI_MA_TYPE
+                            )
+                            rsi_mtf[tf_name] = float(rsi_s.iloc[-1]) if len(rsi_s) > 0 else 50.0
+                        else:
+                            rsi_mtf[tf_name] = 50.0
+                    current_rsi = rsi_mtf.get(CANDLE_TIMEFRAME, 50.0)
                     
                     # Calculate signal
                     symbol_cfg = self.symbol_configs.get(symbol, {})
@@ -547,7 +568,8 @@ class MT5TradingBot:
                         source_df, sha_df, sha_trend_df, gap_pct_series,
                         buy_positions, sell_positions, times, gap_range=symbol_gap_range,
                         fibo_power=symbol_fibo_power, close_threshold=symbol_close,
-                        convergence=convergence, rsi_value=current_rsi
+                        convergence=convergence, rsi_value=current_rsi,
+                        rsi_mtf=rsi_mtf
                     )
                     analysis_data['candle_fresh'] = True
                 else:
