@@ -44,6 +44,11 @@ RSI_OVERSOLD = 30                   # Oversold threshold (BUY_MORE when RSI <= t
 RSI_OVERBOUGHT = 70                 # Overbought threshold (SELL_MORE when RSI >= this)
 RSI_DCA_MAX_POSITIONS = 1           # Max additional DCA positions allowed via RSI signal
 
+# ─── RSI Multi-Timeframe Entry Filter ───
+RSI_MTF_TIMEFRAMES = ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15']
+RSI_MTF_OVERSOLD = 30               # Block BUY entry when ALL MTF RSIs <= this
+RSI_MTF_OVERBOUGHT = 70             # Block SELL entry when ALL MTF RSIs >= this
+
 # ─── Risk Management ───
 RISK_REWARD_RATIO = [1, 1]          # [risk, reward] multiplier for auto SL/TP calculation
 
