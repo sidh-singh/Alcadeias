@@ -4,6 +4,7 @@ from constants import (
     FIBO_SEQUENCE_LENGTH, DEFAULT_GAP_RANGE, FIBO_POWER_DEFAULT,
     SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
     RSI_OVERSOLD, RSI_OVERBOUGHT, RSI_DCA_MAX_POSITIONS,
+    RSI_MTF_OVERSOLD, RSI_MTF_OVERBOUGHT,
 )
 
 
@@ -123,7 +124,7 @@ class Strategy:
     def calculate_signal(self, source_df, sha_df, sha_trend_df, gap_pct_series,
                          buy_positions, sell_positions, times, gap_range=None,
                          fibo_power=None, close_threshold=2, convergence=None,
-                         rsi_value=None):
+                         rsi_value=None, rsi_mtf=None):
         """
         Calculate entry/exit signals based on SHA power
         
@@ -138,6 +139,7 @@ class Strategy:
             gap_range: [min, max] gap% range for this symbol (default from constants)
             fibo_power: Exponent for fibo DCA threshold (default from constants, per-symbol override)
             rsi_value: Current RSI value (float 0-100) for DCA entry decisions
+            rsi_mtf: Dict of {timeframe_name: rsi_value} for multi-timeframe entry filter
         
         Returns:
             tuple: (buy_signal, sell_signal, analysis_data)
@@ -214,6 +216,8 @@ class Strategy:
                 'gap_range': gap_range,
                 'convergence': convergence,
                 'rsi_value': round(current_rsi, 2),
+                'rsi_mtf': rsi_mtf or {},
+                'rsi_mtf_blocked': False,
                 'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
             }
             return buy_status, sell_status, analysis_data
@@ -225,13 +229,24 @@ class Strategy:
         entry_conv_ok = conv_state in ('DIVERGING', 'PARALLEL')
         exit_conv_ok = conv_state == 'CONVERGING'
         
-        # No positions open → look for entry
-        # Requires: signal+trend agree, gap in range, and convergence is DIVERGING or PARALLEL
+        # Multi-timeframe RSI entry filter:
+        # Block BUY if ALL timeframe RSIs show oversold (price likely still falling)
+        # Block SELL if ALL timeframe RSIs show overbought (price likely still rising)
+        rsi_all_oversold = False
+        rsi_all_overbought = False
+        if rsi_mtf and len(rsi_mtf) > 0:
+            rsi_vals = list(rsi_mtf.values())
+            rsi_all_oversold = all(v <= RSI_MTF_OVERSOLD for v in rsi_vals)
+            rsi_all_overbought = all(v >= RSI_MTF_OVERBOUGHT for v in rsi_vals)
+        rsi_mtf_blocked = rsi_all_oversold or rsi_all_overbought
+        
+        # No positions open → look for entry (with MTF RSI filter)
         if buy_count == 0 and sell_count == 0:
-            if lt_sha_power_list[0] == 1 and lt_trend_power_list[0] == 1 and gap_in_range and entry_conv_ok:
-                buy_status = Signal.BUY
-            elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0 and gap_in_range and entry_conv_ok:
-                sell_status = Signal.SELL
+            if not rsi_mtf_blocked:
+                if lt_sha_power_list[0] == 1 and lt_trend_power_list[0] == 1 and gap_in_range and entry_conv_ok:
+                    buy_status = Signal.BUY
+                elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0 and gap_in_range and entry_conv_ok:
+                    sell_status = Signal.SELL
         
         # Only BUY positions open → exit or DCA
         elif buy_count > 0 and sell_count == 0:
@@ -261,6 +276,8 @@ class Strategy:
             'gap_range': gap_range,
             'convergence': convergence,
             'rsi_value': round(current_rsi, 2),
+            'rsi_mtf': rsi_mtf or {},
+            'rsi_mtf_blocked': rsi_mtf_blocked,
             'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
         }
         
