@@ -266,6 +266,13 @@ class Strategy:
             elif current_rsi <= RSI_OVERSOLD and sell_count <= RSI_DCA_MAX_POSITIONS:
                 buy_status = Signal.BUY_MORE
         
+        # Both BUY and SELL positions open (hedge) → close both when combined profit is positive
+        elif buy_count > 0 and sell_count > 0:
+            total_profit = buy_profit + sell_profit
+            if total_profit > close_threshold:
+                buy_status = Signal.CLOSE_BUY
+                sell_status = Signal.CLOSE_SELL
+        
         analysis_data = {
             'sha_power_list': lt_sha_power_list,
             'price_power_list': ct_power_list,
