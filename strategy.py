@@ -57,18 +57,17 @@ class Strategy:
     
     def _analyze(self, source_df, sha_df):
         """
-        Analyze last N candles for SHA power and crossover
+        Analyze last N candles for SHA power
         
         Returns:
-            tuple: (lt_sha_power_list, ct_power_list, crossover)
+            tuple: (lt_sha_power_list, ct_power_list)
         """
         lt_sha_power_list = []
         ct_power_list = []
-        crossover = []
 
         max_lookback = min(self.lookback, len(source_df), len(sha_df))
         if max_lookback <= 0:
-            return lt_sha_power_list, ct_power_list, crossover
+            return lt_sha_power_list, ct_power_list
         
         for i in range(max_lookback):
             idx = -(i + 1)
@@ -82,10 +81,8 @@ class Strategy:
             price_range = source_df['High'].iloc[idx] - source_df['Low'].iloc[idx]
             
             # SHA power (bullish or bearish)
-            sha_bullish = False
             if sha_range != 0 and (sha_diff / sha_range) >= self.sha_threshold:
                 lt_sha_power_list.append(1)
-                sha_bullish = True
             else:
                 lt_sha_power_list.append(0)
             
@@ -95,35 +92,13 @@ class Strategy:
             else:
                 ct_power_list.append(0)
             
-            # Crossover: price candle position relative to SHA candle
-            p_low = source_df['Low'].iloc[idx]
-            p_high = source_df['High'].iloc[idx]
-            s_low = sha_df['Low'].iloc[idx]
-            s_high = sha_df['High'].iloc[idx]
-
-            values = [sha_diff, sha_range, price_diff, price_range, p_low, p_high, s_low, s_high]
+            values = [sha_diff, sha_range, price_diff, price_range]
             if any(v != v for v in values):
                 lt_sha_power_list.append(0)
                 ct_power_list.append(0)
-                crossover.append(0)
                 continue
-            
-            if sha_bullish:
-                if p_low >= s_high:
-                    crossover.append(3)    # Price fully above SHA → strong bull
-                elif p_high <= s_low:
-                    crossover.append(1)    # Price fully below SHA → weak
-                else:
-                    crossover.append(2)    # Overlapping
-            else:
-                if p_high <= s_low:
-                    crossover.append(-3)   # Price fully below SHA → strong bear
-                elif p_low >= s_high:
-                    crossover.append(-1)   # Price fully above SHA → weak
-                else:
-                    crossover.append(-2)   # Overlapping
         
-        return lt_sha_power_list, ct_power_list, crossover
+        return lt_sha_power_list, ct_power_list
     
     def _analyze_trend(self, sha_trend_df):
         """Analyze last N candles of trend SHA for power (bullish/bearish)."""
@@ -150,7 +125,7 @@ class Strategy:
                          fibo_power=None, close_threshold=2, convergence=None,
                          rsi_value=None):
         """
-        Calculate entry/exit signals based on SHA power and crossover
+        Calculate entry/exit signals based on SHA power
         
         Args:
             source_df: Raw OHLC DataFrame (capitalized columns: Open, High, Low, Close)
@@ -168,7 +143,7 @@ class Strategy:
             tuple: (buy_signal, sell_signal, analysis_data)
                 - buy_signal: Signal enum
                 - sell_signal: Signal enum
-                - analysis_data: dict with sha/trend power, crossover, gap% data
+                - analysis_data: dict with sha/trend power, gap% data
         """
         # Use local variable instead of self.hedge for thread-safety
         hedge = times
@@ -182,7 +157,7 @@ class Strategy:
         sell_first_profit = sell_positions['first_profit'] if sell_positions else 0
         
         # Analyze candles
-        lt_sha_power_list, ct_power_list, crossover = self._analyze(source_df, sha_df)
+        lt_sha_power_list, ct_power_list = self._analyze(source_df, sha_df)
         
         # Calculate strengths
         lt_buy_power = sum(1 for x in lt_sha_power_list if x == 1)
@@ -228,7 +203,6 @@ class Strategy:
             analysis_data = {
                 'sha_power_list': lt_sha_power_list,
                 'price_power_list': ct_power_list,
-                'crossover': crossover,
                 'sha_buy_strength': lt_buy_power,
                 'sha_sell_strength': lt_sell_power,
                 'price_buy_strength': ct_buy_power,
@@ -276,7 +250,6 @@ class Strategy:
         analysis_data = {
             'sha_power_list': lt_sha_power_list,
             'price_power_list': ct_power_list,
-            'crossover': crossover,
             'sha_buy_strength': lt_buy_power,
             'sha_sell_strength': lt_sell_power,
             'price_buy_strength': ct_buy_power,

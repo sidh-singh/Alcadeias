@@ -492,26 +492,6 @@ def build_activity_section(data):
     })
 
 
-def _crossover_badge(val):
-    """Compact colored badge for a crossover value — Ballom style."""
-    cfg = {
-        3:  ('🔥 +3', '#009d7a', 'rgba(0, 157, 122, 0.12)'),
-        2:  ('⚡ +2', '#00d2a0', 'rgba(0, 210, 160, 0.12)'),
-        1:  ('💨 +1', '#4de8c8', 'rgba(77, 232, 200, 0.12)'),
-        -1: ('💨 −1', '#ee7b6e', 'rgba(238, 123, 110, 0.12)'),
-        -2: ('⚡ −2', '#e74c3c', 'rgba(231, 76, 60, 0.12)'),
-        -3: ('🔥 −3', '#c0392b', 'rgba(192, 57, 43, 0.12)'),
-    }
-    emoji_txt, color, bg = cfg.get(val, (str(val), '#888', 'rgba(255,255,255,0.04)'))
-    return html.Span(emoji_txt, style={
-        'color': color, 'background': bg,
-        'padding': '3px 10px', 'borderRadius': '10px',
-        'fontSize': '0.78rem', 'fontWeight': '600',
-        'whiteSpace': 'nowrap',
-        'fontFamily': "'JetBrains Mono', monospace",
-    })
-
-
 def _power_bar(power, max_power=7):
     """Compact inline power gauge with colored rectangular segments."""
     dots = []
@@ -547,59 +527,6 @@ def _list_dots(lst, max_items=7):
             'marginRight': '3px', 'opacity': str(opacity),
         }))
     return html.Div(dots, style={'display': 'inline-flex', 'alignItems': 'center'})
-
-
-def _cross_dots(cross_list, max_items=7):
-    """Render crossover values as uniform circle dots with green/red light-medium-dark shading."""
-    green_map = {1: '#4de8c8', 2: '#00d2a0', 3: '#009d7a'}
-    red_map   = {1: '#ee7b6e', 2: '#e74c3c', 3: '#c0392b'}
-    dots = []
-    for i, v in enumerate(cross_list[:max_items]):
-        if v > 0:
-            c = green_map.get(v, '#81c784')
-        elif v < 0:
-            c = red_map.get(abs(v), '#e57373')
-        else:
-            c = '#555'
-        opacity = max(0.35, 1.0 - (i * 0.09))
-        dots.append(html.Span(style={
-            'display': 'inline-block', 'width': '10px', 'height': '10px',
-            'borderRadius': '50%', 'background': c,
-            'marginRight': '3px', 'opacity': str(opacity),
-        }))
-    return html.Div(dots, style={'display': 'inline-flex', 'alignItems': 'center'})
-
-
-def _cross_power_bar(cross_list, max_items=7):
-    """Power bar for crossover — each segment colored by its value's green/red shade."""
-    green_map = {1: '#4de8c8', 2: '#00d2a0', 3: '#009d7a'}
-    red_map   = {1: '#ee7b6e', 2: '#e74c3c', 3: '#c0392b'}
-    bull_count = sum(1 for v in cross_list[:max_items] if v > 0)
-    segs = []
-    for i in range(max_items):
-        if i < len(cross_list):
-            v = cross_list[i]
-            if v > 0:
-                c = green_map.get(v, '#81c784')
-            elif v < 0:
-                c = red_map.get(abs(v), '#e57373')
-            else:
-                c = 'rgba(255,255,255,0.06)'
-        else:
-            c = 'rgba(255,255,255,0.06)'
-        segs.append(html.Span(style={
-            'display': 'inline-block', 'width': '8px', 'height': '16px',
-            'borderRadius': '2px', 'background': c, 'marginRight': '2px',
-        }))
-    p_color = '#00d2a0' if bull_count >= 5 else '#f39c12' if bull_count >= 3 else '#e74c3c'
-    return html.Div([
-        *segs,
-        html.Span(f' {bull_count}', style={
-            'fontSize': '0.75rem', 'fontWeight': '700', 'marginLeft': '4px',
-            'color': p_color if bull_count > 0 else COLORS['text_dim'],
-            'fontFamily': "'JetBrains Mono', monospace",
-        }),
-    ], style={'display': 'inline-flex', 'alignItems': 'center'})
 
 
 def _signal_row(label, icon, color, power, lst):
@@ -726,11 +653,82 @@ def _build_gap_row(gap_pct, gap_range, convergence=None):
     )
 
 
+def _build_rsi_row(rsi_value):
+    """Build a compact RSI indicator row for the SHA analysis panel."""
+    rsi = round(rsi_value, 2)
+
+    # Determine color + label based on RSI zones
+    if rsi <= 30:
+        rsi_color = '#e74c3c'
+        rsi_label = 'OVERSOLD'
+        bar_color = '#e74c3c'
+    elif rsi >= 70:
+        rsi_color = '#00d2a0'
+        rsi_label = 'OVERBOUGHT'
+        bar_color = '#00d2a0'
+    elif rsi >= 50:
+        rsi_color = '#5dade2'
+        rsi_label = 'NEUTRAL'
+        bar_color = '#5dade2'
+    else:
+        rsi_color = '#f39c12'
+        rsi_label = 'NEUTRAL'
+        bar_color = '#f39c12'
+
+    # Visual gauge: fill proportion out of 100
+    fill_pct = max(0, min(100, rsi))
+
+    return html.Div(
+        style={
+            'display': 'grid',
+            'gridTemplateColumns': '64px 1fr 1fr',
+            'gap': '8px', 'alignItems': 'center',
+            'padding': '8px 0',
+        },
+        children=[
+            html.Span('📊 RSI', style={
+                'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#a78bfa',
+            }),
+            # RSI bar gauge
+            html.Div([
+                html.Div(style={
+                    'width': '100%', 'height': '16px',
+                    'background': 'rgba(255,255,255,0.06)',
+                    'borderRadius': '3px', 'overflow': 'hidden',
+                    'position': 'relative',
+                }, children=[
+                    html.Div(style={
+                        'width': f'{fill_pct}%', 'height': '100%',
+                        'background': bar_color,
+                        'borderRadius': '3px',
+                        'transition': 'width 0.3s ease',
+                    }),
+                ]),
+            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '6px'}),
+            # RSI value + label
+            html.Div([
+                html.Span(f'{rsi}', style={
+                    'fontWeight': '800', 'fontSize': '1.0rem',
+                    'color': rsi_color,
+                    'fontFamily': "'JetBrains Mono', monospace",
+                    'marginRight': '8px',
+                }),
+                html.Span(rsi_label, style={
+                    'fontSize': '0.6rem', 'fontWeight': '700',
+                    'color': rsi_color,
+                    'background': f'{rsi_color}18',
+                    'padding': '2px 8px', 'borderRadius': '8px',
+                    'border': f'1px solid {rsi_color}33',
+                }),
+            ], style={'display': 'flex', 'alignItems': 'center'}),
+        ],
+    )
+
+
 def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     """Build clean SHA analysis card — Ballom-inspired grid layout."""
     sha_list = analysis.get('sha_power_list', [])
     price_list = analysis.get('price_power_list', [])
-    crossover = analysis.get('crossover', [])
     sha_buy = analysis.get('sha_buy_strength', 0)
     sha_sell = analysis.get('sha_sell_strength', 0)
     price_buy = analysis.get('price_buy_strength', 0)
@@ -742,6 +740,7 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     trend_sell = analysis.get('sha_trend_sell_strength', 0)
 
     # Gap% data
+    rsi_value = analysis.get('rsi_value', 50.0)
     gap_pct = analysis.get('current_gap_pct', 0)
     gap_range_val = analysis.get('gap_range', [0.1, 0.30])
     convergence = analysis.get('convergence', {})
@@ -773,23 +772,6 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
         'borderTop': f'1px solid {COLORS["divider"]}',
         'margin': '0',
     })
-
-    # Crossover row — same 3-column grid as SHA / Price
-    cross_row = html.Div(
-        style={
-            'display': 'grid',
-            'gridTemplateColumns': '64px 1fr 1fr',
-            'gap': '8px', 'alignItems': 'center',
-            'padding': '8px 0',
-        },
-        children=[
-            html.Span('🔀 Cross', style={
-                'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#f39c12',
-            }),
-            _cross_power_bar(crossover),
-            _cross_dots(crossover),
-        ],
-    )
 
     return html.Div(
         style={
@@ -833,7 +815,7 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                     html.Span('CANDLES', style=col_hdr),
                 ],
             ),
-            # ── Signal + Trend + Price + Cross + Gap rows ──
+            # ── Signal + Trend + Price + RSI + Gap rows ──
             html.Div(style={'padding': '0 16px 10px'}, children=[
                 _signal_row('Signal', '🔵', '#5dade2', sha_buy, sha_list),
                 row_divider,
@@ -841,7 +823,7 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                 row_divider,
                 _signal_row('Price', '🔴', '#e74c3c', price_buy, price_list),
                 row_divider,
-                cross_row,
+                _build_rsi_row(rsi_value),
                 row_divider,
                 _build_gap_row(gap_pct, gap_range_val, convergence),
             ]),
@@ -888,18 +870,18 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                     html.Span('│', style={
                         'color': COLORS['text_muted'], 'fontSize': '0.75rem',
                     }),
-                    # Crossover intensity legend
-                    html.Span('Cross:', style={
+                    # RSI legend
+                    html.Span('RSI:', style={
                         'fontSize': '0.6rem', 'color': COLORS['text_dim'],
                         'fontWeight': '600', 'letterSpacing': '0.5px',
                     }),
                     html.Div([
                         html.Span(style={
                             'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#4de8c8',
+                            'borderRadius': '50%', 'background': '#e74c3c',
                             'marginRight': '3px',
                         }),
-                        html.Span('Light', style={
+                        html.Span('≤30 Over-sold', style={
                             'fontSize': '0.6rem', 'color': COLORS['text_dim'],
                             'marginRight': '8px',
                         }),
@@ -908,44 +890,7 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                             'borderRadius': '50%', 'background': '#00d2a0',
                             'marginRight': '3px',
                         }),
-                        html.Span('Medium', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                            'marginRight': '8px',
-                        }),
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#009d7a',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('Strong', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                        }),
-                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
-                    html.Div([
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#ee7b6e',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('Light', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                            'marginRight': '8px',
-                        }),
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#e74c3c',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('Medium', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                            'marginRight': '8px',
-                        }),
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#c0392b',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('Strong', style={
+                        html.Span('≥70 Over-bought', style={
                             'fontSize': '0.6rem', 'color': COLORS['text_dim'],
                         }),
                     ], style={'display': 'inline-flex', 'alignItems': 'center'}),
