@@ -726,6 +726,115 @@ def _build_gap_row(gap_pct, gap_range, convergence=None):
     )
 
 
+def _build_rsi_row(rsi_value, rsi_mtf=None, rsi_mtf_blocked=False):
+    """Build a compact multi-timeframe RSI indicator section for the SHA analysis panel."""
+
+    def _rsi_color_label(rsi):
+        if rsi <= 30:
+            return '#e74c3c', 'OVERSOLD'
+        elif rsi >= 70:
+            return '#00d2a0', 'OVERBOUGHT'
+        elif rsi >= 50:
+            return '#5dade2', 'NEUTRAL'
+        else:
+            return '#f39c12', 'NEUTRAL'
+
+    def _rsi_mini_row(tf_label, rsi):
+        rsi = round(rsi, 2)
+        color, label = _rsi_color_label(rsi)
+        fill_pct = max(0, min(100, rsi))
+        return html.Div(
+            style={
+                'display': 'grid',
+                'gridTemplateColumns': '36px 1fr auto',
+                'gap': '8px', 'alignItems': 'center',
+                'padding': '3px 0',
+            },
+            children=[
+                html.Span(tf_label, style={
+                    'fontWeight': '600', 'fontSize': '0.7rem',
+                    'color': COLORS['text_secondary'],
+                    'fontFamily': "'JetBrains Mono', monospace",
+                }),
+                html.Div(style={
+                    'width': '100%', 'height': '12px',
+                    'background': 'rgba(255,255,255,0.06)',
+                    'borderRadius': '3px', 'overflow': 'hidden',
+                }, children=[
+                    html.Div(style={
+                        'width': f'{fill_pct}%', 'height': '100%',
+                        'background': color,
+                        'borderRadius': '3px',
+                        'transition': 'width 0.3s ease',
+                    }),
+                ]),
+                html.Div([
+                    html.Span(f'{rsi}', style={
+                        'fontWeight': '700', 'fontSize': '0.82rem',
+                        'color': color,
+                        'fontFamily': "'JetBrains Mono', monospace",
+                        'marginRight': '5px',
+                    }),
+                    html.Span(label, style={
+                        'fontSize': '0.55rem', 'fontWeight': '700',
+                        'color': color,
+                        'background': f'{color}18',
+                        'padding': '1px 6px', 'borderRadius': '6px',
+                        'border': f'1px solid {color}33',
+                    }),
+                ], style={'display': 'flex', 'alignItems': 'center', 'whiteSpace': 'nowrap'}),
+            ],
+        )
+
+    # Build timeframe rows
+    tf_display = {'TIMEFRAME_M1': 'M1', 'TIMEFRAME_M5': 'M5', 'TIMEFRAME_M15': 'M15'}
+    tf_rows = []
+    if rsi_mtf and len(rsi_mtf) > 0:
+        for tf_key in ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15']:
+            if tf_key in rsi_mtf:
+                tf_rows.append(_rsi_mini_row(tf_display[tf_key], rsi_mtf[tf_key]))
+    else:
+        tf_rows.append(_rsi_mini_row('M1', rsi_value))
+
+    # Blocked badge
+    blocked_badge = None
+    if rsi_mtf_blocked:
+        blocked_badge = html.Div([
+            html.Span('⛔', style={'fontSize': '10px', 'marginRight': '4px'}),
+            html.Span('MTF RSI BLOCKED', style={
+                'fontSize': '0.6rem', 'fontWeight': '700',
+                'color': '#e74c3c',
+                'letterSpacing': '0.5px',
+            }),
+            html.Span(' — entry paused (all TFs at extreme)', style={
+                'fontSize': '0.58rem', 'color': COLORS['text_dim'],
+            }),
+        ], style={
+            'display': 'flex', 'alignItems': 'center',
+            'background': 'rgba(231, 76, 60, 0.08)',
+            'border': '1px solid rgba(231, 76, 60, 0.25)',
+            'borderRadius': '6px',
+            'padding': '4px 10px',
+            'marginTop': '4px',
+        })
+
+    return html.Div(
+        style={
+            'display': 'grid',
+            'gridTemplateColumns': '64px 1fr',
+            'gap': '8px', 'alignItems': 'start',
+            'padding': '8px 0',
+        },
+        children=[
+            html.Span('📊 RSI', style={
+                'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#a78bfa',
+                'paddingTop': '3px',
+            }),
+            html.Div(tf_rows + ([blocked_badge] if blocked_badge else [])),
+        ],
+    )
+
+
 def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     """Build clean SHA analysis card — Ballom-inspired grid layout."""
     sha_list = analysis.get('sha_power_list', [])
@@ -742,6 +851,9 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     trend_sell = analysis.get('sha_trend_sell_strength', 0)
 
     # Gap% data
+    rsi_value = analysis.get('rsi_value', 50.0)
+    rsi_mtf = analysis.get('rsi_mtf', {})
+    rsi_mtf_blocked = analysis.get('rsi_mtf_blocked', False)
     gap_pct = analysis.get('current_gap_pct', 0)
     gap_range_val = analysis.get('gap_range', [0.1, 0.30])
     convergence = analysis.get('convergence', {})
@@ -842,6 +954,8 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                 _signal_row('Price', '🔴', '#e74c3c', price_buy, price_list),
                 row_divider,
                 cross_row,
+                row_divider,
+                _build_rsi_row(rsi_value, rsi_mtf=rsi_mtf, rsi_mtf_blocked=rsi_mtf_blocked),
                 row_divider,
                 _build_gap_row(gap_pct, gap_range_val, convergence),
             ]),
@@ -946,6 +1060,34 @@ def build_sha_analysis_panel(symbol, analysis, last_updated=''):
                             'marginRight': '3px',
                         }),
                         html.Span('Strong', style={
+                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                        }),
+                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
+                    # Divider
+                    html.Span('│', style={
+                        'color': COLORS['text_muted'], 'fontSize': '0.75rem',
+                    }),
+                    # RSI legend
+                    html.Span('RSI:', style={
+                        'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                        'fontWeight': '600', 'letterSpacing': '0.5px',
+                    }),
+                    html.Div([
+                        html.Span(style={
+                            'display': 'inline-block', 'width': '8px', 'height': '8px',
+                            'borderRadius': '50%', 'background': '#e74c3c',
+                            'marginRight': '3px',
+                        }),
+                        html.Span('≤30 Over-sold', style={
+                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                            'marginRight': '8px',
+                        }),
+                        html.Span(style={
+                            'display': 'inline-block', 'width': '8px', 'height': '8px',
+                            'borderRadius': '50%', 'background': '#00d2a0',
+                            'marginRight': '3px',
+                        }),
+                        html.Span('≥70 Over-bought', style={
                             'fontSize': '0.6rem', 'color': COLORS['text_dim'],
                         }),
                     ], style={'display': 'inline-flex', 'alignItems': 'center'}),
