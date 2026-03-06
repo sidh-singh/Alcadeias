@@ -230,15 +230,19 @@ class Strategy:
         exit_conv_ok = conv_state == 'CONVERGING'
         
         # Multi-timeframe RSI entry filter:
-        # Block BUY if ALL timeframe RSIs show oversold (price likely still falling)
-        # Block SELL if ALL timeframe RSIs show overbought (price likely still rising)
-        rsi_all_oversold = False
-        rsi_all_overbought = False
+        # Block BUY if ANY timeframe RSI shows oversold (price likely still falling)
+        # Block SELL if ANY timeframe RSI shows overbought (price likely still rising)
+        rsi_any_oversold = False
+        rsi_any_overbought = False
         if rsi_mtf and len(rsi_mtf) > 0:
             rsi_vals = list(rsi_mtf.values())
-            rsi_all_oversold = all(v <= RSI_MTF_OVERSOLD for v in rsi_vals)
-            rsi_all_overbought = all(v >= RSI_MTF_OVERBOUGHT for v in rsi_vals)
-        rsi_mtf_blocked = rsi_all_oversold or rsi_all_overbought
+            rsi_any_oversold = any(v <= RSI_MTF_OVERSOLD for v in rsi_vals)
+            rsi_any_overbought = any(v >= RSI_MTF_OVERBOUGHT for v in rsi_vals)
+        rsi_mtf_blocked = rsi_any_oversold or rsi_any_overbought
+        
+        # Extract individual timeframe RSIs for tiered DCA
+        rsi_1m = rsi_mtf.get('TIMEFRAME_M1', 50.0) if rsi_mtf else 50.0
+        rsi_5m = rsi_mtf.get('TIMEFRAME_M5', 50.0) if rsi_mtf else 50.0
         
         # No positions open → look for entry (with MTF RSI filter)
         if buy_count == 0 and sell_count == 0:
@@ -248,30 +252,23 @@ class Strategy:
                 elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0 and gap_in_range and entry_conv_ok:
                     sell_status = Signal.SELL
         
-        # Only BUY positions open → exit or DCA
+        # Only BUY positions open → exit or DCA (max 3 total: 1 entry + 1 via 1m RSI + 1 via 5m RSI)
         elif buy_count > 0 and sell_count == 0:
             if buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
-            elif current_rsi <= RSI_OVERSOLD and buy_count <= RSI_DCA_MAX_POSITIONS:
+            elif rsi_1m <= RSI_OVERSOLD and buy_count == 1:
                 buy_status = Signal.BUY_MORE
-            elif current_rsi >= RSI_OVERBOUGHT and buy_count <= RSI_DCA_MAX_POSITIONS:
-                sell_status = Signal.SELL_MORE
-        
-        # Only SELL positions open → exit or DCA
+            elif rsi_5m <= RSI_OVERSOLD and buy_count == 2:
+                buy_status = Signal.BUY_MORE
+
+        # Only SELL positions open → exit or DCA (max 3 total: 1 entry + 1 via 1m RSI + 1 via 5m RSI)
         elif buy_count == 0 and sell_count > 0:
             if sell_profit > close_threshold:
                 sell_status = Signal.CLOSE_SELL
-            elif current_rsi >= RSI_OVERBOUGHT and sell_count <= RSI_DCA_MAX_POSITIONS:
+            elif rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
                 sell_status = Signal.SELL_MORE
-            elif current_rsi <= RSI_OVERSOLD and sell_count <= RSI_DCA_MAX_POSITIONS:
-                buy_status = Signal.BUY_MORE
-        
-        # Both BUY and SELL positions open (hedge) → close both when combined profit is positive
-        elif buy_count > 0 and sell_count > 0:
-            total_profit = buy_profit + sell_profit
-            if total_profit > close_threshold:
-                buy_status = Signal.CLOSE_BUY
-                sell_status = Signal.CLOSE_SELL
+            elif rsi_5m >= RSI_OVERBOUGHT and sell_count == 2:
+                sell_status = Signal.SELL_MORE
         
         analysis_data = {
             'sha_power_list': lt_sha_power_list,
