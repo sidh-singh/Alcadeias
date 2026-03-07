@@ -38,23 +38,32 @@ class Strategy:
         except (IndexError, ValueError):
             return times
     
-    def _get_next_fibo_volume(self, position_count, times):
+    def _get_next_fibo_volume(self, total_volume, times):
         """
-        Get next fibonacci volume based on current position count.
-        Uses count as index into fib sequence.
+        Get next fibonacci volume based on total open volume.
+        Finds total_volume in fib sequence and returns the next fib value.
+        
+        Eg: fib = [0.01, 0.02, 0.03, 0.05, 0.08, 0.13, ...]
+            total_volume 0.01 → next 0.02
+            total_volume 0.03 → next 0.05
+            total_volume 0.08 → next 0.13
         
         Args:
-            position_count: Current number of open positions (e.g., 1, 2, 3...)
+            total_volume: Total volume of all open positions for this direction
             times: Multiplier from config
         
         Returns:
             float: Next fibo volume in lots
         """
         fib = [self._recur_fibo(i) for i in range(FIBO_SEQUENCE_LENGTH)][2:]
-        try:
-            return round(fib[position_count] * times / 100, 2)
-        except IndexError:
-            return 0.01 * times
+        total_units = round(total_volume * 100 / times) if times else 0
+        for i, f in enumerate(fib):
+            if f >= total_units:
+                try:
+                    return round(fib[i + 1] * times / 100, 2)
+                except IndexError:
+                    return round(0.01 * times, 2)
+        return round(0.01 * times, 2)
     
     def _analyze(self, source_df, sha_df):
         """
