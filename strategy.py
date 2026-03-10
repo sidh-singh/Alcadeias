@@ -271,7 +271,7 @@ class Strategy:
             elif rsi_5m <= RSI_OVERSOLD and buy_count == 2:
                 buy_status = Signal.BUY_MORE
             elif rsi_30m <= RSI_OVERSOLD and buy_count == 3:
-                buy_status = Signal.BUY_MORE
+                buy_status = Signal.CLOSE_BUY
 
         # Only SELL positions open → exit or DCA (max 4 total: 1 entry + 1 via 1m RSI + 1 via 5m RSI + 1 via 30m RSI)
         elif buy_count == 0 and sell_count > 0:
@@ -282,7 +282,7 @@ class Strategy:
             elif rsi_5m >= RSI_OVERBOUGHT and sell_count == 2:
                 sell_status = Signal.SELL_MORE
             elif rsi_30m >= RSI_OVERBOUGHT and sell_count == 3:
-                sell_status = Signal.SELL_MORE
+                sell_status = Signal.CLOSE_SELL
         
         analysis_data = {
             'sha_power_list': lt_sha_power_list,
