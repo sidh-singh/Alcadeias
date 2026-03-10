@@ -10,8 +10,9 @@
 //    • Trend SHA   (slow, default L=90 RMA)
 //
 //  Entry:  Signal + Trend agree, gap in range, convergence OK
-//  Exit:   Profit target OR opposite signal/trend flip
-//  DCA:    RSI oversold/overbought with position count limit
+//          (blocked when any MTF RSI is at extreme)
+//  Exit:   Profit target
+//  DCA:    Tiered RSI (M1→M5→M30) with fibonacci volume series
 //
 //  Attach to M1 chart for faithful reproduction of the Python bot.
 //  All key hyper-parameters are exposed as inputs for optimization.
@@ -25,6 +26,8 @@
 #property description "Attach to M1 chart for exact Python bot replica"
 
 #include <Trade\Trade.mqh>
+
+#define ALC_OBJ "ALC_"    // Prefix for all EA chart objects
 
 //+------------------------------------------------------------------+
 //| Enumerations                                                      |
@@ -87,7 +90,13 @@ input int              Inp_RSI_Len       = 14;             // RSI Period
 input ENUM_SHA_MA_TYPE Inp_RSI_MA        = SHA_MA_RMA;     // RSI MA Type (RMA = Wilder's)
 input double           Inp_RSI_Oversold  = 30.0;           // RSI Oversold (BUY_MORE when <=)
 input double           Inp_RSI_Overbought = 70.0;          // RSI Overbought (SELL_MORE when >=)
-input int              Inp_RSI_DCA_Max   = 1;              // Max DCA positions via RSI signal
+input int              Inp_RSI_DCA_Max   = 3;              // Max DCA tiers (1=M1, 2=+M5, 3=+M30)
+
+//--- RSI Multi-Timeframe Entry Filter
+input group           "═══ RSI Multi-Timeframe ═══"
+input double           Inp_RSI_MTF_OS    = 30.0;           // MTF RSI Oversold (blocks entry when ANY <=)
+input double           Inp_RSI_MTF_OB    = 70.0;           // MTF RSI Overbought (blocks entry when ANY >=)
+input int              Inp_RSI_MTF_Bars  = 200;            // Bars to load for MTF RSI warmup
 
 //--- Lot sizing
 input group           "═══ Lots ═══"
@@ -99,6 +108,21 @@ input bool   Inp_Brake    = false;                         // Brake — block ne
 input group           "═══ General ═══"
 input long   Inp_Magic     = 123456;                       // Magic Number
 input int    Inp_Bar_Count = 1000;                         // Bars to load for SHA warmup
+
+//--- Chart UI
+input group           "═══ Chart UI ═══"
+input bool   Inp_ShowPanel     = true;              // Show info panel on chart
+input bool   Inp_ShowSHA       = true;              // Draw SHA indicator lines on chart
+input bool   Inp_ShowArrows    = true;              // Show trade signal arrows on chart
+input int    Inp_SHA_DrawBars  = 200;               // SHA lines: number of bars to draw
+input int    Inp_SHA_SigWidth  = 2;                 // Signal SHA line width (1-5)
+input int    Inp_SHA_TrdWidth  = 3;                 // Trend SHA line width (1-5)
+input color  Inp_ClrSigBull    = clrLime;           // Signal SHA: Bullish color
+input color  Inp_ClrSigBear    = clrRed;            // Signal SHA: Bearish color
+input color  Inp_ClrTrdBull    = clrDodgerBlue;     // Trend SHA: Bullish color
+input color  Inp_ClrTrdBear    = clrOrangeRed;      // Trend SHA: Bearish color
+input color  Inp_ClrPanelBg    = C'15,15,25';       // Panel background color
+input color  Inp_ClrPanelTxt   = clrWhite;          // Panel text color
 
 //+------------------------------------------------------------------+
 //| Globals                                                           |
@@ -135,9 +159,11 @@ int OnInit()
                Inp_Conv_LB, Inp_Conv_CloseTh, Inp_Conv_DeadZ);
    PrintFormat("[Alcadeias] Lookback=%d | SHA_Thr=%.2f | FiboPow=%d | CloseProfit=$%.1f",
                Inp_Lookback, Inp_SHA_Thr, Inp_Fibo_Power, Inp_Close_Profit);
-   PrintFormat("[Alcadeias] RSI(%d, %s) | OS=%.0f | OB=%.0f | DCA_Max=%d",
+   PrintFormat("[Alcadeias] RSI(%d, %s) | OS=%.0f | OB=%.0f | DCA_Tiers=%d",
                Inp_RSI_Len, EnumToString(Inp_RSI_MA),
                Inp_RSI_Oversold, Inp_RSI_Overbought, Inp_RSI_DCA_Max);
+   PrintFormat("[Alcadeias] RSI MTF: OS=%.0f | OB=%.0f | Bars=%d",
+               Inp_RSI_MTF_OS, Inp_RSI_MTF_OB, Inp_RSI_MTF_Bars);
    PrintFormat("[Alcadeias] Lot=%.2f × %.1f | Magic=%d | Bars=%d",
                Inp_Lot_Size, Inp_Times, Inp_Magic, Inp_Bar_Count);
 
@@ -147,7 +173,11 @@ int OnInit()
 //+------------------------------------------------------------------+
 //| Expert deinitialization                                           |
 //+------------------------------------------------------------------+
-void OnDeinit(const int reason) { Comment(""); }
+void OnDeinit(const int reason)
+{
+   ObjectsDeleteAll(0, ALC_OBJ);
+   Comment("");
+}
 
 //+------------------------------------------------------------------+
 //| Expert tick function — main loop                                  |
@@ -181,6 +211,12 @@ void OnTick()
       L[i] = rates[i].low;
       C[i] = rates[i].close;
    }
+
+   // Bar times for chart UI drawing
+   datetime T[];
+   ArrayResize(T, n);
+   for(int i = 0; i < n; i++)
+      T[i] = rates[i].time;
 
    // ════════════════════════════════════════════════════════════════
    //  2. SHA SIGNAL INDICATOR (fast)
@@ -235,7 +271,7 @@ void OnTick()
    int trdPow = BarPower(trdO[last], trdH[last], trdL[last], trdC[last]);
 
    // ════════════════════════════════════════════════════════════════
-   //  6b. RSI INDICATOR
+   //  6b. RSI INDICATOR (chart timeframe)
    // ════════════════════════════════════════════════════════════════
    double rsiArr[];
    CalcRSI(C, rsiArr, Inp_RSI_Len, Inp_RSI_MA, n);
@@ -244,11 +280,26 @@ void OnTick()
       curRSI = rsiArr[last];
 
    // ════════════════════════════════════════════════════════════════
+   //  6c. MULTI-TIMEFRAME RSI (M1, M5, M30)
+   //      Matches: strategy.py rsi_1m / rsi_5m / rsi_30m
+   // ════════════════════════════════════════════════════════════════
+   double rsiM1  = CalcRSI_TF(PERIOD_M1,  Inp_RSI_Len, Inp_RSI_MA, Inp_RSI_MTF_Bars);
+   double rsiM5  = CalcRSI_TF(PERIOD_M5,  Inp_RSI_Len, Inp_RSI_MA, Inp_RSI_MTF_Bars);
+   double rsiM30 = CalcRSI_TF(PERIOD_M30, Inp_RSI_Len, Inp_RSI_MA, Inp_RSI_MTF_Bars);
+
+   // MTF entry filter: block if ANY timeframe is extreme
+   // Matches: strategy.py rsi_any_oversold / rsi_any_overbought / rsi_mtf_blocked
+   bool rsiAnyOversold   = (rsiM1 <= Inp_RSI_MTF_OS || rsiM5 <= Inp_RSI_MTF_OS || rsiM30 <= Inp_RSI_MTF_OS);
+   bool rsiAnyOverbought = (rsiM1 >= Inp_RSI_MTF_OB || rsiM5 >= Inp_RSI_MTF_OB || rsiM30 >= Inp_RSI_MTF_OB);
+   bool rsiMtfBlocked    = rsiAnyOversold || rsiAnyOverbought;
+
+   // ════════════════════════════════════════════════════════════════
    //  7. POSITIONS
    // ════════════════════════════════════════════════════════════════
    int    bCnt = 0, sCnt = 0;
    double bProf = 0, sProf = 0, bFirst = 0, sFirst = 0;
-   GetPositions(bCnt, bProf, bFirst, sCnt, sProf, sFirst);
+   double bVol = 0, sVol = 0;
+   GetPositions(bCnt, bProf, bFirst, bVol, sCnt, sProf, sFirst, sVol);
 
    // ════════════════════════════════════════════════════════════════
    //  8. ENTRY / EXIT LOGIC  (strategy.py lines 242–271)
@@ -259,29 +310,45 @@ void OnTick()
    int buySig  = 0;   // 0=nothing  1=BUY  3=CLOSE_BUY  5=BUY_MORE
    int sellSig = 0;   // 0=nothing  2=SELL 4=CLOSE_SELL  6=SELL_MORE
 
-   // ── No positions open → entry ──
+   // ── No positions open → entry (with MTF RSI filter) ──
+   // Matches: strategy.py lines 258-263
    if(bCnt == 0 && sCnt == 0)
    {
-      if(sigPow == 1 && trdPow == 1 && gapInRange && entryConvOk)
-         buySig = 1;                                 // BUY
-      else if(sigPow == 0 && trdPow == 0 && gapInRange && entryConvOk)
-         sellSig = 2;                                // SELL
+      if(!rsiMtfBlocked)
+      {
+         if(sigPow == 1 && trdPow == 1 && gapInRange && entryConvOk)
+            buySig = 1;                              // BUY
+         else if(sigPow == 0 && trdPow == 0 && gapInRange && entryConvOk)
+            sellSig = 2;                             // SELL
+      }
    }
-   // ── Only BUY positions open ── exit or RSI DCA
+   // ── Only BUY positions open → exit or tiered RSI DCA ──
+   //    Max 4 total: 1 entry + 1×M1 RSI + 1×M5 RSI + 1×M30 RSI
+   //    Matches: strategy.py lines 266-274
    else if(bCnt > 0 && sCnt == 0)
    {
       if(bProf > Inp_Close_Profit)
          buySig = 3;                                 // CLOSE_BUY  (profit target)
-      else if(curRSI <= Inp_RSI_Oversold && bCnt <= Inp_RSI_DCA_Max)
-         buySig = 5;                                 // BUY_MORE   (RSI oversold DCA)
+      else if(rsiM1 <= Inp_RSI_Oversold && bCnt == 1 && Inp_RSI_DCA_Max >= 1)
+         buySig = 5;                                 // BUY_MORE   (M1 RSI oversold, tier 1)
+      else if(rsiM5 <= Inp_RSI_Oversold && bCnt == 2 && Inp_RSI_DCA_Max >= 2)
+         buySig = 5;                                 // BUY_MORE   (M5 RSI oversold, tier 2)
+      else if(rsiM30 <= Inp_RSI_Oversold && bCnt == 3 && Inp_RSI_DCA_Max >= 3)
+         buySig = 5;                                 // BUY_MORE   (M30 RSI oversold, tier 3)
    }
-   // ── Only SELL positions open ── exit or RSI DCA
+   // ── Only SELL positions open → exit or tiered RSI DCA ──
+   //    Max 4 total: 1 entry + 1×M1 RSI + 1×M5 RSI + 1×M30 RSI
+   //    Matches: strategy.py lines 278-285
    else if(bCnt == 0 && sCnt > 0)
    {
       if(sProf > Inp_Close_Profit)
          sellSig = 4;                                // CLOSE_SELL (profit target)
-      else if(curRSI >= Inp_RSI_Overbought && sCnt <= Inp_RSI_DCA_Max)
-         sellSig = 6;                                // SELL_MORE  (RSI overbought DCA)
+      else if(rsiM1 >= Inp_RSI_Overbought && sCnt == 1 && Inp_RSI_DCA_Max >= 1)
+         sellSig = 6;                                // SELL_MORE  (M1 RSI overbought, tier 1)
+      else if(rsiM5 >= Inp_RSI_Overbought && sCnt == 2 && Inp_RSI_DCA_Max >= 2)
+         sellSig = 6;                                // SELL_MORE  (M5 RSI overbought, tier 2)
+      else if(rsiM30 >= Inp_RSI_Overbought && sCnt == 3 && Inp_RSI_DCA_Max >= 3)
+         sellSig = 6;                                // SELL_MORE  (M30 RSI overbought, tier 3)
    }
    // ── Both sides open → do nothing (matches Python) ──
 
@@ -304,12 +371,13 @@ void OnTick()
    }
    else if(buySig == 5)
    {
-      double vol = NormLots(FiboVolume(bCnt, Inp_Times));
+      // Volume-based fibo DCA — matches strategy.py _get_next_fibo_volume
+      double vol = NormLots(FiboVolumeByTotal(bVol, Inp_Times));
       double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
       if(g_trade.Buy(vol, _Symbol, ask, 0, 0,
                       StringFormat("Alcadeias RSI DCA BUY #%d", bCnt + 1)))
-         PrintFormat("[Alcadeias] BUY_MORE #%d  %.2f lots @ %.5f  (RSI=%.1f <= %.0f)",
-                     bCnt + 1, vol, ask, curRSI, Inp_RSI_Oversold);
+         PrintFormat("[Alcadeias] BUY_MORE #%d  %.2f lots @ %.5f  (M1=%.1f M5=%.1f M30=%.1f)",
+                     bCnt + 1, vol, ask, rsiM1, rsiM5, rsiM30);
    }
 
    // ── SELL signals ──
@@ -326,50 +394,53 @@ void OnTick()
    }
    else if(sellSig == 6)
    {
-      double vol = NormLots(FiboVolume(sCnt, Inp_Times));
+      // Volume-based fibo DCA — matches strategy.py _get_next_fibo_volume
+      double vol = NormLots(FiboVolumeByTotal(sVol, Inp_Times));
       double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
       if(g_trade.Sell(vol, _Symbol, bid, 0, 0,
                        StringFormat("Alcadeias RSI DCA SELL #%d", sCnt + 1)))
-         PrintFormat("[Alcadeias] SELL_MORE #%d  %.2f lots @ %.5f  (RSI=%.1f >= %.0f)",
-                     sCnt + 1, vol, bid, curRSI, Inp_RSI_Overbought);
+         PrintFormat("[Alcadeias] SELL_MORE #%d  %.2f lots @ %.5f  (M1=%.1f M5=%.1f M30=%.1f)",
+                     sCnt + 1, vol, bid, rsiM1, rsiM5, rsiM30);
    }
 
    // ════════════════════════════════════════════════════════════════
-   //  10. CHART DISPLAY
+   //  10. CHART UI — Panel, SHA Lines, Trade Arrows
    // ════════════════════════════════════════════════════════════════
-   string cmt = StringFormat(
-      "============ Alcadeias EA ============\n"
-      "Signal SHA(%d): %s   |   Trend SHA(%d): %s\n"
-      "Gap: %.4f   [%.4f - %.4f]  %s\n"
-      "Conv: %s   (now=%.6f  prev=%.6f  d=%.6f)\n"
-      "--------------------------------------\n"
-      "BUY:  n=%d   P/L=$%.2f   1st=$%.2f\n"
-      "SELL: n=%d   P/L=$%.2f   1st=$%.2f\n"
-      "--------------------------------------\n"
-      "RSI(%d): %.1f   OS=%.0f  OB=%.0f  DCA_Max=%d\n"
-      "Next DCA vol:  BUY=%.2f  SELL=%.2f\n"
-      "--------------------------------------\n"
-      ">> %s",
-      //--- row 1
-      Inp_SHA_Sig_Len, sigPow == 1 ? "BULL" : "BEAR",
-      Inp_SHA_Trd_Len, trdPow == 1 ? "BULL" : "BEAR",
-      //--- row 2
-      curGap, Inp_Gap_Min, Inp_Gap_Max,
-      gapInRange ? "IN-RANGE" : "OUT",
-      //--- row 3
-      ConvStr(conv), gNow, gPrev, gDelta,
-      //--- row 4-5
-      bCnt, bProf, bFirst,
-      sCnt, sProf, sFirst,
-      //--- row 6: RSI
-      Inp_RSI_Len, curRSI, Inp_RSI_Oversold, Inp_RSI_Overbought, Inp_RSI_DCA_Max,
-      //--- row 7: Next DCA vol
-      bCnt > 0 ? NormLots(FiboVolume(bCnt, Inp_Times)) : 0.0,
-      sCnt > 0 ? NormLots(FiboVolume(sCnt, Inp_Times)) : 0.0,
-      //--- action
-      ActionStr(buySig, sellSig)
-   );
-   Comment(cmt);
+   double nextBuyVol  = bCnt > 0 ? NormLots(FiboVolumeByTotal(bVol, Inp_Times)) : 0.0;
+   double nextSellVol = sCnt > 0 ? NormLots(FiboVolumeByTotal(sVol, Inp_Times)) : 0.0;
+
+   if(Inp_ShowPanel)
+   {
+      Comment("");  // clear text comment when panel is active
+      DrawPanel(sigPow, trdPow, curGap, gapInRange, conv, gDelta,
+                rsiM1, rsiM5, rsiM30, rsiMtfBlocked,
+                bCnt, bVol, bProf, bFirst,
+                sCnt, sVol, sProf, sFirst,
+                nextBuyVol, nextSellVol, buySig, sellSig);
+   }
+   else
+   {
+      // Fallback text display when panel disabled
+      Comment(StringFormat(
+         "Alcadeias | Sig(%d):%s Trd(%d):%s | Gap:%.4f %s | %s | RSI M1:%.0f M5:%.0f M30:%.0f\n"
+         "BUY:%d($%.2f) SELL:%d($%.2f) | Next DCA: B=%.2f S=%.2f | >> %s",
+         Inp_SHA_Sig_Len, sigPow == 1 ? "BULL" : "BEAR",
+         Inp_SHA_Trd_Len, trdPow == 1 ? "BULL" : "BEAR",
+         curGap, gapInRange ? "OK" : "OUT", ConvStr(conv),
+         rsiM1, rsiM5, rsiM30,
+         bCnt, bProf, sCnt, sProf,
+         nextBuyVol, nextSellVol, ActionStr(buySig, sellSig)
+      ));
+   }
+
+   // Draw SHA indicator lines on chart
+   DrawSHALines(T, sigO, sigC, trdO, trdC, n);
+
+   // Draw trade arrow for current signal
+   if(buySig != 0 || sellSig != 0)
+      DrawTradeArrow(buySig, sellSig, T[last],
+                     SymbolInfoDouble(_Symbol, SYMBOL_BID),
+                     SymbolInfoDouble(_Symbol, SYMBOL_ASK));
 }
 
 
@@ -429,6 +500,23 @@ string ActionStr(int buySig, int sellSig)
    return "WAIT";
 }
 
+//+------------------------------------------------------------------+
+//| MA type short name for panel display                              |
+//+------------------------------------------------------------------+
+string MAShortName(ENUM_SHA_MA_TYPE t)
+{
+   switch(t)
+   {
+      case SHA_MA_SMA:  return "SMA";
+      case SHA_MA_EMA:  return "EMA";
+      case SHA_MA_RMA:  return "RMA";
+      case SHA_MA_WMA:  return "WMA";
+      case SHA_MA_SMMA: return "SMMA";
+      case SHA_MA_HMA:  return "HMA";
+   }
+   return "?";
+}
+
 
 //╔══════════════════════════════════════════════════════════════════╗
 //║                     FIBONACCI FUNCTIONS                         ║
@@ -480,6 +568,32 @@ double FiboVolume(int posCount, double times)
 }
 
 //+------------------------------------------------------------------+
+//| FiboVolumeByTotal — volume-based DCA lot size                     |
+//| Matches: strategy.py _get_next_fibo_volume(total_volume, times)  |
+//| Finds total_volume in fib sequence, returns next fib value.       |
+//| Eg: fib lots = [0.01, 0.02, 0.03, 0.05, 0.08, 0.13, ...]       |
+//|     total_volume 0.01 → next 0.02                                |
+//|     total_volume 0.03 → next 0.05                                |
+//+------------------------------------------------------------------+
+double FiboVolumeByTotal(double totalVolume, double times)
+{
+   int totalUnits = (times != 0.0)
+                    ? (int)MathRound(totalVolume * 100.0 / times)
+                    : 0;
+   for(int i = 0; i < g_fiboLen; i++)
+   {
+      if(g_fibo[i] >= totalUnits)
+      {
+         if(i + 1 < g_fiboLen)
+            return NormalizeDouble((double)g_fibo[i + 1] * times / 100.0, 2);
+         else
+            return NormalizeDouble(0.01 * times, 2);
+      }
+   }
+   return NormalizeDouble(0.01 * times, 2);  // fallback
+}
+
+//+------------------------------------------------------------------+
 //| Normalize lot to broker constraints                               |
 //+------------------------------------------------------------------+
 double NormLots(double lots)
@@ -505,11 +619,11 @@ double NormLots(double lots)
 //| Matches: mt5_helper.py get_buy_positions / get_sell_positions     |
 //| "first" = oldest position by open time                            |
 //+------------------------------------------------------------------+
-void GetPositions(int &bCnt, double &bProf, double &bFirst,
-                  int &sCnt, double &sProf, double &sFirst)
+void GetPositions(int &bCnt, double &bProf, double &bFirst, double &bVol,
+                  int &sCnt, double &sProf, double &sFirst, double &sVol)
 {
-   bCnt = 0;  bProf = 0;  bFirst = 0;
-   sCnt = 0;  sProf = 0;  sFirst = 0;
+   bCnt = 0;  bProf = 0;  bFirst = 0;  bVol = 0;
+   sCnt = 0;  sProf = 0;  sFirst = 0;  sVol = 0;
 
    datetime bFirstTime = D'2099.01.01';
    datetime sFirstTime = D'2099.01.01';
@@ -525,10 +639,13 @@ void GetPositions(int &bCnt, double &bProf, double &bFirst,
       long     type     = PositionGetInteger(POSITION_TYPE);
       datetime openTime = (datetime)PositionGetInteger(POSITION_TIME);
 
+      double volume = PositionGetDouble(POSITION_VOLUME);
+
       if(type == POSITION_TYPE_BUY)
       {
          bCnt++;
          bProf += profit;
+         bVol  += volume;
          if(openTime < bFirstTime)
          {
             bFirstTime = openTime;
@@ -539,6 +656,7 @@ void GetPositions(int &bCnt, double &bProf, double &bFirst,
       {
          sCnt++;
          sProf += profit;
+         sVol  += volume;
          if(openTime < sFirstTime)
          {
             sFirstTime = openTime;
@@ -551,6 +669,8 @@ void GetPositions(int &bCnt, double &bProf, double &bFirst,
    sProf  = NormalizeDouble(sProf, 2);
    bFirst = NormalizeDouble(bFirst, 2);
    sFirst = NormalizeDouble(sFirst, 2);
+   bVol   = NormalizeDouble(bVol, 2);
+   sVol   = NormalizeDouble(sVol, 2);
 }
 
 //+------------------------------------------------------------------+
@@ -891,6 +1011,34 @@ void CalcRSI(const double &close[], double &rsi[],
 }
 
 
+//+------------------------------------------------------------------+
+//| CalcRSI_TF — Compute RSI on a specific timeframe                  |
+//| Returns last valid RSI value, or 50.0 if not enough data.         |
+//| Used for multi-timeframe RSI (M1, M5, M30) matching Python.       |
+//+------------------------------------------------------------------+
+double CalcRSI_TF(ENUM_TIMEFRAMES tf, int rsiLen, ENUM_SHA_MA_TYPE maType, int barCount)
+{
+   MqlRates tfRates[];
+   ArraySetAsSeries(tfRates, false);
+   int tfN = CopyRates(_Symbol, tf, 0, barCount, tfRates);
+   if(tfN < rsiLen + 2) return 50.0;  // not enough data
+
+   double tfC[];
+   ArrayResize(tfC, tfN);
+   for(int i = 0; i < tfN; i++)
+      tfC[i] = tfRates[i].close;
+
+   double tfRSI[];
+   CalcRSI(tfC, tfRSI, rsiLen, maType, tfN);
+
+   // Return last valid RSI value
+   for(int i = tfN - 1; i >= 0; i--)
+      if(tfRSI[i] != EMPTY_VALUE) return tfRSI[i];
+
+   return 50.0;  // fallback neutral
+}
+
+
 //╔══════════════════════════════════════════════════════════════════╗
 //║                 GAP & CONVERGENCE                               ║
 //╚══════════════════════════════════════════════════════════════════╝
@@ -968,5 +1116,269 @@ void CalcConvergence(const double &gap[], int n, int lb,
    else if(gDelta > deadZone)   state = CONV_DIVERGING;
    else if(gDelta < -deadZone)  state = CONV_CONVERGING;
    else                          state = CONV_PARALLEL;
+}
+
+
+//╔══════════════════════════════════════════════════════════════════╗
+//║                    CHART UI FUNCTIONS                           ║
+//║  Dashboard panel, SHA indicator lines, trade signal arrows       ║
+//╚══════════════════════════════════════════════════════════════════╝
+
+//+------------------------------------------------------------------+
+//| Create/update a rectangle label on chart                          |
+//+------------------------------------------------------------------+
+void UIRect(string id, int x, int y, int w, int h, color bg, color bdr)
+{
+   string nm = ALC_OBJ + id;
+   if(ObjectFind(0, nm) < 0)
+      ObjectCreate(0, nm, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, nm, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, nm, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, nm, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, nm, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, nm, OBJPROP_YSIZE, h);
+   ObjectSetInteger(0, nm, OBJPROP_BGCOLOR, bg);
+   ObjectSetInteger(0, nm, OBJPROP_BORDER_COLOR, bdr);
+   ObjectSetInteger(0, nm, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+   ObjectSetInteger(0, nm, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, nm, OBJPROP_HIDDEN, true);
+   ObjectSetInteger(0, nm, OBJPROP_BACK, false);
+}
+
+//+------------------------------------------------------------------+
+//| Create/update a text label on chart                               |
+//+------------------------------------------------------------------+
+void UIText(string id, int x, int y, string text, color clr,
+            int fontSize = 9, string font = "Consolas")
+{
+   string nm = ALC_OBJ + id;
+   if(ObjectFind(0, nm) < 0)
+      ObjectCreate(0, nm, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, nm, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, nm, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, nm, OBJPROP_YDISTANCE, y);
+   ObjectSetString(0, nm, OBJPROP_TEXT, text);
+   ObjectSetString(0, nm, OBJPROP_FONT, font);
+   ObjectSetInteger(0, nm, OBJPROP_FONTSIZE, fontSize);
+   ObjectSetInteger(0, nm, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, nm, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, nm, OBJPROP_HIDDEN, true);
+}
+
+//+------------------------------------------------------------------+
+//| Draw dashboard panel (top-left corner)                            |
+//+------------------------------------------------------------------+
+void DrawPanel(int sigPow, int trdPow,
+               double curGap, bool gapInRange,
+               ENUM_CONV_STATE conv, double gDelta,
+               double rsiM1, double rsiM5, double rsiM30,
+               bool rsiMtfBlocked,
+               int bCnt, double bVol, double bProf, double bFirst,
+               int sCnt, double sVol, double sProf, double sFirst,
+               double nextBuyVol, double nextSellVol,
+               int buySig, int sellSig)
+{
+   int pw = 340, px = 10, py = 25;
+   int rh = 16, pad = 8;
+   int titleH = rh + 4;
+   int bodyRows = 15;
+   int ph = titleH + bodyRows * rh + pad;
+
+   color bg  = Inp_ClrPanelBg;
+   color brd = C'60,60,80';
+   color txt = Inp_ClrPanelTxt;
+   color dim = C'120,120,150';
+   color sep = C'45,45,65';
+   color grn = clrLime;
+   color red = clrRed;
+   color ylw = clrGold;
+   color cyn = clrAqua;
+
+   // ── Background ──
+   UIRect("PBG", px, py, pw, ph, bg, brd);
+   UIRect("PTB", px, py, pw, titleH, C'30,30,55', brd);
+
+   int tx = px + pad;
+   int ty = py + 3;
+
+   // Row 0: Title
+   UIText("R00", tx, ty, "===== ALCADEIAS EA =====", ylw, 10);
+
+   // Row 1: Signal SHA
+   ty = py + titleH + pad;
+   UIText("R01", tx, ty,
+      StringFormat("Signal SHA(%d,%s):  %s",
+         Inp_SHA_Sig_Len, MAShortName(Inp_SHA_Sig_MA),
+         sigPow == 1 ? "BULL" : "BEAR"),
+      sigPow == 1 ? grn : red);
+
+   // Row 2: Trend SHA
+   ty += rh;
+   UIText("R02", tx, ty,
+      StringFormat("Trend  SHA(%d,%s):  %s",
+         Inp_SHA_Trd_Len, MAShortName(Inp_SHA_Trd_MA),
+         trdPow == 1 ? "BULL" : "BEAR"),
+      trdPow == 1 ? grn : red);
+
+   // Row 3: Separator
+   ty += rh;
+   UIText("R03", tx, ty, "----------------------------------", sep);
+
+   // Row 4: Gap
+   ty += rh;
+   UIText("R04", tx, ty,
+      StringFormat("Gap: %.4f  [%.4f-%.4f]  %s",
+         curGap, Inp_Gap_Min, Inp_Gap_Max,
+         gapInRange ? "IN-RANGE" : "OUT"),
+      gapInRange ? grn : dim);
+
+   // Row 5: Convergence
+   ty += rh;
+   color cClr = (conv == CONV_DIVERGING) ? grn :
+                (conv == CONV_CONVERGING) ? red :
+                (conv == CONV_CLOSE) ? ylw : dim;
+   UIText("R05", tx, ty,
+      StringFormat("Conv: %-11s  d=%s%.6f",
+         ConvStr(conv),
+         gDelta >= 0 ? "+" : "", gDelta), cClr);
+
+   // Row 6: Separator
+   ty += rh;
+   UIText("R06", tx, ty, "----------------------------------", sep);
+
+   // Row 7: RSI values
+   ty += rh;
+   UIText("R07", tx, ty,
+      StringFormat("RSI(%d)  M1:%.0f  M5:%.0f  M30:%.0f",
+         Inp_RSI_Len, rsiM1, rsiM5, rsiM30), txt);
+
+   // Row 8: MTF filter status
+   ty += rh;
+   UIText("R08", tx, ty,
+      StringFormat("MTF: %s   DCA Tiers: %d",
+         rsiMtfBlocked ? "BLOCKED" : "CLEAR",
+         Inp_RSI_DCA_Max),
+      rsiMtfBlocked ? red : grn);
+
+   // Row 9: Separator
+   ty += rh;
+   UIText("R09", tx, ty, "----------------------------------", sep);
+
+   // Row 10: BUY positions
+   ty += rh;
+   UIText("R10", tx, ty,
+      StringFormat("BUY:  n=%d  vol=%.2f  P/L=$%.2f",
+         bCnt, bVol, bProf),
+      bCnt > 0 ? (bProf >= 0 ? grn : red) : dim);
+
+   // Row 11: SELL positions
+   ty += rh;
+   UIText("R11", tx, ty,
+      StringFormat("SELL: n=%d  vol=%.2f  P/L=$%.2f",
+         sCnt, sVol, sProf),
+      sCnt > 0 ? (sProf >= 0 ? grn : red) : dim);
+
+   // Row 12: Next DCA volumes
+   ty += rh;
+   UIText("R12", tx, ty,
+      StringFormat("Next DCA: BUY=%.2f  SELL=%.2f",
+         nextBuyVol, nextSellVol), cyn);
+
+   // Row 13: Separator
+   ty += rh;
+   UIText("R13", tx, ty, "----------------------------------", sep);
+
+   // Row 14: Current action
+   ty += rh;
+   string act = ActionStr(buySig, sellSig);
+   color aClr = (buySig == 1 || buySig == 5) ? grn :
+                (sellSig == 2 || sellSig == 6) ? red :
+                (buySig == 3 || sellSig == 4) ? ylw : txt;
+   UIText("R14", tx, ty, ">> " + act, aClr, 11);
+}
+
+//+------------------------------------------------------------------+
+//| Draw SHA indicator lines on chart                                 |
+//| Signal SHA = colored close line (colored by bull/bear)            |
+//| Trend SHA  = colored close line (thicker, colored by bull/bear)   |
+//+------------------------------------------------------------------+
+void DrawSHALines(const datetime &T[],
+                  const double &sigO[], const double &sigC[],
+                  const double &trdO[], const double &trdC[],
+                  int n)
+{
+   if(!Inp_ShowSHA) return;
+
+   // Remove old SHA line objects
+   ObjectsDeleteAll(0, ALC_OBJ + "SS_");
+   ObjectsDeleteAll(0, ALC_OBJ + "ST_");
+
+   int from = MathMax(0, n - Inp_SHA_DrawBars);
+
+   for(int i = from; i < n - 1; i++)
+   {
+      // ── Signal SHA close line (fast) ──
+      if(sigC[i] != EMPTY_VALUE && sigC[i + 1] != EMPTY_VALUE)
+      {
+         string sn = ALC_OBJ + "SS_" + IntegerToString(i);
+         bool sb = (sigC[i] >= sigO[i]);
+
+         ObjectCreate(0, sn, OBJ_TREND, 0, T[i], sigC[i], T[i + 1], sigC[i + 1]);
+         ObjectSetInteger(0, sn, OBJPROP_COLOR, sb ? Inp_ClrSigBull : Inp_ClrSigBear);
+         ObjectSetInteger(0, sn, OBJPROP_WIDTH, Inp_SHA_SigWidth);
+         ObjectSetInteger(0, sn, OBJPROP_RAY_RIGHT, false);
+         ObjectSetInteger(0, sn, OBJPROP_SELECTABLE, false);
+         ObjectSetInteger(0, sn, OBJPROP_HIDDEN, true);
+         ObjectSetInteger(0, sn, OBJPROP_BACK, true);
+      }
+
+      // ── Trend SHA close line (slow) ──
+      if(trdC[i] != EMPTY_VALUE && trdC[i + 1] != EMPTY_VALUE)
+      {
+         string tn = ALC_OBJ + "ST_" + IntegerToString(i);
+         bool tb = (trdC[i] >= trdO[i]);
+
+         ObjectCreate(0, tn, OBJ_TREND, 0, T[i], trdC[i], T[i + 1], trdC[i + 1]);
+         ObjectSetInteger(0, tn, OBJPROP_COLOR, tb ? Inp_ClrTrdBull : Inp_ClrTrdBear);
+         ObjectSetInteger(0, tn, OBJPROP_WIDTH, Inp_SHA_TrdWidth);
+         ObjectSetInteger(0, tn, OBJPROP_RAY_RIGHT, false);
+         ObjectSetInteger(0, tn, OBJPROP_SELECTABLE, false);
+         ObjectSetInteger(0, tn, OBJPROP_HIDDEN, true);
+         ObjectSetInteger(0, tn, OBJPROP_BACK, true);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Draw trade arrow on chart at signal bar                           |
+//| 233=up arrow, 234=down arrow, 251=X (close mark)                 |
+//+------------------------------------------------------------------+
+void DrawTradeArrow(int buySig, int sellSig, datetime time,
+                    double bid, double ask)
+{
+   if(!Inp_ShowArrows) return;
+
+   string nm = ALC_OBJ + "AR_" + IntegerToString((int)time);
+   int code = 0;
+   color clr;
+   double price;
+
+   if(buySig == 1)       { code = 233; clr = clrLime;        price = ask; }
+   else if(buySig == 3)  { code = 251; clr = clrDeepSkyBlue; price = bid; }
+   else if(buySig == 5)  { code = 233; clr = clrGreen;       price = ask; }
+   else if(sellSig == 2) { code = 234; clr = clrRed;         price = bid; }
+   else if(sellSig == 4) { code = 251; clr = clrDeepSkyBlue; price = ask; }
+   else if(sellSig == 6) { code = 234; clr = clrOrangeRed;   price = bid; }
+   else return;
+
+   if(ObjectFind(0, nm) < 0)
+      ObjectCreate(0, nm, OBJ_ARROW, 0, time, price);
+   ObjectSetDouble(0, nm, OBJPROP_PRICE, price);
+   ObjectSetInteger(0, nm, OBJPROP_ARROWCODE, code);
+   ObjectSetInteger(0, nm, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, nm, OBJPROP_WIDTH, 2);
+   ObjectSetInteger(0, nm, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, nm, OBJPROP_HIDDEN, true);
+   ObjectSetInteger(0, nm, OBJPROP_ANCHOR, ANCHOR_BOTTOM);
 }
 //+------------------------------------------------------------------+
