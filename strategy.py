@@ -253,6 +253,7 @@ class Strategy:
         rsi_1m = rsi_mtf.get('TIMEFRAME_M1', 50.0) if rsi_mtf else 50.0
         rsi_5m = rsi_mtf.get('TIMEFRAME_M5', 50.0) if rsi_mtf else 50.0
         rsi_30m = rsi_mtf.get('TIMEFRAME_M30', 50.0) if rsi_mtf else 50.0
+        rsi_1h = rsi_mtf.get('TIMEFRAME_H1', 50.0) if rsi_mtf else 50.0
         
         # No positions open → look for entry (with MTF RSI filter)
         if buy_count == 0 and sell_count == 0:
@@ -271,6 +272,8 @@ class Strategy:
             elif rsi_5m <= RSI_OVERSOLD and buy_count == 2:
                 buy_status = Signal.BUY_MORE
             elif rsi_30m <= RSI_OVERSOLD and buy_count == 3:
+                buy_status = Signal.BUY_MORE
+            elif rsi_1h <= RSI_OVERSOLD and buy_count == 4:
                 buy_status = Signal.CLOSE_BUY
 
         # Only SELL positions open → exit or DCA (max 4 total: 1 entry + 1 via 1m RSI + 1 via 5m RSI + 1 via 30m RSI)
@@ -282,6 +285,8 @@ class Strategy:
             elif rsi_5m >= RSI_OVERBOUGHT and sell_count == 2:
                 sell_status = Signal.SELL_MORE
             elif rsi_30m >= RSI_OVERBOUGHT and sell_count == 3:
+                sell_status = Signal.SELL_MORE
+            elif rsi_1h >= RSI_OVERBOUGHT and sell_count == 4:
                 sell_status = Signal.CLOSE_SELL
         
         analysis_data = {
