@@ -1,9 +1,18 @@
 @echo off
 REM === Alcadeias Dashboard Launcher ===
-REM Usage: start_dashboard.bat
+REM Usage: start_dashboard.bat [mode]
+REM   mode: demo (default), live
 
-REM === Define Python installation path explicitly ===
-set "PYTHON_ROOT=C:\Users\Administrator\AppData\Local\Programs\Python\Python311"
+REM === Get mode from parameter (default to demo) ===
+set "MODE=%~1"
+if "%MODE%"=="" set "MODE=demo"
+
+REM === Define Python installation path based on mode ===
+if /i "%MODE%"=="live" (
+    set "PYTHON_ROOT=C:\Users\Administrator\AppData\Local\Programs\Python\Python311"
+) else (
+    set "PYTHON_ROOT=C:\Users\admin\AppData\Local\Programs\Python\Python311"
+)
 set "PYTHON_EXE=%PYTHON_ROOT%\python.exe"
 
 echo Python path: %PYTHON_EXE%
