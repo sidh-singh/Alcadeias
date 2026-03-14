@@ -3,18 +3,22 @@ REM === Alcadeias — BTCUSDm Single-Symbol Process ===
 REM Usage: start_btcusd.bat [mode]
 REM   mode: demo (default), live
 
-REM === Define Python installation path explicitly ===
-set "PYTHON_ROOT=C:\Users\Administrator\AppData\Local\Programs\Python\Python311"
+REM === Get mode from parameter (default to demo) ===
+set "MODE=%~1"
+if "%MODE%"=="" set "MODE=demo"
+
+REM === Define Python installation path based on mode ===
+if /i "%MODE%"=="live" (
+    set "PYTHON_ROOT=C:\Users\Administrator\AppData\Local\Programs\Python\Python311"
+) else (
+    set "PYTHON_ROOT=C:\Users\admin\AppData\Local\Programs\Python\Python311"
+)
 set "PYTHON_EXE=%PYTHON_ROOT%\python.exe"
 
 REM --- Ensure UTF-8 ---
 chcp 65001 > nul
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
-
-REM === Get mode from parameter (default to demo) ===
-set "MODE=%~1"
-if "%MODE%"=="" set "MODE=demo"
 
 echo ============================================================
 echo   STARTING BTCUSDm on %MODE% ACCOUNT
