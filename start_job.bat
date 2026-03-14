@@ -10,8 +10,16 @@ REM   start_job.bat              # Run on DEMO account
 REM   start_job.bat demo         # Run on DEMO account
 REM   start_job.bat live         # Run on LIVE account
 
-REM === Define Python installation path explicitly ===
-set "PYTHON_ROOT=C:\Users\Administrator\AppData\Local\Programs\Python\Python311"
+REM === Get mode from parameter (default to demo if not provided) ===
+set "MODE=%~1"
+if "%MODE%"=="" set "MODE=demo"
+
+REM === Define Python installation path based on mode ===
+if /i "%MODE%"=="live" (
+    set "PYTHON_ROOT=C:\Users\Administrator\AppData\Local\Programs\Python\Python311"
+) else (
+    set "PYTHON_ROOT=C:\Users\admin\AppData\Local\Programs\Python\Python311"
+)
 set "PYTHON_EXE=%PYTHON_ROOT%\python.exe"
 
 echo Python path: %PYTHON_EXE%
@@ -22,10 +30,6 @@ REM Set console code page to UTF-8 and force Python to use UTF-8 IO
 chcp 65001 > nul
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
-
-REM === Get mode from parameter (default to demo if not provided) ===
-set "MODE=%~1"
-if "%MODE%"=="" set "MODE=demo"
 
 echo ============================================================
 echo   STARTING JOB on %MODE% ACCOUNT
