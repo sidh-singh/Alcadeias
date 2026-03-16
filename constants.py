@@ -45,7 +45,7 @@ RSI_OVERBOUGHT = 70                 # Overbought threshold (SELL_MORE when RSI >
 RSI_DCA_MAX_POSITIONS = 1           # Max additional DCA positions allowed via RSI signal
 
 # ─── RSI Multi-Timeframe Entry Filter ───
-RSI_MTF_TIMEFRAMES = ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M30']
+RSI_MTF_TIMEFRAMES = ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M30', 'TIMEFRAME_H1']
 RSI_MTF_OVERSOLD = 30               # Block BUY entry when ALL MTF RSIs <= this
 RSI_MTF_OVERBOUGHT = 70             # Block SELL entry when ALL MTF RSIs >= this
 
