@@ -12,7 +12,7 @@
 //  Entry:  Signal + Trend agree, gap in range, convergence OK
 //          (blocked when any MTF RSI is at extreme)
 //  Exit:   Profit target
-//  DCA:    Tiered RSI (M1→M5→M30) with fibonacci volume series
+//  DCA:    Tiered RSI (M1→M5→M15) with fibonacci volume series
 //
 //  Attach to M1 chart for faithful reproduction of the Python bot.
 //  All key hyper-parameters are exposed as inputs for optimization.
@@ -90,7 +90,7 @@ input int              Inp_RSI_Len       = 14;             // RSI Period
 input ENUM_SHA_MA_TYPE Inp_RSI_MA        = SHA_MA_RMA;     // RSI MA Type (RMA = Wilder's)
 input double           Inp_RSI_Oversold  = 30.0;           // RSI Oversold (BUY_MORE when <=)
 input double           Inp_RSI_Overbought = 70.0;          // RSI Overbought (SELL_MORE when >=)
-input int              Inp_RSI_DCA_Max   = 3;              // Max DCA tiers (1=M1, 2=+M5, 3=+M30)
+input int              Inp_RSI_DCA_Max   = 3;              // Max DCA tiers (1=M1, 2=+M5, 3=+M15)
 
 //--- RSI Multi-Timeframe Entry Filter
 input group           "═══ RSI Multi-Timeframe ═══"
@@ -280,17 +280,17 @@ void OnTick()
       curRSI = rsiArr[last];
 
    // ════════════════════════════════════════════════════════════════
-   //  6c. MULTI-TIMEFRAME RSI (M1, M5, M30)
-   //      Matches: strategy.py rsi_1m / rsi_5m / rsi_30m
+   //  6c. MULTI-TIMEFRAME RSI (M1, M5, M15)
+   //      Matches: strategy.py rsi_1m / rsi_5m / rsi_15m
    // ════════════════════════════════════════════════════════════════
    double rsiM1  = CalcRSI_TF(PERIOD_M1,  Inp_RSI_Len, Inp_RSI_MA, Inp_RSI_MTF_Bars);
    double rsiM5  = CalcRSI_TF(PERIOD_M5,  Inp_RSI_Len, Inp_RSI_MA, Inp_RSI_MTF_Bars);
-   double rsiM30 = CalcRSI_TF(PERIOD_M30, Inp_RSI_Len, Inp_RSI_MA, Inp_RSI_MTF_Bars);
+   double rsiM15 = CalcRSI_TF(PERIOD_M15, Inp_RSI_Len, Inp_RSI_MA, Inp_RSI_MTF_Bars);
 
    // MTF entry filter: block if ANY timeframe is extreme
    // Matches: strategy.py rsi_any_oversold / rsi_any_overbought / rsi_mtf_blocked
-   bool rsiAnyOversold   = (rsiM1 <= Inp_RSI_MTF_OS || rsiM5 <= Inp_RSI_MTF_OS || rsiM30 <= Inp_RSI_MTF_OS);
-   bool rsiAnyOverbought = (rsiM1 >= Inp_RSI_MTF_OB || rsiM5 >= Inp_RSI_MTF_OB || rsiM30 >= Inp_RSI_MTF_OB);
+   bool rsiAnyOversold   = (rsiM1 <= Inp_RSI_MTF_OS || rsiM5 <= Inp_RSI_MTF_OS || rsiM15 <= Inp_RSI_MTF_OS);
+   bool rsiAnyOverbought = (rsiM1 >= Inp_RSI_MTF_OB || rsiM5 >= Inp_RSI_MTF_OB || rsiM15 >= Inp_RSI_MTF_OB);
    bool rsiMtfBlocked    = rsiAnyOversold || rsiAnyOverbought;
 
    // ════════════════════════════════════════════════════════════════
@@ -323,7 +323,7 @@ void OnTick()
       }
    }
    // ── Only BUY positions open → exit or tiered RSI DCA ──
-   //    Max 4 total: 1 entry + 1×M1 RSI + 1×M5 RSI + 1×M30 RSI
+   //    Max 4 total: 1 entry + 1×M1 RSI + 1×M5 RSI + 1×M15 RSI
    //    Matches: strategy.py lines 266-274
    else if(bCnt > 0 && sCnt == 0)
    {
@@ -333,11 +333,11 @@ void OnTick()
          buySig = 5;                                 // BUY_MORE   (M1 RSI oversold, tier 1)
       else if(rsiM5 <= Inp_RSI_Oversold && bCnt == 2 && Inp_RSI_DCA_Max >= 2)
          buySig = 5;                                 // BUY_MORE   (M5 RSI oversold, tier 2)
-      else if(rsiM30 <= Inp_RSI_Oversold && bCnt == 3 && Inp_RSI_DCA_Max >= 3)
-         buySig = 5;                                 // BUY_MORE   (M30 RSI oversold, tier 3)
+      else if(rsiM15 <= Inp_RSI_Oversold && bCnt == 3 && Inp_RSI_DCA_Max >= 3)
+         buySig = 5;                                 // BUY_MORE   (M15 RSI oversold, tier 3)
    }
    // ── Only SELL positions open → exit or tiered RSI DCA ──
-   //    Max 4 total: 1 entry + 1×M1 RSI + 1×M5 RSI + 1×M30 RSI
+   //    Max 4 total: 1 entry + 1×M1 RSI + 1×M5 RSI + 1×M15 RSI
    //    Matches: strategy.py lines 278-285
    else if(bCnt == 0 && sCnt > 0)
    {
@@ -347,8 +347,8 @@ void OnTick()
          sellSig = 6;                                // SELL_MORE  (M1 RSI overbought, tier 1)
       else if(rsiM5 >= Inp_RSI_Overbought && sCnt == 2 && Inp_RSI_DCA_Max >= 2)
          sellSig = 6;                                // SELL_MORE  (M5 RSI overbought, tier 2)
-      else if(rsiM30 >= Inp_RSI_Overbought && sCnt == 3 && Inp_RSI_DCA_Max >= 3)
-         sellSig = 6;                                // SELL_MORE  (M30 RSI overbought, tier 3)
+      else if(rsiM15 >= Inp_RSI_Overbought && sCnt == 3 && Inp_RSI_DCA_Max >= 3)
+         sellSig = 6;                                // SELL_MORE  (M15 RSI overbought, tier 3)
    }
    // ── Both sides open → do nothing (matches Python) ──
 
@@ -376,8 +376,8 @@ void OnTick()
       double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
       if(g_trade.Buy(vol, _Symbol, ask, 0, 0,
                       StringFormat("Alcadeias RSI DCA BUY #%d", bCnt + 1)))
-         PrintFormat("[Alcadeias] BUY_MORE #%d  %.2f lots @ %.5f  (M1=%.1f M5=%.1f M30=%.1f)",
-                     bCnt + 1, vol, ask, rsiM1, rsiM5, rsiM30);
+         PrintFormat("[Alcadeias] BUY_MORE #%d  %.2f lots @ %.5f  (M1=%.1f M5=%.1f M15=%.1f)",
+                     bCnt + 1, vol, ask, rsiM1, rsiM5, rsiM15);
    }
 
    // ── SELL signals ──
@@ -399,8 +399,8 @@ void OnTick()
       double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
       if(g_trade.Sell(vol, _Symbol, bid, 0, 0,
                        StringFormat("Alcadeias RSI DCA SELL #%d", sCnt + 1)))
-         PrintFormat("[Alcadeias] SELL_MORE #%d  %.2f lots @ %.5f  (M1=%.1f M5=%.1f M30=%.1f)",
-                     sCnt + 1, vol, bid, rsiM1, rsiM5, rsiM30);
+         PrintFormat("[Alcadeias] SELL_MORE #%d  %.2f lots @ %.5f  (M1=%.1f M5=%.1f M15=%.1f)",
+                     sCnt + 1, vol, bid, rsiM1, rsiM5, rsiM15);
    }
 
    // ════════════════════════════════════════════════════════════════
@@ -413,7 +413,7 @@ void OnTick()
    {
       Comment("");  // clear text comment when panel is active
       DrawPanel(sigPow, trdPow, curGap, gapInRange, conv, gDelta,
-                rsiM1, rsiM5, rsiM30, rsiMtfBlocked,
+                rsiM1, rsiM5, rsiM15, rsiMtfBlocked,
                 bCnt, bVol, bProf, bFirst,
                 sCnt, sVol, sProf, sFirst,
                 nextBuyVol, nextSellVol, buySig, sellSig);
@@ -422,12 +422,12 @@ void OnTick()
    {
       // Fallback text display when panel disabled
       Comment(StringFormat(
-         "Alcadeias | Sig(%d):%s Trd(%d):%s | Gap:%.4f %s | %s | RSI M1:%.0f M5:%.0f M30:%.0f\n"
+         "Alcadeias | Sig(%d):%s Trd(%d):%s | Gap:%.4f %s | %s | RSI M1:%.0f M5:%.0f M15:%.0f\n"
          "BUY:%d($%.2f) SELL:%d($%.2f) | Next DCA: B=%.2f S=%.2f | >> %s",
          Inp_SHA_Sig_Len, sigPow == 1 ? "BULL" : "BEAR",
          Inp_SHA_Trd_Len, trdPow == 1 ? "BULL" : "BEAR",
          curGap, gapInRange ? "OK" : "OUT", ConvStr(conv),
-         rsiM1, rsiM5, rsiM30,
+         rsiM1, rsiM5, rsiM15,
          bCnt, bProf, sCnt, sProf,
          nextBuyVol, nextSellVol, ActionStr(buySig, sellSig)
       ));
@@ -1014,7 +1014,7 @@ void CalcRSI(const double &close[], double &rsi[],
 //+------------------------------------------------------------------+
 //| CalcRSI_TF — Compute RSI on a specific timeframe                  |
 //| Returns last valid RSI value, or 50.0 if not enough data.         |
-//| Used for multi-timeframe RSI (M1, M5, M30) matching Python.       |
+//| Used for multi-timeframe RSI (M1, M5, M15) matching Python.       |
 //+------------------------------------------------------------------+
 double CalcRSI_TF(ENUM_TIMEFRAMES tf, int rsiLen, ENUM_SHA_MA_TYPE maType, int barCount)
 {
@@ -1171,7 +1171,7 @@ void UIText(string id, int x, int y, string text, color clr,
 void DrawPanel(int sigPow, int trdPow,
                double curGap, bool gapInRange,
                ENUM_CONV_STATE conv, double gDelta,
-               double rsiM1, double rsiM5, double rsiM30,
+               double rsiM1, double rsiM5, double rsiM15,
                bool rsiMtfBlocked,
                int bCnt, double bVol, double bProf, double bFirst,
                int sCnt, double sVol, double sProf, double sFirst,
@@ -1249,8 +1249,8 @@ void DrawPanel(int sigPow, int trdPow,
    // Row 7: RSI values
    ty += rh;
    UIText("R07", tx, ty,
-      StringFormat("RSI(%d)  M1:%.0f  M5:%.0f  M30:%.0f",
-         Inp_RSI_Len, rsiM1, rsiM5, rsiM30), txt);
+      StringFormat("RSI(%d)  M1:%.0f  M5:%.0f  M15:%.0f",
+         Inp_RSI_Len, rsiM1, rsiM5, rsiM15), txt);
 
    // Row 8: MTF filter status
    ty += rh;

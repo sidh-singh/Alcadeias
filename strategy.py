@@ -248,11 +248,19 @@ class Strategy:
             rsi_any_oversold = any(v <= RSI_MTF_OVERSOLD for v in rsi_vals)
             rsi_any_overbought = any(v >= RSI_MTF_OVERBOUGHT for v in rsi_vals)
         rsi_mtf_blocked = rsi_any_oversold or rsi_any_overbought
+
+        def _get_mtf_rsi(*timeframes, default=50.0):
+            if not rsi_mtf:
+                return default
+            for timeframe in timeframes:
+                if timeframe in rsi_mtf:
+                    return rsi_mtf[timeframe]
+            return default
         
         # Extract individual timeframe RSIs for tiered DCA
-        rsi_1m = rsi_mtf.get('TIMEFRAME_M1', 50.0) if rsi_mtf else 50.0
-        rsi_5m = rsi_mtf.get('TIMEFRAME_M5', 50.0) if rsi_mtf else 50.0
-        rsi_15m = rsi_mtf.get('TIMEFRAME_M15', 50.0) if rsi_mtf else 50.0
+        rsi_1m = _get_mtf_rsi('TIMEFRAME_M1')
+        rsi_5m = _get_mtf_rsi('TIMEFRAME_M5')
+        rsi_15m = _get_mtf_rsi('TIMEFRAME_M15')
         
         # No positions open → look for entry (with MTF RSI filter)
         if buy_count == 0 and sell_count == 0:
