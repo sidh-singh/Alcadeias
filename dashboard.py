@@ -787,10 +787,14 @@ def _build_rsi_row(rsi_value, rsi_mtf=None, rsi_mtf_blocked=False):
         )
 
     # Build timeframe rows
-    tf_display = {'TIMEFRAME_M1': 'M1', 'TIMEFRAME_M5': 'M5', 'TIMEFRAME_M30': 'M30', 'TIMEFRAME_H1': 'H1'}
+    tf_display = {
+        'TIMEFRAME_M1': 'M1',
+        'TIMEFRAME_M5': 'M5',
+        'TIMEFRAME_M15': 'M15',
+    }
     tf_rows = []
     if rsi_mtf and len(rsi_mtf) > 0:
-        for tf_key in ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M30', 'TIMEFRAME_H1']:
+        for tf_key in ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15']:
             if tf_key in rsi_mtf:
                 tf_rows.append(_rsi_mini_row(tf_display[tf_key], rsi_mtf[tf_key]))
     else:
@@ -806,7 +810,7 @@ def _build_rsi_row(rsi_value, rsi_mtf=None, rsi_mtf_blocked=False):
                 'color': '#e74c3c',
                 'letterSpacing': '0.5px',
             }),
-            html.Span(' — entry paused (all TFs at extreme)', style={
+            html.Span(' — entry paused (one or more TFs at extreme)', style={
                 'fontSize': '0.58rem', 'color': COLORS['text_dim'],
             }),
         ], style={
