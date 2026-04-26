@@ -792,6 +792,7 @@ def _build_rsi_row(rsi_value, rsi_mtf=None, rsi_mtf_blocked=False):
         'TIMEFRAME_M5': 'M5',
         'TIMEFRAME_M15': 'M15',
         'TIMEFRAME_M30': 'M30',
+        'TIMEFRAME_M30': 'M30',
     }
     tf_rows = []
     if rsi_mtf and len(rsi_mtf) > 0:
