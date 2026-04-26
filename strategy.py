@@ -280,6 +280,7 @@ class Strategy:
         rsi_5m = rsi_mtf.get('TIMEFRAME_M5', 50.0) if rsi_mtf else 50.0
         rsi_15m = rsi_mtf.get('TIMEFRAME_M15', 50.0) if rsi_mtf else 50.0
         rsi_30m = rsi_mtf.get('TIMEFRAME_M30', 50.0) if rsi_mtf else 50.0
+        rsi_30m = rsi_mtf.get('TIMEFRAME_M30', 50.0) if rsi_mtf else 50.0
         
         # No positions open → look for entry (with MTF RSI filter)
         if buy_count == 0 and sell_count == 0:
