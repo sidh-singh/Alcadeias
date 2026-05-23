@@ -53,6 +53,51 @@ class MT5TradingBot:
         self.strategy = Strategy()
         self._stop_event = threading.Event()     # Signal workers to stop
 
+    # ── Day-of-week mapping for trading_window config ──
+    _DAY_NAME_TO_NUM = {
+        'monday': 0, 'mon': 0,
+        'tuesday': 1, 'tue': 1, 'tues': 1,
+        'wednesday': 2, 'wed': 2,
+        'thursday': 3, 'thu': 3, 'thurs': 3,
+        'friday': 4, 'fri': 4,
+        'saturday': 5, 'sat': 5,
+        'sunday': 6, 'sun': 6,
+    }
+
+    @classmethod
+    def _day_time_to_week_minutes(cls, day, time_str):
+        """Convert (day_name, 'HH:MM') to minutes since Monday 00:00."""
+        d = cls._DAY_NAME_TO_NUM.get(str(day).strip().lower(), 0)
+        try:
+            hh, mm = str(time_str).strip().split(':')
+            return d * 1440 + int(hh) * 60 + int(mm)
+        except (ValueError, AttributeError):
+            return d * 1440
+
+    def _is_in_trading_window(self, now_dt, window_cfg):
+        """Return True if `now_dt` falls inside the configured trading window.
+
+        Window may wrap past Sunday (e.g. Friday 22:00 → Monday 06:00).
+        If config is missing or `enabled` is false, always returns True.
+        """
+        if not window_cfg or not window_cfg.get('enabled', False):
+            return True
+        start = self._day_time_to_week_minutes(
+            window_cfg.get('start_day', 'Monday'),
+            window_cfg.get('start_time', '00:00'),
+        )
+        end = self._day_time_to_week_minutes(
+            window_cfg.get('end_day', 'Saturday'),
+            window_cfg.get('end_time', '00:00'),
+        )
+        now_min = now_dt.weekday() * 1440 + now_dt.hour * 60 + now_dt.minute
+        if start == end:
+            return True   # 24/7 window
+        if start < end:
+            return start <= now_min < end
+        # Wrap-around window (e.g. Fri 22:00 → Mon 06:00)
+        return now_min >= start or now_min < end
+
     def _resolve_symbol_alias(self, symbol):
         """Resolve configured symbol to the best matching broker symbol name."""
         info = mt5.symbol_info(symbol)
@@ -403,7 +448,8 @@ class MT5TradingBot:
         
         # Get configuration once before loop (per-symbol config from array)
         sym_cfg = self.symbol_configs.get(symbol, {})
-        brake = self.symbols_config.get('brake', 0)
+        brake_manual = self.symbols_config.get('brake', 0)
+        trading_window_cfg = self.symbols_config.get('trading_window', {})
         times = sym_cfg.get('times', 1)
         mtqty = self.symbols_config.get('mtqty', 0.01)
         symbol_gap_range = sym_cfg.get('gap_range', DEFAULT_GAP_RANGE)
@@ -434,6 +480,12 @@ class MT5TradingBot:
                     sell_positions = self.position_helper.get_sell_positions(trade_symbol)
                     account_info = self.position_helper.get_account_info()
                     server_time = self.position_helper._get_server_time(trade_symbol)
+
+                # ── Effective brake: manual override OR outside trading window ──
+                # brake_manual=1 → always braked; else brake when outside the
+                # configured trading_window (server-time based).
+                in_window = self._is_in_trading_window(server_time, trading_window_cfg)
+                brake = 1 if brake_manual or not in_window else 0
 
                 # Save account data regardless of candle availability
                 if account_info:
