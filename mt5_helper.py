@@ -703,7 +703,7 @@ class MT5PositionHelper:
                 base = symbol.rstrip('mM')
                 if base and base != symbol:
                     candidates.append(base)
-            candidates.extend(['EURUSDm', 'EURUSD', 'BTCUSDm', 'XAUUSDm', 'XAGUSDm'])
+            candidates.extend(['EURUSDm', 'EURUSD', 'BTCUSD', 'XAUUSDm', 'XAGUSDm'])
 
             # Deduplicate while keeping order
             seen = set()

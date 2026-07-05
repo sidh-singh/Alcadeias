@@ -16,7 +16,7 @@ echo ============================================================
 echo.
 
 REM Launch each symbol in its own terminal window
-start "Alcadeias - BTCUSDm" cmd /k "start_btcusd.bat %MODE%"
+start "Alcadeias - BTCUSD" cmd /k "start_btcusd.bat %MODE%"
 timeout /t 3 /nobreak > nul
 
 start "Alcadeias - XAUUSDm" cmd /k "start_xauusd.bat %MODE%"

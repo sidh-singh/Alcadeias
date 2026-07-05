@@ -1,5 +1,5 @@
 @echo off
-REM === Alcadeias — BTCUSDm Single-Symbol Process ===
+REM === Alcadeias — BTCUSD Single-Symbol Process ===
 REM Usage: start_btcusd.bat [mode]
 REM   mode: demo (default), live
 
@@ -17,7 +17,7 @@ set "MODE=%~1"
 if "%MODE%"=="" set "MODE=demo"
 
 echo ============================================================
-echo   STARTING BTCUSDm on %MODE% ACCOUNT
+echo   STARTING BTCUSD on %MODE% ACCOUNT
 echo ============================================================
 echo.
 
@@ -32,7 +32,7 @@ if not exist ".\deps_installed.flag" (
     echo Dependencies already installed, skipping...
 )
 
-"%PYTHON_EXE%" -X utf8 -u app.py %MODE% --symbol BTCUSDm
+"%PYTHON_EXE%" -X utf8 -u app.py %MODE% --symbol BTCUSD
 
 echo.
-echo ============= BTCUSDm PROCESS STOPPED =============
+echo ============= BTCUSD PROCESS STOPPED =============
