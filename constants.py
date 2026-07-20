@@ -6,12 +6,12 @@ Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
 # ─── SHA Signal Indicator ───
-SHA_LENGTH = 6                      # Smoothing length for signal SHA (pre & post)
-SHA_MA_TYPE = 'RMA'                 # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
+SHA_LENGTH = 29                      # Smoothing length for signal SHA (pre & post)
+SHA_MA_TYPE = 'DEMA'                 # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
 
 # ─── SHA Trend Indicator ───
-SHA_TREND_LENGTH = 10               # Smoothing length for trend SHA (pre & post)
-SHA_TREND_MA_TYPE = 'RMA'           # MA type for trend SHA
+SHA_TREND_LENGTH = 27               # Smoothing length for trend SHA (pre & post)
+SHA_TREND_MA_TYPE = 'DEMA'           # MA type for trend SHA
 
 # ─── SHA Gap ───
 DEFAULT_GAP_RANGE = [0.001, 0.003]   # Default gap range [min, max] as raw ratio (not ×100)
@@ -48,6 +48,12 @@ RSI_DCA_MAX_POSITIONS = 1           # Max additional DCA positions allowed via R
 RSI_MTF_TIMEFRAMES = ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15', 'TIMEFRAME_M30']
 RSI_MTF_OVERSOLD = 30               # Block BUY entry when ANY MTF RSI <= this
 RSI_MTF_OVERBOUGHT = 70             # Block SELL entry when ANY MTF RSI >= this
+
+# ─── RSI Final Forced-Close Timeframe ───
+# When a basket has maxed out its DCA ladder (4 positions), the final forced
+# close is triggered by this timeframe's RSI hitting the oversold/overbought
+# threshold. Previously the M30 RSI was used; now the 1-hour (H1) RSI.
+RSI_FINAL_CLOSE_TIMEFRAME = 'TIMEFRAME_H1'
 
 # ─── Risk Management ───
 RISK_REWARD_RATIO = [1, 1]          # [risk, reward] multiplier for auto SL/TP calculation
