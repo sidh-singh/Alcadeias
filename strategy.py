@@ -5,6 +5,7 @@ from constants import (
     SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
     RSI_OVERSOLD, RSI_OVERBOUGHT, RSI_DCA_MAX_POSITIONS,
     RSI_MTF_OVERSOLD, RSI_MTF_OVERBOUGHT,
+    RSI_MTF_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
 )
 
 
@@ -270,16 +271,18 @@ class Strategy:
         rsi_any_oversold = False
         rsi_any_overbought = False
         if rsi_mtf and len(rsi_mtf) > 0:
-            rsi_vals = list(rsi_mtf.values())
+            # Only the configured entry-filter timeframes gate entries; the final
+            # forced-close timeframe (H1) is intentionally excluded here.
+            rsi_vals = [rsi_mtf[tf] for tf in RSI_MTF_TIMEFRAMES if tf in rsi_mtf]
             rsi_any_oversold = any(v <= RSI_MTF_OVERSOLD for v in rsi_vals)
             rsi_any_overbought = any(v >= RSI_MTF_OVERBOUGHT for v in rsi_vals)
         rsi_mtf_blocked = rsi_any_oversold or rsi_any_overbought
         
-        # Extract individual timeframe RSIs for tiered DCA
+        # Extract individual timeframe RSIs for tiered DCA + final forced close
         rsi_1m = rsi_mtf.get('TIMEFRAME_M1', 50.0) if rsi_mtf else 50.0
         rsi_5m = rsi_mtf.get('TIMEFRAME_M5', 50.0) if rsi_mtf else 50.0
         rsi_15m = rsi_mtf.get('TIMEFRAME_M15', 50.0) if rsi_mtf else 50.0
-        rsi_30m = rsi_mtf.get('TIMEFRAME_M30', 50.0) if rsi_mtf else 50.0
+        rsi_1h = rsi_mtf.get(RSI_FINAL_CLOSE_TIMEFRAME, 50.0) if rsi_mtf else 50.0
         
         # No positions open → look for entry (with MTF RSI filter)
         if buy_count == 0 and sell_count == 0:
@@ -289,7 +292,7 @@ class Strategy:
                 elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0 and gap_in_range and entry_conv_ok:
                     sell_status = Signal.SELL
         
-        # Only BUY positions open → exit or DCA (max 4 total: 1 entry + 1 via 1m RSI + 1 via 5m RSI + 1 via 15m RSI)
+        # Only BUY positions open → exit or DCA (max 4 total: 1 entry + 1m + 5m + 15m RSI DCA; final forced close via 1h RSI)
         elif buy_count > 0 and sell_count == 0:
             if buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
@@ -299,10 +302,10 @@ class Strategy:
                 buy_status = Signal.BUY_MORE
             elif rsi_15m <= RSI_OVERSOLD and buy_count == 3:
                 buy_status = Signal.BUY_MORE
-            elif rsi_30m <= RSI_OVERSOLD and buy_count == 4:
+            elif rsi_1h <= RSI_OVERSOLD and buy_count == 4:
                 buy_status = Signal.CLOSE_BUY
 
-        # Only SELL positions open → exit or DCA (max 4 total: 1 entry + 1 via 1m RSI + 1 via 5m RSI + 1 via 15m RSI)
+        # Only SELL positions open → exit or DCA (max 4 total: 1 entry + 1m + 5m + 15m RSI DCA; final forced close via 1h RSI)
         elif buy_count == 0 and sell_count > 0:
             if sell_profit > close_threshold:
                 sell_status = Signal.CLOSE_SELL
@@ -312,7 +315,7 @@ class Strategy:
                 sell_status = Signal.SELL_MORE
             elif rsi_15m >= RSI_OVERBOUGHT and sell_count == 3:
                 sell_status = Signal.SELL_MORE
-            elif rsi_30m >= RSI_OVERBOUGHT and sell_count == 4:
+            elif rsi_1h >= RSI_OVERBOUGHT and sell_count == 4:
                 sell_status = Signal.CLOSE_SELL
         
         analysis_data = {
