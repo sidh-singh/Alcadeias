@@ -442,7 +442,7 @@ class MT5TradingBot:
         Lightweight and optimized - runs in infinite loop
         
         Args:
-            symbol (str): Symbol to process (e.g., 'BTCUSD', 'XAUUSD')
+            symbol (str): Symbol to process (e.g., 'EURCHF', 'XAUUSD')
         """
         from datetime import datetime
         
@@ -957,7 +957,7 @@ def main():
     parser.add_argument('mode', nargs='?', default='demo', choices=['demo', 'live'],
                         help='Account mode (default: demo)')
     parser.add_argument('--symbol', '-s', type=str, default=None,
-                        help='Run only this symbol (e.g. BTCUSDm). '
+                        help='Run only this symbol (e.g. EURCHFm). '
                              'Recommended: run one process per symbol.')
     args = parser.parse_args()
 
