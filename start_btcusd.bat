@@ -1,6 +1,6 @@
 @echo off
-REM === Alcadeias — BTCUSDm Single-Symbol Process ===
-REM Usage: start_btcusd.bat [mode]
+REM === Alcadeias — USDJPYm Single-Symbol Process ===
+REM Usage: start_USDJPY.bat [mode]
 REM   mode: demo (default), live
 
 REM === Get mode from parameter (default to demo) ===
@@ -21,7 +21,7 @@ set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
 
 echo ============================================================
-echo   STARTING BTCUSDm on %MODE% ACCOUNT
+echo   STARTING USDJPYm on %MODE% ACCOUNT
 echo ============================================================
 echo.
 
@@ -36,7 +36,7 @@ if not exist ".\deps_installed.flag" (
     echo Dependencies already installed, skipping...
 )
 
-"%PYTHON_EXE%" -X utf8 -u app.py %MODE% --symbol BTCUSDm
+"%PYTHON_EXE%" -X utf8 -u app.py %MODE% --symbol USDJPYm
 
 echo.
-echo ============= BTCUSDm PROCESS STOPPED =============
+echo ============= USDJPYm PROCESS STOPPED =============
