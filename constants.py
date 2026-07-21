@@ -6,12 +6,12 @@ Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
 # ─── SHA Signal Indicator ───
-SHA_LENGTH = 29                      # Smoothing length for signal SHA (pre & post)
-SHA_MA_TYPE = 'DEMA'                 # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
+SHA_LENGTH = 6                      # Smoothing length for signal SHA (pre & post)
+SHA_MA_TYPE = 'RMA'                 # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
 
 # ─── SHA Trend Indicator ───
-SHA_TREND_LENGTH = 27               # Smoothing length for trend SHA (pre & post)
-SHA_TREND_MA_TYPE = 'DEMA'           # MA type for trend SHA
+SHA_TREND_LENGTH = 10               # Smoothing length for trend SHA (pre & post)
+SHA_TREND_MA_TYPE = 'RMA'           # MA type for trend SHA
 
 # ─── SHA Gap ───
 DEFAULT_GAP_RANGE = [0.001, 0.003]   # Default gap range [min, max] as raw ratio (not ×100)
