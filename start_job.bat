@@ -59,7 +59,7 @@ if not exist ".\deps_installed.flag" (
 
 REM === Run job via launch_strategy.py with mode parameter ===
 echo Running job on %MODE% account
-"%PYTHON_EXE%" -X utf8 -u app.py %MODE% --symbol BTCUSDm
+"%PYTHON_EXE%" -X utf8 -u app.py %MODE% --symbol USDCADm
 
 echo.
 echo ============= SCRIPT FINISHED =============
