@@ -15,7 +15,7 @@ from constants import (
     SHA_TREND_LENGTH, SHA_TREND_MA_TYPE,
     DEFAULT_GAP_RANGE,
     SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
-    RSI_LENGTH, RSI_MA_TYPE, RSI_MTF_TIMEFRAMES,
+    RSI_LENGTH, RSI_MA_TYPE, RSI_CANDLE_COUNT, RSI_MTF_TIMEFRAMES,
     RSI_DCA_LADDER_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
@@ -462,11 +462,12 @@ class MT5TradingBot:
         _last_hist_save = 0.0
         _DAILY_SAVE_INTERVAL = 60       # seconds between daily-trade saves
         _HIST_SAVE_INTERVAL = 300       # seconds between historical-summary saves
-        _last_seen_candle_time = None
-        _same_candle_count = 0
-        
+
         while True:
             try:
+                # Start of one full iteration's work (excludes the end-of-cycle sleep)
+                _iter_start = time.perf_counter()
+
                 # ── Gather MT5 data under lock (split into small windows for fairness) ──
                 with self.mt5_lock:
                     # Ensure symbol stays subscribed in Market Watch
@@ -506,55 +507,26 @@ class MT5TradingBot:
                     print(f"[{symbol}] Market {market_status.get('status')} — {market_status.get('minutes_since_last')}m since last candle")
 
                 if has_candle_data:
+                    # Market liveness is judged from the M1 market probe (latest M1
+                    # bar + tick), NOT from the SHA source bar. The SHA source is now
+                    # H1, whose forming bar is up to an hour "old" by design, so its
+                    # age must never gate trading. market_status is tick-aware and
+                    # timeframe-agnostic, so it stays correct regardless of the SHA
+                    # source timeframe.
+                    candle_is_fresh = bool(market_status.get('is_open')) if market_status else False
+
+                    # Age of the latest H1 SHA bar — kept for logging/analysis only.
                     try:
-                        # Always derive freshness from the ACTUAL source_df we will
-                        # use (which may contain tick-rebuilt bars), NOT from
-                        # market_status that fetches its own (possibly stale) bars.
                         last_candle_time = source_df['time'].iloc[-1]
                         if getattr(last_candle_time, 'tzinfo', None) is None:
                             last_candle_time = last_candle_time.replace(tzinfo=timezone.utc)
                         candle_age_min = (server_time - last_candle_time).total_seconds() / 60.0
-
-                        # When bars were rebuilt from ticks, the rebuild IS our
-                        # freshest available data — always treat as fresh so SHA
-                        # analysis runs instead of being permanently blocked.
-                        if source_df.attrs.get('tick_rebuilt', False):
-                            candle_is_fresh = True
-                        else:
-                            candle_is_fresh = candle_age_min <= max(MARKET_LOOKBACK_MINUTES + 1, 4)
                     except Exception:
-                        candle_is_fresh = False
-
-                    try:
-                        current_candle_time = source_df['time'].iloc[-1]
-                        if _last_seen_candle_time is not None and current_candle_time == _last_seen_candle_time:
-                            _same_candle_count += 1
-                            # Only warn when candle is actually stale (>90s for M1)
-                            # M1 bars naturally hold the same time for up to 60s
-                            if _same_candle_count == 90 or (_same_candle_count > 90 and _same_candle_count % 60 == 0):
-                                tick_time = None
-                                if market_status:
-                                    tick_time = market_status.get('last_tick_time')
-                                print(
-                                    f"[{symbol}] Candle time not advancing: {current_candle_time} "
-                                    f"(same for {_same_candle_count} cycles) | age={candle_age_min}m | tick={tick_time}"
-                                )
-                            # Force re-subscribe after ~3 min of same candle
-                            # to reset MT5 terminal's internal cache for this symbol
-                            if _same_candle_count > 0 and _same_candle_count % 180 == 0:
-                                with self.mt5_lock:
-                                    mt5.symbol_select(trade_symbol, False)
-                                    time.sleep(0.1)
-                                    mt5.symbol_select(trade_symbol, True)
-                                print(f"[{symbol}] Forced re-subscribe to {trade_symbol} (stuck {_same_candle_count} cycles)")
-                        else:
-                            _last_seen_candle_time = current_candle_time
-                            _same_candle_count = 0
-                    except Exception:
-                        pass
+                        candle_age_min = None
 
                     if not candle_is_fresh:
-                        print(f"[{symbol}] WARNING: Stale candle stream (age={candle_age_min}m) — SHA/trading skipped this cycle")
+                        _mins = market_status.get('minutes_since_last') if market_status else None
+                        print(f"[{symbol}] Market not live ({_mins}m since last activity) — SHA/trading skipped this cycle")
 
                 if has_candle_data and candle_is_fresh:
                     # Capitalize columns for indicator compatibility
@@ -571,11 +543,26 @@ class MT5TradingBot:
                     
                     # Calculate SHA trend indicator
                     sha_trend_df = self.indicator.calculate_sha_v3(
-                        source_df, 
-                        length=SHA_TREND_LENGTH, 
+                        source_df,
+                        length=SHA_TREND_LENGTH,
                         ma_type=SHA_TREND_MA_TYPE,
                     )
-                    
+
+                    # Warn if the latest SHA is still NaN — the data window is too
+                    # short for the configured lengths/MA types to warm up. The
+                    # strategy handles NaN safely (no false entries), but this makes
+                    # an under-sized CANDLE_COUNT visible instead of silent.
+                    try:
+                        if not (bool(sha_df['Close'].notna().iloc[-1])
+                                and bool(sha_trend_df['Close'].notna().iloc[-1])):
+                            print(
+                                f"[{symbol}] WARNING: SHA not converged — latest value is NaN "
+                                f"(got {len(source_df)} candles; increase CANDLE_COUNT for "
+                                f"{SHA_MA_TYPE}({SHA_LENGTH})/{SHA_TREND_MA_TYPE}({SHA_TREND_LENGTH}))"
+                            )
+                    except (IndexError, KeyError):
+                        pass
+
                     # Calculate gap% between signal SHA and trend SHA
                     gap_pct_series = self.indicator.calculate_sha_gap(sha_df, sha_trend_df)
                     
@@ -588,7 +575,10 @@ class MT5TradingBot:
                     )
                     
                     # Calculate RSI for multiple timeframes (entry filter + DCA ladder + final close).
-                    # Union of all timeframes needed, de-duplicated while preserving order.
+                    # Fetched INDEPENDENTLY of the SHA source (its own small count via a
+                    # lightweight fetch), so the mean-reversion ladder is never impacted
+                    # by the SHA timeframe/candle-count. Union of all needed timeframes,
+                    # de-duplicated while preserving order.
                     rsi_mtf = {}
                     rsi_tf_list = []
                     for tf_name in (list(RSI_MTF_TIMEFRAMES)
@@ -597,29 +587,18 @@ class MT5TradingBot:
                         if tf_name not in rsi_tf_list:
                             rsi_tf_list.append(tf_name)
                     for tf_name in rsi_tf_list:
-                        if tf_name == CANDLE_TIMEFRAME:
-                            tf_close = source_df['Close']
-                        else:
-                            with self.mt5_lock:
-                                tf_df = self.position_helper.get_rates(
-                                    trade_symbol, getattr(mt5, tf_name), CANDLE_COUNT
-                                )
-                            if tf_df is not None and len(tf_df) > 0:
-                                tf_df.rename(columns={
-                                    'open': 'Open', 'high': 'High',
-                                    'low': 'Low', 'close': 'Close'
-                                }, inplace=True)
-                                tf_close = tf_df['Close']
-                            else:
-                                tf_close = None
-                        if tf_close is not None and len(tf_close) > 0:
+                        with self.mt5_lock:
+                            tf_df = self.position_helper.get_rates(
+                                trade_symbol, getattr(mt5, tf_name), RSI_CANDLE_COUNT, simple=True
+                            )
+                        if tf_df is not None and len(tf_df) > 0:
                             rsi_s = self.indicator.calculate_rsi(
-                                tf_close, length=RSI_LENGTH, ma_type=RSI_MA_TYPE
+                                tf_df['close'], length=RSI_LENGTH, ma_type=RSI_MA_TYPE
                             )
                             rsi_mtf[tf_name] = float(rsi_s.iloc[-1]) if len(rsi_s) > 0 else 50.0
                         else:
                             rsi_mtf[tf_name] = 50.0
-                    current_rsi = rsi_mtf.get(CANDLE_TIMEFRAME, 50.0)
+                    current_rsi = rsi_mtf.get('TIMEFRAME_M1', 50.0)
                     
                     # Calculate signal
                     symbol_cfg = self.symbol_configs.get(symbol, {})
@@ -652,7 +631,13 @@ class MT5TradingBot:
                     analysis_data['tick_rebuilt'] = False
                     analysis_data['last_source_candle_time'] = None
                 analysis_data['candle_age_min'] = round(float(candle_age_min), 2) if candle_age_min is not None else None
-                
+
+                # SHA source config (so the dashboard reflects the running setup)
+                analysis_data['sha_timeframe'] = CANDLE_TIMEFRAME.replace('TIMEFRAME_', '')
+                analysis_data['sha_config'] = (
+                    f"{SHA_MA_TYPE}({SHA_LENGTH})/{SHA_TREND_MA_TYPE}({SHA_TREND_LENGTH})"
+                )
+
                 # ── Build JSON data (always saved so dashboard stays current) ──
                 symbol_data = {
                     'symbol': symbol,
@@ -775,6 +760,12 @@ class MT5TradingBot:
                 if close_response is not None:
                     symbol_data['close_response'] = close_response
                 
+                # ── Full-iteration timing (work only, excludes the trailing sleep) ──
+                iteration_ms = round((time.perf_counter() - _iter_start) * 1000, 1)
+                symbol_data['iteration_ms'] = iteration_ms
+                symbol_data['analysis']['iteration_ms'] = iteration_ms
+                print(f"[{symbol}] iteration {iteration_ms} ms")
+
                 # Save to JSON
                 self._save_symbol_data(symbol, symbol_data)
                 
