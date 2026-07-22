@@ -6,11 +6,15 @@ Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
 # ─── SHA Signal Indicator ───
-SHA_LENGTH = 600                    # Smoothing length for signal SHA (pre & post)
+# Computed directly on 1-hour candles (see CANDLE_TIMEFRAME). Length 10 TEMA on
+# H1 is the target signal; previously this was emulated on M1 with length 600
+# (10×60), which forced huge M1 downloads. H1 gives the same signal far cheaper.
+SHA_LENGTH = 10                     # Smoothing length for signal SHA (pre & post)
 SHA_MA_TYPE = 'TEMA'                # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
 
 # ─── SHA Trend Indicator ───
-SHA_TREND_LENGTH = 1200             # Smoothing length for trend SHA (pre & post)
+# Length 20 DEMA on H1 (previously emulated on M1 as length 1200 = 20×60).
+SHA_TREND_LENGTH = 20               # Smoothing length for trend SHA (pre & post)
 SHA_TREND_MA_TYPE = 'DEMA'          # MA type for trend SHA
 
 # ─── SHA Gap ───
@@ -22,9 +26,16 @@ SHA_CLOSE_THRESHOLD = 0.0003        # Gap below this = CLOSE (raw ratio, 0.03%)
 SHA_CONVERGENCE_THRESHOLD = 0.0001  # Dead zone for PARALLEL (raw ratio, 0.01%)
 
 # ─── Data Fetching ───
-CANDLE_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe for price data (resolved via mt5 at runtime)
-CANDLE_COUNT = 1000                  # Must be large for RMA convergence (~140 warmup + ~640 convergence for RMA(70))
-ALLOW_SYNTHETIC_TICK_BAR = True     # Append provisional bar from tick when MT5 bar feed lags
+# SHA is now computed on H1 candles directly, so only a few hundred bars are
+# needed (vs thousands of M1 bars before). The SHA smooths OHLC twice and
+# TEMA/DEMA chain 2-3 passes, so with length 10/20 the NaN warmup is:
+#   signal SHA TEMA(10): first valid ≈ bar 54
+#   trend  SHA DEMA(20): first valid ≈ bar 76
+# Both converge to <0.001% error by ~150 bars. 300 gives a wide safety margin
+# (~12 days of H1) while keeping each iteration light.
+CANDLE_TIMEFRAME = 'TIMEFRAME_H1'   # Timeframe for SHA price data (resolved via mt5 at runtime)
+CANDLE_COUNT = 300
+ALLOW_SYNTHETIC_TICK_BAR = True     # Append provisional bar from tick when MT5 bar feed lags (M1 only)
 
 # ─── Market Status ───
 MARKET_STATUS_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe used to check market open/closed
@@ -40,6 +51,10 @@ FIBO_POWER_DEFAULT = 3              # Default exponent for fibo-based DCA thresh
 # ─── RSI Indicator ───
 RSI_LENGTH = 14                     # RSI period
 RSI_MA_TYPE = 'RMA'                 # MA type for RSI smoothing (RMA = Wilder's, matches TradingView default)
+# RSI(14) converges within a few hundred bars, so multi-timeframe RSI fetches use
+# this smaller count instead of the large SHA CANDLE_COUNT. This avoids pulling
+# years of history on high timeframes (e.g. 8000 H6 bars ≈ 5.5 years) every loop.
+RSI_CANDLE_COUNT = 500
 RSI_OVERSOLD = 30                   # Oversold threshold (BUY_MORE when RSI <= this)
 RSI_OVERBOUGHT = 70                 # Overbought threshold (SELL_MORE when RSI >= this)
 RSI_DCA_MAX_POSITIONS = 1           # Max additional DCA positions allowed via RSI signal

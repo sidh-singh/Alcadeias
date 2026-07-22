@@ -247,21 +247,34 @@ class MT5PositionHelper:
         except Exception:
             return rates_frame, False
     
-    def get_rates(self, symbol: str, timeframe: int, count: int):
+    def get_rates(self, symbol: str, timeframe: int, count: int, simple: bool = False):
         """
         Fetch historical rates/candles for a symbol
-        
+
         Args:
             symbol: Trading symbol (e.g., 'BTCUSD', 'XAUUSD')
             timeframe: MT5 timeframe constant (e.g., mt5.TIMEFRAME_M1, mt5.TIMEFRAME_H1)
             count: Number of candles to fetch
-        
+            simple: When True, do a single fast fetch and skip feed-warming, the
+                    freshest-stream comparison, the synthetic tick bar and the
+                    tick-rebuild fallback. Use for indicators that only need
+                    recent closes (e.g. RSI) — none of that machinery matters
+                    there and it costs several extra IPC round-trips per call.
+
         Returns:
             DataFrame with OHLCV data or None if failed
             Each row contains: time, open, high, low, close, tick_volume, spread, real_volume
         """
         if not self._ensure_symbol_ready(symbol):
             return None
+
+        if simple:
+            rates = self.mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
+            if rates is None or len(rates) == 0:
+                return None
+            frame = pd.DataFrame(rates)
+            frame["time"] = pd.to_datetime(frame["time"], unit="s", utc=True)
+            return frame
 
         rates = None
         rates_source = 'copy_rates_from_pos'
@@ -302,8 +315,9 @@ class MT5PositionHelper:
         tick_rebuilt = False
 
         # If bar stream lags but tick stream is live, add a provisional latest M1 bar
-        # so downstream SHA can continue updating for this symbol.
-        if ALLOW_SYNTHETIC_TICK_BAR:
+        # so downstream SHA can continue updating for this symbol. M1-only: the
+        # synthetic bar is minute-resolution and would corrupt higher timeframes.
+        if ALLOW_SYNTHETIC_TICK_BAR and timeframe == self.mt5.TIMEFRAME_M1:
             try:
                 tick = self.mt5.symbol_info_tick(symbol)
                 if tick is not None and getattr(tick, 'time', 0):
