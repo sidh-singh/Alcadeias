@@ -15,7 +15,8 @@ from constants import (
     SHA_TREND_LENGTH, SHA_TREND_MA_TYPE,
     DEFAULT_GAP_RANGE,
     SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
-    RSI_LENGTH, RSI_MA_TYPE, RSI_MTF_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
+    RSI_LENGTH, RSI_MA_TYPE, RSI_MTF_TIMEFRAMES,
+    RSI_DCA_LADDER_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
@@ -586,11 +587,15 @@ class MT5TradingBot:
                         convergence_threshold=SHA_CONVERGENCE_THRESHOLD,
                     )
                     
-                    # Calculate RSI for multiple timeframes (entry filter + final-close H1)
+                    # Calculate RSI for multiple timeframes (entry filter + DCA ladder + final close).
+                    # Union of all timeframes needed, de-duplicated while preserving order.
                     rsi_mtf = {}
-                    rsi_tf_list = list(RSI_MTF_TIMEFRAMES)
-                    if RSI_FINAL_CLOSE_TIMEFRAME not in rsi_tf_list:
-                        rsi_tf_list.append(RSI_FINAL_CLOSE_TIMEFRAME)
+                    rsi_tf_list = []
+                    for tf_name in (list(RSI_MTF_TIMEFRAMES)
+                                    + list(RSI_DCA_LADDER_TIMEFRAMES)
+                                    + [RSI_FINAL_CLOSE_TIMEFRAME]):
+                        if tf_name not in rsi_tf_list:
+                            rsi_tf_list.append(tf_name)
                     for tf_name in rsi_tf_list:
                         if tf_name == CANDLE_TIMEFRAME:
                             tf_close = source_df['Close']

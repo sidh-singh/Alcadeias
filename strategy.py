@@ -41,25 +41,32 @@ class Strategy:
     
     def _get_next_fibo_volume(self, total_volume, times):
         """
-        Get next fibonacci volume based on total open volume.
-        Finds total_volume in fib sequence and returns the next fib value.
-        
+        Get next fibonacci volume so each placed position is a fib value.
+
+        Positions are opened as the fib sequence itself (0.01, 0.02, 0.03,
+        0.05, 0.08, 0.13, ...). total_volume is the SUM of the fib positions
+        already open, so we walk the cumulative sum to find how many positions
+        are open and return the next fib value to place.
+
         Eg: fib = [0.01, 0.02, 0.03, 0.05, 0.08, 0.13, ...]
-            total_volume 0.01 → next 0.02
-            total_volume 0.03 → next 0.05
-            total_volume 0.08 → next 0.13
-        
+            total_volume 0.01 (1 pos)        → next 0.02
+            total_volume 0.03 (0.01+0.02)    → next 0.03
+            total_volume 0.06 (+0.03)        → next 0.05
+            total_volume 0.11 (+0.05)        → next 0.08
+
         Args:
             total_volume: Total volume of all open positions for this direction
             times: Multiplier from config
-        
+
         Returns:
             float: Next fibo volume in lots
         """
         fib = [self._recur_fibo(i) for i in range(FIBO_SEQUENCE_LENGTH)][2:]
         total_units = round(total_volume * 100 / times) if times else 0
+        cumulative = 0
         for i, f in enumerate(fib):
-            if f >= total_units:
+            cumulative += f
+            if cumulative >= total_units:
                 try:
                     return round(fib[i + 1] * times / 100, 2)
                 except IndexError:
@@ -282,7 +289,9 @@ class Strategy:
         rsi_1m = rsi_mtf.get('TIMEFRAME_M1', 50.0) if rsi_mtf else 50.0
         rsi_5m = rsi_mtf.get('TIMEFRAME_M5', 50.0) if rsi_mtf else 50.0
         rsi_15m = rsi_mtf.get('TIMEFRAME_M15', 50.0) if rsi_mtf else 50.0
-        rsi_1h = rsi_mtf.get(RSI_FINAL_CLOSE_TIMEFRAME, 50.0) if rsi_mtf else 50.0
+        rsi_1h = rsi_mtf.get('TIMEFRAME_H1', 50.0) if rsi_mtf else 50.0
+        rsi_4h = rsi_mtf.get('TIMEFRAME_H4', 50.0) if rsi_mtf else 50.0
+        rsi_6h = rsi_mtf.get(RSI_FINAL_CLOSE_TIMEFRAME, 50.0) if rsi_mtf else 50.0
         
         # No positions open → look for entry (with MTF RSI filter)
         if buy_count == 0 and sell_count == 0:
@@ -292,7 +301,7 @@ class Strategy:
                 elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0 and gap_in_range and entry_conv_ok:
                     sell_status = Signal.SELL
         
-        # Only BUY positions open → exit or DCA (max 4 total: 1 entry + 1m + 5m + 15m RSI DCA; final forced close via 1h RSI)
+        # Only BUY positions open → exit or DCA (max 6 total: 1 entry + 1m + 5m + 15m + 1h + 4h RSI DCA; final forced close via 6h RSI)
         elif buy_count > 0 and sell_count == 0:
             if buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
@@ -303,9 +312,13 @@ class Strategy:
             elif rsi_15m <= RSI_OVERSOLD and buy_count == 3:
                 buy_status = Signal.BUY_MORE
             elif rsi_1h <= RSI_OVERSOLD and buy_count == 4:
+                buy_status = Signal.BUY_MORE
+            elif rsi_4h <= RSI_OVERSOLD and buy_count == 5:
+                buy_status = Signal.BUY_MORE
+            elif rsi_6h <= RSI_OVERSOLD and buy_count == 6:
                 buy_status = Signal.CLOSE_BUY
 
-        # Only SELL positions open → exit or DCA (max 4 total: 1 entry + 1m + 5m + 15m RSI DCA; final forced close via 1h RSI)
+        # Only SELL positions open → exit or DCA (max 6 total: 1 entry + 1m + 5m + 15m + 1h + 4h RSI DCA; final forced close via 6h RSI)
         elif buy_count == 0 and sell_count > 0:
             if sell_profit > close_threshold:
                 sell_status = Signal.CLOSE_SELL
@@ -316,6 +329,10 @@ class Strategy:
             elif rsi_15m >= RSI_OVERBOUGHT and sell_count == 3:
                 sell_status = Signal.SELL_MORE
             elif rsi_1h >= RSI_OVERBOUGHT and sell_count == 4:
+                sell_status = Signal.SELL_MORE
+            elif rsi_4h >= RSI_OVERBOUGHT and sell_count == 5:
+                sell_status = Signal.SELL_MORE
+            elif rsi_6h >= RSI_OVERBOUGHT and sell_count == 6:
                 sell_status = Signal.CLOSE_SELL
         
         analysis_data = {

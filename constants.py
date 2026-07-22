@@ -6,12 +6,12 @@ Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
 # ─── SHA Signal Indicator ───
-SHA_LENGTH = 6                      # Smoothing length for signal SHA (pre & post)
-SHA_MA_TYPE = 'RMA'                 # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
+SHA_LENGTH = 600                    # Smoothing length for signal SHA (pre & post)
+SHA_MA_TYPE = 'TEMA'                # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
 
 # ─── SHA Trend Indicator ───
-SHA_TREND_LENGTH = 10               # Smoothing length for trend SHA (pre & post)
-SHA_TREND_MA_TYPE = 'RMA'           # MA type for trend SHA
+SHA_TREND_LENGTH = 1200             # Smoothing length for trend SHA (pre & post)
+SHA_TREND_MA_TYPE = 'DEMA'          # MA type for trend SHA
 
 # ─── SHA Gap ───
 DEFAULT_GAP_RANGE = [0.001, 0.003]   # Default gap range [min, max] as raw ratio (not ×100)
@@ -49,11 +49,22 @@ RSI_MTF_TIMEFRAMES = ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15', 'TIMEFRAM
 RSI_MTF_OVERSOLD = 30               # Block BUY entry when ANY MTF RSI <= this
 RSI_MTF_OVERBOUGHT = 70             # Block SELL entry when ANY MTF RSI >= this
 
+# ─── RSI DCA Ladder Timeframes ───
+# Tiered DCA (BUY_MORE / SELL_MORE) is gated by these timeframes' RSI — one
+# timeframe per open-position count. Position 1 is the initial entry; each
+# further position is added when the matching timeframe RSI hits its extreme:
+#   count 1 → M1, count 2 → M5, count 3 → M15, count 4 → H1, count 5 → H4.
+# After the last ladder position the basket is force-closed on the final-close
+# timeframe RSI (see below).
+RSI_DCA_LADDER_TIMEFRAMES = [
+    'TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15', 'TIMEFRAME_H1', 'TIMEFRAME_H4',
+]
+
 # ─── RSI Final Forced-Close Timeframe ───
-# When a basket has maxed out its DCA ladder (4 positions), the final forced
-# close is triggered by this timeframe's RSI hitting the oversold/overbought
-# threshold. Previously the M30 RSI was used; now the 1-hour (H1) RSI.
-RSI_FINAL_CLOSE_TIMEFRAME = 'TIMEFRAME_H1'
+# When a basket has maxed out its DCA ladder, the final forced close is
+# triggered by this timeframe's RSI hitting the oversold/overbought threshold.
+# Previously the 1-hour (H1) RSI was used; now the 6-hour (H6) RSI.
+RSI_FINAL_CLOSE_TIMEFRAME = 'TIMEFRAME_H6'
 
 # ─── Risk Management ───
 RISK_REWARD_RATIO = [1, 1]          # [risk, reward] multiplier for auto SL/TP calculation

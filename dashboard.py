@@ -793,10 +793,13 @@ def _build_rsi_row(rsi_value, rsi_mtf=None, rsi_mtf_blocked=False):
         'TIMEFRAME_M15': 'M15',
         'TIMEFRAME_M30': 'M30',
         'TIMEFRAME_H1': 'H1',
+        'TIMEFRAME_H4': 'H4',
+        'TIMEFRAME_H6': 'H6',
     }
     tf_rows = []
     if rsi_mtf and len(rsi_mtf) > 0:
-        for tf_key in ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15', 'TIMEFRAME_M30', 'TIMEFRAME_H1']:
+        for tf_key in ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15', 'TIMEFRAME_M30',
+                       'TIMEFRAME_H1', 'TIMEFRAME_H4', 'TIMEFRAME_H6']:
             if tf_key in rsi_mtf:
                 tf_rows.append(_rsi_mini_row(tf_display[tf_key], rsi_mtf[tf_key]))
     else:
