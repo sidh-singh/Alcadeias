@@ -33,7 +33,7 @@ class MT5PositionHelper:
         Get detailed position information for BUY positions
         
         Args:
-            symbol: Trading symbol (e.g., 'BTCUSD', 'XAUUSD')
+            symbol: Trading symbol (e.g., 'XAGUSD', 'XAUUSD')
         
         Returns:
             Dict with keys:
@@ -82,7 +82,7 @@ class MT5PositionHelper:
         Get detailed position information for SELL positions
         
         Args:
-            symbol: Trading symbol (e.g., 'BTCUSD', 'XAUUSD')
+            symbol: Trading symbol (e.g., 'XAGUSD', 'XAUUSD')
         
         Returns:
             Dict with keys:
@@ -252,7 +252,7 @@ class MT5PositionHelper:
         Fetch historical rates/candles for a symbol
 
         Args:
-            symbol: Trading symbol (e.g., 'BTCUSD', 'XAUUSD')
+            symbol: Trading symbol (e.g., 'XAGUSD', 'XAUUSD')
             timeframe: MT5 timeframe constant (e.g., mt5.TIMEFRAME_M1, mt5.TIMEFRAME_H1)
             count: Number of candles to fetch
             simple: When True, do a single fast fetch and skip feed-warming, the
@@ -375,7 +375,7 @@ class MT5PositionHelper:
         Compares the latest candle time against current time using a lookback window.
         
         Args:
-            symbol: Trading symbol (e.g., 'BTCUSD', 'XAUUSD')
+            symbol: Trading symbol (e.g., 'XAGUSD', 'XAUUSD')
             timeframe: MT5 timeframe constant used for fetching rates
             lookback_minutes: Max minutes since last candle to consider market open (default 15)
         
@@ -717,7 +717,7 @@ class MT5PositionHelper:
                 base = symbol.rstrip('mM')
                 if base and base != symbol:
                     candidates.append(base)
-            candidates.extend(['EURUSDm', 'EURUSD', 'BTCUSDm', 'XAUUSDm', 'XAGUSDm'])
+            candidates.extend(['EURUSDm', 'EURUSD', 'XAGUSDm', 'XAUUSDm', 'XAGUSDm'])
 
             # Deduplicate while keeping order
             seen = set()
