@@ -509,13 +509,13 @@ class MT5TradingBot:
                 if has_candle_data:
                     # Market liveness is judged from the M1 market probe (latest M1
                     # bar + tick), NOT from the SHA source bar. The SHA source is now
-                    # H1, whose forming bar is up to an hour "old" by design, so its
+                    # M15, whose forming bar is up to 15 minutes "old" by design, so its
                     # age must never gate trading. market_status is tick-aware and
                     # timeframe-agnostic, so it stays correct regardless of the SHA
                     # source timeframe.
                     candle_is_fresh = bool(market_status.get('is_open')) if market_status else False
 
-                    # Age of the latest H1 SHA bar — kept for logging/analysis only.
+                    # Age of the latest M15 SHA bar — kept for logging/analysis only.
                     try:
                         last_candle_time = source_df['time'].iloc[-1]
                         if getattr(last_candle_time, 'tzinfo', None) is None:
