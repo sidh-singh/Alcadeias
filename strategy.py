@@ -177,9 +177,12 @@ class Strategy:
             gap_pct_series: pd.Series of gap% between signal and trend SHA
             buy_positions: Dict from get_buy_positions() or None
             sell_positions: Dict from get_sell_positions() or None
-            times: Hedge/multiplier from symbols config
+            times: Effective unit (min(times, max_limit) from symbols config).
+                   Scales the Fibo lot ladder.
             gap_range: [min, max] gap% range for this symbol (default from constants)
             fibo_power: Exponent for fibo DCA threshold (default from constants, per-symbol override)
+            close_threshold: USD basket profit target to close all trades. Derived
+                   from the effective unit, so it always equals `times` (unit N → $N).
             rsi_value: Current RSI value (float 0-100) for DCA entry decisions
             rsi_mtf: Dict of {timeframe_name: rsi_value} for multi-timeframe entry filter
         
