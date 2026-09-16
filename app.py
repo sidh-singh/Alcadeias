@@ -468,7 +468,6 @@ class MT5TradingBot:
         units = 1
         mtqty = self.symbols_config.get('mtqty', 0.01)
         symbol_gap_range = sym_cfg.get('gap_range', DEFAULT_GAP_RANGE)
-        symbol_fibo_power = sym_cfg.get('fibo_power', None)
         trade_symbol = self.symbol_map.get(symbol, symbol)
 
         # Throttle expensive saves so they don't block other threads
@@ -634,7 +633,7 @@ class MT5TradingBot:
                     buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
                         source_df, sha_df, sha_trend_df, gap_pct_series,
                         buy_positions, sell_positions, units, gap_range=symbol_gap_range,
-                        fibo_power=symbol_fibo_power, close_threshold=units,
+                        close_threshold=units,
                         convergence=convergence, rsi_value=current_rsi,
                         rsi_mtf=rsi_mtf
                     )
