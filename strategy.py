@@ -1,7 +1,7 @@
 from enum import Enum
 from constants import (
     STRATEGY_HEDGE, STRATEGY_LOOKBACK, STRATEGY_SHA_THRESHOLD,
-    FIBO_SEQUENCE_LENGTH, DEFAULT_GAP_RANGE, FIBO_POWER_DEFAULT,
+    FIBO_SEQUENCE_LENGTH, DEFAULT_GAP_RANGE,
     SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
     RSI_OVERSOLD, RSI_OVERBOUGHT, RSI_DCA_MAX_POSITIONS,
     RSI_MTF_OVERSOLD, RSI_MTF_OVERBOUGHT,
@@ -165,7 +165,7 @@ class Strategy:
     
     def calculate_signal(self, source_df, sha_df, sha_trend_df, gap_pct_series,
                          buy_positions, sell_positions, times, gap_range=None,
-                         fibo_power=None, close_threshold=2, convergence=None,
+                         close_threshold=2, convergence=None,
                          rsi_value=None, rsi_mtf=None):
         """
         Calculate entry/exit signals based on SHA power and crossover
@@ -180,7 +180,6 @@ class Strategy:
             times: Effective unit (min(times, max_limit) from symbols config).
                    Scales the Fibo lot ladder.
             gap_range: [min, max] gap% range for this symbol (default from constants)
-            fibo_power: Exponent for fibo DCA threshold (default from constants, per-symbol override)
             close_threshold: USD basket profit target to close all trades. Derived
                    from the effective unit, so it always equals `times` (unit N → $N).
             rsi_value: Current RSI value (float 0-100) for DCA entry decisions
@@ -230,10 +229,6 @@ class Strategy:
         # Gap range
         if gap_range is None:
             gap_range = DEFAULT_GAP_RANGE
-        
-        # Fibo power
-        if fibo_power is None:
-            fibo_power = FIBO_POWER_DEFAULT
         
         # RSI value
         current_rsi = rsi_value if rsi_value is not None else 50.0
