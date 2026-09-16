@@ -13,10 +13,10 @@
         {
             "symbol": "BTCUSDm",
             "is_active": true,
-            "times": 1,
+            "step_up_balance": 2500,
+            "unit_max_limit": 10,
             "gap_range": [0.0002, 0.0200],
-            "fibo_power": 6,
-            "close": 1
+            "fibo_power": 6
         }
     ]
 }
