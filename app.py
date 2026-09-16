@@ -451,7 +451,21 @@ class MT5TradingBot:
         sym_cfg = self.symbol_configs.get(symbol, {})
         brake_manual = self.symbols_config.get('brake', 0)
         trading_window_cfg = self.symbols_config.get('trading_window', {})
-        times = sym_cfg.get('times', 1)
+        # ── Auto unit stepping by account balance ──
+        # The running unit is no longer configured directly; it is derived from
+        # the live account balance in `step_up_balance`-sized tiers:
+        #   balance [0, step)         → unit 1
+        #   balance [step, 2·step)    → unit 2
+        #   balance [2·step, 3·step)  → unit 3   … and so on
+        # i.e. unit = floor(balance / step_up_balance) + 1, then capped by
+        # `unit_max_limit`. The effective unit (`units`) drives BOTH lot sizing
+        # (entry + Fibo ladder) and the USD profit target, keeping them
+        # synchronized (unit N → target $N). It is re-derived below, but ONLY
+        # while the symbol is flat — an open Fibo basket keeps the unit it was
+        # opened with (rescaling mid-basket would corrupt the ladder maths).
+        step_up_balance = sym_cfg.get('step_up_balance', 0)
+        max_limit = sym_cfg.get('unit_max_limit', 1)
+        units = 1
         mtqty = self.symbols_config.get('mtqty', 0.01)
         symbol_gap_range = sym_cfg.get('gap_range', DEFAULT_GAP_RANGE)
         symbol_fibo_power = sym_cfg.get('fibo_power', None)
@@ -482,6 +496,20 @@ class MT5TradingBot:
                     sell_positions = self.position_helper.get_sell_positions(trade_symbol)
                     account_info = self.position_helper.get_account_info()
                     server_time = self.position_helper._get_server_time(trade_symbol)
+
+                # ── Auto-step the running unit from live balance (only when flat) ──
+                # Re-derive only while no positions are open so an active basket
+                # stays on the unit it was opened with; the new tier applies to
+                # the next basket. Balance is unavailable → keep the current unit.
+                _buy_ct = buy_positions['count'] if buy_positions else 0
+                _sell_ct = sell_positions['count'] if sell_positions else 0
+                if _buy_ct == 0 and _sell_ct == 0 and account_info:
+                    balance = account_info.get('balance', 0)
+                    if step_up_balance and step_up_balance > 0:
+                        units = int(balance // step_up_balance) + 1
+                    else:
+                        units = 1
+                    units = max(1, min(units, max_limit))
 
                 # ── Effective brake: manual override OR outside trading window ──
                 # brake_manual=1 → always braked; else brake when outside the
@@ -600,13 +628,13 @@ class MT5TradingBot:
                             rsi_mtf[tf_name] = 50.0
                     current_rsi = rsi_mtf.get('TIMEFRAME_M1', 50.0)
                     
-                    # Calculate signal
-                    symbol_cfg = self.symbol_configs.get(symbol, {})
-                    symbol_close = symbol_cfg.get('close', 2)
+                    # Calculate signal. `units` (effective, capped by max_limit)
+                    # drives both the Fibo lot ladder and the USD close target,
+                    # so the profit target always equals the running unit.
                     buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
                         source_df, sha_df, sha_trend_df, gap_pct_series,
-                        buy_positions, sell_positions, times, gap_range=symbol_gap_range,
-                        fibo_power=symbol_fibo_power, close_threshold=symbol_close,
+                        buy_positions, sell_positions, units, gap_range=symbol_gap_range,
+                        fibo_power=symbol_fibo_power, close_threshold=units,
                         convergence=convergence, rsi_value=current_rsi,
                         rsi_mtf=rsi_mtf
                     )
@@ -631,6 +659,12 @@ class MT5TradingBot:
                     analysis_data['tick_rebuilt'] = False
                     analysis_data['last_source_candle_time'] = None
                 analysis_data['candle_age_min'] = round(float(candle_age_min), 2) if candle_age_min is not None else None
+
+                # Running unit (auto-derived from balance) so the dashboard/logs
+                # show the current tier and its inputs.
+                analysis_data['unit_times'] = units
+                analysis_data['step_up_balance'] = step_up_balance
+                analysis_data['unit_max_limit'] = max_limit
 
                 # SHA source config (so the dashboard reflects the running setup)
                 analysis_data['sha_timeframe'] = CANDLE_TIMEFRAME.replace('TIMEFRAME_', '')
@@ -680,10 +714,10 @@ class MT5TradingBot:
                 if has_candle_data and candle_is_fresh and buy_signal == Signal.BUY:
                     if not brake:
                         with self.mt5_lock:
-                            order_response = self.position_helper.buy(trade_symbol, times * mtqty)
+                            order_response = self.position_helper.buy(trade_symbol, units * mtqty)
                         self._log_event(symbol, 'BUY_EXECUTED', 'ENTRY', {
                             'mt5_symbol': trade_symbol,
-                            'qty': times * mtqty,
+                            'qty': units * mtqty,
                             'response': str(order_response),
                         }, server_time=server_time)
                     else:
@@ -691,7 +725,7 @@ class MT5TradingBot:
                             'note': 'Brake active — order skipped',
                         }, server_time=server_time)
                 elif buy_signal == Signal.BUY_MORE:
-                    vol = self.strategy._get_next_fibo_volume(buy_positions['total_volume'], times)
+                    vol = self.strategy._get_next_fibo_volume(buy_positions['total_volume'], units)
                     with self.mt5_lock:
                         order_response = self.position_helper.buy(trade_symbol, vol)
                     self._log_event(symbol, 'BUY_MORE_EXECUTED', 'ENTRY', {
@@ -718,10 +752,10 @@ class MT5TradingBot:
                 if has_candle_data and candle_is_fresh and sell_signal == Signal.SELL:
                     if not brake:
                         with self.mt5_lock:
-                            order_response = self.position_helper.sell(trade_symbol, times * mtqty)
+                            order_response = self.position_helper.sell(trade_symbol, units * mtqty)
                         self._log_event(symbol, 'SELL_EXECUTED', 'ENTRY', {
                             'mt5_symbol': trade_symbol,
-                            'qty': times * mtqty,
+                            'qty': units * mtqty,
                             'response': str(order_response),
                         }, server_time=server_time)
                     else:
@@ -729,7 +763,7 @@ class MT5TradingBot:
                             'note': 'Brake active — order skipped',
                         }, server_time=server_time)
                 elif sell_signal == Signal.SELL_MORE:
-                    vol = self.strategy._get_next_fibo_volume(sell_positions['total_volume'], times)
+                    vol = self.strategy._get_next_fibo_volume(sell_positions['total_volume'], units)
                     with self.mt5_lock:
                         order_response = self.position_helper.sell(trade_symbol, vol)
                     self._log_event(symbol, 'SELL_MORE_EXECUTED', 'ENTRY', {
