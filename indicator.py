@@ -139,24 +139,6 @@ class Indicator:
 
         return sha
     
-    def calculate_sha_gap(self, sha_df, sha_trend_df):
-        """
-        Calculate absolute gap ratio between signal SHA and trend SHA.
-        Uses mean of OHLC candles; trend SHA is the base value.
-        Result is always positive (absolute value).
-        
-        Args:
-            sha_df: Signal SHA DataFrame (Open, High, Low, Close)
-            sha_trend_df: Trend SHA DataFrame (Open, High, Low, Close)
-        
-        Returns:
-            pd.Series: absolute gap ratio for each candle (e.g. 0.0015)
-        """
-        sha_mean = (sha_df['Open'] + sha_df['High'] + sha_df['Low'] + sha_df['Close']) / 4
-        trend_mean = (sha_trend_df['Open'] + sha_trend_df['High'] + sha_trend_df['Low'] + sha_trend_df['Close']) / 4
-        gap_pct = ((sha_mean - trend_mean) / trend_mean).abs()
-        return gap_pct
-    
     def calculate_rsi(self, series, length=14, ma_type='RMA'):
         """
         Calculate RSI (Relative Strength Index).
@@ -184,57 +166,29 @@ class Indicator:
         rsi = rsi.fillna(100.0)
         return rsi
     
-    def calculate_sha_convergence(self, sha_df, sha_trend_df,
-                                   lookback=5, close_threshold=0.0003,
-                                   convergence_threshold=0.0001):
+    def calculate_atr(self, high, low, close, length=14):
         """
-        Detect whether signal SHA and trend SHA are converging, diverging,
-        parallel, or close (stuck together).
+        Average True Range (Wilder / RMA-smoothed).
 
-        Compares the absolute gap ratio at the current bar vs `lookback` bars ago.
+        Cheap and fully vectorized — intended to run on candles already fetched
+        elsewhere (e.g. the H1 frame pulled for the RSI ladder), so it adds no
+        data fetch. Takes explicit High/Low/Close series so it works regardless
+        of whether the source frame uses capitalized or lowercase columns.
 
         Args:
-            sha_df: Signal SHA DataFrame (Open, High, Low, Close)
-            sha_trend_df: Trend SHA DataFrame (Open, High, Low, Close)
-            lookback: Number of bars to measure gap change over
-            close_threshold: Gap below this -> CLOSE (raw ratio, e.g. 0.0003 = 0.03%)
-            convergence_threshold: Dead-zone for PARALLEL (raw ratio)
+            high, low, close: pd.Series of the OHLC candles
+            length: ATR period (default 14)
 
         Returns:
-            dict:
-              state: 'CONVERGING' | 'DIVERGING' | 'PARALLEL' | 'CLOSE'
-              gap_now: current absolute gap ratio
-              gap_prev: gap ratio `lookback` bars ago
-              gap_delta: gap_now - gap_prev (positive = widening)
+            pd.Series: ATR values (same index as inputs)
         """
-        sha_mean = (sha_df['Open'] + sha_df['High'] + sha_df['Low'] + sha_df['Close']) / 4
-        trend_mean = (sha_trend_df['Open'] + sha_trend_df['High'] + sha_trend_df['Low'] + sha_trend_df['Close']) / 4
-
-        gap_series = ((sha_mean - trend_mean) / trend_mean).abs()
-
-        valid = gap_series.dropna()
-        if len(valid) < lookback + 1:
-            return {'state': 'UNKNOWN', 'gap_now': 0.0, 'gap_prev': 0.0, 'gap_delta': 0.0}
-
-        gap_now = float(valid.iloc[-1])
-        gap_prev = float(valid.iloc[-(lookback + 1)])
-        gap_delta = gap_now - gap_prev
-
-        if gap_now < close_threshold:
-            state = 'CLOSE'
-        elif gap_delta > convergence_threshold:
-            state = 'DIVERGING'
-        elif gap_delta < -convergence_threshold:
-            state = 'CONVERGING'
-        else:
-            state = 'PARALLEL'
-
-        return {
-            'state': state,
-            'gap_now': round(gap_now, 6),
-            'gap_prev': round(gap_prev, 6),
-            'gap_delta': round(gap_delta, 6),
-        }
+        prev_close = close.shift(1)
+        true_range = pd.concat([
+            (high - low),
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ], axis=1).max(axis=1)
+        return self._ma(true_range, length, 'RMA')
 
     def _ma(self, series, length, ma_type='EMA', volume=None):
         """

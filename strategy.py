@@ -1,11 +1,13 @@
 from enum import Enum
 from constants import (
     STRATEGY_HEDGE, STRATEGY_LOOKBACK, STRATEGY_SHA_THRESHOLD,
-    FIBO_SEQUENCE_LENGTH, DEFAULT_GAP_RANGE,
-    SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
+    FIBO_SEQUENCE_LENGTH,
     RSI_OVERSOLD, RSI_OVERBOUGHT, RSI_DCA_MAX_POSITIONS,
     RSI_MTF_OVERSOLD, RSI_MTF_OVERBOUGHT,
     RSI_MTF_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
+    HTF_PROTECTION_ENABLED, HTF_CATASTROPHE_LOSS_PCT,
+    HTF_MEDIUM_LOSS_PCT, HTF_PROTECT_MIN_COUNT,
+    HTF_LADDER_CAP_ON_SPIKE, HTF_LADDER_CAP_MAX_COUNT,
 )
 
 
@@ -163,10 +165,11 @@ class Strategy:
                 trend_power_list.append(0)
         return trend_power_list
     
-    def calculate_signal(self, source_df, sha_df, sha_trend_df, gap_pct_series,
-                         buy_positions, sell_positions, times, gap_range=None,
-                         close_threshold=2, convergence=None,
-                         rsi_value=None, rsi_mtf=None):
+    def calculate_signal(self, source_df, sha_df, sha_trend_df,
+                         buy_positions, sell_positions, times,
+                         close_threshold=2,
+                         rsi_value=None, rsi_mtf=None,
+                         balance=None, spike=False):
         """
         Calculate entry/exit signals based on SHA power and crossover
         
@@ -174,17 +177,21 @@ class Strategy:
             source_df: Raw OHLC DataFrame (capitalized columns: Open, High, Low, Close)
             sha_df: SHA signal indicator DataFrame (Open, High, Low, Close)
             sha_trend_df: SHA trend indicator DataFrame (Open, High, Low, Close)
-            gap_pct_series: pd.Series of gap% between signal and trend SHA
             buy_positions: Dict from get_buy_positions() or None
             sell_positions: Dict from get_sell_positions() or None
             times: Effective unit (min(times, max_limit) from symbols config).
                    Scales the Fibo lot ladder.
-            gap_range: [min, max] gap% range for this symbol (default from constants)
             close_threshold: USD basket profit target to close all trades. Derived
                    from the effective unit, so it always equals `times` (unit N → $N).
             rsi_value: Current RSI value (float 0-100) for DCA entry decisions
             rsi_mtf: Dict of {timeframe_name: rsi_value} for multi-timeframe entry filter
-        
+            balance: Live account balance (float). Used to size the %-of-balance
+                   higher-timeframe protection stops. None/0 → those stops are
+                   skipped and the strategy behaves exactly as before.
+            spike: True when a fast adverse move (spike/slippage) is detected on
+                   the protection timeframe for the currently-open basket. Gates
+                   the ladder cap and the medium stop (see constants HTF_*).
+
         Returns:
             tuple: (buy_signal, sell_signal, analysis_data)
                 - buy_signal: Signal enum
@@ -216,27 +223,8 @@ class Strategy:
         lt_trend_buy_power = sum(1 for x in lt_trend_power_list if x == 1)
         lt_trend_sell_power = sum(1 for x in lt_trend_power_list if x == 0)
         
-        # Current candle gap%
-        current_gap_pct = 0.0
-        if len(gap_pct_series) > 0:
-            try:
-                gap_value = float(gap_pct_series.iloc[-1])
-                if gap_value == gap_value:  # not NaN
-                    current_gap_pct = round(gap_value, 4)
-            except (TypeError, ValueError):
-                current_gap_pct = 0.0
-        
-        # Gap range
-        if gap_range is None:
-            gap_range = DEFAULT_GAP_RANGE
-        
         # RSI value
         current_rsi = rsi_value if rsi_value is not None else 50.0
-
-        # Convergence state
-        if convergence is None:
-            convergence = {'state': 'UNKNOWN', 'gap_now': 0.0, 'gap_prev': 0.0, 'gap_delta': 0.0}
-        conv_state = convergence.get('state', 'UNKNOWN')
 
         buy_status = Signal.DO_NOTHING
         sell_status = Signal.DO_NOTHING
@@ -253,9 +241,6 @@ class Strategy:
                 'sha_trend_power_list': lt_trend_power_list,
                 'sha_trend_buy_strength': lt_trend_buy_power,
                 'sha_trend_sell_strength': lt_trend_sell_power,
-                'current_gap_pct': current_gap_pct,
-                'gap_range': gap_range,
-                'convergence': convergence,
                 'rsi_value': round(current_rsi, 2),
                 'rsi_mtf': rsi_mtf or {},
                 'rsi_mtf_blocked': False,
@@ -264,20 +249,16 @@ class Strategy:
             return buy_status, sell_status, analysis_data
         
         # ─── Entry/Exit Logic ───
-        
-        gap_in_range = gap_range[0] <= current_gap_pct <= gap_range[1]
-        below_gap = current_gap_pct < gap_range[0]
-        entry_conv_ok = conv_state in ('DIVERGING')
-        exit_conv_ok = conv_state == 'CONVERGING'
-        
+
         # Multi-timeframe RSI entry filter:
         # Block BUY if ANY timeframe RSI shows oversold (price likely still falling)
         # Block SELL if ANY timeframe RSI shows overbought (price likely still rising)
         rsi_any_oversold = False
         rsi_any_overbought = False
         if rsi_mtf and len(rsi_mtf) > 0:
-            # Only the configured entry-filter timeframes gate entries; the final
-            # forced-close timeframe (H1) is intentionally excluded here.
+            # Only the configured entry-filter timeframes (RSI_MTF_TIMEFRAMES:
+            # M1/M5/M15/M30) gate entries; the DCA-ladder timeframes (H1/H4) and
+            # the final forced-close timeframe (H6) are intentionally excluded here.
             rsi_vals = [rsi_mtf[tf] for tf in RSI_MTF_TIMEFRAMES if tf in rsi_mtf]
             rsi_any_oversold = any(v <= RSI_MTF_OVERSOLD for v in rsi_vals)
             rsi_any_overbought = any(v >= RSI_MTF_OVERBOUGHT for v in rsi_vals)
@@ -294,14 +275,39 @@ class Strategy:
         # No positions open → look for entry (with MTF RSI filter)
         if buy_count == 0 and sell_count == 0:
             if not rsi_mtf_blocked:
-                if lt_sha_power_list[0] == 1 and lt_trend_power_list[0] == 1 and gap_in_range and entry_conv_ok:
+                if lt_sha_power_list[0] == 1 and lt_trend_power_list[0] == 1:
                     buy_status = Signal.BUY
-                elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0 and gap_in_range and entry_conv_ok:
+                elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0:
                     sell_status = Signal.SELL
         
         # Only BUY positions open → exit or DCA (max 6 total: 1 entry + 1m + 5m + 15m + 1h + 4h RSI DCA; final forced close via 6h RSI)
         elif buy_count > 0 and sell_count == 0:
-            if buy_profit > close_threshold:
+            # ── Higher-timeframe spike / drawdown protection ──
+            # Strict priority chain (mutually exclusive, so no layer can cancel
+            # another): catastrophe stop > profit close > spike medium stop >
+            # DCA ladder (H4 add capped during a spike). Low tiers (counts 1-3)
+            # are never affected.
+            catastrophe_hit = (
+                HTF_PROTECTION_ENABLED and HTF_CATASTROPHE_LOSS_PCT > 0
+                and balance and balance > 0
+                and buy_profit <= -(HTF_CATASTROPHE_LOSS_PCT * balance)
+            )
+            spike_medium_hit = (
+                HTF_PROTECTION_ENABLED and spike
+                and buy_count >= HTF_PROTECT_MIN_COUNT
+                and balance and balance > 0
+                and buy_profit <= -(HTF_MEDIUM_LOSS_PCT * balance)
+            )
+            ladder_capped = (
+                HTF_PROTECTION_ENABLED and HTF_LADDER_CAP_ON_SPIKE and spike
+                and buy_count >= HTF_LADDER_CAP_MAX_COUNT
+            )
+
+            if catastrophe_hit:
+                buy_status = Signal.CLOSE_BUY
+            elif buy_profit > close_threshold:
+                buy_status = Signal.CLOSE_BUY
+            elif spike_medium_hit:
                 buy_status = Signal.CLOSE_BUY
             elif rsi_1m <= RSI_OVERSOLD and buy_count == 1:
                 buy_status = Signal.BUY_MORE
@@ -310,15 +316,36 @@ class Strategy:
             elif rsi_15m <= RSI_OVERSOLD and buy_count == 3:
                 buy_status = Signal.BUY_MORE
             elif rsi_1h <= RSI_OVERSOLD and buy_count == 4:
-                buy_status = Signal.BUY_MORE
-            elif rsi_4h <= RSI_OVERSOLD and buy_count == 5:
-                buy_status = Signal.BUY_MORE
+                buy_status = Signal.BUY_MORE                       # H1 tier add (#5) — always allowed
+            elif rsi_4h <= RSI_OVERSOLD and buy_count == 5 and not ladder_capped:
+                buy_status = Signal.BUY_MORE                       # H4 tier add (#6) — blocked during spike
             elif rsi_6h <= RSI_OVERSOLD and buy_count == 6:
                 buy_status = Signal.CLOSE_BUY
 
         # Only SELL positions open → exit or DCA (max 6 total: 1 entry + 1m + 5m + 15m + 1h + 4h RSI DCA; final forced close via 6h RSI)
         elif buy_count == 0 and sell_count > 0:
-            if sell_profit > close_threshold:
+            # ── Higher-timeframe spike / drawdown protection (mirror of BUY) ──
+            catastrophe_hit = (
+                HTF_PROTECTION_ENABLED and HTF_CATASTROPHE_LOSS_PCT > 0
+                and balance and balance > 0
+                and sell_profit <= -(HTF_CATASTROPHE_LOSS_PCT * balance)
+            )
+            spike_medium_hit = (
+                HTF_PROTECTION_ENABLED and spike
+                and sell_count >= HTF_PROTECT_MIN_COUNT
+                and balance and balance > 0
+                and sell_profit <= -(HTF_MEDIUM_LOSS_PCT * balance)
+            )
+            ladder_capped = (
+                HTF_PROTECTION_ENABLED and HTF_LADDER_CAP_ON_SPIKE and spike
+                and sell_count >= HTF_LADDER_CAP_MAX_COUNT
+            )
+
+            if catastrophe_hit:
+                sell_status = Signal.CLOSE_SELL
+            elif sell_profit > close_threshold:
+                sell_status = Signal.CLOSE_SELL
+            elif spike_medium_hit:
                 sell_status = Signal.CLOSE_SELL
             elif rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
                 sell_status = Signal.SELL_MORE
@@ -327,9 +354,9 @@ class Strategy:
             elif rsi_15m >= RSI_OVERBOUGHT and sell_count == 3:
                 sell_status = Signal.SELL_MORE
             elif rsi_1h >= RSI_OVERBOUGHT and sell_count == 4:
-                sell_status = Signal.SELL_MORE
-            elif rsi_4h >= RSI_OVERBOUGHT and sell_count == 5:
-                sell_status = Signal.SELL_MORE
+                sell_status = Signal.SELL_MORE                     # H1 tier add (#5) — always allowed
+            elif rsi_4h >= RSI_OVERBOUGHT and sell_count == 5 and not ladder_capped:
+                sell_status = Signal.SELL_MORE                     # H4 tier add (#6) — blocked during spike
             elif rsi_6h >= RSI_OVERBOUGHT and sell_count == 6:
                 sell_status = Signal.CLOSE_SELL
         
@@ -344,13 +371,12 @@ class Strategy:
             'sha_trend_power_list': lt_trend_power_list,
             'sha_trend_buy_strength': lt_trend_buy_power,
             'sha_trend_sell_strength': lt_trend_sell_power,
-            'current_gap_pct': current_gap_pct,
-            'gap_range': gap_range,
-            'convergence': convergence,
             'rsi_value': round(current_rsi, 2),
             'rsi_mtf': rsi_mtf or {},
             'rsi_mtf_blocked': rsi_mtf_blocked,
+            'htf_spike': bool(spike),
+            'htf_protection_enabled': bool(HTF_PROTECTION_ENABLED),
             'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
         }
-        
+
         return buy_status, sell_status, analysis_data
