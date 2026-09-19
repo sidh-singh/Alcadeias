@@ -13,8 +13,6 @@ from datetime import timezone
 from constants import (
     SHA_LENGTH, SHA_MA_TYPE,
     SHA_TREND_LENGTH, SHA_TREND_MA_TYPE,
-    DEFAULT_GAP_RANGE,
-    SHA_CONVERGENCE_LOOKBACK, SHA_CLOSE_THRESHOLD, SHA_CONVERGENCE_THRESHOLD,
     RSI_LENGTH, RSI_MA_TYPE, RSI_CANDLE_COUNT, RSI_MTF_TIMEFRAMES,
     RSI_DCA_LADDER_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
@@ -24,6 +22,8 @@ from constants import (
     STRATEGY_LOG_FILENAME, STRATEGY_LOG_MAX_ENTRIES,
     ORDER_COOLDOWN_SECONDS,
     ACTIVE_CONFIG_FILENAME,
+    HTF_PROTECTION_ENABLED, HTF_SPIKE_TIMEFRAME, HTF_SPIKE_ATR_PERIOD,
+    HTF_SPIKE_LOOKBACK_BARS, HTF_SPIKE_ATR_MULT,
 )
 
 
@@ -437,6 +437,42 @@ class MT5TradingBot:
             with open(log_path, 'w') as f:
                 json.dump(log_data, f, indent=2, default=str)
     
+    def _detect_htf_spike(self, ohlc_df, is_buy_basket):
+        """Detect a fast adverse move (spike/slippage) on the protection timeframe.
+
+        Reuses the H1 OHLC frame already fetched for the RSI ladder — NO extra
+        data fetch. A spike = the adverse excursion (against the open basket)
+        over the last HTF_SPIKE_LOOKBACK_BARS bars exceeding
+        HTF_SPIKE_ATR_MULT × ATR(HTF_SPIKE_ATR_PERIOD).
+
+        Args:
+            ohlc_df: DataFrame with lowercase 'high'/'low'/'close' columns
+            is_buy_basket: True for a BUY basket (adverse = price falling),
+                           False for a SELL basket (adverse = price rising)
+
+        Returns:
+            bool: True if a spike is detected
+        """
+        try:
+            if ohlc_df is None or len(ohlc_df) <= HTF_SPIKE_ATR_PERIOD:
+                return False
+            atr = self.indicator.calculate_atr(
+                ohlc_df['high'], ohlc_df['low'], ohlc_df['close'],
+                length=HTF_SPIKE_ATR_PERIOD,
+            )
+            atr_val = float(atr.iloc[-1])
+            if not (atr_val > 0):
+                return False
+            window = ohlc_df.tail(HTF_SPIKE_LOOKBACK_BARS + 1)
+            current = float(ohlc_df['close'].iloc[-1])
+            if is_buy_basket:
+                adverse = float(window['high'].max()) - current   # how far price fell
+            else:
+                adverse = current - float(window['low'].min())    # how far price rose
+            return adverse >= HTF_SPIKE_ATR_MULT * atr_val
+        except Exception:
+            return False
+
     def process_symbol(self, symbol):
         """
         Process a single symbol (will be called in separate threads)
@@ -467,7 +503,6 @@ class MT5TradingBot:
         max_limit = sym_cfg.get('unit_max_limit', 1)
         units = 1
         mtqty = self.symbols_config.get('mtqty', 0.01)
-        symbol_gap_range = sym_cfg.get('gap_range', DEFAULT_GAP_RANGE)
         trade_symbol = self.symbol_map.get(symbol, symbol)
 
         # Throttle expensive saves so they don't block other threads
@@ -475,6 +510,11 @@ class MT5TradingBot:
         _last_hist_save = 0.0
         _DAILY_SAVE_INTERVAL = 60       # seconds between daily-trade saves
         _HIST_SAVE_INTERVAL = 300       # seconds between historical-summary saves
+
+        # Higher-timeframe spike protection: once a spike is detected during a
+        # basket's life the flag LATCHES until the basket closes (goes flat), so
+        # the ladder cap / medium stop stay armed even if the fast bar ages out.
+        spike_latched = False
 
         while True:
             try:
@@ -502,6 +542,9 @@ class MT5TradingBot:
                 # the next basket. Balance is unavailable → keep the current unit.
                 _buy_ct = buy_positions['count'] if buy_positions else 0
                 _sell_ct = sell_positions['count'] if sell_positions else 0
+                if _buy_ct == 0 and _sell_ct == 0:
+                    # Basket is flat → clear the latched spike flag for the next basket
+                    spike_latched = False
                 if _buy_ct == 0 and _sell_ct == 0 and account_info:
                     balance = account_info.get('balance', 0)
                     if step_up_balance and step_up_balance > 0:
@@ -590,17 +633,6 @@ class MT5TradingBot:
                     except (IndexError, KeyError):
                         pass
 
-                    # Calculate gap% between signal SHA and trend SHA
-                    gap_pct_series = self.indicator.calculate_sha_gap(sha_df, sha_trend_df)
-                    
-                    # Detect SHA convergence/divergence state
-                    convergence = self.indicator.calculate_sha_convergence(
-                        sha_df, sha_trend_df,
-                        lookback=SHA_CONVERGENCE_LOOKBACK,
-                        close_threshold=SHA_CLOSE_THRESHOLD,
-                        convergence_threshold=SHA_CONVERGENCE_THRESHOLD,
-                    )
-                    
                     # Calculate RSI for multiple timeframes (entry filter + DCA ladder + final close).
                     # Fetched INDEPENDENTLY of the SHA source (its own small count via a
                     # lightweight fetch), so the mean-reversion ladder is never impacted
@@ -613,6 +645,7 @@ class MT5TradingBot:
                                     + [RSI_FINAL_CLOSE_TIMEFRAME]):
                         if tf_name not in rsi_tf_list:
                             rsi_tf_list.append(tf_name)
+                    spike_src_df = None   # H1 frame reused for spike detection (no extra fetch)
                     for tf_name in rsi_tf_list:
                         with self.mt5_lock:
                             tf_df = self.position_helper.get_rates(
@@ -623,19 +656,29 @@ class MT5TradingBot:
                                 tf_df['close'], length=RSI_LENGTH, ma_type=RSI_MA_TYPE
                             )
                             rsi_mtf[tf_name] = float(rsi_s.iloc[-1]) if len(rsi_s) > 0 else 50.0
+                            if tf_name == HTF_SPIKE_TIMEFRAME:
+                                spike_src_df = tf_df
                         else:
                             rsi_mtf[tf_name] = 50.0
                     current_rsi = rsi_mtf.get('TIMEFRAME_M1', 50.0)
+
+                    # ── Higher-timeframe spike detection + latch (only while in a basket) ──
+                    # Reuses the H1 frame captured above — no extra data fetch.
+                    if HTF_PROTECTION_ENABLED and (_buy_ct > 0 or _sell_ct > 0):
+                        if self._detect_htf_spike(spike_src_df, is_buy_basket=(_buy_ct > 0)):
+                            spike_latched = True
                     
                     # Calculate signal. `units` (effective, capped by max_limit)
                     # drives both the Fibo lot ladder and the USD close target,
                     # so the profit target always equals the running unit.
+                    acct_balance = account_info.get('balance', 0) if account_info else 0
                     buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
-                        source_df, sha_df, sha_trend_df, gap_pct_series,
-                        buy_positions, sell_positions, units, gap_range=symbol_gap_range,
+                        source_df, sha_df, sha_trend_df,
+                        buy_positions, sell_positions, units,
                         close_threshold=units,
-                        convergence=convergence, rsi_value=current_rsi,
-                        rsi_mtf=rsi_mtf
+                        rsi_value=current_rsi,
+                        rsi_mtf=rsi_mtf,
+                        balance=acct_balance, spike=spike_latched
                     )
                     analysis_data['candle_fresh'] = True
                 else:
@@ -744,6 +787,7 @@ class MT5TradingBot:
                         'mt5_symbol': trade_symbol,
                         'positions_closed': close_response.get('closed_count', 0),
                         'total_profit': buy_positions['total_profit'] if buy_positions else 0,
+                        'htf_spike': spike_latched,
                         'response': close_response,
                     }, server_time=server_time)
                 
@@ -782,6 +826,7 @@ class MT5TradingBot:
                         'mt5_symbol': trade_symbol,
                         'positions_closed': close_response.get('closed_count', 0),
                         'total_profit': sell_positions['total_profit'] if sell_positions else 0,
+                        'htf_spike': spike_latched,
                         'response': close_response,
                     }, server_time=server_time)
                 
