@@ -47,8 +47,8 @@ RSI_MA_TYPE = 'RMA'                 # MA type for RSI smoothing (RMA = Wilder's,
 # this smaller count instead of the large SHA CANDLE_COUNT. This avoids pulling
 # years of history on high timeframes (e.g. 8000 H6 bars ≈ 5.5 years) every loop.
 RSI_CANDLE_COUNT = 500
-RSI_OVERSOLD = 30                   # Oversold threshold (BUY_MORE when RSI <= this)
-RSI_OVERBOUGHT = 70                 # Overbought threshold (SELL_MORE when RSI >= this)
+RSI_OVERSOLD = 35                   # Oversold threshold (BUY_MORE when RSI <= this)
+RSI_OVERBOUGHT = 65                 # Overbought threshold (SELL_MORE when RSI >= this)
 RSI_DCA_MAX_POSITIONS = 1           # Max additional DCA positions allowed via RSI signal
 
 # ─── RSI Multi-Timeframe Entry Filter ───
