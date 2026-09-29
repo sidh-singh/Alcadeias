@@ -9,6 +9,77 @@ Versioning is feature-based (`vMAJOR.MINOR.PATCH`). Each entry names the git
 
 ---
 
+## [v1.3.0] — 2026-09-29 — Rollback HTF Spike / Drawdown Protection (revert v1.1.0)
+
+**Baseline commit (state before this change):** `32dc79a` — *feat: HTF spike/drawdown protection + remove gap_range & SHA convergence entry filters* (this commit bundled v1.1.0 + v1.2.0 together).
+**Branch:** `dev_btcusd2_v2`
+**Files touched:** `constants.py`, `indicator.py`, `strategy.py`, `app.py` (+ this `CHANGELOG.md`)
+**Status:** working tree (uncommitted).
+**Behaviour change:** the entire v1.1.0 Higher-Timeframe Spike / Drawdown Protection
+module is **removed**. The DCA/martingale basket is back to pure RSI mean-reversion:
+the ladder runs all tiers — fresh entry, then M1/M5/M15/H1/**H4** adds — with the
+**H6** RSI forced-close as the only capitulation exit. There is again **no tail-risk
+stop** (no catastrophe stop, no spike medium stop, no ladder cap, no ATR spike
+detector). This is exactly the pre-v1.1.0 (`d0bc0ec` / v1.0.0) loss-side behaviour.
+The v1.2.0 entry-filter change (gap_range + SHA convergence removed) and the
+balance-stepped auto unit sizing (`step_up_balance`) are **kept, untouched**.
+
+### Why
+Per the owner, in live trading the spike/slippage protection cut baskets early at
+the H1/H4 tiers and locked in losses the mean-reversion ladder would otherwise have
+recovered — it caused net loss. Reverting restores the profitable "mean-reverse till
+H4, H6 forced close" logic. The auto lot-increment must stay, so this is a surgical
+removal of v1.1.0 only, **not** a full reset to `d0bc0ec`.
+
+### Verification
+- `git diff d0bc0ec` for the four code files shows **no** HTF/spike content — the
+  spike-protection surface is byte-identical to the pre-v1.1.0 baseline `d0bc0ec`.
+- The BUY/SELL DCA `if/elif` ladder is **byte-identical to `d0bc0ec`** (full H4 add,
+  H6 forced close).
+- The v1.2.0 gap_range/convergence removal is still present (diff vs `d0bc0ec` still
+  shows those deletions).
+- Auto unit stepping (`step_up_balance`) is still present in `app.py`.
+- All four files parse (`ast.parse`); grep finds none of `HTF_`, `_detect_htf_spike`,
+  `spike_latched`, `spike_src_df`, `ladder_capped`, `calculate_atr`, `htf_spike`, or
+  `acct_balance` remaining.
+
+### Change detail per file (all REMOVALS of the v1.1.0 additions)
+- **`constants.py`** — removed the whole `Higher-Timeframe Spike / Drawdown
+  Protection` block (all 10 `HTF_*` keys). `RISK_REWARD_RATIO` is now immediately
+  followed by the `File System / Output` section.
+- **`indicator.py`** — removed the `calculate_atr(self, high, low, close, length=14)`
+  method. `calculate_rsi` is now immediately followed by `_ma`.
+- **`strategy.py`** — removed the 6 `HTF_*` imports; removed the `balance`/`spike`
+  params (and their docstring lines) from `calculate_signal`; restored both the BUY
+  and SELL `if/elif` ladders to their pre-v1.1.0 form (dropped the `catastrophe_hit` /
+  `spike_medium_hit` / `ladder_capped` computation and the `and not ladder_capped` H4
+  guard); removed the `htf_spike` and `htf_protection_enabled` keys from
+  `analysis_data`.
+- **`app.py`** — removed the 5 `HTF_*` imports; removed the `_detect_htf_spike`
+  method; removed the `spike_latched` declaration and its flat-check reset (the
+  adjacent `step_up_balance` auto-increment block was left in place); removed the
+  `spike_src_df` init + in-loop capture; removed the spike detect/latch block; removed
+  the `acct_balance` local and the `balance=`/`spike=` args on the
+  `calculate_signal(...)` call; removed the two `'htf_spike'` log keys.
+
+### Rollback (re-enable HTF protection)
+This reversal is a pure removal of the v1.1.0 additions, applied on top of `32dc79a`.
+
+**If this rollback is NOT yet committed** (current state) — discard it to get HTF back:
+```bash
+git checkout -- constants.py indicator.py strategy.py app.py
+```
+This restores the four files to `32dc79a` (HTF present). To then keep HTF present but
+OFF, set `HTF_PROTECTION_ENABLED = False` in `constants.py`.
+
+**If this rollback WAS committed** (say as `<v1.3.0-sha>`):
+```bash
+git revert <v1.3.0-sha>                                    # inverse commit, or:
+git checkout 32dc79a -- constants.py indicator.py strategy.py app.py
+```
+
+---
+
 ## [v1.2.0] — 2026-09-20 — Remove gap_range + SHA convergence entry filters
 
 **Baseline:** applied on top of v1.1.0 (working tree; still on commit `d0bc0ec`).
