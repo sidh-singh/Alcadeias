@@ -17,6 +17,38 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v1.5.0] — 2026-09-29 — MTF entry-filter thresholds 30/70 → 35/65 (match core RSI)
+
+**Baseline commit (state before this change):** `93ddd21` — *feat: core RSI thresholds 30/70 -> 35/65 (CHANGELOG v1.4.0)*.
+**Branch:** `dev_btcusd2_v2` (then propagated to all 20 fleet branches).
+**Files touched:** `constants.py` (+ this `CHANGELOG.md`).
+**Behaviour change:** the multi-timeframe **entry filter** thresholds are tightened
+inward from 30/70 to 35/65 — `RSI_MTF_OVERSOLD 30 → 35`, `RSI_MTF_OVERBOUGHT 70 → 65` —
+so both RSI threshold pairs now use the same 35/65 band. This filter gates **fresh
+entries** only (`strategy.py` ~L253–254): a new BUY is blocked when ANY of M1/M5/M15/M30
+RSI ≤ 35, a new SELL when ANY ≥ 65. Widening the block band from 30/70 to 35/65 makes
+the entry filter **stricter** — fresh baskets open less often, only when all four MTF
+RSIs sit in the calmer 35–65 middle. The core DCA-ladder / H6-close thresholds
+(`RSI_OVERSOLD`/`RSI_OVERBOUGHT`) remain 35/65 from v1.4.0 — unchanged here.
+
+### Why
+Per the owner: apply the same 35/65 range to the MTF entry filter so it matches the
+core RSI thresholds (one consistent band across entry + ladder).
+
+### Change detail per file
+- **`constants.py`** — L56 `RSI_MTF_OVERSOLD = 30` → `35`; L57 `RSI_MTF_OVERBOUGHT = 70`
+  → `65` (comments and alignment unchanged). Core `RSI_OVERSOLD`/`RSI_OVERBOUGHT` stay
+  at 35/65 (v1.4.0); `RSI_MTF_TIMEFRAMES` (M1/M5/M15/M30) unchanged.
+- No logic files changed: `strategy.py` reads these constants by name
+  (`any(v <= RSI_MTF_OVERSOLD ...)`, `any(v >= RSI_MTF_OVERBOUGHT ...)`), so the new
+  values take effect with no code edits.
+
+### Rollback
+Restore the two values in `constants.py` (`RSI_MTF_OVERSOLD = 30`,
+`RSI_MTF_OVERBOUGHT = 70`), or if committed as `<v1.5.0-sha>`: `git revert <v1.5.0-sha>`.
+
+---
+
 ## [v1.4.0] — 2026-09-29 — Core RSI thresholds 30/70 → 35/65
 
 **Baseline commit (state before this change):** `9e311b7` — *revert: roll back HTF spike/drawdown protection (CHANGELOG v1.3.0)*.
