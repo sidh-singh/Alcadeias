@@ -7,6 +7,45 @@ version can be reversed cleanly.
 Versioning is feature-based (`vMAJOR.MINOR.PATCH`). Each entry names the git
 **baseline commit** it was applied on top of, so you can always return to a known state.
 
+**Maintenance policy (every change, no exceptions):** every change — however small — is
+recorded here with per-file detail (down to the small stuff), committed together with its
+code, and propagated to **all 20 live-money fleet branches** in the same change
+(cherry-pick; rebase onto `origin/<branch>` for any branch behind so remote-only
+credential/symbol commits are preserved; never force-push). Fleet:
+`dev_btcusd1_v2`…`dev_btcusd10_v2` (BTCUSDm) and `dev_xauusd1_v2`…`dev_xauusd10_v2`
+(XAUUSDm).
+
+---
+
+## [v1.4.0] — 2026-09-29 — Core RSI thresholds 30/70 → 35/65
+
+**Baseline commit (state before this change):** `9e311b7` — *revert: roll back HTF spike/drawdown protection (CHANGELOG v1.3.0)*.
+**Branch:** `dev_btcusd2_v2` (then propagated to all 20 fleet branches).
+**Files touched:** `constants.py` (+ this `CHANGELOG.md`).
+**Behaviour change:** the **core** RSI oversold/overbought thresholds are tightened
+inward from 30/70 to 35/65 — `RSI_OVERSOLD 30 → 35`, `RSI_OVERBOUGHT 70 → 65`. These
+gate the DCA ladder adds (`BUY_MORE`/`SELL_MORE` at M1/M5/M15/H1/H4, `strategy.py`
+~L277–304) and the H6 RSI forced-close, so a basket adds the next rung — and
+force-closes when maxed — at a less-extreme RSI (sooner / more readily). The
+multi-timeframe **entry filter** is deliberately left at 30/70 (`RSI_MTF_OVERSOLD`,
+`RSI_MTF_OVERBOUGHT`), so fresh-entry gating is unchanged.
+
+### Why
+Per the owner: make the mean-reversion ladder react on shallower RSI extremes.
+Entry-filter behaviour intentionally unchanged (confirmed scope: "Core RSI only").
+
+### Change detail per file
+- **`constants.py`** — L50 `RSI_OVERSOLD = 30` → `35`; L51 `RSI_OVERBOUGHT = 70` → `65`
+  (comments and alignment unchanged). `RSI_MTF_OVERSOLD` (30) and `RSI_MTF_OVERBOUGHT`
+  (70) left untouched.
+- No logic files changed: `strategy.py` references these constants by name
+  (`rsi_* <= RSI_OVERSOLD`, `rsi_* >= RSI_OVERBOUGHT`), so the new values take effect
+  with no code edits.
+
+### Rollback
+Restore the two values in `constants.py` (`RSI_OVERSOLD = 30`, `RSI_OVERBOUGHT = 70`),
+or if committed as `<v1.4.0-sha>`: `git revert <v1.4.0-sha>`.
+
 ---
 
 ## [v1.3.0] — 2026-09-29 — Rollback HTF Spike / Drawdown Protection (revert v1.1.0)
