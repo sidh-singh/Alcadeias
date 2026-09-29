@@ -53,8 +53,8 @@ RSI_DCA_MAX_POSITIONS = 1           # Max additional DCA positions allowed via R
 
 # ─── RSI Multi-Timeframe Entry Filter ───
 RSI_MTF_TIMEFRAMES = ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15', 'TIMEFRAME_M30']
-RSI_MTF_OVERSOLD = 30               # Block BUY entry when ANY MTF RSI <= this
-RSI_MTF_OVERBOUGHT = 70             # Block SELL entry when ANY MTF RSI >= this
+RSI_MTF_OVERSOLD = 35               # Block BUY entry when ANY MTF RSI <= this
+RSI_MTF_OVERBOUGHT = 65             # Block SELL entry when ANY MTF RSI >= this
 
 # ─── RSI DCA Ladder Timeframes ───
 # Tiered DCA (BUY_MORE / SELL_MORE) is gated by these timeframes' RSI — one
