@@ -166,30 +166,6 @@ class Indicator:
         rsi = rsi.fillna(100.0)
         return rsi
     
-    def calculate_atr(self, high, low, close, length=14):
-        """
-        Average True Range (Wilder / RMA-smoothed).
-
-        Cheap and fully vectorized — intended to run on candles already fetched
-        elsewhere (e.g. the H1 frame pulled for the RSI ladder), so it adds no
-        data fetch. Takes explicit High/Low/Close series so it works regardless
-        of whether the source frame uses capitalized or lowercase columns.
-
-        Args:
-            high, low, close: pd.Series of the OHLC candles
-            length: ATR period (default 14)
-
-        Returns:
-            pd.Series: ATR values (same index as inputs)
-        """
-        prev_close = close.shift(1)
-        true_range = pd.concat([
-            (high - low),
-            (high - prev_close).abs(),
-            (low - prev_close).abs(),
-        ], axis=1).max(axis=1)
-        return self._ma(true_range, length, 'RMA')
-
     def _ma(self, series, length, ma_type='EMA', volume=None):
         """
         Calculate moving average
