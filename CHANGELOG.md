@@ -17,6 +17,103 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v1.6.0] — 2026-10-01 — Regime Entry Filter (ADX + ATR-spike fresh-entry gate; OFF + shadow by default)
+
+**Baseline commit (state before this change):** `60540a3` — *feat: MTF entry-filter thresholds 30/70 -> 35/65 (CHANGELOG v1.5.0)*.
+**Branch:** `dev_btcusd2_v2` (then propagated to all 20 fleet branches).
+**Files touched:** `constants.py`, `indicator.py`, `strategy.py`, `app.py` (+ this `CHANGELOG.md`).
+**Behaviour change (when enabled):** adds a **fresh-entry-only** regime gate that can turn a
+would-be BUY/SELL into **DO_NOTHING** when the current M15 price regime is hostile to
+mean-reversion — a strong trend (**ADX**) or a fast **1–2 candle ATR spike**. It answers the
+owner's two failure cases directly: (1) the 2-bar BULL/BEAR spike that lagging SHA enters the
+wrong way, and (2) the dull→explosive trend where SHA gives the opposite direction and the
+martingale cannot recover. **This is the exact opposite of the rolled-back v1.1.0 HTF
+protection**: v1.1.0 *handled* spikes by cutting **open** baskets early (which locked in losses);
+this gate only *prevents* a **new** basket from opening and **never touches an open basket** —
+once `buy_count>0` or `sell_count>0`, the DCA ladder (M1/M5/M15/H1/H4 adds), RSI adds, `+$unit`
+profit close and H6 forced close all run **byte-identical to v1.5.0**.
+
+**Ships OFF and safe.** `REGIME_FILTER_ENABLED = False` → **byte-identical to v1.5.0** (the gate
+computes nothing and `strategy.py` receives an inert `{}`). Turning it on defaults to **shadow
+mode** (`REGIME_FILTER_SHADOW = True`): it computes the verdict and **logs** every fresh entry it
+*would* have blocked, but still trades identically — so the block rate can be measured on live
+data before it is ever allowed to suppress a trade. No new MT5 fetches (ATR is an intermediate of
+ADX on the M15 `source_df` already pulled for SHA) and fully **stateless** (recomputed each loop;
+no latch to get stuck, unlike v1.1.0's `spike_latched`).
+
+### Why
+Per the owner (planning phase → approved): SHA is a lagging trend pair (TEMA10/DEMA20 on M15) and
+RSI is a range tool, so neither can veto an entry taken *into* a fresh trend/spike. A **regime**
+dimension is the missing filter. ADX (inverted: high ADX = trend = **don't** open a mean-reversion
+basket) plus a stateless ATR-spike guard catches both the slow trend and the fast 2-bar move. Built
+entry-only and OFF-by-default precisely because the previous market-protection attempt (v1.1.0) lost
+money by acting on open baskets — the owner asked to *prevent* bad entries, not *handle* them, and to
+"be prepared to rollback if this also fails."
+
+### Change detail per file
+- **`constants.py`** — new `Regime Entry Filter (FRESH-ENTRY gate ONLY)` block (L76–118), placed
+  after `RSI_FINAL_CLOSE_TIMEFRAME` and before `Risk Management`. Master switches
+  `REGIME_FILTER_ENABLED = False`, `REGIME_FILTER_SHADOW = True`. ADX gate: `REGIME_ADX_ENABLED`,
+  `REGIME_ADX_PERIOD = 14`, `REGIME_ADX_MAX = 25.0`, `REGIME_ADX_USE_DI = False`. ATR-spike guard:
+  `REGIME_ATR_ENABLED`, `REGIME_SPIKE_K1 = 2.2`, `REGIME_SPIKE_K2 = 3.2`, `REGIME_SPIKE_WINDOW = 2`,
+  `REGIME_SPIKE_USE_DIR = False`. RSI-slope phase-2 (off): `REGIME_RSI_SLOPE_ENABLED = False`,
+  `REGIME_RSI_SLOPE_TIMEFRAMES = [M1, M5]`, `REGIME_RSI_SLOPE_BARS = 3`, `REGIME_RSI_SLOPE_MIN = 8.0`.
+  A comment documents the optional per-symbol `"regime"` override in `symbols.json`
+  (`adx_max`/`spike_k1`/`spike_k2`/`spike_window`). No existing key changed.
+- **`indicator.py`** — new `calculate_adx(self, high, low, close, length=14)` (L169), inserted
+  between `calculate_rsi` and `_ma`. Wilder / TradingView `ta.adx`-compatible: TR, RMA-smoothed ATR,
+  `+DI`/`−DI` from directional movement, `DX`, and RMA-smoothed `ADX`; returns a DataFrame
+  `{TR, ATR, plus_DI, minus_DI, ADX}` (ATR falls out for free, so the spike guard needs no extra
+  math). Divide-by-zero guarded via `replace(0, np.nan)` on ATR and the DI sum. Pure addition — no
+  existing indicator touched. Verified on synthetic data: ADX∈0–100, low in range / ~99 in trend,
+  `+DI>−DI` on an uptrend, NaN-safe warmup.
+- **`strategy.py`** — `calculate_signal(...)` gains a trailing `regime=None` param (L168) + docstring
+  note (L184–185: entry-only, ignored once a basket is open). In the **flat** branch only
+  (`buy_count == 0 and sell_count == 0`), the SHA decision is split into `sha_wants_buy`/`sha_wants_sell`
+  (L277–278) and gated by `_block_buy`/`_block_sell` read from the regime dict (L274–276), so a blocked
+  side falls through to DO_NOTHING (L283–285). Every open-basket branch (DCA ladder, RSI adds, profit
+  close, H6 close) is **unchanged**. Adds a `regime_out` telemetry block (L326–334:
+  `would_fire_buy/sell`, `blocked_buy/sell`, `shadow_would_block_buy/sell`) surfaced as
+  `analysis_data['regime']` (L350); the early-return path carries `'regime': regime or {}` (L241).
+  `regime=None` ⇒ `{}` ⇒ nothing blocks (full backward compatibility).
+- **`app.py`** — imports the 15 `REGIME_*` constants (L25–30). New `_compute_regime(...)` (L444–565):
+  returns an inert dict when `REGIME_FILTER_ENABLED` is False; else calls `calculate_adx` on the M15
+  `source_df` (**fail-open** — any exception returns no-block, L476), applies the ADX gate
+  (`adx >= adx_max`, symmetric or `+DI/−DI` directional), the stateless ATR-spike guard (scans the last
+  `spike_window` bars, 1-bar `TR ≥ K1·priorATR` and 2-bar sum `≥ K2·priorATR`, optional direction from
+  the last candle body), and the optional RSI-slope check; emits `would_block_*` (measurement) and
+  `block_*` (= active **and** would-block) separately. Per-symbol overrides read once
+  (L600–604) with constant fallbacks. The MTF-RSI loop optionally captures an RSI slope for the phase-2
+  check (L750–755). `_compute_regime` is called just before `calculate_signal` and passed in
+  (L764–778). Shadow verdicts ride along in the `BUY_EXECUTED`/`SELL_EXECUTED` log detail
+  (L857–862 / L902–907); when actually blocking, a `REGIME_BLOCK_BUY`/`REGIME_BLOCK_SELL` event is
+  logged **throttled to once per M15 bar** (`_last_regime_log_bar`, L605 / L945–960).
+
+### Behaviour matrix
+| `REGIME_FILTER_ENABLED` | `REGIME_FILTER_SHADOW` | Effect |
+|---|---|---|
+| `False` (default) | — | **Byte-identical to v1.5.0.** Gate computes nothing; `strategy.py` gets `{}`. |
+| `True` | `True` (default when on) | Trades identically, but **logs** every fresh entry it *would* block. Measurement / A-B. |
+| `True` | `False` | **Actively blocks** hostile-regime fresh entries (symmetric unless `*_USE_DIR`). |
+
+### Verification
+- `python -m py_compile constants.py indicator.py strategy.py app.py` → OK.
+- `calculate_adx` unit-checked on synthetic calm→trend→spike data: ADX range 0–100, ~29 in range vs
+  ~99 in trend, `+DI≫−DI` on the uptrend, and an injected 1-bar candle trips `TR/priorATR = 5.0 ≥ K1`.
+- Entry-only guarantee: the regime dict is consulted **only** inside the `buy_count == 0 and
+  sell_count == 0` branch; no open-basket branch reads it.
+
+### Rollback
+- **Instant, no code change:** leave/confirm `REGIME_FILTER_ENABLED = False` in `constants.py` — the
+  filter is completely inert (this is the shipped default).
+- **De-risk while keeping it on:** set `REGIME_FILTER_SHADOW = True` (log-only, never blocks).
+- **Full removal:** revert the four files to `60540a3` (`git checkout 60540a3 -- constants.py
+  indicator.py strategy.py app.py`), or if committed as `<v1.6.0-sha>`: `git revert <v1.6.0-sha>`.
+  Removal is clean because every change is additive and OFF-gated — nothing in the v1.5.0 path was
+  modified.
+
+---
+
 ## [v1.5.0] — 2026-09-29 — MTF entry-filter thresholds 30/70 → 35/65 (match core RSI)
 
 **Baseline commit (state before this change):** `93ddd21` — *feat: core RSI thresholds 30/70 -> 35/65 (CHANGELOG v1.4.0)*.
