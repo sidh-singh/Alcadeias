@@ -165,7 +165,65 @@ class Indicator:
         # Where avg_loss is 0, RSI should be 100
         rsi = rsi.fillna(100.0)
         return rsi
-    
+
+    def calculate_adx(self, high, low, close, length=14):
+        """
+        Calculate ADX, +DI, -DI, ATR and True Range (Wilder / TradingView ta.adx).
+
+        Matches TradingView's ta.adx()/ta.dmi() when smoothed with RMA. ATR is an
+        intermediate value of the DI computation and is returned for free (reused
+        by the regime spike guard, so no separate ATR pass is needed). Pure /
+        vectorized; reuses the existing Wilder RMA in _ma().
+
+        Args:
+            high, low, close: pd.Series of prices (shared/aligned index)
+            length: ADX/ATR period (default 14)
+
+        Returns:
+            pd.DataFrame with columns: TR, ATR, plus_DI, minus_DI, ADX
+        """
+        high = high.astype(float)
+        low = low.astype(float)
+        close = close.astype(float)
+
+        prev_close = close.shift(1)
+        # True range = max(H-L, |H-Cprev|, |L-Cprev|); first bar falls back to H-L
+        tr = pd.concat([
+            (high - low),
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ], axis=1).max(axis=1)
+
+        # Directional movement
+        up_move = high.diff()          # high - prev_high
+        down_move = -low.diff()        # prev_low - low
+        plus_dm = pd.Series(
+            np.where((up_move > down_move) & (up_move > 0), up_move, 0.0),
+            index=high.index,
+        )
+        minus_dm = pd.Series(
+            np.where((down_move > up_move) & (down_move > 0), down_move, 0.0),
+            index=high.index,
+        )
+
+        # Wilder-smoothed (RMA) — same smoothing TradingView uses for ADX
+        atr = self._ma(tr, length, 'RMA')
+        safe_atr = atr.replace(0, np.nan)              # avoid divide-by-zero
+        plus_di = 100.0 * self._ma(plus_dm, length, 'RMA') / safe_atr
+        minus_di = 100.0 * self._ma(minus_dm, length, 'RMA') / safe_atr
+
+        di_sum = (plus_di + minus_di).replace(0, np.nan)
+        dx = 100.0 * (plus_di - minus_di).abs() / di_sum
+        adx = self._ma(dx, length, 'RMA')
+
+        return pd.DataFrame({
+            'TR': tr,
+            'ATR': atr,
+            'plus_DI': plus_di,
+            'minus_DI': minus_di,
+            'ADX': adx,
+        }, index=high.index)
+
     def _ma(self, series, length, ma_type='EMA', volume=None):
         """
         Calculate moving average
