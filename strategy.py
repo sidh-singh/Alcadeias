@@ -165,7 +165,7 @@ class Strategy:
     def calculate_signal(self, source_df, sha_df, sha_trend_df,
                          buy_positions, sell_positions, times,
                          close_threshold=2,
-                         rsi_value=None, rsi_mtf=None):
+                         rsi_value=None, rsi_mtf=None, regime=None):
         """
         Calculate entry/exit signals based on SHA power and crossover
         
@@ -181,6 +181,10 @@ class Strategy:
                    from the effective unit, so it always equals `times` (unit N → $N).
             rsi_value: Current RSI value (float 0-100) for DCA entry decisions
             rsi_mtf: Dict of {timeframe_name: rsi_value} for multi-timeframe entry filter
+            regime: Optional dict from app._compute_regime() carrying the fresh-entry
+                   regime verdict (block_buy / block_sell + raw metrics). Applied
+                   ONLY in the flat (no-position) branch; ignored once a basket is
+                   open, so the DCA ladder and exits are never affected.
 
         Returns:
             tuple: (buy_signal, sell_signal, analysis_data)
@@ -234,6 +238,7 @@ class Strategy:
                 'rsi_value': round(current_rsi, 2),
                 'rsi_mtf': rsi_mtf or {},
                 'rsi_mtf_blocked': False,
+                'regime': regime or {},
                 'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
             }
             return buy_status, sell_status, analysis_data
@@ -262,12 +267,22 @@ class Strategy:
         rsi_4h = rsi_mtf.get('TIMEFRAME_H4', 50.0) if rsi_mtf else 50.0
         rsi_6h = rsi_mtf.get(RSI_FINAL_CLOSE_TIMEFRAME, 50.0) if rsi_mtf else 50.0
         
-        # No positions open → look for entry (with MTF RSI filter)
+        # Regime entry filter (FRESH entries only). block_buy/block_sell are the
+        # resolved "act" decision from app._compute_regime (already False in shadow
+        # mode or when the filter is disabled), so these guards are no-ops unless the
+        # filter is armed. They only ever suppress a fresh entry — never an add/exit.
+        _regime = regime or {}
+        _block_buy = bool(_regime.get('block_buy', False))
+        _block_sell = bool(_regime.get('block_sell', False))
+        sha_wants_buy = (lt_sha_power_list[0] == 1 and lt_trend_power_list[0] == 1)
+        sha_wants_sell = (lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0)
+
+        # No positions open → look for entry (MTF RSI filter + regime gate)
         if buy_count == 0 and sell_count == 0:
             if not rsi_mtf_blocked:
-                if lt_sha_power_list[0] == 1 and lt_trend_power_list[0] == 1:
+                if sha_wants_buy and not _block_buy:
                     buy_status = Signal.BUY
-                elif lt_sha_power_list[0] == 0 and lt_trend_power_list[0] == 0:
+                elif sha_wants_sell and not _block_sell:
                     sell_status = Signal.SELL
         
         # Only BUY positions open → exit or DCA (max 6 total: 1 entry + 1m + 5m + 15m + 1h + 4h RSI DCA; final forced close via 6h RSI)
@@ -304,6 +319,20 @@ class Strategy:
             elif rsi_6h >= RSI_OVERBOUGHT and sell_count == 6:
                 sell_status = Signal.CLOSE_SELL
         
+        # ── Regime filter annotation (dashboard + shadow-mode logging) ──
+        _flat = (buy_count == 0 and sell_count == 0)
+        _would_fire_buy = _flat and (not rsi_mtf_blocked) and sha_wants_buy
+        _would_fire_sell = _flat and (not rsi_mtf_blocked) and sha_wants_sell
+        regime_out = dict(_regime)
+        regime_out['would_fire_buy'] = bool(_would_fire_buy)
+        regime_out['would_fire_sell'] = bool(_would_fire_sell)
+        # Actively blocked a valid signal (only true when the filter is armed):
+        regime_out['blocked_buy'] = bool(_would_fire_buy and _block_buy)
+        regime_out['blocked_sell'] = bool(_would_fire_sell and _block_sell)
+        # Would-have-blocked a valid signal (shadow measurement; ignores act state):
+        regime_out['shadow_would_block_buy'] = bool(_would_fire_buy and _regime.get('would_block_buy', False))
+        regime_out['shadow_would_block_sell'] = bool(_would_fire_sell and _regime.get('would_block_sell', False))
+
         analysis_data = {
             'sha_power_list': lt_sha_power_list,
             'price_power_list': ct_power_list,
@@ -318,6 +347,7 @@ class Strategy:
             'rsi_value': round(current_rsi, 2),
             'rsi_mtf': rsi_mtf or {},
             'rsi_mtf_blocked': rsi_mtf_blocked,
+            'regime': regime_out,
             'lookback_used': min(len(lt_sha_power_list), len(lt_trend_power_list)),
         }
 
