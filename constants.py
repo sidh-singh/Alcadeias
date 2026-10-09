@@ -55,49 +55,6 @@ RSI_DCA_LADDER_TIMEFRAMES = [
 # Previously the 1-hour (H1) RSI was used; now the 6-hour (H6) RSI.
 RSI_FINAL_CLOSE_TIMEFRAME = 'TIMEFRAME_H6'
 
-# ─── Regime Entry Filter (FRESH-ENTRY gate ONLY) ───
-# Studies the current price *regime* to decide whether a FRESH basket may open.
-# It can ONLY turn a fresh BUY/SELL into DO_NOTHING — it NEVER touches an open
-# basket: the DCA ladder, RSI adds, +$ profit close and H6 forced close all
-# behave exactly as before. Computed on the M15 `source_df` already fetched for
-# SHA (ATR is an intermediate value of ADX), so it adds NO new MT5 fetches, and
-# it is fully STATELESS (recomputed each loop — no latch to reset, unlike the
-# rolled-back v1.1.0 HTF protection).
-#
-# Behaviour matrix:
-#   REGIME_FILTER_ENABLED = False                         → byte-identical to before.
-#   REGIME_FILTER_ENABLED = True,  REGIME_FILTER_SHADOW = True  → trades identically
-#       to now, but LOGS every fresh entry it *would* have blocked (measurement).
-#   REGIME_FILTER_ENABLED = True,  REGIME_FILTER_SHADOW = False → actually blocks.
-REGIME_FILTER_ENABLED = False       # Master switch. False = pre-filter behaviour.
-REGIME_FILTER_SHADOW = True         # True = compute + log only, do NOT block trades.
-
-# ADX trend-strength gate — mean-reversion works in ranges and dies in trends, so
-# block FRESH entries when ADX says a strong trend is running (inverted ADX use).
-REGIME_ADX_ENABLED = True
-REGIME_ADX_PERIOD = 14              # ADX/ATR period on M15 (Wilder / TradingView ta.adx)
-REGIME_ADX_MAX = 25.0              # Block fresh entry when ADX >= this
-REGIME_ADX_USE_DI = False          # True = block only the counter-trend side via +DI/-DI
-
-# ATR spike guard — catches the fast 1-2 candle move ADX is too slow to see. A
-# spike anywhere in the last REGIME_SPIKE_WINDOW M15 bars blocks fresh entries
-# (self-clearing: recomputed from data each loop, so no cooldown state is stored).
-REGIME_ATR_ENABLED = True
-REGIME_SPIKE_K1 = 2.2             # 1-bar true range     >= K1 * prior ATR → spike
-REGIME_SPIKE_K2 = 3.2             # 2-bar true range sum >= K2 * prior ATR → spike
-REGIME_SPIKE_WINDOW = 2           # Block if a spike occurred in the last N M15 bars
-REGIME_SPIKE_USE_DIR = False       # True = block only the wrong (against-spike) side
-
-# RSI-slope confirm (PHASE 2 — off by default). Block a fresh entry taken against
-# a fast-moving RSI even before it reaches the static 35/65 band.
-REGIME_RSI_SLOPE_ENABLED = False
-REGIME_RSI_SLOPE_TIMEFRAMES = ['TIMEFRAME_M1', 'TIMEFRAME_M5']
-REGIME_RSI_SLOPE_BARS = 3          # Lookback bars for the RSI slope
-REGIME_RSI_SLOPE_MIN = 8.0        # Block entry against an RSI move >= this over BARS
-
-# Optional per-symbol overrides may be placed in symbols.json under a "regime"
-# key on the symbol entry, e.g.:  "regime": {"adx_max": 28, "spike_k1": 2.2,
-# "spike_k2": 3.2, "spike_window": 2}. Missing keys fall back to the values above.
 
 # ─── Risk Management ───
 RISK_REWARD_RATIO = [1, 1]          # [risk, reward] multiplier for auto SL/TP calculation

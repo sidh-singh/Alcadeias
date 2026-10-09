@@ -73,7 +73,7 @@ class Strategy:
     def calculate_signal(self, source_df,
                          buy_positions, sell_positions, times,
                          close_threshold=2,
-                         rsi_value=None, rsi_mtf=None, regime=None):
+                         rsi_value=None, rsi_mtf=None):
         """
         Calculate entry/exit signals.
 
@@ -93,8 +93,6 @@ class Strategy:
                    from the effective unit, so it always equals `times` (unit N -> $N).
             rsi_value: Current RSI value (float 0-100) for DCA entry decisions
             rsi_mtf: Dict of {timeframe_name: rsi_value} for the MTF filter / DCA ladder
-            regime: Optional dict from app._compute_regime() (kept inert here; removed
-                   in a later step).
 
         Returns:
             tuple: (buy_signal, sell_signal, analysis_data)
@@ -140,11 +138,6 @@ class Strategy:
         rsi_4h = rsi_mtf.get('TIMEFRAME_H4', 50.0) if rsi_mtf else 50.0
         rsi_6h = rsi_mtf.get(RSI_FINAL_CLOSE_TIMEFRAME, 50.0) if rsi_mtf else 50.0
 
-        # Regime entry-filter bookkeeping (kept inert here; removed in a later step).
-        _regime = regime or {}
-        _block_buy = bool(_regime.get('block_buy', False))
-        _block_sell = bool(_regime.get('block_sell', False))
-
         # No positions open -> look for entry.
         # SHA direction logic REMOVED (Step 2). The RSI+MACD slope entry engine is
         # added in a later step; until then no fresh entry is taken.
@@ -185,23 +178,10 @@ class Strategy:
             elif rsi_6h >= RSI_OVERBOUGHT and sell_count == 6:
                 sell_status = Signal.CLOSE_SELL
 
-        # ── Regime filter annotation (kept inert here; removed in a later step) ──
-        _flat = (buy_count == 0 and sell_count == 0)
-        _would_fire_buy = False   # entry logic removed with SHA (Step 2)
-        _would_fire_sell = False
-        regime_out = dict(_regime)
-        regime_out['would_fire_buy'] = bool(_would_fire_buy)
-        regime_out['would_fire_sell'] = bool(_would_fire_sell)
-        regime_out['blocked_buy'] = bool(_would_fire_buy and _block_buy)
-        regime_out['blocked_sell'] = bool(_would_fire_sell and _block_sell)
-        regime_out['shadow_would_block_buy'] = bool(_would_fire_buy and _regime.get('would_block_buy', False))
-        regime_out['shadow_would_block_sell'] = bool(_would_fire_sell and _regime.get('would_block_sell', False))
-
         analysis_data = {
             'rsi_value': round(current_rsi, 2),
             'rsi_mtf': rsi_mtf or {},
             'rsi_mtf_blocked': rsi_mtf_blocked,
-            'regime': regime_out,
         }
 
         return buy_status, sell_status, analysis_data
