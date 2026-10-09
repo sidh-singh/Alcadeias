@@ -17,6 +17,74 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v2.0.0] — 2026-10-10 — RSI+MACD Slope Strategy (full rewrite of direction + management)
+
+**Baseline:** the live v1.6.0 fleet HEAD per branch (`adcb1cb` btcusd1 / `dca6788` xauusd1).
+**Branches:** `rsimacd_dev_btcusd1_v2` (off `dev_btcusd1_v2`) and `rsimacd_dev_xauusd1_v2`
+(off `dev_xauusd1_v2`). **EXPERIMENT — NOT propagated to the 20 live fleet branches.**
+Must pass the offline backtest before any live money.
+**Files touched:** `constants.py`, `indicator.py`, `strategy.py`, `app.py`, `dashboard.py` (+ this `CHANGELOG.md`).
+
+**Why.** The bot kept taking large losses on spikes/slippage even after the v1.6.0 ADX
+regime filter. The owner decided to replace the entire trade-direction + basket-management
+logic: remove everything that previously chose direction or averaged down, and rebuild entry
+and exit on RSI + MACD **slope** reversals (idea inspired by mean-reversion). The martingale is
+removed — one position per signal with real stops — which is what eliminates the deep spike
+drawdowns (previously depth-6 H6 capitulations on an averaged-down basket).
+
+### Behaviour — the new strategy
+- **Indicators (H1 & H4):** RSI(14) and MACD(12/26/9) histogram. For each, the *latest pivot*
+  (local turning point, width `k=2`) within the last `N=20` bars is found — the most recent one
+  wins even if smaller than earlier pivots — and a per-bar **slope sign** (pivot → current) is
+  taken. 4 slopes total. No OB/OS thresholds anymore (sign only).
+- **Entry (flat only):** H4-primary / H1-confirm. H4 both +ve & ≥1 H1 +ve → BUY; H4 both −ve &
+  ≥1 H1 −ve → SELL; H4 split → H1-both-aligned decides; any zero/undefined slope → WAIT. Opens a
+  **single** position; a 300 s post-close cooldown blocks instant re-entry.
+- **Exit (open basket):** (1) profit-protect — profit > `PROFIT_PROTECT_MIN_USD` AND **both** H1
+  slopes flipped against → CLOSE; (2) hard stop — H4 both flipped against AND (either H1 against)
+  → CLOSE (accept loss); else HOLD. No DCA adds, no H6.
+
+### Change detail per file
+- **`constants.py`** — REMOVED the SHA block (`SHA_LENGTH`/`SHA_MA_TYPE`/`SHA_TREND_*`),
+  `STRATEGY_LOOKBACK`, `STRATEGY_SHA_THRESHOLD`, the whole Regime Entry Filter block (all
+  `REGIME_*`), `RSI_OVERSOLD`/`RSI_OVERBOUGHT`/`RSI_DCA_MAX_POSITIONS`,
+  `RSI_MTF_OVERSOLD`/`RSI_MTF_OVERBOUGHT`. ADDED `MACD_FAST`/`SLOW`/`SIGNAL` (12/26/9),
+  `SLOPE_TIMEFRAMES` (H1,H4), `PEAK_LOOKBACK` (20), `PIVOT_WIDTH` (2),
+  `REENTRY_COOLDOWN_SECONDS` (300), `PROFIT_PROTECT_MIN_USD` (0.0 — tune to costs). KEPT
+  `CANDLE_TIMEFRAME`/`CANDLE_COUNT` (price feed), `RSI_LENGTH`/`RSI_MA_TYPE`/`RSI_CANDLE_COUNT`,
+  and the RSI timeframe lists (app fetch / dashboard RSI display).
+- **`indicator.py`** — REMOVED `calculate_sha_v3`, `calculate_adx`. ADDED `calculate_macd`
+  (ta.macd-compatible) and `latest_pivot_slope` (latest-pivot + per-bar slope sign). KEPT
+  `calculate_rsi`, `_ma`, `_tv_exp_ma*`.
+- **`strategy.py`** — `calculate_signal` fully rewritten. Removed `_analyze`/`_analyze_trend`,
+  the SHA entry, the regime param/annotation, the MTF-RSI entry filter, the DCA ladder, the H6
+  close, the fixed +$unit target and the Fibo helpers. Added `_slope_sign`, `_slope_direction`
+  and the slope entry + exit. New `slopes` / `entry_allowed` params; `analysis_data` now carries
+  `slopes` / `slope_direction` / `entry_allowed` / `exit_reason`.
+- **`app.py`** — removed SHA fetch/calc, `_compute_regime` + all regime wiring/logging, and the
+  `BUY_MORE`/`SELL_MORE` execution handlers. Added H1/H4 MACD + slope computation inside the
+  existing RSI fetch loop (no new MT5 call), the re-entry cooldown (`_last_close_time`,
+  `entry_allowed`), and `exit_reason` in the close logs.
+- **`dashboard.py`** — added `build_slope_panel` (the 4 slopes + decision / cooldown / exit
+  reason) and switched the analysis panel from `build_sha_analysis_panel` (now dead) to it.
+
+### Verification
+- `python -m py_compile` on all files — OK.
+- Unit tests (offline): MACD identity (hist = macd − signal, macd = EMA12 − EMA26); 6 pivot cases
+  incl. latest-smaller-wins and monotonic → none; all 25 Step-6 entry cases incl. zeros; full
+  exit matrix (profit-protect / hard stop / give-room HOLD / priority / mirror); the cooldown gate
+  and the open-position guard.
+- **STILL REQUIRED before live:** the ~3-month offline backtest — quantifies `PROFIT_PROTECT_MIN_USD`
+  and the strategy's expectancy / drawdown under real spread + commission.
+
+### Rollback
+Isolated feature branches off the live v1.6.0 HEADs. To abandon: delete the `rsimacd_dev_*`
+branches (the live `dev_*` branches are untouched). To revert a single phase: `git revert <sha>`
+— teardown `5a122d1`/`46a817e`/`73bbf63`, rebuild `abca018`/`e715f01`/`67cc93b` (btcusd; mirror
+SHAs on xauusd).
+
+---
+
 ## [v1.6.0] — 2026-10-01 — Regime Entry Filter (ADX + ATR-spike fresh-entry gate; OFF + shadow by default)
 
 **Baseline commit (state before this change):** `60540a3` — *feat: MTF entry-filter thresholds 30/70 -> 35/65 (CHANGELOG v1.5.0)*.

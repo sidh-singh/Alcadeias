@@ -739,6 +739,122 @@ def _build_rsi_row(rsi_value, rsi_mtf=None, rsi_mtf_blocked=False):
     )
 
 
+def _slope_cell(sl):
+    """One slope cell: direction arrow + per-bar slope + latest-pivot side/age."""
+    sl = sl or {}
+    sign = sl.get('sign', 0) or 0
+    if sign > 0:
+        arrow, color = '▲', COLORS['buy']
+    elif sign < 0:
+        arrow, color = '▼', COLORS['sell']
+    else:
+        arrow, color = '—', COLORS['text_dim']
+    slope = sl.get('slope')
+    val = f'{slope:+.3f}' if isinstance(slope, (int, float)) else '—'
+    side = sl.get('side')
+    bars = sl.get('bars_ago')
+    sub = f'{side} · {bars}b ago' if side else 'no pivot'
+    return html.Div(
+        style={
+            'display': 'flex', 'flexDirection': 'column', 'gap': '2px',
+            'padding': '6px 10px', 'background': COLORS['bg'],
+            'borderRadius': '8px', 'border': f'1px solid {COLORS["card_border"]}',
+        },
+        children=[
+            html.Span(f'{arrow} {val}', style={
+                'color': color, 'fontWeight': '700', 'fontSize': '0.9rem'}),
+            html.Span(sub, style={'fontSize': '0.6rem', 'color': COLORS['text_muted']}),
+        ],
+    )
+
+
+def build_slope_panel(symbol, analysis, last_updated=''):
+    """RSI+MACD slope direction panel — H1/H4 pivot slopes + the current decision."""
+    slopes = analysis.get('slopes', {}) or {}
+    decision = analysis.get('slope_direction', 'WAIT') or 'WAIT'
+    entry_allowed = analysis.get('entry_allowed', True)
+    exit_reason = analysis.get('exit_reason')
+    rsi_value = analysis.get('rsi_value', 50.0)
+    rsi_mtf = analysis.get('rsi_mtf', {})
+    iteration_ms = analysis.get('iteration_ms')
+    src_count = analysis.get('source_candle_count', 0)
+    src_last_time = analysis.get('last_source_candle_time', '-')
+
+    h1 = slopes.get('H1', {}) or {}
+    h4 = slopes.get('H4', {}) or {}
+
+    dec_color = {'BUY': COLORS['buy'], 'SELL': COLORS['sell']}.get(decision, COLORS['text_dim'])
+    dec_icon = {'BUY': '🟢', 'SELL': '🔴'}.get(decision, '⚪')
+
+    status_bits = []
+    if not entry_allowed:
+        status_bits.append('⏳ entry cooldown')
+    if exit_reason:
+        status_bits.append(f'exit: {exit_reason}')
+    status_text = '   ·   '.join(status_bits) if status_bits else 'idle'
+
+    col_hdr = {'fontSize': '0.62rem', 'color': COLORS['text_dim'], 'fontWeight': '600'}
+    row_lbl = {'fontWeight': '700', 'color': COLORS['text'], 'fontSize': '0.8rem'}
+    grid_style = {
+        'display': 'grid', 'gridTemplateColumns': '34px 1fr 1fr',
+        'gap': '8px', 'alignItems': 'center', 'padding': '10px 16px',
+    }
+
+    return html.Div(
+        style={
+            'background': COLORS['card_solid'], 'borderRadius': '12px',
+            'overflow': 'hidden', 'border': f'1px solid {COLORS["card_border"]}',
+        },
+        children=[
+            # Header: symbol + decision
+            html.Div(
+                style={
+                    'display': 'flex', 'justifyContent': 'space-between',
+                    'alignItems': 'center', 'padding': '10px 16px',
+                    'borderBottom': f'2px solid {dec_color}',
+                },
+                children=[
+                    html.Span(symbol, style={
+                        'fontWeight': '700', 'fontSize': '0.95rem',
+                        'color': COLORS['text'], 'letterSpacing': '1px'}),
+                    html.Span(f'{dec_icon} {decision}', style={
+                        'color': dec_color, 'fontWeight': '700', 'fontSize': '0.8rem',
+                        'background': COLORS['bg'], 'padding': '2px 10px',
+                        'borderRadius': '10px'}),
+                ],
+            ),
+            # 2x2 slope grid (rows H4 / H1, cols RSI / MACD-hist)
+            html.Div(style=grid_style, children=[
+                html.Span(''),
+                html.Span('RSI slope', style=col_hdr),
+                html.Span('MACD-hist slope', style=col_hdr),
+                html.Span('H4', style=row_lbl),
+                _slope_cell(h4.get('rsi')), _slope_cell(h4.get('macd')),
+                html.Span('H1', style=row_lbl),
+                _slope_cell(h1.get('rsi')), _slope_cell(h1.get('macd')),
+            ]),
+            # Status (cooldown / exit reason)
+            html.Div(status_text, style={
+                'padding': '6px 16px', 'fontSize': '0.68rem',
+                'color': COLORS['warning'] if (not entry_allowed or exit_reason) else COLORS['text_dim'],
+                'borderTop': f'1px solid {COLORS["divider"]}'}),
+            # Multi-timeframe RSI (reused helper)
+            html.Div(style={'padding': '0 16px 8px'}, children=[
+                _build_rsi_row(rsi_value, rsi_mtf=rsi_mtf, rsi_mtf_blocked=False),
+            ]),
+            # Footer
+            html.Div(
+                f'{last_updated}  |  ITER:{(str(iteration_ms) + "ms") if iteration_ms is not None else "-"}  |  '
+                f'SRC:{src_count}  LAST:{src_last_time}',
+                style={
+                    'padding': '8px 16px', 'fontSize': '0.6rem',
+                    'color': COLORS['text_muted'],
+                    'borderTop': f'1px solid {COLORS["divider"]}'},
+            ),
+        ],
+    )
+
+
 def build_sha_analysis_panel(symbol, analysis, last_updated=''):
     """Build clean SHA analysis card — Ballom-inspired grid layout."""
     sha_list = analysis.get('sha_power_list', [])
@@ -1767,13 +1883,13 @@ def build_symbol_tab_content(symbol, selected_date=None):
 
         html.Div(style={'height': '16px'}),
 
-        # ── SHA Signal Analysis (compact table panel) ──
+        # ── RSI+MACD Slope Analysis (H1/H4 direction) ──
         html.Div([
             html.Div([
                 html.Span('🎯', style={'fontSize': '14px'}),
-                html.Span('SHA Signal Analysis', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
+                html.Span('RSI+MACD Slope Analysis', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
             ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
-            build_sha_analysis_panel(symbol, analysis, last_updated),
+            build_slope_panel(symbol, analysis, last_updated),
         ]),
 
         html.Div(style={'height': '16px'}),
