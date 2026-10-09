@@ -13,6 +13,8 @@ from datetime import timezone
 from constants import (
     RSI_LENGTH, RSI_MA_TYPE, RSI_CANDLE_COUNT, RSI_MTF_TIMEFRAMES,
     RSI_DCA_LADDER_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
+    MACD_FAST, MACD_SLOW, MACD_SIGNAL,
+    SLOPE_TIMEFRAMES, PEAK_LOOKBACK, PIVOT_WIDTH,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
@@ -562,9 +564,11 @@ class MT5TradingBot:
                     # by the SHA timeframe/candle-count. Union of all needed timeframes,
                     # de-duplicated while preserving order.
                     rsi_mtf = {}
+                    slopes = {}   # H1/H4 RSI + MACD-histogram pivot slopes (direction engine)
                     rsi_tf_list = []
                     for tf_name in (list(RSI_MTF_TIMEFRAMES)
                                     + list(RSI_DCA_LADDER_TIMEFRAMES)
+                                    + list(SLOPE_TIMEFRAMES)
                                     + [RSI_FINAL_CLOSE_TIMEFRAME]):
                         if tf_name not in rsi_tf_list:
                             rsi_tf_list.append(tf_name)
@@ -578,6 +582,21 @@ class MT5TradingBot:
                                 tf_df['close'], length=RSI_LENGTH, ma_type=RSI_MA_TYPE
                             )
                             rsi_mtf[tf_name] = float(rsi_s.iloc[-1]) if len(rsi_s) > 0 else 50.0
+                            # RSI + MACD-histogram slopes on the H1/H4 direction
+                            # timeframes (reuses this fetch - no extra MT5 call).
+                            if tf_name in SLOPE_TIMEFRAMES:
+                                macd_df = self.indicator.calculate_macd(
+                                    tf_df['close'], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL
+                                )
+                                rsi_slope = self.indicator.latest_pivot_slope(
+                                    rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH
+                                )
+                                macd_slope = self.indicator.latest_pivot_slope(
+                                    macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH
+                                )
+                                slopes[tf_name.replace('TIMEFRAME_', '')] = {
+                                    'rsi': rsi_slope, 'macd': macd_slope,
+                                }
                         else:
                             rsi_mtf[tf_name] = 50.0
                     current_rsi = rsi_mtf.get('TIMEFRAME_M1', 50.0)
@@ -591,6 +610,7 @@ class MT5TradingBot:
                         close_threshold=units,
                         rsi_value=current_rsi,
                         rsi_mtf=rsi_mtf,
+                        slopes=slopes,
                     )
                     analysis_data['candle_fresh'] = True
                 else:
