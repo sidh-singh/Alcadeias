@@ -83,62 +83,6 @@ class Indicator:
 
         return pd.Series(result, index=series.index)
 
-    def calculate_sha_v3(self, df, length=10, ma_type='EMA'):
-        """
-        Calculate Smoothed Heiken Ashi v3
-        
-        Args:
-            df: DataFrame with OHLCV data
-            length: Smoothing length (used for both pre and post HA smoothing)
-            ma_type: MA type (used for both pre and post HA smoothing)
-        
-        Returns:
-            DataFrame with SHA OHLC columns
-        """
-        df = df.copy()
-
-        # Step 1: Pre-smooth the OHLC
-        o = self._ma(df['Open'], length, ma_type, df.get('Volume'))
-        h = self._ma(df['High'], length, ma_type, df.get('Volume'))
-        l = self._ma(df['Low'], length, ma_type, df.get('Volume'))
-        c = self._ma(df['Close'], length, ma_type, df.get('Volume'))
-
-        # Step 2: Heiken Ashi Calculation
-        ha_close = (o + h + l + c) / 4
-
-        # Find first bar where ALL pre-smoothed values are valid.
-        # With TV-compatible MAs the first (length-1) bars are NaN.
-        valid_mask = o.notna() & h.notna() & l.notna() & c.notna()
-        ha_open = pd.Series(np.nan, index=df.index, dtype=float)
-
-        if valid_mask.any():
-            first_valid_pos = int(valid_mask.values.argmax())  # first True
-            ha_open.iloc[first_valid_pos] = (
-                o.iloc[first_valid_pos] + c.iloc[first_valid_pos]
-            ) / 2
-
-            # Recursive calculation from first valid bar onward
-            for i in range(first_valid_pos + 1, len(df)):
-                ha_open.iloc[i] = (ha_open.iloc[i - 1] + ha_close.iloc[i - 1]) / 2
-
-        ha_high = pd.concat([h, ha_open, ha_close], axis=1).max(axis=1)
-        ha_low = pd.concat([l, ha_open, ha_close], axis=1).min(axis=1)
-
-        # Step 3: Smooth again after HA (same length & MA type)
-        sha_open = self._ma(ha_open, length, ma_type, df.get('Volume'))
-        sha_high = self._ma(ha_high, length, ma_type, df.get('Volume'))
-        sha_low = self._ma(ha_low, length, ma_type, df.get('Volume'))
-        sha_close = self._ma(ha_close, length, ma_type, df.get('Volume'))
-
-        sha = pd.DataFrame({
-            'Open': sha_open,
-            'High': sha_high,
-            'Low': sha_low,
-            'Close': sha_close
-        }, index=df.index)
-
-        return sha
-    
     def calculate_rsi(self, series, length=14, ma_type='RMA'):
         """
         Calculate RSI (Relative Strength Index).

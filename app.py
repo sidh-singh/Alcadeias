@@ -11,8 +11,6 @@ from indicator import Indicator
 from strategy import Strategy, Signal
 from datetime import timezone
 from constants import (
-    SHA_LENGTH, SHA_MA_TYPE,
-    SHA_TREND_LENGTH, SHA_TREND_MA_TYPE,
     RSI_LENGTH, RSI_MA_TYPE, RSI_CANDLE_COUNT, RSI_MTF_TIMEFRAMES,
     RSI_DCA_LADDER_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
@@ -695,35 +693,6 @@ class MT5TradingBot:
                         'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'
                     }, inplace=True)
                     
-                    # Calculate SHA signal indicator
-                    sha_df = self.indicator.calculate_sha_v3(
-                        source_df, 
-                        length=SHA_LENGTH, 
-                        ma_type=SHA_MA_TYPE,
-                    )
-                    
-                    # Calculate SHA trend indicator
-                    sha_trend_df = self.indicator.calculate_sha_v3(
-                        source_df,
-                        length=SHA_TREND_LENGTH,
-                        ma_type=SHA_TREND_MA_TYPE,
-                    )
-
-                    # Warn if the latest SHA is still NaN — the data window is too
-                    # short for the configured lengths/MA types to warm up. The
-                    # strategy handles NaN safely (no false entries), but this makes
-                    # an under-sized CANDLE_COUNT visible instead of silent.
-                    try:
-                        if not (bool(sha_df['Close'].notna().iloc[-1])
-                                and bool(sha_trend_df['Close'].notna().iloc[-1])):
-                            print(
-                                f"[{symbol}] WARNING: SHA not converged — latest value is NaN "
-                                f"(got {len(source_df)} candles; increase CANDLE_COUNT for "
-                                f"{SHA_MA_TYPE}({SHA_LENGTH})/{SHA_TREND_MA_TYPE}({SHA_TREND_LENGTH}))"
-                            )
-                    except (IndexError, KeyError):
-                        pass
-
                     # Calculate RSI for multiple timeframes (entry filter + DCA ladder + final close).
                     # Fetched INDEPENDENTLY of the SHA source (its own small count via a
                     # lightweight fetch), so the mean-reversion ladder is never impacted
@@ -770,7 +739,7 @@ class MT5TradingBot:
                     # drives both the Fibo lot ladder and the USD close target,
                     # so the profit target always equals the running unit.
                     buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
-                        source_df, sha_df, sha_trend_df,
+                        source_df,
                         buy_positions, sell_positions, units,
                         close_threshold=units,
                         rsi_value=current_rsi,
@@ -804,12 +773,6 @@ class MT5TradingBot:
                 analysis_data['unit_times'] = units
                 analysis_data['step_up_balance'] = step_up_balance
                 analysis_data['unit_max_limit'] = max_limit
-
-                # SHA source config (so the dashboard reflects the running setup)
-                analysis_data['sha_timeframe'] = CANDLE_TIMEFRAME.replace('TIMEFRAME_', '')
-                analysis_data['sha_config'] = (
-                    f"{SHA_MA_TYPE}({SHA_LENGTH})/{SHA_TREND_MA_TYPE}({SHA_TREND_LENGTH})"
-                )
 
                 # ── Build JSON data (always saved so dashboard stays current) ──
                 symbol_data = {

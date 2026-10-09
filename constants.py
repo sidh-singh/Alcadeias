@@ -5,28 +5,12 @@ All tuneable parameters in one place.
 Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
-# ─── SHA Signal Indicator ───
-# Computed directly on 15-minute candles (see CANDLE_TIMEFRAME). Length 10 TEMA on
-# M15 is the target signal; previously this was emulated on M1 with length 600
-# (10×60) for H1; switching to M15 reduces historical download size while keeping
-# smoothing lengths unchanged.
-SHA_LENGTH = 10                     # Smoothing length for signal SHA (pre & post)
-SHA_MA_TYPE = 'TEMA'                # MA type for signal SHA (SMA, EMA, RMA, WMA, HMA …)
-
-# ─── SHA Trend Indicator ───
-# Length 20 DEMA on M15 (previously emulated on M1 as length 1200 = 20×60 for H1).
-SHA_TREND_LENGTH = 20               # Smoothing length for trend SHA (pre & post)
-SHA_TREND_MA_TYPE = 'DEMA'          # MA type for trend SHA
-
-# ─── Data Fetching ───
-# SHA is now computed on H1 candles directly, so only a few hundred bars are
-# needed (vs thousands of M1 bars before). The SHA smooths OHLC twice and
-# TEMA/DEMA chain 2-3 passes, so with length 10/20 the NaN warmup is:
-#   signal SHA TEMA(10): first valid ≈ bar 54
-#   trend  SHA DEMA(20): first valid ≈ bar 76
-# Both converge to <0.001% error by ~150 bars. 300 gives a wide safety margin
-# (~12 days of H1) while keeping each iteration light.
-CANDLE_TIMEFRAME = 'TIMEFRAME_M15'   # Timeframe for SHA price data (resolved via mt5 at runtime)
+# ─── Price Data Feed ───
+# Main OHLC candle feed pulled each loop. This previously fed the SHA entry
+# indicator (removed in the RSI+MACD rebuild); it is retained for market-liveness
+# / metadata and as a price source. The RSI+MACD slope entry runs on its own
+# H1/H4 fetches (added in a later step), independent of this feed.
+CANDLE_TIMEFRAME = 'TIMEFRAME_M15'   # Timeframe for the main price feed (resolved via mt5 at runtime)
 CANDLE_COUNT = 300
 ALLOW_SYNTHETIC_TICK_BAR = True     # Append provisional bar from tick when MT5 bar feed lags (M1 only)
 
@@ -36,8 +20,6 @@ MARKET_LOOKBACK_MINUTES = 3                # Max minutes since last candle → s
 
 # ─── Strategy Parameters ───
 STRATEGY_HEDGE = 1                  # Hedge / profit target multiplier
-STRATEGY_LOOKBACK = 7               # Number of candles to analyse for signal
-STRATEGY_SHA_THRESHOLD = 0          # Min SHA ratio to classify candle as bullish
 FIBO_SEQUENCE_LENGTH = 25           # Fibonacci sequence length (first 2 dropped)
 
 # ─── RSI Indicator ───
