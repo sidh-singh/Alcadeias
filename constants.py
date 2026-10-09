@@ -26,7 +26,7 @@ SHA_TREND_MA_TYPE = 'DEMA'          # MA type for trend SHA
 #   trend  SHA DEMA(20): first valid ≈ bar 76
 # Both converge to <0.001% error by ~150 bars. 300 gives a wide safety margin
 # (~12 days of H1) while keeping each iteration light.
-CANDLE_TIMEFRAME = 'TIMEFRAME_M15'   # Timeframe for SHA price data (resolved via mt5 at runtime)
+CANDLE_TIMEFRAME = 'TIMEFRAME_M1'    # Timeframe for SHA price data (resolved via mt5 at runtime)
 CANDLE_COUNT = 300
 ALLOW_SYNTHETIC_TICK_BAR = True     # Append provisional bar from tick when MT5 bar feed lags (M1 only)
 
