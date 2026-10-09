@@ -14,7 +14,7 @@ from constants import (
     RSI_LENGTH, RSI_MA_TYPE, RSI_CANDLE_COUNT, RSI_MTF_TIMEFRAMES,
     RSI_DCA_LADDER_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
     MACD_FAST, MACD_SLOW, MACD_SIGNAL,
-    SLOPE_TIMEFRAMES, PEAK_LOOKBACK, PIVOT_WIDTH,
+    SLOPE_TIMEFRAMES, PEAK_LOOKBACK, PIVOT_WIDTH, REENTRY_COOLDOWN_SECONDS,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
@@ -472,6 +472,7 @@ class MT5TradingBot:
         _last_hist_save = 0.0
         _DAILY_SAVE_INTERVAL = 60       # seconds between daily-trade saves
         _HIST_SAVE_INTERVAL = 300       # seconds between historical-summary saves
+        _last_close_time = 0.0          # for the post-close re-entry cooldown
 
         while True:
             try:
@@ -601,9 +602,10 @@ class MT5TradingBot:
                             rsi_mtf[tf_name] = 50.0
                     current_rsi = rsi_mtf.get('TIMEFRAME_M1', 50.0)
                     
-                    # Calculate signal. `units` (effective, capped by max_limit)
-                    # drives both the Fibo lot ladder and the USD close target,
-                    # so the profit target always equals the running unit.
+                    # Calculate signal. `units` (effective, capped by max_limit) drives
+                    # the lot size and the USD close target. `entry_allowed` is False
+                    # while the post-close re-entry cooldown is still active.
+                    entry_allowed = (time.time() - _last_close_time) >= REENTRY_COOLDOWN_SECONDS
                     buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
                         source_df,
                         buy_positions, sell_positions, units,
@@ -611,6 +613,7 @@ class MT5TradingBot:
                         rsi_value=current_rsi,
                         rsi_mtf=rsi_mtf,
                         slopes=slopes,
+                        entry_allowed=entry_allowed,
                     )
                     analysis_data['candle_fresh'] = True
                 else:
@@ -695,6 +698,7 @@ class MT5TradingBot:
                 elif buy_signal == Signal.CLOSE_BUY:
                     with self.mt5_lock:
                         close_response = self.position_helper.close_by_type(trade_symbol, 0)
+                    _last_close_time = time.time()   # start the re-entry cooldown
                     self._log_event(symbol, 'CLOSE_BUY', 'EXIT', {
                         'mt5_symbol': trade_symbol,
                         'positions_closed': close_response.get('closed_count', 0),
@@ -719,6 +723,7 @@ class MT5TradingBot:
                 elif sell_signal == Signal.CLOSE_SELL:
                     with self.mt5_lock:
                         close_response = self.position_helper.close_by_type(trade_symbol, 1)
+                    _last_close_time = time.time()   # start the re-entry cooldown
                     self._log_event(symbol, 'CLOSE_SELL', 'EXIT', {
                         'mt5_symbol': trade_symbol,
                         'positions_closed': close_response.get('closed_count', 0),

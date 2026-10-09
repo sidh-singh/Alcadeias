@@ -59,6 +59,7 @@ MACD_SIGNAL = 9                     # signal EMA length
 SLOPE_TIMEFRAMES = ['TIMEFRAME_H1', 'TIMEFRAME_H4']   # direction decided on H1 and H4
 PEAK_LOOKBACK = 20                  # candles scanned for the latest pivot (configurable)
 PIVOT_WIDTH = 2                     # bars required on each side to confirm a pivot (k)
+REENTRY_COOLDOWN_SECONDS = 300      # block a fresh entry for this long after any close
 
 
 # ─── Risk Management ───
