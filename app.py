@@ -20,12 +20,6 @@ from constants import (
     STRATEGY_LOG_FILENAME, STRATEGY_LOG_MAX_ENTRIES,
     ORDER_COOLDOWN_SECONDS,
     ACTIVE_CONFIG_FILENAME,
-    REGIME_FILTER_ENABLED, REGIME_FILTER_SHADOW,
-    REGIME_ADX_ENABLED, REGIME_ADX_PERIOD, REGIME_ADX_MAX, REGIME_ADX_USE_DI,
-    REGIME_ATR_ENABLED, REGIME_SPIKE_K1, REGIME_SPIKE_K2, REGIME_SPIKE_WINDOW,
-    REGIME_SPIKE_USE_DIR,
-    REGIME_RSI_SLOPE_ENABLED, REGIME_RSI_SLOPE_TIMEFRAMES,
-    REGIME_RSI_SLOPE_BARS, REGIME_RSI_SLOPE_MIN,
 )
 
 
@@ -439,129 +433,6 @@ class MT5TradingBot:
             with open(log_path, 'w') as f:
                 json.dump(log_data, f, indent=2, default=str)
     
-    def _compute_regime(self, source_df, rsi_slope_map,
-                        adx_max, spike_k1, spike_k2, spike_window):
-        """
-        Compute the FRESH-ENTRY regime verdict from the M15 `source_df` already in
-        hand (no new MT5 fetch; ATR is derived inside ADX). Fully stateless — every
-        value is recomputed each loop, so there is no cooldown latch to reset.
-
-        Returns a dict consumed by strategy.calculate_signal (block_buy/block_sell)
-        and by the shadow-mode logger. When REGIME_FILTER_ENABLED is False it returns
-        an all-inert dict, so calculate_signal behaves exactly as before.
-        """
-        regime = {
-            'enabled': bool(REGIME_FILTER_ENABLED),
-            'shadow': bool(REGIME_FILTER_SHADOW),
-            'active': bool(REGIME_FILTER_ENABLED and not REGIME_FILTER_SHADOW),
-            'adx': None, 'plus_di': None, 'minus_di': None,
-            'atr': None, 'tr': None,
-            'spike': False, 'spike_dir': 0,
-            'would_block_buy': False, 'would_block_sell': False,
-            'block_buy': False, 'block_sell': False,
-            'reasons_buy': [], 'reasons_sell': [],
-        }
-
-        if not REGIME_FILTER_ENABLED:
-            return regime
-
-        try:
-            adx_df = self.indicator.calculate_adx(
-                source_df['High'], source_df['Low'], source_df['Close'],
-                length=REGIME_ADX_PERIOD,
-            )
-        except Exception:
-            return regime  # fail-open: never block a trade on a compute error
-
-        if adx_df is None or len(adx_df) == 0:
-            return regime
-
-        def _ok(v):
-            return v is not None and v == v  # not None and not NaN
-
-        reasons_buy = []
-        reasons_sell = []
-
-        # ── ADX trend-strength gate ──
-        if REGIME_ADX_ENABLED:
-            adx = adx_df['ADX'].iloc[-1]
-            plus_di = adx_df['plus_DI'].iloc[-1]
-            minus_di = adx_df['minus_DI'].iloc[-1]
-            regime['adx'] = round(float(adx), 2) if _ok(adx) else None
-            regime['plus_di'] = round(float(plus_di), 2) if _ok(plus_di) else None
-            regime['minus_di'] = round(float(minus_di), 2) if _ok(minus_di) else None
-            if _ok(adx) and adx >= adx_max:
-                if REGIME_ADX_USE_DI and _ok(plus_di) and _ok(minus_di):
-                    # Directional: block only the counter-trend (dangerous) side
-                    if minus_di > plus_di:
-                        reasons_buy.append(f'adx{round(float(adx),1)}/-DI')
-                    if plus_di > minus_di:
-                        reasons_sell.append(f'adx{round(float(adx),1)}/+DI')
-                else:
-                    # Symmetric: sit out the trend entirely
-                    tag = f'adx{round(float(adx),1)}>={adx_max}'
-                    reasons_buy.append(tag)
-                    reasons_sell.append(tag)
-
-        # ── ATR spike guard (stateless window) ──
-        if REGIME_ATR_ENABLED and len(adx_df) >= 3:
-            tr = adx_df['TR']
-            atr = adx_df['ATR']
-            regime['atr'] = round(float(atr.iloc[-1]), 5) if _ok(atr.iloc[-1]) else None
-            regime['tr'] = round(float(tr.iloc[-1]), 5) if _ok(tr.iloc[-1]) else None
-            spike = False
-            win = max(1, int(spike_window))
-            for k in range(1, win + 1):
-                if len(tr) < (k + 2):
-                    break
-                atr_prev = atr.iloc[-k - 1]      # ATR as of the bar BEFORE bar -k
-                if not _ok(atr_prev) or atr_prev <= 0:
-                    continue
-                tr_i = tr.iloc[-k]
-                tr_i1 = tr.iloc[-k - 1]
-                single = _ok(tr_i) and tr_i >= spike_k1 * atr_prev
-                double = (_ok(tr_i) and _ok(tr_i1)
-                          and (tr_i + tr_i1) >= spike_k2 * atr_prev)
-                if single or double:
-                    spike = True
-                    break
-            regime['spike'] = bool(spike)
-            if spike:
-                try:
-                    body = float(source_df['Close'].iloc[-1] - source_df['Open'].iloc[-1])
-                except Exception:
-                    body = 0.0
-                regime['spike_dir'] = 1 if body > 0 else (-1 if body < 0 else 0)
-                if REGIME_SPIKE_USE_DIR:
-                    # Block only the wrong (against-spike) side — SHA lag would
-                    # otherwise open into the spike's face.
-                    if regime['spike_dir'] < 0:
-                        reasons_buy.append('down-spike')
-                    if regime['spike_dir'] > 0:
-                        reasons_sell.append('up-spike')
-                else:
-                    reasons_buy.append('spike')
-                    reasons_sell.append('spike')
-
-        # ── RSI-slope confirm (phase 2, off by default) ──
-        if REGIME_RSI_SLOPE_ENABLED and rsi_slope_map:
-            for tf, slope in rsi_slope_map.items():
-                if not _ok(slope):
-                    continue
-                short = tf.replace('TIMEFRAME_', '')
-                if slope <= -REGIME_RSI_SLOPE_MIN:
-                    reasons_buy.append(f'rsi{short}v{round(float(slope),1)}')
-                if slope >= REGIME_RSI_SLOPE_MIN:
-                    reasons_sell.append(f'rsi{short}^{round(float(slope),1)}')
-
-        regime['reasons_buy'] = reasons_buy
-        regime['reasons_sell'] = reasons_sell
-        regime['would_block_buy'] = len(reasons_buy) > 0
-        regime['would_block_sell'] = len(reasons_sell) > 0
-        regime['block_buy'] = bool(regime['active'] and regime['would_block_buy'])
-        regime['block_sell'] = bool(regime['active'] and regime['would_block_sell'])
-        return regime
-
     def process_symbol(self, symbol):
         """
         Process a single symbol (will be called in separate threads)
@@ -593,14 +464,6 @@ class MT5TradingBot:
         units = 1
         mtqty = self.symbols_config.get('mtqty', 0.01)
         trade_symbol = self.symbol_map.get(symbol, symbol)
-
-        # ── Regime entry-filter thresholds (per-symbol overrides → constants) ──
-        _regime_cfg = sym_cfg.get('regime', {}) or {}
-        regime_adx_max = float(_regime_cfg.get('adx_max', REGIME_ADX_MAX))
-        regime_spike_k1 = float(_regime_cfg.get('spike_k1', REGIME_SPIKE_K1))
-        regime_spike_k2 = float(_regime_cfg.get('spike_k2', REGIME_SPIKE_K2))
-        regime_spike_window = int(_regime_cfg.get('spike_window', REGIME_SPIKE_WINDOW))
-        _last_regime_log_bar = None      # throttle REGIME_BLOCK logs to 1 per M15 bar
 
         # Throttle expensive saves so they don't block other threads
         _last_daily_save = 0.0
@@ -699,7 +562,6 @@ class MT5TradingBot:
                     # by the SHA timeframe/candle-count. Union of all needed timeframes,
                     # de-duplicated while preserving order.
                     rsi_mtf = {}
-                    rsi_mtf_slope = {}
                     rsi_tf_list = []
                     for tf_name in (list(RSI_MTF_TIMEFRAMES)
                                     + list(RSI_DCA_LADDER_TIMEFRAMES)
@@ -716,25 +578,10 @@ class MT5TradingBot:
                                 tf_df['close'], length=RSI_LENGTH, ma_type=RSI_MA_TYPE
                             )
                             rsi_mtf[tf_name] = float(rsi_s.iloc[-1]) if len(rsi_s) > 0 else 50.0
-                            # RSI slope (only for the optional phase-2 regime gate)
-                            if (REGIME_RSI_SLOPE_ENABLED
-                                    and tf_name in REGIME_RSI_SLOPE_TIMEFRAMES
-                                    and len(rsi_s) > REGIME_RSI_SLOPE_BARS):
-                                rsi_mtf_slope[tf_name] = float(
-                                    rsi_s.iloc[-1] - rsi_s.iloc[-1 - REGIME_RSI_SLOPE_BARS]
-                                )
                         else:
                             rsi_mtf[tf_name] = 50.0
                     current_rsi = rsi_mtf.get('TIMEFRAME_M1', 50.0)
                     
-                    # Regime FRESH-ENTRY verdict (M15 source_df already in hand; no
-                    # new fetch). Inert unless REGIME_FILTER_ENABLED. Only ever gates
-                    # a fresh entry — the open-basket ladder/exits are untouched.
-                    regime = self._compute_regime(
-                        source_df, rsi_mtf_slope,
-                        regime_adx_max, regime_spike_k1, regime_spike_k2, regime_spike_window,
-                    )
-
                     # Calculate signal. `units` (effective, capped by max_limit)
                     # drives both the Fibo lot ladder and the USD close target,
                     # so the profit target always equals the running unit.
@@ -744,7 +591,6 @@ class MT5TradingBot:
                         close_threshold=units,
                         rsi_value=current_rsi,
                         rsi_mtf=rsi_mtf,
-                        regime=regime
                     )
                     analysis_data['candle_fresh'] = True
                 else:
@@ -817,17 +663,10 @@ class MT5TradingBot:
                     if not brake:
                         with self.mt5_lock:
                             order_response = self.position_helper.buy(trade_symbol, units * mtqty)
-                        _rg = analysis_data.get('regime', {})
                         self._log_event(symbol, 'BUY_EXECUTED', 'ENTRY', {
                             'mt5_symbol': trade_symbol,
                             'qty': units * mtqty,
                             'response': str(order_response),
-                            'regime': {
-                                'would_block': _rg.get('shadow_would_block_buy', False),
-                                'adx': _rg.get('adx'),
-                                'spike': _rg.get('spike'),
-                                'reasons': _rg.get('reasons_buy', []),
-                            },
                         }, server_time=server_time)
                     else:
                         self._log_event(symbol, 'BUY_SIGNAL', 'SIGNAL', {
@@ -862,17 +701,10 @@ class MT5TradingBot:
                     if not brake:
                         with self.mt5_lock:
                             order_response = self.position_helper.sell(trade_symbol, units * mtqty)
-                        _rg = analysis_data.get('regime', {})
                         self._log_event(symbol, 'SELL_EXECUTED', 'ENTRY', {
                             'mt5_symbol': trade_symbol,
                             'qty': units * mtqty,
                             'response': str(order_response),
-                            'regime': {
-                                'would_block': _rg.get('shadow_would_block_sell', False),
-                                'adx': _rg.get('adx'),
-                                'spike': _rg.get('spike'),
-                                'reasons': _rg.get('reasons_sell', []),
-                            },
                         }, server_time=server_time)
                     else:
                         self._log_event(symbol, 'SELL_SIGNAL', 'SIGNAL', {
@@ -902,26 +734,6 @@ class MT5TradingBot:
                         'response': close_response,
                     }, server_time=server_time)
                 
-                # ── Regime filter: log actively-blocked fresh entries (throttled to
-                # once per M15 bar so the capped strategy log isn't flooded). Only
-                # fires when the filter is armed for real (not shadow). ──
-                if REGIME_FILTER_ENABLED and has_candle_data and candle_is_fresh:
-                    _rg = analysis_data.get('regime', {})
-                    _bar_t = analysis_data.get('last_source_candle_time')
-                    if (_rg.get('blocked_buy') or _rg.get('blocked_sell')) and _bar_t != _last_regime_log_bar:
-                        _ev = 'REGIME_BLOCK_BUY' if _rg.get('blocked_buy') else 'REGIME_BLOCK_SELL'
-                        _reasons = _rg.get('reasons_buy') if _rg.get('blocked_buy') else _rg.get('reasons_sell')
-                        self._log_event(symbol, _ev, 'SIGNAL', {
-                            'note': 'Fresh entry blocked by regime filter',
-                            'reasons': _reasons,
-                            'adx': _rg.get('adx'),
-                            'plus_di': _rg.get('plus_di'),
-                            'minus_di': _rg.get('minus_di'),
-                            'spike': _rg.get('spike'),
-                            'spike_dir': _rg.get('spike_dir'),
-                        }, server_time=server_time)
-                        _last_regime_log_bar = _bar_t
-
                 # Attach order response if any
                 if order_response is not None:
                     symbol_data['order_response'] = str(order_response)
