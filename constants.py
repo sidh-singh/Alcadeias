@@ -60,6 +60,10 @@ SLOPE_TIMEFRAMES = ['TIMEFRAME_H1', 'TIMEFRAME_H4']   # direction decided on H1 
 PEAK_LOOKBACK = 20                  # candles scanned for the latest pivot (configurable)
 PIVOT_WIDTH = 2                     # bars required on each side to confirm a pivot (k)
 REENTRY_COOLDOWN_SECONDS = 300      # block a fresh entry for this long after any close
+# Profit-protect fires only when basket profit exceeds this USD buffer. Set it to
+# cover the round-trip spread + commission so a protect-close never locks a net loss.
+# 0.0 = protect at any profit > 0 (TUNE from the backtest / your broker costs).
+PROFIT_PROTECT_MIN_USD = 0.0
 
 
 # ─── Risk Management ───
