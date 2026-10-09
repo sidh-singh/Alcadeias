@@ -11,7 +11,7 @@ REM === Define Python installation path based on mode ===
 if /i "%MODE%"=="live" (
     set "PYTHON_ROOT=C:\Users\Administrator\AppData\Local\Programs\Python\Python311"
 ) else (
-    set "PYTHON_ROOT=C:\Users\admin\AppData\Local\Programs\Python\Python311"
+    set "PYTHON_ROOT=C:\Users\Administrator\AppData\Local\Programs\Python\Python311"
 )
 set "PYTHON_EXE=%PYTHON_ROOT%\python.exe"
 
