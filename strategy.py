@@ -23,7 +23,7 @@ class Strategy:
     def calculate_signal(self, source_df,
                          buy_positions, sell_positions, times,
                          close_threshold=2,
-                         rsi_value=None, rsi_mtf=None):
+                         rsi_value=None, rsi_mtf=None, slopes=None):
         """
         Calculate entry/exit signals.
 
@@ -45,6 +45,9 @@ class Strategy:
             close_threshold: USD basket profit target (unused in this teardown state).
             rsi_value: Current RSI value (float 0-100); retained for dashboard/logs.
             rsi_mtf: Dict of {timeframe_name: rsi_value}; retained for the dashboard.
+            slopes: Dict {tf: {'rsi': <pivot-slope dict>, 'macd': <pivot-slope dict>}}
+                   for H1/H4, from indicator.latest_pivot_slope - consumed by the
+                   entry/exit logic added in later steps.
 
         Returns:
             tuple: (buy_signal, sell_signal, analysis_data)
@@ -76,6 +79,7 @@ class Strategy:
         analysis_data = {
             'rsi_value': round(current_rsi, 2),
             'rsi_mtf': rsi_mtf or {},
+            'slopes': slopes or {},
         }
 
         return buy_status, sell_status, analysis_data

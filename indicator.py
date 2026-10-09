@@ -110,6 +110,97 @@ class Indicator:
         rsi = rsi.fillna(100.0)
         return rsi
 
+    def calculate_macd(self, series, fast=12, slow=26, signal=9):
+        """
+        MACD - TradingView ta.macd() compatible.
+
+        macd   = EMA(close, fast) - EMA(close, slow)
+        signal = EMA(macd, signal)
+        hist   = macd - signal
+
+        Uses the SMA-seeded EMA in _ma() (matches ta.ema). Returns a DataFrame with
+        columns: macd, signal, hist.
+
+        Args:
+            series: pd.Series of close prices
+            fast, slow, signal: EMA lengths (default 12 / 26 / 9)
+
+        Returns:
+            pd.DataFrame with columns: macd, signal, hist
+        """
+        series = series.astype(float)
+        ema_fast = self._ma(series, fast, 'EMA')
+        ema_slow = self._ma(series, slow, 'EMA')
+        macd = ema_fast - ema_slow
+        signal_line = self._ma(macd, signal, 'EMA')
+        hist = macd - signal_line
+        return pd.DataFrame(
+            {'macd': macd, 'signal': signal_line, 'hist': hist},
+            index=series.index,
+        )
+
+    def latest_pivot_slope(self, series, lookback=20, width=2):
+        """
+        Latest-pivot direction of a series (RSI or MACD histogram).
+
+        Scans the last `lookback` bars from the most recent confirmable bar backward
+        and returns the FIRST turning point found - i.e. the *latest* pivot, never the
+        largest. A pivot at bar i must be strictly greater (local high) or strictly
+        less (local low) than the `width` bars on BOTH sides. Magnitudes are never
+        compared, so a smaller but more recent same-side pivot wins.
+
+        The slope is per-bar from that pivot to the current (last) value:
+            slope = (current - pivot_value) / bars_since_pivot
+        and `sign` is +1 / -1 / 0. With no pivot in the window (e.g. a monotonic run)
+        side=None and sign=0 - callers treat 0 as "no direction".
+
+        Timing: a pivot is only confirmable `width` bars after it forms, so the latest
+        pivot is >= `width` bars old; while the series keeps moving one way the latest
+        confirmed pivot is the previous turn and the slope reads that direction.
+
+        Args:
+            series: pd.Series (or array-like) of indicator values
+            lookback: window of bars to search (default 20)
+            width: bars required on each side to confirm a pivot, k (default 2)
+
+        Returns:
+            dict: {side: 'high'|'low'|None, value, bars_ago, slope, sign}
+        """
+        vals = np.asarray(
+            series.values if hasattr(series, 'values') else series, dtype=float
+        )
+        n = len(vals)
+        out = {'side': None, 'value': None, 'bars_ago': None, 'slope': 0.0, 'sign': 0}
+        if n < (2 * width + 1) or width < 1:
+            return out
+        current = vals[-1]
+        if current != current:  # NaN guard on the current value
+            return out
+        latest_i = n - 1 - width                 # newest bar that has `width` right neighbours
+        earliest_i = max(width, n - lookback)    # stay within the lookback window
+        for i in range(latest_i, earliest_i - 1, -1):
+            c = vals[i]
+            if c != c:
+                continue
+            left = vals[i - width:i]
+            right = vals[i + 1:i + 1 + width]
+            if np.isnan(left).any() or np.isnan(right).any():
+                continue
+            is_high = bool(np.all(c > left) and np.all(c > right))
+            is_low = bool(np.all(c < left) and np.all(c < right))
+            if is_high or is_low:
+                bars_ago = (n - 1) - i
+                slope = (current - c) / bars_ago if bars_ago > 0 else 0.0
+                out = {
+                    'side': 'high' if is_high else 'low',
+                    'value': float(c),
+                    'bars_ago': int(bars_ago),
+                    'slope': float(slope),
+                    'sign': 1 if slope > 0 else (-1 if slope < 0 else 0),
+                }
+                return out
+        return out
+
     def _ma(self, series, length, ma_type='EMA', volume=None):
         """
         Calculate moving average

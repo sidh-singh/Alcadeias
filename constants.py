@@ -50,6 +50,16 @@ RSI_DCA_LADDER_TIMEFRAMES = [
 # Previously the 1-hour (H1) RSI was used; now the 6-hour (H6) RSI.
 RSI_FINAL_CLOSE_TIMEFRAME = 'TIMEFRAME_H6'
 
+# ─── MACD Indicator (RSI+MACD slope entry engine) ───
+MACD_FAST = 12                      # fast EMA length (TradingView ta.macd default)
+MACD_SLOW = 26                      # slow EMA length
+MACD_SIGNAL = 9                     # signal EMA length
+
+# ─── Slope Entry/Exit Engine (H1 + H4 RSI & MACD-histogram slopes) ───
+SLOPE_TIMEFRAMES = ['TIMEFRAME_H1', 'TIMEFRAME_H4']   # direction decided on H1 and H4
+PEAK_LOOKBACK = 20                  # candles scanned for the latest pivot (configurable)
+PIVOT_WIDTH = 2                     # bars required on each side to confirm a pivot (k)
+
 
 # ─── Risk Management ───
 RISK_REWARD_RATIO = [1, 1]          # [risk, reward] multiplier for auto SL/TP calculation
