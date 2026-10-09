@@ -1,6 +1,7 @@
 from enum import Enum
 from constants import (
     STRATEGY_HEDGE,
+    PROFIT_PROTECT_MIN_USD,
 )
 
 
@@ -15,7 +16,7 @@ class Signal(Enum):
 
 
 class Strategy:
-    """HAM Strategy - Heiken Ashi Martingale Signal Calculator"""
+    """RSI+MACD slope strategy - single-position entry/exit on H1/H4 pivot slopes."""
 
     def __init__(self):
         self.hedge = STRATEGY_HEDGE
@@ -66,25 +67,27 @@ class Strategy:
                          rsi_value=None, rsi_mtf=None, slopes=None,
                          entry_allowed=True):
         """
-        Calculate entry/exit signals.
+        RSI+MACD slope strategy - fresh-entry direction and open-basket exit from the
+        four H1/H4 pivot slopes. Single position (no martingale).
 
-        RSI+MACD REBUILD. The old SHA / ADX-regime / RSI-MTF-filter / DCA-martingale /
-        H6 logic was removed (Steps 2-4, 7). The flat-entry branch now runs the new
-        RSI+MACD slope entry (Step 6, below). Still to be added: the open-basket slope
-        exit (H1-flip profit-protect + H4 force-close, Phase 4) - the open branches are
-        no-op placeholders until then.
+          Flat (Step 6): H4-primary / H1-confirm -> BUY / SELL / WAIT.
+          Open (Step 7, option C), checked in order:
+            1. profit-protect - basket profit > cost buffer (PROFIT_PROTECT_MIN_USD)
+               AND BOTH H1 slopes have flipped against the position -> CLOSE.
+            2. hard stop      - H4 both slopes flipped against AND (either H1 against)
+               -> CLOSE (accept the loss).
+            3. else HOLD.
 
         Args:
             source_df: Raw OHLC DataFrame (capitalized columns: Open, High, Low, Close)
             buy_positions: Dict from get_buy_positions() or None
             sell_positions: Dict from get_sell_positions() or None
             times: Effective unit (min(times, max_limit) from symbols config).
-            close_threshold: USD basket profit target (used by the exit, Phase 4).
+            close_threshold: Legacy param, unused (the fixed +$unit target was removed).
             rsi_value: Current RSI value (float 0-100); retained for dashboard/logs.
             rsi_mtf: Dict of {timeframe_name: rsi_value}; retained for the dashboard.
             slopes: Dict {tf: {'rsi': <pivot-slope dict>, 'macd': <pivot-slope dict>}}
-                   for H1/H4, from indicator.latest_pivot_slope. Drives the entry
-                   direction (and, later, the exit).
+                   for H1/H4, from indicator.latest_pivot_slope. Drives entry and exit.
             entry_allowed: False while the post-close re-entry cooldown is active
                    (app-side); suppresses a fresh entry even if the slopes agree.
 
@@ -103,25 +106,39 @@ class Strategy:
 
         buy_status = Signal.DO_NOTHING
         sell_status = Signal.DO_NOTHING
+        exit_reason = None
 
-        # ─── Entry/Exit Logic ───
-        # Fresh-entry direction from the 4 H1/H4 slopes (Step 6). Computed always so
-        # the dashboard can show it even when flat-entry is gated by the cooldown.
+        # ─── Slope signs (H1/H4 RSI & MACD) + fresh-entry direction ───
+        h4r = self._slope_sign(slopes, 'H4', 'rsi')
+        h4m = self._slope_sign(slopes, 'H4', 'macd')
+        h1r = self._slope_sign(slopes, 'H1', 'rsi')
+        h1m = self._slope_sign(slopes, 'H1', 'macd')
         slope_direction = self._slope_direction(slopes)
 
         if buy_count == 0 and sell_count == 0:
-            # Fresh entry (single position; H4-primary / H1-confirm). Suppressed while
-            # the post-close re-entry cooldown is active (entry_allowed=False).
+            # Fresh entry (single position; H4-primary / H1-confirm), gated by cooldown.
             if entry_allowed and slope_direction == 'BUY':
                 buy_status = Signal.BUY
             elif entry_allowed and slope_direction == 'SELL':
                 sell_status = Signal.SELL
+
         elif buy_count > 0 and sell_count == 0:
-            # Open BUY: slope profit-protect + force-close added in a later step (Phase 4).
-            pass
+            # Open BUY exit (Step 7 C) - the threat to a long is a DOWN move.
+            if buy_profit > PROFIT_PROTECT_MIN_USD and h1r < 0 and h1m < 0:
+                buy_status = Signal.CLOSE_BUY          # profit-protect (both H1 flipped down)
+                exit_reason = 'profit_protect'
+            elif h4r < 0 and h4m < 0 and (h1r < 0 or h1m < 0):
+                buy_status = Signal.CLOSE_BUY          # hard stop (H4 flipped down + H1 confirm)
+                exit_reason = 'force_close'
+
         elif buy_count == 0 and sell_count > 0:
-            # Open SELL: slope profit-protect + force-close added in a later step (Phase 4).
-            pass
+            # Open SELL exit (mirror) - the threat to a short is an UP move.
+            if sell_profit > PROFIT_PROTECT_MIN_USD and h1r > 0 and h1m > 0:
+                sell_status = Signal.CLOSE_SELL        # profit-protect (both H1 flipped up)
+                exit_reason = 'profit_protect'
+            elif h4r > 0 and h4m > 0 and (h1r > 0 or h1m > 0):
+                sell_status = Signal.CLOSE_SELL        # hard stop (H4 flipped up + H1 confirm)
+                exit_reason = 'force_close'
 
         analysis_data = {
             'rsi_value': round(current_rsi, 2),
@@ -129,6 +146,7 @@ class Strategy:
             'slopes': slopes or {},
             'slope_direction': slope_direction or 'WAIT',
             'entry_allowed': bool(entry_allowed),
+            'exit_reason': exit_reason,
         }
 
         return buy_status, sell_status, analysis_data

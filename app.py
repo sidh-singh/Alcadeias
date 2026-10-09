@@ -703,6 +703,7 @@ class MT5TradingBot:
                         'mt5_symbol': trade_symbol,
                         'positions_closed': close_response.get('closed_count', 0),
                         'total_profit': buy_positions['total_profit'] if buy_positions else 0,
+                        'reason': analysis_data.get('exit_reason'),
                         'response': close_response,
                     }, server_time=server_time)
                 
@@ -728,6 +729,7 @@ class MT5TradingBot:
                         'mt5_symbol': trade_symbol,
                         'positions_closed': close_response.get('closed_count', 0),
                         'total_profit': sell_positions['total_profit'] if sell_positions else 0,
+                        'reason': analysis_data.get('exit_reason'),
                         'response': close_response,
                     }, server_time=server_time)
                 
