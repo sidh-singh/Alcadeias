@@ -695,6 +695,20 @@ class MT5TradingBot:
                         self._log_event(symbol, 'BUY_SIGNAL', 'SIGNAL', {
                             'note': 'Brake active — order skipped',
                         }, server_time=server_time)
+                elif buy_signal == Signal.BUY_MORE:
+                    vol = self.strategy._get_next_fibo_volume(buy_positions['total_volume'], units)
+                    with self.mt5_lock:
+                        order_response = self.position_helper.buy(trade_symbol, vol)
+                    self._log_event(symbol, 'BUY_MORE_EXECUTED', 'ENTRY', {
+                        'mt5_symbol': trade_symbol,
+                        'qty': vol,
+                        'fibo_level': buy_positions['count'] + 1,
+                        'total_volume': buy_positions['total_volume'],
+                        'total_profit': buy_positions['total_profit'],
+                        'first_profit': buy_positions['first_profit'],
+                        'response': str(order_response),
+                    }, server_time=server_time)
+                    time.sleep(ORDER_COOLDOWN_SECONDS)  # Wait for MT5 to register position
                 elif buy_signal == Signal.CLOSE_BUY:
                     with self.mt5_lock:
                         close_response = self.position_helper.close_by_type(trade_symbol, 0)
@@ -721,6 +735,20 @@ class MT5TradingBot:
                         self._log_event(symbol, 'SELL_SIGNAL', 'SIGNAL', {
                             'note': 'Brake active — order skipped',
                         }, server_time=server_time)
+                elif sell_signal == Signal.SELL_MORE:
+                    vol = self.strategy._get_next_fibo_volume(sell_positions['total_volume'], units)
+                    with self.mt5_lock:
+                        order_response = self.position_helper.sell(trade_symbol, vol)
+                    self._log_event(symbol, 'SELL_MORE_EXECUTED', 'ENTRY', {
+                        'mt5_symbol': trade_symbol,
+                        'qty': vol,
+                        'fibo_level': sell_positions['count'] + 1,
+                        'total_volume': sell_positions['total_volume'],
+                        'total_profit': sell_positions['total_profit'],
+                        'first_profit': sell_positions['first_profit'],
+                        'response': str(order_response),
+                    }, server_time=server_time)
+                    time.sleep(ORDER_COOLDOWN_SECONDS)  # Wait for MT5 to register position
                 elif sell_signal == Signal.CLOSE_SELL:
                     with self.mt5_lock:
                         close_response = self.position_helper.close_by_type(trade_symbol, 1)
