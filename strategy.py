@@ -2,8 +2,7 @@ from enum import Enum
 from constants import (
     STRATEGY_HEDGE,
     FIBO_SEQUENCE_LENGTH,
-    RSI_OVERSOLD, RSI_OVERBOUGHT,
-    PROFIT_PROTECT_MIN_USD,
+    RSI_OVERSOLD, RSI_OVERBOUGHT, RSI_FINAL_CLOSE_TIMEFRAME,
 )
 
 
@@ -18,7 +17,7 @@ class Signal(Enum):
 
 
 class Strategy:
-    """RSI+MACD slope strategy - slope entry, RSI Fibo DCA ladder, slope exits."""
+    """RSI+MACD slope entry + RSI Fibo DCA ladder with +$unit / H6 exits (variant B)."""
 
     def __init__(self):
         self.hedge = STRATEGY_HEDGE
@@ -109,29 +108,27 @@ class Strategy:
                          rsi_value=None, rsi_mtf=None, slopes=None,
                          entry_allowed=True):
         """
-        RSI+MACD slope strategy (slope-exit variant).
+        RSI+MACD slope entry + RSI Fibo ladder, with the classic +$unit / H6 exits
+        (variant B). No slope-based exits.
 
           Flat  (Step 6): H4-primary / H1-confirm slope direction -> BUY / SELL / WAIT.
                           Opens a single position; gated by the re-entry cooldown.
-          Open:
-            Exits (checked first, Step 7 option C):
-              - profit-protect: profit > PROFIT_PROTECT_MIN_USD AND both H1 slopes
-                flipped against -> CLOSE.
-              - hard stop: H4 both flipped against AND (either H1 against) -> CLOSE.
-            RSI DCA ladder (if no exit): BUY_MORE/SELL_MORE at RSI 35/65, one tier per
-            open count - count 1->M1, 2->M5, 3->M15, 4->H1, 5->H4 (max 6 positions).
-            Fibo lot sizing. Else HOLD. (An H4 flip still closes the whole basket, so
-            the ladder is bounded by the slope stop.)
+          Open  (checked in order):
+            - +$unit target: basket profit > close_threshold (= unit) -> CLOSE.
+            - RSI DCA ladder: BUY_MORE/SELL_MORE at RSI 35/65, one tier per count
+              (1->M1, 2->M5, 3->M15, 4->H1, 5->H4), Fibo lot sizing.
+            - H6 forced close: at count 6, RSI_FINAL_CLOSE_TIMEFRAME (H6) RSI extreme
+              -> CLOSE.
+            - else HOLD.
 
         Args:
             source_df: Raw OHLC DataFrame (capitalized: Open, High, Low, Close)
             buy_positions / sell_positions: dicts from get_*_positions() or None
             times: effective unit; scales the Fibo lot ladder.
-            close_threshold: legacy param, unused in this variant.
+            close_threshold: USD basket profit target (= unit) for the +$unit close.
             rsi_value: current RSI (dashboard/logs).
-            rsi_mtf: {timeframe_name: rsi_value} - drives the DCA ladder tiers.
-            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for H1/H4 -
-                    drives entry direction and the slope exits.
+            rsi_mtf: {timeframe_name: rsi_value} - drives the DCA ladder + H6 close.
+            slopes: {tf: {'rsi': ..., 'macd': ...}} for H1/H4 - drives entry direction.
             entry_allowed: False during the post-close re-entry cooldown.
 
         Returns:
@@ -151,18 +148,15 @@ class Strategy:
         sell_status = Signal.DO_NOTHING
         exit_reason = None
 
-        # Per-timeframe RSI for the DCA ladder tiers (count 1->M1 ... 5->H4)
+        # Per-timeframe RSI for the DCA ladder tiers (1->M1 ... 5->H4) + H6 final close
         rsi_1m = rsi_mtf.get('TIMEFRAME_M1', 50.0) if rsi_mtf else 50.0
         rsi_5m = rsi_mtf.get('TIMEFRAME_M5', 50.0) if rsi_mtf else 50.0
         rsi_15m = rsi_mtf.get('TIMEFRAME_M15', 50.0) if rsi_mtf else 50.0
         rsi_1h = rsi_mtf.get('TIMEFRAME_H1', 50.0) if rsi_mtf else 50.0
         rsi_4h = rsi_mtf.get('TIMEFRAME_H4', 50.0) if rsi_mtf else 50.0
+        rsi_6h = rsi_mtf.get(RSI_FINAL_CLOSE_TIMEFRAME, 50.0) if rsi_mtf else 50.0
 
-        # Slope signs (H1/H4) + fresh-entry direction
-        h4r = self._slope_sign(slopes, 'H4', 'rsi')
-        h4m = self._slope_sign(slopes, 'H4', 'macd')
-        h1r = self._slope_sign(slopes, 'H1', 'rsi')
-        h1m = self._slope_sign(slopes, 'H1', 'macd')
+        # Fresh-entry direction from the H1/H4 slopes (entry only)
         slope_direction = self._slope_direction(slopes)
 
         if buy_count == 0 and sell_count == 0:
@@ -173,13 +167,10 @@ class Strategy:
                 sell_status = Signal.SELL
 
         elif buy_count > 0 and sell_count == 0:
-            # Open BUY: slope exits FIRST, then the RSI DCA ladder (threat = DOWN move).
-            if buy_profit > PROFIT_PROTECT_MIN_USD and h1r < 0 and h1m < 0:
+            # Open BUY: +$unit target, RSI DCA ladder, then H6 forced close (max 6).
+            if buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
-                exit_reason = 'profit_protect'
-            elif h4r < 0 and h4m < 0 and (h1r < 0 or h1m < 0):
-                buy_status = Signal.CLOSE_BUY
-                exit_reason = 'force_close'
+                exit_reason = 'target'
             elif rsi_1m <= RSI_OVERSOLD and buy_count == 1:
                 buy_status = Signal.BUY_MORE
             elif rsi_5m <= RSI_OVERSOLD and buy_count == 2:
@@ -190,15 +181,15 @@ class Strategy:
                 buy_status = Signal.BUY_MORE
             elif rsi_4h <= RSI_OVERSOLD and buy_count == 5:
                 buy_status = Signal.BUY_MORE
+            elif rsi_6h <= RSI_OVERSOLD and buy_count == 6:
+                buy_status = Signal.CLOSE_BUY
+                exit_reason = 'h6_forced'
 
         elif buy_count == 0 and sell_count > 0:
-            # Open SELL (mirror): slope exits FIRST, then the RSI DCA ladder.
-            if sell_profit > PROFIT_PROTECT_MIN_USD and h1r > 0 and h1m > 0:
+            # Open SELL (mirror): +$unit target, RSI DCA ladder, then H6 forced close.
+            if sell_profit > close_threshold:
                 sell_status = Signal.CLOSE_SELL
-                exit_reason = 'profit_protect'
-            elif h4r > 0 and h4m > 0 and (h1r > 0 or h1m > 0):
-                sell_status = Signal.CLOSE_SELL
-                exit_reason = 'force_close'
+                exit_reason = 'target'
             elif rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
                 sell_status = Signal.SELL_MORE
             elif rsi_5m >= RSI_OVERBOUGHT and sell_count == 2:
@@ -209,6 +200,9 @@ class Strategy:
                 sell_status = Signal.SELL_MORE
             elif rsi_4h >= RSI_OVERBOUGHT and sell_count == 5:
                 sell_status = Signal.SELL_MORE
+            elif rsi_6h >= RSI_OVERBOUGHT and sell_count == 6:
+                sell_status = Signal.CLOSE_SELL
+                exit_reason = 'h6_forced'
 
         analysis_data = {
             'rsi_value': round(current_rsi, 2),
