@@ -29,6 +29,8 @@ RSI_MA_TYPE = 'RMA'                 # MA type for RSI smoothing (RMA = Wilder's,
 # this smaller count instead of the large SHA CANDLE_COUNT. This avoids pulling
 # years of history on high timeframes (e.g. 8000 H6 bars ≈ 5.5 years) every loop.
 RSI_CANDLE_COUNT = 500
+RSI_OVERSOLD = 35                   # DCA ladder: BUY_MORE when the tier timeframe RSI <= this
+RSI_OVERBOUGHT = 65                 # DCA ladder: SELL_MORE when the tier timeframe RSI >= this
 
 # ─── RSI fetch timeframes (for the dashboard RSI display; entry filter removed) ───
 RSI_MTF_TIMEFRAMES = ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15', 'TIMEFRAME_M30']
