@@ -113,12 +113,12 @@ class Strategy:
 
           Flat  (Step 6): H4-primary / H1-confirm slope direction -> BUY / SELL / WAIT.
                           Opens a single position; gated by the re-entry cooldown.
-          Open  (checked in order):
+          Open  (checked in order; closing has priority over adding):
             - +$unit target: basket profit > close_threshold (= unit) -> CLOSE.
-            - RSI DCA ladder: BUY_MORE/SELL_MORE at RSI 35/65, one tier per count
-              (1->M1, 2->M5, 3->M15, 4->H1, 5->H4), Fibo lot sizing.
             - slope force-close: H4 both flipped against AND (either H1 against) -> CLOSE
               (replaces the old H6 forced close).
+            - RSI DCA ladder: BUY_MORE/SELL_MORE at RSI 35/65, one tier per count
+              (1->M1, 2->M5, 3->M15, 4->H1, 5->H4), Fibo lot sizing.
             - else HOLD.
 
         Args:
@@ -170,10 +170,14 @@ class Strategy:
                 sell_status = Signal.SELL
 
         elif buy_count > 0 and sell_count == 0:
-            # Open BUY: +$unit target, RSI DCA ladder, then slope force-close (max 6).
+            # Open BUY: close first (+$unit target, then slope force-close), then the
+            # RSI DCA ladder adds -- closing has priority over taking new positions.
             if buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = 'target'
+            elif h4r < 0 and h4m < 0 and (h1r < 0 or h1m < 0):
+                buy_status = Signal.CLOSE_BUY
+                exit_reason = 'force_close'
             elif rsi_1m <= RSI_OVERSOLD and buy_count == 1:
                 buy_status = Signal.BUY_MORE
             elif rsi_5m <= RSI_OVERSOLD and buy_count == 2:
@@ -184,15 +188,16 @@ class Strategy:
                 buy_status = Signal.BUY_MORE
             elif rsi_4h <= RSI_OVERSOLD and buy_count == 5:
                 buy_status = Signal.BUY_MORE
-            elif h4r < 0 and h4m < 0 and (h1r < 0 or h1m < 0):
-                buy_status = Signal.CLOSE_BUY
-                exit_reason = 'force_close'
 
         elif buy_count == 0 and sell_count > 0:
-            # Open SELL (mirror): +$unit target, RSI DCA ladder, then slope force-close.
+            # Open SELL (mirror): close first (+$unit target, then slope force-close),
+            # then the RSI DCA ladder adds.
             if sell_profit > close_threshold:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = 'target'
+            elif h4r > 0 and h4m > 0 and (h1r > 0 or h1m > 0):
+                sell_status = Signal.CLOSE_SELL
+                exit_reason = 'force_close'
             elif rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
                 sell_status = Signal.SELL_MORE
             elif rsi_5m >= RSI_OVERBOUGHT and sell_count == 2:
@@ -203,9 +208,6 @@ class Strategy:
                 sell_status = Signal.SELL_MORE
             elif rsi_4h >= RSI_OVERBOUGHT and sell_count == 5:
                 sell_status = Signal.SELL_MORE
-            elif h4r > 0 and h4m > 0 and (h1r > 0 or h1m > 0):
-                sell_status = Signal.CLOSE_SELL
-                exit_reason = 'force_close'
 
         analysis_data = {
             'rsi_value': round(current_rsi, 2),
