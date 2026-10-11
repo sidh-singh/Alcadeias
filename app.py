@@ -594,8 +594,14 @@ class MT5TradingBot:
                                     rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
                                     ob_level=RSI_PEAK_OB, os_level=RSI_PEAK_OS
                                 )
+                                # MACD has no fixed OB/OS; the signal line's sign is its
+                                # regime proxy -> read the high (OB) side when signal > 0,
+                                # the low (OS) side when signal < 0.
+                                _sig = float(macd_df['signal'].iloc[-1]) if len(macd_df) > 0 else 0.0
+                                _macd_side = 'high' if _sig > 0 else ('low' if _sig < 0 else None)
                                 macd_slope = self.indicator.latest_pivot_slope(
-                                    macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH
+                                    macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
+                                    side=_macd_side
                                 )
                                 slopes[tf_name.replace('TIMEFRAME_', '')] = {
                                     'rsi': rsi_slope, 'macd': macd_slope,
