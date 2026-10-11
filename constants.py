@@ -57,11 +57,11 @@ MACD_FAST = 12                      # fast EMA length (TradingView ta.macd defau
 MACD_SLOW = 26                      # slow EMA length
 MACD_SIGNAL = 9                     # signal EMA length
 
-# ─── Slope Entry/Exit Engine (D1 + H4 + H1 RSI & MACD-histogram pivot slopes) ───
-# All three timeframes are latest-pivot slopes. H4 primary / H1 confirm gives the
-# base direction; D1 is a pivot that gates the SIDE (D1 up -> buys only, D1 down ->
-# sells only, D1 mixed -> no gate). See docs/d1-decision-table.md.
-SLOPE_TIMEFRAMES = ['TIMEFRAME_H1', 'TIMEFRAME_H4', 'TIMEFRAME_D1']  # D1/H4/H1 latest-pivot slopes
+# ─── Slope Entry/Exit Engine (H4 + H1 RSI & MACD-histogram pivot slopes) ───
+# Both timeframes are latest-pivot slopes. H4 primary / H1 confirm gives the entry
+# direction. (D1 removed on this "_wd" / without-daily branch - no daily side-gate.)
+# See docs/h4h1-decision-table.md.
+SLOPE_TIMEFRAMES = ['TIMEFRAME_H1', 'TIMEFRAME_H4']  # H4/H1 latest-pivot slopes
 PEAK_LOOKBACK = 20                  # candles scanned for the latest pivot (configurable)
 PIVOT_WIDTH = 2                     # bars required on each side to confirm a pivot (k)
 # RSI pivots only count as real OB/OS turns inside these bands (MACD stays unbounded):
@@ -69,7 +69,7 @@ PIVOT_WIDTH = 2                     # bars required on each side to confirm a pi
 #   RSI <= RSI_PEAK_OS (35+5 -> [0,40]). Neutral-zone RSI wiggles (41-59) are ignored.
 RSI_PEAK_OB = 60                    # a HIGH pivot on RSI counts only if value >= this
 RSI_PEAK_OS = 40                    # a LOW  pivot on RSI counts only if value <= this
-# Dashboard RSI pivot graphs (H1/H4/D1): recent RSI bars each mini-chart plots.
+# Dashboard RSI pivot graphs (H1/H4): recent RSI bars each mini-chart plots.
 # Must exceed PEAK_LOOKBACK so the latest pivot is always within the drawn window.
 RSI_GRAPH_BARS = 40
 REENTRY_COOLDOWN_SECONDS = 300      # block a fresh entry for this long after any close

@@ -593,8 +593,8 @@ class MT5TradingBot:
                                 macd_df = self.indicator.calculate_macd(
                                     tf_df['close'], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL
                                 )
-                                # D1 / H4 / H1 are all latest-pivot slopes (D1 is a
-                                # pivot now, not a regime) - identical computation.
+                                # H4 / H1 latest-pivot slopes - identical computation.
+                                # (D1 removed on this "_wd" / without-daily branch.)
                                 rsi_slope = self.indicator.latest_pivot_slope(
                                     rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
                                     ob_level=RSI_PEAK_OB, os_level=RSI_PEAK_OS

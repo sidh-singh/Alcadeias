@@ -74,52 +74,35 @@ class Strategy:
 
     def _slope_direction(self, slopes):
         """
-        Fresh-entry direction from the D1 / H4 / H1 latest-pivot slope signs.
+        Fresh-entry direction from the H4 / H1 latest-pivot slope signs.
 
-        All three timeframes are pivot slopes (D1 is a pivot, NOT a regime).
-        Two stages:
-          1. Base direction - H4 primary, H1 confirm:
-               H4 both +ve & (>=1 H1 +ve)  -> BUY
-               H4 both -ve & (>=1 H1 -ve)  -> SELL
-               H4 split    & H1 both +ve   -> BUY
-               H4 split    & H1 both -ve   -> SELL
-               else                        -> WAIT
-          2. D1 pivot gates the SIDE (daily bias):
-               D1 both +ve   -> allow BUY only  (a SELL base -> WAIT)
-               D1 both -ve   -> allow SELL only (a BUY  base -> WAIT)
-               D1 mixed/flat -> no gate (base passes through)
+        H4 primary, H1 confirm (D1 removed on this "_wd" / without-daily branch -
+        no daily side-gate):
+          H4 both +ve & (>=1 H1 +ve)  -> BUY
+          H4 both -ve & (>=1 H1 -ve)  -> SELL
+          H4 split    & H1 both +ve   -> BUY
+          H4 split    & H1 both -ve   -> SELL
+          else                        -> WAIT
 
         Returns 'BUY', 'SELL', or None (WAIT). Missing / zero slope = "no direction".
         """
         slopes = slopes or {}
-        d1r = self._slope_sign(slopes, 'D1', 'rsi')
-        d1m = self._slope_sign(slopes, 'D1', 'macd')
         h4r = self._slope_sign(slopes, 'H4', 'rsi')
         h4m = self._slope_sign(slopes, 'H4', 'macd')
         h1r = self._slope_sign(slopes, 'H1', 'rsi')
         h1m = self._slope_sign(slopes, 'H1', 'macd')
 
-        # Stage 1 - H4-primary / H1-confirm base direction.
         if h4r > 0 and h4m > 0:
-            base = 'BUY' if (h1r > 0 or h1m > 0) else None
-        elif h4r < 0 and h4m < 0:
-            base = 'SELL' if (h1r < 0 or h1m < 0) else None
-        elif (h4r > 0 and h4m < 0) or (h4r < 0 and h4m > 0):
+            return 'BUY' if (h1r > 0 or h1m > 0) else None
+        if h4r < 0 and h4m < 0:
+            return 'SELL' if (h1r < 0 or h1m < 0) else None
+        if (h4r > 0 and h4m < 0) or (h4r < 0 and h4m > 0):
             if h1r > 0 and h1m > 0:
-                base = 'BUY'
-            elif h1r < 0 and h1m < 0:
-                base = 'SELL'
-            else:
-                base = None
-        else:
-            base = None
-
-        # Stage 2 - D1 pivot gates the side (daily bias).
-        if d1r > 0 and d1m > 0:
-            return base if base == 'BUY' else None
-        if d1r < 0 and d1m < 0:
-            return base if base == 'SELL' else None
-        return base
+                return 'BUY'
+            if h1r < 0 and h1m < 0:
+                return 'SELL'
+            return None
+        return None
 
     def calculate_signal(self, source_df,
                          buy_positions, sell_positions, times,
