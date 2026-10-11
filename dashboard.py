@@ -749,16 +749,11 @@ def _slope_cell(sl):
         arrow, color = '▼', COLORS['sell']
     else:
         arrow, color = '—', COLORS['text_dim']
-    if sl.get('regime'):
-        v = sl.get('value')
-        val = f'{v}' if isinstance(v, (int, float)) else '—'
-        sub = 'regime'
-    else:
-        slope = sl.get('slope')
-        val = f'{slope:+.3f}' if isinstance(slope, (int, float)) else '—'
-        side = sl.get('side')
-        bars = sl.get('bars_ago')
-        sub = f'{side} · {bars}b ago' if side else 'no pivot'
+    slope = sl.get('slope')
+    val = f'{slope:+.3f}' if isinstance(slope, (int, float)) else '—'
+    side = sl.get('side')
+    bars = sl.get('bars_ago')
+    sub = f'{side} · {bars}b ago' if side else 'no pivot'
     return html.Div(
         style={
             'display': 'flex', 'flexDirection': 'column', 'gap': '2px',
@@ -793,7 +788,7 @@ def _pivot_mini_graph(tf_label, g):
     Compact pivot chart for one timeframe/indicator: the recent series line, the
     latest pivot marker, a dotted line from that pivot to the current value (GREEN
     if the slope is +ve, RED if -ve, dim if flat), the current-value marker, and
-    reference lines. Works for both RSI (g['clamp']=[0,100], bands=OB/OS or 45/55)
+    reference lines. Works for both RSI (g['clamp']=[0,100], bands=OB/OS)
     and MACD-histogram (g['clamp']=None -> auto-range, bands=[0] zero line).
     `g` = analysis['rsi_graphs'|'macd_graphs'][tf]. Wrapped so a bad payload can
     never break the panel.
@@ -812,7 +807,7 @@ def _pivot_mini_graph(tf_label, g):
         line_color = COLORS['buy'] if sign > 0 else (COLORS['sell'] if sign < 0 else COLORS['text_dim'])
 
         fig = go.Figure()
-        # reference lines: RSI OB/OS (or 45/55 regime), or the MACD zero line
+        # reference lines: the RSI OB/OS band, or the MACD zero line
         for b in bands:
             fig.add_hline(y=b, line_dash='dot', line_color=COLORS['text_muted'],
                           line_width=0.8, opacity=0.5)
@@ -874,8 +869,6 @@ def _pivot_mini_graph(tf_label, g):
 
         arrow = '▲' if sign > 0 else ('▼' if sign < 0 else '—')
         label = f'{tf_label}  ·  {name} {_fmt_pivot_val(current, clamp)}  {arrow}'
-        if g.get('regime'):
-            label += '  (regime)'
         return html.Div([
             html.Div(label, style={
                 'fontSize': '0.62rem', 'color': line_color, 'fontWeight': '700',
@@ -946,7 +939,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                         'borderRadius': '10px'}),
                 ],
             ),
-            # slope grid (rows D1 / H4 / H1; D1 = trend regime, H4/H1 = pivot slope)
+            # slope grid (rows D1 / H4 / H1; all latest-pivot slopes)
             html.Div(style=grid_style, children=[
                 html.Span(''),
                 html.Span('RSI', style=col_hdr),
@@ -960,7 +953,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
             ]),
             # Pivot mini-charts — RSI (left) + MACD-hist (right) per timeframe:
             # series line + latest-pivot marker + dotted peak->current slope line
-            # (green +ve / red -ve) + reference lines (RSI OB/OS or 45/55; MACD 0).
+            # (green +ve / red -ve) + reference lines (RSI OB/OS band; MACD 0).
             html.Div(style={'padding': '2px 12px 2px'}, children=[
                 html.Div('Pivots — peak → current (green up · red down)   ·   RSI left · MACD right', style={
                     'fontSize': '0.6rem', 'color': COLORS['text_dim'],
