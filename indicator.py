@@ -139,7 +139,7 @@ class Indicator:
             index=series.index,
         )
 
-    def latest_pivot_slope(self, series, lookback=20, width=2, ob_level=None, os_level=None):
+    def latest_pivot_slope(self, series, lookback=20, width=2, ob_level=None, os_level=None, side=None):
         """
         Latest-pivot direction of a series (RSI or MACD histogram).
 
@@ -163,12 +163,17 @@ class Indicator:
         value <= os_level. Pivots outside the band are skipped (scan continues). None =
         no boundary (any pivot) - used for unbounded series like the MACD histogram.
 
+        Optional `side` restricts which turn qualifies: 'high' = only highs, 'low' =
+        only lows, None = both. MACD uses this - the signal line's sign selects the
+        side: signal > 0 -> 'high' (OB side), signal < 0 -> 'low' (OS side).
+
         Args:
             series: pd.Series (or array-like) of indicator values
             lookback: window of bars to search (default 20)
             width: bars required on each side to confirm a pivot, k (default 2)
             ob_level: min value for a HIGH pivot to qualify (None = no limit)
             os_level: max value for a LOW pivot to qualify (None = no limit)
+            side: 'high' | 'low' | None - restrict to that pivot side (None = both)
 
         Returns:
             dict: {side: 'high'|'low'|None, value, bars_ago, slope, sign}
@@ -200,6 +205,11 @@ class Indicator:
                 is_high = False
             if is_low and os_level is not None and c > os_level:
                 is_low = False
+            # Side filter (e.g. MACD: restrict to the side the signal line implies).
+            if side == 'high':
+                is_low = False
+            elif side == 'low':
+                is_high = False
             if is_high or is_low:
                 bars_ago = (n - 1) - i
                 slope = (current - c) / bars_ago if bars_ago > 0 else 0.0
