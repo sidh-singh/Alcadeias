@@ -58,7 +58,7 @@ MACD_SLOW = 26                      # slow EMA length
 MACD_SIGNAL = 9                     # signal EMA length
 
 # ─── Slope Entry/Exit Engine (H1 + H4 RSI & MACD-histogram slopes) ───
-SLOPE_TIMEFRAMES = ['TIMEFRAME_H1', 'TIMEFRAME_H4']   # direction decided on H1 and H4
+SLOPE_TIMEFRAMES = ['TIMEFRAME_H1', 'TIMEFRAME_H4', 'TIMEFRAME_D1']  # H1/H4 pivot-slope + D1 trend regime
 PEAK_LOOKBACK = 20                  # candles scanned for the latest pivot (configurable)
 PIVOT_WIDTH = 2                     # bars required on each side to confirm a pivot (k)
 # RSI pivots only count as real OB/OS turns inside these bands (MACD stays unbounded):
@@ -66,6 +66,13 @@ PIVOT_WIDTH = 2                     # bars required on each side to confirm a pi
 #   RSI <= RSI_PEAK_OS (35+5 -> [0,40]). Neutral-zone RSI wiggles (41-59) are ignored.
 RSI_PEAK_OB = 60                    # a HIGH pivot on RSI counts only if value >= this
 RSI_PEAK_OS = 40                    # a LOW  pivot on RSI counts only if value <= this
+# ─── D1 trend regime (continuous; D1 uses this INSTEAD of the pivot-slope) ───
+# D1 is a persistent daily-trend filter, not a reversal detector. Its two signs:
+#   RSI  sign: +1 if RSI >= D1_RSI_UP, -1 if RSI <= D1_RSI_DN, else 0 (neutral band).
+#   MACD sign: +1 if the reference > 0, -1 if < 0, else 0.
+D1_RSI_UP = 55                      # D1 RSI >= this -> bullish
+D1_RSI_DN = 45                      # D1 RSI <= this -> bearish (45-55 = neutral)
+D1_MACD_MODE = 'line'               # 'line' = MACD line vs 0 (trend); 'hist' = macd-vs-signal
 REENTRY_COOLDOWN_SECONDS = 300      # block a fresh entry for this long after any close
 # Profit-protect fires only when basket profit exceeds this USD buffer. Set it to
 # cover the round-trip spread + commission so a protect-close never locks a net loss.

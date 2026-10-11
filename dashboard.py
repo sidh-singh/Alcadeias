@@ -749,11 +749,16 @@ def _slope_cell(sl):
         arrow, color = '▼', COLORS['sell']
     else:
         arrow, color = '—', COLORS['text_dim']
-    slope = sl.get('slope')
-    val = f'{slope:+.3f}' if isinstance(slope, (int, float)) else '—'
-    side = sl.get('side')
-    bars = sl.get('bars_ago')
-    sub = f'{side} · {bars}b ago' if side else 'no pivot'
+    if sl.get('regime'):
+        v = sl.get('value')
+        val = f'{v}' if isinstance(v, (int, float)) else '—'
+        sub = 'regime'
+    else:
+        slope = sl.get('slope')
+        val = f'{slope:+.3f}' if isinstance(slope, (int, float)) else '—'
+        side = sl.get('side')
+        bars = sl.get('bars_ago')
+        sub = f'{side} · {bars}b ago' if side else 'no pivot'
     return html.Div(
         style={
             'display': 'flex', 'flexDirection': 'column', 'gap': '2px',
@@ -782,6 +787,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
 
     h1 = slopes.get('H1', {}) or {}
     h4 = slopes.get('H4', {}) or {}
+    d1 = slopes.get('D1', {}) or {}
 
     dec_color = {'BUY': COLORS['buy'], 'SELL': COLORS['sell']}.get(decision, COLORS['text_dim'])
     dec_icon = {'BUY': '🟢', 'SELL': '🔴'}.get(decision, '⚪')
@@ -823,11 +829,13 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                         'borderRadius': '10px'}),
                 ],
             ),
-            # 2x2 slope grid (rows H4 / H1, cols RSI / MACD-hist)
+            # slope grid (rows D1 / H4 / H1; D1 = trend regime, H4/H1 = pivot slope)
             html.Div(style=grid_style, children=[
                 html.Span(''),
-                html.Span('RSI slope', style=col_hdr),
-                html.Span('MACD-hist slope', style=col_hdr),
+                html.Span('RSI', style=col_hdr),
+                html.Span('MACD', style=col_hdr),
+                html.Span('D1', style=row_lbl),
+                _slope_cell(d1.get('rsi')), _slope_cell(d1.get('macd')),
                 html.Span('H4', style=row_lbl),
                 _slope_cell(h4.get('rsi')), _slope_cell(h4.get('macd')),
                 html.Span('H1', style=row_lbl),
