@@ -773,6 +773,91 @@ def _slope_cell(sl):
     )
 
 
+def _rsi_mini_graph(tf_label, g):
+    """
+    Compact RSI chart for one timeframe: the recent RSI line, the latest pivot
+    marker, a dotted line from that pivot to the current RSI (GREEN if the slope
+    is +ve, RED if -ve, dim if flat), the current-value marker, and the OB/OS (or
+    D1 regime 45/55) reference bands. `g` = analysis['rsi_graphs'][tf]. Wrapped so
+    a bad payload can never break the panel.
+    """
+    g = g or {}
+    try:
+        series = [float(v) for v in (g.get('series') or [])]
+        if not series:
+            raise ValueError('no series')
+        cur_x = len(series) - 1
+        current = float(g.get('current', series[-1]))
+        sign = g.get('sign', 0) or 0
+        bands = [float(b) for b in (g.get('bands') or []) if isinstance(b, (int, float))]
+        line_color = COLORS['buy'] if sign > 0 else (COLORS['sell'] if sign < 0 else COLORS['text_dim'])
+
+        fig = go.Figure()
+        # OB/OS (or D1 45/55 regime) reference bands
+        for b in bands:
+            fig.add_hline(y=b, line_dash='dot', line_color=COLORS['text_muted'],
+                          line_width=0.8, opacity=0.5)
+        # RSI line
+        fig.add_trace(go.Scatter(
+            x=list(range(len(series))), y=series, mode='lines',
+            line=dict(color=COLORS['accent'], width=1.6),
+            hoverinfo='skip', showlegend=False,
+        ))
+        # latest pivot -> current dotted line + pivot marker (slope-coloured)
+        pba = g.get('pivot_bars_ago')
+        pv = g.get('pivot_value')
+        if isinstance(pba, int) and pv is not None and 0 <= (cur_x - pba) <= cur_x:
+            piv_x = cur_x - pba
+            fig.add_trace(go.Scatter(
+                x=[piv_x, cur_x], y=[float(pv), current], mode='lines',
+                line=dict(color=line_color, width=1.8, dash='dot'),
+                hoverinfo='skip', showlegend=False,
+            ))
+            fig.add_trace(go.Scatter(
+                x=[piv_x], y=[float(pv)], mode='markers',
+                marker=dict(color=line_color, size=9, symbol='circle',
+                            line=dict(width=1, color=COLORS['bg'])),
+                hoverinfo='skip', showlegend=False,
+            ))
+        # current-value marker
+        fig.add_trace(go.Scatter(
+            x=[cur_x], y=[current], mode='markers',
+            marker=dict(color=COLORS['text'], size=7, symbol='diamond',
+                        line=dict(width=1, color=COLORS['bg'])),
+            hoverinfo='skip', showlegend=False,
+        ))
+        # y-range from the data + bands, clamped to [0, 100]
+        pts = series + bands + [current]
+        lo = max(0, min(pts) - 5)
+        hi = min(100, max(pts) + 5)
+        if hi <= lo:
+            lo, hi = 0.0, 100.0
+        fig.update_layout(
+            height=118, margin=dict(l=26, r=8, t=4, b=4),
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=COLORS['text_dim'], size=9), showlegend=False,
+        )
+        fig.update_xaxes(visible=False, showgrid=False, range=[0, max(cur_x, 1)])
+        fig.update_yaxes(range=[lo, hi], showgrid=True, gridcolor=COLORS['chart_grid'],
+                         gridwidth=0.5, dtick=20,
+                         tickfont=dict(size=8, color=COLORS['text_muted']))
+
+        arrow = '▲' if sign > 0 else ('▼' if sign < 0 else '—')
+        label = f'{tf_label}  ·  RSI {current:.1f}  {arrow}'
+        if g.get('regime'):
+            label += '  (regime)'
+        return html.Div([
+            html.Div(label, style={
+                'fontSize': '0.62rem', 'color': line_color, 'fontWeight': '700',
+                'padding': '2px 0 0 4px'}),
+            dcc.Graph(figure=fig, config={'displayModeBar': False},
+                      style={'height': '118px'}),
+        ])
+    except Exception:
+        return html.Div(f'{tf_label}: no RSI graph', style={
+            'fontSize': '0.6rem', 'color': COLORS['text_muted'], 'padding': '6px 4px'})
+
+
 def build_slope_panel(symbol, analysis, last_updated=''):
     """RSI+MACD slope direction panel — H1/H4 pivot slopes + the current decision."""
     slopes = analysis.get('slopes', {}) or {}
@@ -781,6 +866,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
     exit_reason = analysis.get('exit_reason')
     rsi_value = analysis.get('rsi_value', 50.0)
     rsi_mtf = analysis.get('rsi_mtf', {})
+    rsi_graphs = analysis.get('rsi_graphs', {}) or {}
     iteration_ms = analysis.get('iteration_ms')
     src_count = analysis.get('source_candle_count', 0)
     src_last_time = analysis.get('last_source_candle_time', '-')
@@ -840,6 +926,16 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                 _slope_cell(h4.get('rsi')), _slope_cell(h4.get('macd')),
                 html.Span('H1', style=row_lbl),
                 _slope_cell(h1.get('rsi')), _slope_cell(h1.get('macd')),
+            ]),
+            # RSI pivot mini-charts (D1 / H4 / H1): line + peak marker + dotted
+            # peak->current slope line (green +ve / red -ve).
+            html.Div(style={'padding': '2px 12px 2px'}, children=[
+                html.Div('RSI pivots — peak → current (green up · red down)', style={
+                    'fontSize': '0.6rem', 'color': COLORS['text_dim'],
+                    'fontWeight': '600', 'padding': '4px 0 0 4px'}),
+                _rsi_mini_graph('D1', rsi_graphs.get('D1')),
+                _rsi_mini_graph('H4', rsi_graphs.get('H4')),
+                _rsi_mini_graph('H1', rsi_graphs.get('H1')),
             ]),
             # Status (cooldown / exit reason)
             html.Div(status_text, style={
