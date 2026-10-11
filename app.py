@@ -16,7 +16,6 @@ from constants import (
     MACD_FAST, MACD_SLOW, MACD_SIGNAL,
     SLOPE_TIMEFRAMES, PEAK_LOOKBACK, PIVOT_WIDTH, RSI_PEAK_OB, RSI_PEAK_OS,
     RSI_GRAPH_BARS,
-    D1_RSI_UP, D1_RSI_DN, D1_MACD_MODE,
     REENTRY_COOLDOWN_SECONDS,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
@@ -594,99 +593,48 @@ class MT5TradingBot:
                                 macd_df = self.indicator.calculate_macd(
                                     tf_df['close'], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL
                                 )
-                                if tf_name == 'TIMEFRAME_D1':
-                                    # D1 is a continuous TREND REGIME (persistent daily
-                                    # bias), not a reversal pivot: RSI vs a neutral band,
-                                    # and MACD line-vs-0 (or histogram).
-                                    _rv = rsi_mtf[tf_name]
-                                    if len(macd_df) > 0:
-                                        _ref = (float(macd_df['macd'].iloc[-1]) if D1_MACD_MODE == 'line'
-                                                else float(macd_df['hist'].iloc[-1]))
-                                    else:
-                                        _ref = 0.0
-                                    if _ref != _ref:  # NaN guard
-                                        _ref = 0.0
-                                    _rsi_sign = 1 if _rv >= D1_RSI_UP else (-1 if _rv <= D1_RSI_DN else 0)
-                                    _macd_sign = 1 if _ref > 0 else (-1 if _ref < 0 else 0)
-                                    slopes['D1'] = {
-                                        'rsi': {'sign': _rsi_sign, 'value': round(_rv, 2),
-                                                'regime': True, 'slope': None, 'side': None, 'bars_ago': None},
-                                        'macd': {'sign': _macd_sign, 'value': round(_ref, 5),
-                                                 'regime': True, 'slope': None, 'side': None, 'bars_ago': None},
-                                    }
-                                    # D1 RSI mini-chart: daily RSI line + its latest pivot
-                                    # (display only; the D1 DECISION uses the 55/45 regime
-                                    # bands) + the regime band reference lines.
-                                    _d1_piv = self.indicator.latest_pivot_slope(
-                                        rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH
-                                    )
-                                    rsi_graphs['D1'] = {
-                                        'series': [round(float(v), 2) for v in rsi_s.tail(RSI_GRAPH_BARS).tolist()],
-                                        'current': round(float(_rv), 2),
-                                        'pivot_bars_ago': _d1_piv.get('bars_ago'),
-                                        'pivot_value': (round(_d1_piv['value'], 2)
-                                                        if _d1_piv.get('value') is not None else None),
-                                        'sign': _d1_piv.get('sign', 0),
-                                        'bands': [D1_RSI_DN, D1_RSI_UP],
-                                        'clamp': [0, 100], 'name': 'RSI', 'regime': True,
-                                    }
-                                    # D1 MACD-histogram mini-chart: daily hist line + its
-                                    # latest pivot (display only; the D1 MACD DECISION uses
-                                    # the MACD line-vs-0 regime) + the zero reference line.
-                                    _d1_hist = macd_df['hist']
-                                    _d1_macd_piv = self.indicator.latest_pivot_slope(
-                                        _d1_hist, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH
-                                    )
-                                    macd_graphs['D1'] = {
-                                        'series': [round(float(v), 5) for v in _d1_hist.tail(RSI_GRAPH_BARS).tolist()],
-                                        'current': round(float(_d1_hist.iloc[-1]), 5),
-                                        'pivot_bars_ago': _d1_macd_piv.get('bars_ago'),
-                                        'pivot_value': (round(_d1_macd_piv['value'], 5)
-                                                        if _d1_macd_piv.get('value') is not None else None),
-                                        'sign': _d1_macd_piv.get('sign', 0),
-                                        'bands': [0], 'clamp': None, 'name': 'MACD', 'regime': True,
-                                    }
-                                else:
-                                    rsi_slope = self.indicator.latest_pivot_slope(
-                                        rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
-                                        ob_level=RSI_PEAK_OB, os_level=RSI_PEAK_OS
-                                    )
-                                    # MACD has no fixed OB/OS; the signal line's sign is its
-                                    # regime proxy -> read the high (OB) side when signal > 0,
-                                    # the low (OS) side when signal < 0.
-                                    _sig = float(macd_df['signal'].iloc[-1]) if len(macd_df) > 0 else 0.0
-                                    _macd_side = 'high' if _sig > 0 else ('low' if _sig < 0 else None)
-                                    macd_slope = self.indicator.latest_pivot_slope(
-                                        macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
-                                        side=_macd_side
-                                    )
-                                    _tf_key = tf_name.replace('TIMEFRAME_', '')
-                                    slopes[_tf_key] = {
-                                        'rsi': rsi_slope, 'macd': macd_slope,
-                                    }
-                                    # RSI mini-chart: RSI line + latest (OB/OS-band) pivot +
-                                    # peak->current line coloured by the RSI slope sign.
-                                    rsi_graphs[_tf_key] = {
-                                        'series': [round(float(v), 2) for v in rsi_s.tail(RSI_GRAPH_BARS).tolist()],
-                                        'current': round(float(rsi_s.iloc[-1]), 2),
-                                        'pivot_bars_ago': rsi_slope.get('bars_ago'),
-                                        'pivot_value': (round(rsi_slope['value'], 2)
-                                                        if rsi_slope.get('value') is not None else None),
-                                        'sign': rsi_slope.get('sign', 0),
-                                        'bands': [RSI_PEAK_OS, RSI_PEAK_OB],
-                                        'clamp': [0, 100], 'name': 'RSI', 'regime': False,
-                                    }
-                                    # MACD-histogram mini-chart: hist line + latest (signal-
-                                    # side) pivot + peak->current line coloured by its slope.
-                                    macd_graphs[_tf_key] = {
-                                        'series': [round(float(v), 5) for v in macd_df['hist'].tail(RSI_GRAPH_BARS).tolist()],
-                                        'current': round(float(macd_df['hist'].iloc[-1]), 5),
-                                        'pivot_bars_ago': macd_slope.get('bars_ago'),
-                                        'pivot_value': (round(macd_slope['value'], 5)
-                                                        if macd_slope.get('value') is not None else None),
-                                        'sign': macd_slope.get('sign', 0),
-                                        'bands': [0], 'clamp': None, 'name': 'MACD', 'regime': False,
-                                    }
+                                # D1 / H4 / H1 are all latest-pivot slopes (D1 is a
+                                # pivot now, not a regime) - identical computation.
+                                rsi_slope = self.indicator.latest_pivot_slope(
+                                    rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
+                                    ob_level=RSI_PEAK_OB, os_level=RSI_PEAK_OS
+                                )
+                                # MACD has no fixed OB/OS; the signal line's sign
+                                # selects the pivot side -> high (OB) when signal > 0,
+                                # low (OS) when signal < 0.
+                                _sig = float(macd_df['signal'].iloc[-1]) if len(macd_df) > 0 else 0.0
+                                _macd_side = 'high' if _sig > 0 else ('low' if _sig < 0 else None)
+                                macd_slope = self.indicator.latest_pivot_slope(
+                                    macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
+                                    side=_macd_side
+                                )
+                                _tf_key = tf_name.replace('TIMEFRAME_', '')
+                                slopes[_tf_key] = {
+                                    'rsi': rsi_slope, 'macd': macd_slope,
+                                }
+                                # RSI mini-chart: RSI line + latest (OB/OS-band) pivot +
+                                # peak->current line coloured by the RSI slope sign.
+                                rsi_graphs[_tf_key] = {
+                                    'series': [round(float(v), 2) for v in rsi_s.tail(RSI_GRAPH_BARS).tolist()],
+                                    'current': round(float(rsi_s.iloc[-1]), 2),
+                                    'pivot_bars_ago': rsi_slope.get('bars_ago'),
+                                    'pivot_value': (round(rsi_slope['value'], 2)
+                                                    if rsi_slope.get('value') is not None else None),
+                                    'sign': rsi_slope.get('sign', 0),
+                                    'bands': [RSI_PEAK_OS, RSI_PEAK_OB],
+                                    'clamp': [0, 100], 'name': 'RSI',
+                                }
+                                # MACD-histogram mini-chart: hist line + latest (signal-
+                                # side) pivot + peak->current line coloured by its slope.
+                                macd_graphs[_tf_key] = {
+                                    'series': [round(float(v), 5) for v in macd_df['hist'].tail(RSI_GRAPH_BARS).tolist()],
+                                    'current': round(float(macd_df['hist'].iloc[-1]), 5),
+                                    'pivot_bars_ago': macd_slope.get('bars_ago'),
+                                    'pivot_value': (round(macd_slope['value'], 5)
+                                                    if macd_slope.get('value') is not None else None),
+                                    'sign': macd_slope.get('sign', 0),
+                                    'bands': [0], 'clamp': None, 'name': 'MACD',
+                                }
                         else:
                             rsi_mtf[tf_name] = 50.0
                     current_rsi = rsi_mtf.get('TIMEFRAME_M1', 50.0)
