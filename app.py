@@ -15,6 +15,7 @@ from constants import (
     RSI_DCA_LADDER_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
     MACD_FAST, MACD_SLOW, MACD_SIGNAL,
     SLOPE_TIMEFRAMES, PEAK_LOOKBACK, PIVOT_WIDTH, RSI_PEAK_OB, RSI_PEAK_OS,
+    RSI_GRAPH_BARS,
     D1_RSI_UP, D1_RSI_DN, D1_MACD_MODE,
     REENTRY_COOLDOWN_SECONDS,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
@@ -568,6 +569,7 @@ class MT5TradingBot:
                     # de-duplicated while preserving order.
                     rsi_mtf = {}
                     slopes = {}   # H1/H4 RSI + MACD-histogram pivot slopes (direction engine)
+                    rsi_graphs = {}  # per-TF RSI series + pivot for the dashboard mini-charts
                     rsi_tf_list = []
                     for tf_name in (list(RSI_MTF_TIMEFRAMES)
                                     + list(RSI_DCA_LADDER_TIMEFRAMES)
@@ -611,6 +613,22 @@ class MT5TradingBot:
                                         'macd': {'sign': _macd_sign, 'value': round(_ref, 5),
                                                  'regime': True, 'slope': None, 'side': None, 'bars_ago': None},
                                     }
+                                    # D1 RSI mini-chart: daily RSI line + its latest pivot
+                                    # (display only; the D1 DECISION uses the 55/45 regime
+                                    # bands) + the regime band reference lines.
+                                    _d1_piv = self.indicator.latest_pivot_slope(
+                                        rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH
+                                    )
+                                    rsi_graphs['D1'] = {
+                                        'series': [round(float(v), 2) for v in rsi_s.tail(RSI_GRAPH_BARS).tolist()],
+                                        'current': round(float(_rv), 2),
+                                        'pivot_bars_ago': _d1_piv.get('bars_ago'),
+                                        'pivot_value': (round(_d1_piv['value'], 2)
+                                                        if _d1_piv.get('value') is not None else None),
+                                        'sign': _d1_piv.get('sign', 0),
+                                        'bands': [D1_RSI_DN, D1_RSI_UP],
+                                        'regime': True,
+                                    }
                                 else:
                                     rsi_slope = self.indicator.latest_pivot_slope(
                                         rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
@@ -625,8 +643,21 @@ class MT5TradingBot:
                                         macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
                                         side=_macd_side
                                     )
-                                    slopes[tf_name.replace('TIMEFRAME_', '')] = {
+                                    _tf_key = tf_name.replace('TIMEFRAME_', '')
+                                    slopes[_tf_key] = {
                                         'rsi': rsi_slope, 'macd': macd_slope,
+                                    }
+                                    # RSI mini-chart: RSI line + latest (OB/OS-band) pivot +
+                                    # peak->current line coloured by the RSI slope sign.
+                                    rsi_graphs[_tf_key] = {
+                                        'series': [round(float(v), 2) for v in rsi_s.tail(RSI_GRAPH_BARS).tolist()],
+                                        'current': round(float(rsi_s.iloc[-1]), 2),
+                                        'pivot_bars_ago': rsi_slope.get('bars_ago'),
+                                        'pivot_value': (round(rsi_slope['value'], 2)
+                                                        if rsi_slope.get('value') is not None else None),
+                                        'sign': rsi_slope.get('sign', 0),
+                                        'bands': [RSI_PEAK_OS, RSI_PEAK_OB],
+                                        'regime': False,
                                     }
                         else:
                             rsi_mtf[tf_name] = 50.0
@@ -645,6 +676,7 @@ class MT5TradingBot:
                         slopes=slopes,
                         entry_allowed=entry_allowed,
                     )
+                    analysis_data['rsi_graphs'] = rsi_graphs
                     analysis_data['candle_fresh'] = True
                 else:
                     analysis_data['candle_fresh'] = False
