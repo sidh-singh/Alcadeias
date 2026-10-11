@@ -61,6 +61,11 @@ MACD_SIGNAL = 9                     # signal EMA length
 SLOPE_TIMEFRAMES = ['TIMEFRAME_H1', 'TIMEFRAME_H4']   # direction decided on H1 and H4
 PEAK_LOOKBACK = 20                  # candles scanned for the latest pivot (configurable)
 PIVOT_WIDTH = 2                     # bars required on each side to confirm a pivot (k)
+# RSI pivots only count as real OB/OS turns inside these bands (MACD stays unbounded):
+#   OB high valid when RSI >= RSI_PEAK_OB (65-1 -> [64,100]); OS low valid when
+#   RSI <= RSI_PEAK_OS (35+1 -> [0,36]). Neutral-zone RSI wiggles (37-63) are ignored.
+RSI_PEAK_OB = 64                    # a HIGH pivot on RSI counts only if value >= this
+RSI_PEAK_OS = 36                    # a LOW  pivot on RSI counts only if value <= this
 REENTRY_COOLDOWN_SECONDS = 300      # block a fresh entry for this long after any close
 # Profit-protect fires only when basket profit exceeds this USD buffer. Set it to
 # cover the round-trip spread + commission so a protect-close never locks a net loss.
