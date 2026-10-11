@@ -773,15 +773,33 @@ def _slope_cell(sl):
     )
 
 
-def _rsi_mini_graph(tf_label, g):
+def _fmt_pivot_val(v, clamp):
+    """Axis/label number format: RSI (clamp set) -> 1dp; MACD (clamp None) ->
+    signed, adaptive precision for the unbounded histogram."""
+    if clamp is not None:
+        return f'{v:.1f}'
+    a = abs(v)
+    if a == 0:
+        return '0'
+    if a < 1:
+        return f'{v:+.5f}'
+    if a < 1000:
+        return f'{v:+.3f}'
+    return f'{v:+.1f}'
+
+
+def _pivot_mini_graph(tf_label, g):
     """
-    Compact RSI chart for one timeframe: the recent RSI line, the latest pivot
-    marker, a dotted line from that pivot to the current RSI (GREEN if the slope
-    is +ve, RED if -ve, dim if flat), the current-value marker, and the OB/OS (or
-    D1 regime 45/55) reference bands. `g` = analysis['rsi_graphs'][tf]. Wrapped so
-    a bad payload can never break the panel.
+    Compact pivot chart for one timeframe/indicator: the recent series line, the
+    latest pivot marker, a dotted line from that pivot to the current value (GREEN
+    if the slope is +ve, RED if -ve, dim if flat), the current-value marker, and
+    reference lines. Works for both RSI (g['clamp']=[0,100], bands=OB/OS or 45/55)
+    and MACD-histogram (g['clamp']=None -> auto-range, bands=[0] zero line).
+    `g` = analysis['rsi_graphs'|'macd_graphs'][tf]. Wrapped so a bad payload can
+    never break the panel.
     """
     g = g or {}
+    name = g.get('name', 'RSI')
     try:
         series = [float(v) for v in (g.get('series') or [])]
         if not series:
@@ -790,14 +808,15 @@ def _rsi_mini_graph(tf_label, g):
         current = float(g.get('current', series[-1]))
         sign = g.get('sign', 0) or 0
         bands = [float(b) for b in (g.get('bands') or []) if isinstance(b, (int, float))]
+        clamp = g.get('clamp', [0, 100])  # [lo,hi] for RSI; None -> auto-range (MACD)
         line_color = COLORS['buy'] if sign > 0 else (COLORS['sell'] if sign < 0 else COLORS['text_dim'])
 
         fig = go.Figure()
-        # OB/OS (or D1 45/55 regime) reference bands
+        # reference lines: RSI OB/OS (or 45/55 regime), or the MACD zero line
         for b in bands:
             fig.add_hline(y=b, line_dash='dot', line_color=COLORS['text_muted'],
                           line_width=0.8, opacity=0.5)
-        # RSI line
+        # series line
         fig.add_trace(go.Scatter(
             x=list(range(len(series))), y=series, mode='lines',
             line=dict(color=COLORS['accent'], width=1.6),
@@ -826,24 +845,35 @@ def _rsi_mini_graph(tf_label, g):
                         line=dict(width=1, color=COLORS['bg'])),
             hoverinfo='skip', showlegend=False,
         ))
-        # y-range from the data + bands, clamped to [0, 100]
+        # y-range: RSI clamps to [0,100]; MACD auto-ranges with padding (0 always
+        # in view via the zero band) so the histogram sign is readable.
         pts = series + bands + [current]
-        lo = max(0, min(pts) - 5)
-        hi = min(100, max(pts) + 5)
-        if hi <= lo:
-            lo, hi = 0.0, 100.0
+        pmin, pmax = min(pts), max(pts)
+        if clamp is not None:
+            lo = max(clamp[0], pmin - 5)
+            hi = min(clamp[1], pmax + 5)
+            if hi <= lo:
+                lo, hi = float(clamp[0]), float(clamp[1])
+            ydtick = 20
+        else:
+            span = pmax - pmin
+            pad = (span * 0.12) if span > 0 else (abs(pmax) * 0.12 or 1.0)
+            lo, hi = pmin - pad, pmax + pad
+            if hi <= lo:
+                lo, hi = pmin - 1.0, pmax + 1.0
+            ydtick = None
         fig.update_layout(
-            height=118, margin=dict(l=26, r=8, t=4, b=4),
+            height=118, margin=dict(l=38, r=8, t=4, b=4),
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             font=dict(color=COLORS['text_dim'], size=9), showlegend=False,
         )
         fig.update_xaxes(visible=False, showgrid=False, range=[0, max(cur_x, 1)])
         fig.update_yaxes(range=[lo, hi], showgrid=True, gridcolor=COLORS['chart_grid'],
-                         gridwidth=0.5, dtick=20,
+                         gridwidth=0.5, dtick=ydtick,
                          tickfont=dict(size=8, color=COLORS['text_muted']))
 
         arrow = '▲' if sign > 0 else ('▼' if sign < 0 else '—')
-        label = f'{tf_label}  ·  RSI {current:.1f}  {arrow}'
+        label = f'{tf_label}  ·  {name} {_fmt_pivot_val(current, clamp)}  {arrow}'
         if g.get('regime'):
             label += '  (regime)'
         return html.Div([
@@ -854,7 +884,7 @@ def _rsi_mini_graph(tf_label, g):
                       style={'height': '118px'}),
         ])
     except Exception:
-        return html.Div(f'{tf_label}: no RSI graph', style={
+        return html.Div(f'{tf_label}: no {name} graph', style={
             'fontSize': '0.6rem', 'color': COLORS['text_muted'], 'padding': '6px 4px'})
 
 
@@ -867,6 +897,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
     rsi_value = analysis.get('rsi_value', 50.0)
     rsi_mtf = analysis.get('rsi_mtf', {})
     rsi_graphs = analysis.get('rsi_graphs', {}) or {}
+    macd_graphs = analysis.get('macd_graphs', {}) or {}
     iteration_ms = analysis.get('iteration_ms')
     src_count = analysis.get('source_candle_count', 0)
     src_last_time = analysis.get('last_source_candle_time', '-')
@@ -927,15 +958,24 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                 html.Span('H1', style=row_lbl),
                 _slope_cell(h1.get('rsi')), _slope_cell(h1.get('macd')),
             ]),
-            # RSI pivot mini-charts (D1 / H4 / H1): line + peak marker + dotted
-            # peak->current slope line (green +ve / red -ve).
+            # Pivot mini-charts — RSI (left) + MACD-hist (right) per timeframe:
+            # series line + latest-pivot marker + dotted peak->current slope line
+            # (green +ve / red -ve) + reference lines (RSI OB/OS or 45/55; MACD 0).
             html.Div(style={'padding': '2px 12px 2px'}, children=[
-                html.Div('RSI pivots — peak → current (green up · red down)', style={
+                html.Div('Pivots — peak → current (green up · red down)   ·   RSI left · MACD right', style={
                     'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                    'fontWeight': '600', 'padding': '4px 0 0 4px'}),
-                _rsi_mini_graph('D1', rsi_graphs.get('D1')),
-                _rsi_mini_graph('H4', rsi_graphs.get('H4')),
-                _rsi_mini_graph('H1', rsi_graphs.get('H1')),
+                    'fontWeight': '600', 'padding': '4px 0 2px 4px'}),
+                html.Div(style={
+                    'display': 'grid', 'gridTemplateColumns': '1fr 1fr',
+                    'columnGap': '10px', 'rowGap': '2px',
+                }, children=[
+                    _pivot_mini_graph('D1', rsi_graphs.get('D1')),
+                    _pivot_mini_graph('D1', macd_graphs.get('D1')),
+                    _pivot_mini_graph('H4', rsi_graphs.get('H4')),
+                    _pivot_mini_graph('H4', macd_graphs.get('H4')),
+                    _pivot_mini_graph('H1', rsi_graphs.get('H1')),
+                    _pivot_mini_graph('H1', macd_graphs.get('H1')),
+                ]),
             ]),
             # Status (cooldown / exit reason)
             html.Div(status_text, style={

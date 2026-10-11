@@ -570,6 +570,7 @@ class MT5TradingBot:
                     rsi_mtf = {}
                     slopes = {}   # H1/H4 RSI + MACD-histogram pivot slopes (direction engine)
                     rsi_graphs = {}  # per-TF RSI series + pivot for the dashboard mini-charts
+                    macd_graphs = {}  # per-TF MACD-histogram series + pivot for the mini-charts
                     rsi_tf_list = []
                     for tf_name in (list(RSI_MTF_TIMEFRAMES)
                                     + list(RSI_DCA_LADDER_TIMEFRAMES)
@@ -627,7 +628,23 @@ class MT5TradingBot:
                                                         if _d1_piv.get('value') is not None else None),
                                         'sign': _d1_piv.get('sign', 0),
                                         'bands': [D1_RSI_DN, D1_RSI_UP],
-                                        'regime': True,
+                                        'clamp': [0, 100], 'name': 'RSI', 'regime': True,
+                                    }
+                                    # D1 MACD-histogram mini-chart: daily hist line + its
+                                    # latest pivot (display only; the D1 MACD DECISION uses
+                                    # the MACD line-vs-0 regime) + the zero reference line.
+                                    _d1_hist = macd_df['hist']
+                                    _d1_macd_piv = self.indicator.latest_pivot_slope(
+                                        _d1_hist, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH
+                                    )
+                                    macd_graphs['D1'] = {
+                                        'series': [round(float(v), 5) for v in _d1_hist.tail(RSI_GRAPH_BARS).tolist()],
+                                        'current': round(float(_d1_hist.iloc[-1]), 5),
+                                        'pivot_bars_ago': _d1_macd_piv.get('bars_ago'),
+                                        'pivot_value': (round(_d1_macd_piv['value'], 5)
+                                                        if _d1_macd_piv.get('value') is not None else None),
+                                        'sign': _d1_macd_piv.get('sign', 0),
+                                        'bands': [0], 'clamp': None, 'name': 'MACD', 'regime': True,
                                     }
                                 else:
                                     rsi_slope = self.indicator.latest_pivot_slope(
@@ -657,7 +674,18 @@ class MT5TradingBot:
                                                         if rsi_slope.get('value') is not None else None),
                                         'sign': rsi_slope.get('sign', 0),
                                         'bands': [RSI_PEAK_OS, RSI_PEAK_OB],
-                                        'regime': False,
+                                        'clamp': [0, 100], 'name': 'RSI', 'regime': False,
+                                    }
+                                    # MACD-histogram mini-chart: hist line + latest (signal-
+                                    # side) pivot + peak->current line coloured by its slope.
+                                    macd_graphs[_tf_key] = {
+                                        'series': [round(float(v), 5) for v in macd_df['hist'].tail(RSI_GRAPH_BARS).tolist()],
+                                        'current': round(float(macd_df['hist'].iloc[-1]), 5),
+                                        'pivot_bars_ago': macd_slope.get('bars_ago'),
+                                        'pivot_value': (round(macd_slope['value'], 5)
+                                                        if macd_slope.get('value') is not None else None),
+                                        'sign': macd_slope.get('sign', 0),
+                                        'bands': [0], 'clamp': None, 'name': 'MACD', 'regime': False,
                                     }
                         else:
                             rsi_mtf[tf_name] = 50.0
@@ -677,6 +705,7 @@ class MT5TradingBot:
                         entry_allowed=entry_allowed,
                     )
                     analysis_data['rsi_graphs'] = rsi_graphs
+                    analysis_data['macd_graphs'] = macd_graphs
                     analysis_data['candle_fresh'] = True
                 else:
                     analysis_data['candle_fresh'] = False
