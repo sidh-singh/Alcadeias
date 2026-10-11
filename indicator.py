@@ -139,7 +139,7 @@ class Indicator:
             index=series.index,
         )
 
-    def latest_pivot_slope(self, series, lookback=20, width=2):
+    def latest_pivot_slope(self, series, lookback=20, width=2, ob_level=None, os_level=None):
         """
         Latest-pivot direction of a series (RSI or MACD histogram).
 
@@ -158,10 +158,17 @@ class Indicator:
         pivot is >= `width` bars old; while the series keeps moving one way the latest
         confirmed pivot is the previous turn and the slope reads that direction.
 
+        Optional OB/OS boundary: when `ob_level` is given a pivot HIGH only counts if
+        its value >= ob_level; when `os_level` is given a pivot LOW only counts if its
+        value <= os_level. Pivots outside the band are skipped (scan continues). None =
+        no boundary (any pivot) - used for unbounded series like the MACD histogram.
+
         Args:
             series: pd.Series (or array-like) of indicator values
             lookback: window of bars to search (default 20)
             width: bars required on each side to confirm a pivot, k (default 2)
+            ob_level: min value for a HIGH pivot to qualify (None = no limit)
+            os_level: max value for a LOW pivot to qualify (None = no limit)
 
         Returns:
             dict: {side: 'high'|'low'|None, value, bars_ago, slope, sign}
@@ -188,6 +195,11 @@ class Indicator:
                 continue
             is_high = bool(np.all(c > left) and np.all(c > right))
             is_low = bool(np.all(c < left) and np.all(c < right))
+            # OB/OS boundary: a HIGH must be in the OB band, a LOW in the OS band.
+            if is_high and ob_level is not None and c < ob_level:
+                is_high = False
+            if is_low and os_level is not None and c > os_level:
+                is_low = False
             if is_high or is_low:
                 bars_ago = (n - 1) - i
                 slope = (current - c) / bars_ago if bars_ago > 0 else 0.0
