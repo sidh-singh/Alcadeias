@@ -1,86 +1,92 @@
 # RSI+MACD Slope Entry — D1 × H4 × H1 Decision Table
 
 Entry **direction** (fresh entry only) is decided by `strategy._slope_direction()` from
-three timeframes. **D1 is a continuous trend regime; H4 is primary; H1 confirms.**
-Exits are unchanged (H4/H1). This document mirrors the code exactly.
+three timeframes. **All three (D1, H4, H1) are latest-pivot slopes** — D1 is a *pivot*,
+not a trend regime. Exits are unchanged (H4/H1). This document mirrors the code exactly.
+
+## How it works — two stages
+1. **Base direction** — H4 **primary**, H1 **confirm** (the H4/H1 engine).
+2. **D1 side-gate** — the D1 pivot filters which *side* is allowed:
+   D1 UP ⇒ buys only · D1 DOWN ⇒ sells only · D1 MIXED ⇒ no filter.
 
 ## Inputs
-Each timeframe yields **two slope signs** (RSI, MACD), each `+ / − / 0`:
+Each timeframe yields **two pivot-slope signs** (RSI, MACD-histogram), each `+ / − / 0`:
 
-- **D1** — *regime* signs (NOT the pivot-slope):
-  - RSI sign: `+` if RSI ≥ `D1_RSI_UP` (55), `−` if ≤ `D1_RSI_DN` (45), else `0` (45–55 neutral).
-  - MACD sign: `+` if MACD line > 0, `−` if < 0, else `0` (`D1_MACD_MODE='line'`; `'hist'` = macd-vs-signal).
-- **H4 / H1** — *pivot-slope* signs: RSI (latest OB/OS-band pivot → current) and MACD-hist
-  (latest signal-side pivot → current).
+- **RSI** sign: slope from the latest OB/OS-band pivot (HIGH only if RSI ≥ `RSI_PEAK_OB`
+  = 60, LOW only if RSI ≤ `RSI_PEAK_OS` = 40) to the current RSI.
+- **MACD** sign: slope from the latest MACD-histogram pivot (side chosen by the MACD
+  **signal line**: signal > 0 → read the HIGH side, < 0 → the LOW side) to the current hist.
 
 **Per-timeframe verdict:** `UP` = both `+` · `DOWN` = both `−` · `SPLIT` = one `+`/one `−` ·
-`FLAT` = at least one `0`. D1 collapses SPLIT+FLAT into **MIXED** (it only tests both-aligned).
+`FLAT` = at least one `0`. For D1 only the UP / DOWN cases gate; everything else
+(SPLIT or any `0`) is **MIXED** = no gate.
 
 **H1 confirm:** `≥1 up` = at least one H1 sign `+`; `≥1 down` = at least one `−`;
 `both up/down` = both.
 
-## Decision table
-
-### Tier 1 — D1 = UP → strict, BUY-only (D1 and H4 must both be UP)
-| H4 | H1 | Decision |
+## Stage 1 — base direction (H4 primary · H1 confirm)
+| H4 | H1 | Base |
 |---|---|---|
-| UP | ≥1 up | **BUY** |
+| UP (both +) | ≥1 up | **BUY** |
 | UP | no up (both ≤ 0) | WAIT |
-| DOWN / SPLIT / FLAT | anything | WAIT |
-
-### Tier 1 — D1 = DOWN → strict, SELL-only
-| H4 | H1 | Decision |
-|---|---|---|
-| DOWN | ≥1 down | **SELL** |
+| DOWN (both −) | ≥1 down | **SELL** |
 | DOWN | no down (both ≥ 0) | WAIT |
-| UP / SPLIT / FLAT | anything | WAIT |
-
-### Tier 2 — D1 = MIXED (SPLIT or any neutral) → fall back to the H4/H1 engine (D1 ignored)
-| H4 | H1 | Decision |
-|---|---|---|
-| UP | ≥1 up | **BUY** |
-| UP | no up | WAIT |
-| DOWN | ≥1 down | **SELL** |
-| DOWN | no down | WAIT |
-| SPLIT | both up | **BUY** |
+| SPLIT (one +, one −) | both up | **BUY** |
 | SPLIT | both down | **SELL** |
-| SPLIT | mixed / neutral | WAIT |
+| SPLIT | mixed / flat | WAIT |
 | FLAT (any 0) | anything | WAIT |
+
+## Stage 2 — D1 pivot side-gate
+| D1 | Base = BUY | Base = SELL | Base = WAIT |
+|---|---|---|---|
+| **UP** (both +) | **BUY** | WAIT | WAIT |
+| **DOWN** (both −) | WAIT | **SELL** | WAIT |
+| **MIXED** (split / any 0) | **BUY** | **SELL** | WAIT |
+
+Final decision = Stage 1 base, then filtered by Stage 2. (Invariant: D1 UP never sells,
+D1 DOWN never buys.)
 
 ## Worked examples  `(D1 rsi,macd | H4 rsi,macd | H1 rsi,macd)`
 | D1 | H4 | H1 | Path | Decision |
 |---|---|---|---|---|
-| +,+ | +,+ | +,− | D1 UP, H4 UP, ≥1 H1 up | **BUY** |
-| +,+ | +,− | +,+ | D1 UP but H4 SPLIT → strict | WAIT |
-| +,+ | −,− | any | D1 UP but H4 DOWN | WAIT |
-| +,+ | +,+ | −,− | D1 UP, H4 UP, H1 no up | WAIT |
-| +,0 | +,+ | +,0 | D1 not both-up → MIXED → fallback | **BUY** |
-| +,− | −,− | −,+ | D1 MIXED → fallback (H4 DOWN + ≥1 down); D1 RSI+ ignored | **SELL** |
-| 0,0 | +,− | +,+ | D1 MIXED → fallback (H4 SPLIT + H1 both up) | **BUY** |
-| −,− | −,− | −,+ | D1 DOWN, H4 DOWN, ≥1 H1 down | **SELL** |
-| −,− | −,− | +,+ | D1 DOWN, H4 DOWN, H1 no down | WAIT |
+| +,+ | +,+ | +,− | base BUY (H4 UP, ≥1 H1 up); D1 UP allows | **BUY** |
+| +,+ | +,− | +,+ | base BUY (H4 SPLIT, H1 both up); D1 UP allows | **BUY** |
+| +,+ | −,− | any | base SELL/none (H4 DOWN); D1 UP blocks sells | WAIT |
+| +,+ | +,+ | −,− | base none (H4 UP, H1 no up) | WAIT |
+| +,0 | +,+ | +,0 | D1 MIXED (half); base BUY (H4 UP, ≥1 H1 up) | **BUY** |
+| +,− | −,− | −,+ | D1 MIXED (split); base SELL (H4 DOWN, ≥1 H1 down) | **SELL** |
+| 0,0 | +,− | +,+ | D1 MIXED; base BUY (H4 SPLIT, H1 both up) | **BUY** |
+| −,− | −,− | −,+ | base SELL (H4 DOWN, ≥1 H1 down); D1 DOWN allows | **SELL** |
+| −,− | +,− | −,− | base SELL (H4 SPLIT, H1 both down); D1 DOWN allows | **SELL** |
+| −,− | −,− | +,+ | base none (H4 DOWN, H1 no down) | WAIT |
 
 ## Flowchart
 ```
-FLAT? → signs: D1(regime) · H4(pivot) · H1(pivot)
-   │
-   ├─ D1 UP  (both +) ─► H4 UP?  ─ yes ─► ≥1 H1 up?   ─ yes ─► BUY
-   │                                └ no / no ─────────────────► WAIT
-   ├─ D1 DOWN (both −) ─► H4 DOWN? ─ yes ─► ≥1 H1 down? ─ yes ─► SELL
-   │                                └ no / no ─────────────────► WAIT
-   └─ D1 MIXED ─► H4/H1 engine:
-                   H4 UP    & ≥1 H1 up     → BUY
-                   H4 DOWN  & ≥1 H1 down   → SELL
-                   H4 SPLIT & H1 both up   → BUY
-                   H4 SPLIT & H1 both down → SELL
-                   else                    → WAIT
+signs: D1 · H4 · H1 (all latest-pivot slopes)
+        │
+   Stage 1  base direction (H4 primary, H1 confirm)
+        ├─ H4 UP    & ≥1 H1 up     → base BUY
+        ├─ H4 DOWN  & ≥1 H1 down   → base SELL
+        ├─ H4 SPLIT & H1 both up   → base BUY
+        ├─ H4 SPLIT & H1 both down → base SELL
+        └─ else                    → base WAIT
+        │
+   Stage 2  D1 side-gate
+        ├─ D1 UP   (both +) → BUY if base BUY  else WAIT
+        ├─ D1 DOWN (both −) → SELL if base SELL else WAIT
+        └─ D1 MIXED         → base passes through (BUY / SELL / WAIT)
 ```
 
 ## Notes
-- When D1 clearly trends, an H4 **SPLIT no longer trades** (strict needs H4 fully aligned) —
-  unlike the MIXED fallback, where H4-SPLIT + H1-both still trades.
-- In the fallback, **D1 is ignored entirely** (a half-signal like `D1 +,0` is MIXED).
-- Config knobs: `D1_RSI_UP`/`D1_RSI_DN` (55/45), `D1_MACD_MODE` ('line'), plus the H4/H1
-  pivot config `PEAK_LOOKBACK` (20), `PIVOT_WIDTH` (2), `RSI_PEAK_OB`/`RSI_PEAK_OS` (60/40).
-- Exits are unchanged (H4/H1): variant-A slope exits; `_h6` variant = +$unit target + slope
-  force-close.
+- **D1 is a pivot, not a regime** — it uses the same latest-pivot engine, OB/OS band
+  (60/40) and MACD signal-side selection as H4/H1, on daily bars (`PEAK_LOOKBACK`=20,
+  `PIVOT_WIDTH`=2). The old 55/45 RSI regime + MACD line-vs-0 (`D1_RSI_UP/DN`,
+  `D1_MACD_MODE`) are **removed**.
+- D1 only ever **removes** trades (gates the side); it never creates a direction the
+  H4/H1 engine didn't already produce.
+- Under a clearly-trending D1, an **H4-SPLIT with H1 fully aligned now trades** (e.g.
+  D1 UP + H4 split + H1 both up → BUY) — the base engine decides, D1 just allows the side.
+- Config knobs: `PEAK_LOOKBACK` (20), `PIVOT_WIDTH` (2), `RSI_PEAK_OB`/`RSI_PEAK_OS`
+  (60/40) — shared by D1/H4/H1.
+- Exits are unchanged (H4/H1): variant-A slope exits; `_h6` variant = +$unit target +
+  slope force-close.
