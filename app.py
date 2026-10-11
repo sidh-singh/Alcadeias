@@ -14,7 +14,8 @@ from constants import (
     RSI_LENGTH, RSI_MA_TYPE, RSI_CANDLE_COUNT, RSI_MTF_TIMEFRAMES,
     RSI_DCA_LADDER_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
     MACD_FAST, MACD_SLOW, MACD_SIGNAL,
-    SLOPE_TIMEFRAMES, PEAK_LOOKBACK, PIVOT_WIDTH, REENTRY_COOLDOWN_SECONDS,
+    SLOPE_TIMEFRAMES, PEAK_LOOKBACK, PIVOT_WIDTH, RSI_PEAK_OB, RSI_PEAK_OS,
+    REENTRY_COOLDOWN_SECONDS,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
@@ -590,7 +591,8 @@ class MT5TradingBot:
                                     tf_df['close'], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL
                                 )
                                 rsi_slope = self.indicator.latest_pivot_slope(
-                                    rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH
+                                    rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
+                                    ob_level=RSI_PEAK_OB, os_level=RSI_PEAK_OS
                                 )
                                 macd_slope = self.indicator.latest_pivot_slope(
                                     macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH
