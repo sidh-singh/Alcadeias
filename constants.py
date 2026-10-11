@@ -66,6 +66,9 @@ PIVOT_WIDTH = 2                     # bars required on each side to confirm a pi
 #   RSI <= RSI_PEAK_OS (35+5 -> [0,40]). Neutral-zone RSI wiggles (41-59) are ignored.
 RSI_PEAK_OB = 60                    # a HIGH pivot on RSI counts only if value >= this
 RSI_PEAK_OS = 40                    # a LOW  pivot on RSI counts only if value <= this
+# Dashboard RSI pivot graphs (H1/H4/D1): recent RSI bars each mini-chart plots.
+# Must exceed PEAK_LOOKBACK so the latest pivot is always within the drawn window.
+RSI_GRAPH_BARS = 40
 # ─── D1 trend regime (continuous; D1 uses this INSTEAD of the pivot-slope) ───
 # D1 is a persistent daily-trend filter, not a reversal detector. Its two signs:
 #   RSI  sign: +1 if RSI >= D1_RSI_UP, -1 if RSI <= D1_RSI_DN, else 0 (neutral band).
