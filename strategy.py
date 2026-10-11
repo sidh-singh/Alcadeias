@@ -74,23 +74,35 @@ class Strategy:
 
     def _slope_direction(self, slopes):
         """
-        Fresh-entry direction from the four H1/H4 slope signs (Step 6, locked).
+        Fresh-entry direction from the D1 / H4 / H1 slope signs.
 
-        H4 is primary, H1 confirms. Returns 'BUY', 'SELL', or None (WAIT). Any
-        missing / zero / undefined slope counts as "no direction".
+        D1 is a continuous trend REGIME (daily bias); H4 is primary; H1 confirms.
+        Returns 'BUY', 'SELL', or None (WAIT). Missing / zero slope = "no direction".
 
-          - H4 both +ve & (>=1 H1 +ve)  -> BUY   ; both H1 -ve/0 -> WAIT
-          - H4 both -ve & (>=1 H1 -ve)  -> SELL  ; both H1 +ve/0 -> WAIT
-          - H4 split    & H1 both +ve   -> BUY
-          - H4 split    & H1 both -ve   -> SELL  ; H1 mixed/zero -> WAIT
-          - H4 has a zero slope         -> WAIT
+        Strict when D1 shows a clear daily trend (D1 and H4 must align):
+          - D1 both +ve  -> BUY  iff H4 both +ve and (>=1 H1 +ve), else WAIT
+          - D1 both -ve  -> SELL iff H4 both -ve and (>=1 H1 -ve), else WAIT
+        When D1 is MIXED/neutral, fall back to the H4-primary / H1-confirm engine:
+          - H4 both +ve & (>=1 H1 +ve)  -> BUY
+          - H4 both -ve & (>=1 H1 -ve)  -> SELL
+          - H4 split    & H1 both +ve   -> BUY ; both -ve -> SELL ; else WAIT
+          - else                        -> WAIT
         """
         slopes = slopes or {}
+        d1r = self._slope_sign(slopes, 'D1', 'rsi')
+        d1m = self._slope_sign(slopes, 'D1', 'macd')
         h4r = self._slope_sign(slopes, 'H4', 'rsi')
         h4m = self._slope_sign(slopes, 'H4', 'macd')
         h1r = self._slope_sign(slopes, 'H1', 'rsi')
         h1m = self._slope_sign(slopes, 'H1', 'macd')
 
+        # D1 clear daily trend -> strict: D1 and H4 must align in that direction.
+        if d1r > 0 and d1m > 0:
+            return 'BUY' if (h4r > 0 and h4m > 0 and (h1r > 0 or h1m > 0)) else None
+        if d1r < 0 and d1m < 0:
+            return 'SELL' if (h4r < 0 and h4m < 0 and (h1r < 0 or h1m < 0)) else None
+
+        # D1 MIXED/neutral -> current H4-primary / H1-confirm engine (unchanged).
         if h4r > 0 and h4m > 0:
             return 'BUY' if (h1r > 0 or h1m > 0) else None
         if h4r < 0 and h4m < 0:
