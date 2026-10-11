@@ -15,6 +15,7 @@ from constants import (
     RSI_DCA_LADDER_TIMEFRAMES, RSI_FINAL_CLOSE_TIMEFRAME,
     MACD_FAST, MACD_SLOW, MACD_SIGNAL,
     SLOPE_TIMEFRAMES, PEAK_LOOKBACK, PIVOT_WIDTH, RSI_PEAK_OB, RSI_PEAK_OS,
+    D1_RSI_UP, D1_RSI_DN, D1_MACD_MODE,
     REENTRY_COOLDOWN_SECONDS,
     CANDLE_TIMEFRAME, CANDLE_COUNT,
     MARKET_STATUS_TIMEFRAME, MARKET_LOOKBACK_MINUTES,
@@ -590,22 +591,43 @@ class MT5TradingBot:
                                 macd_df = self.indicator.calculate_macd(
                                     tf_df['close'], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL
                                 )
-                                rsi_slope = self.indicator.latest_pivot_slope(
-                                    rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
-                                    ob_level=RSI_PEAK_OB, os_level=RSI_PEAK_OS
-                                )
-                                # MACD has no fixed OB/OS; the signal line's sign is its
-                                # regime proxy -> read the high (OB) side when signal > 0,
-                                # the low (OS) side when signal < 0.
-                                _sig = float(macd_df['signal'].iloc[-1]) if len(macd_df) > 0 else 0.0
-                                _macd_side = 'high' if _sig > 0 else ('low' if _sig < 0 else None)
-                                macd_slope = self.indicator.latest_pivot_slope(
-                                    macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
-                                    side=_macd_side
-                                )
-                                slopes[tf_name.replace('TIMEFRAME_', '')] = {
-                                    'rsi': rsi_slope, 'macd': macd_slope,
-                                }
+                                if tf_name == 'TIMEFRAME_D1':
+                                    # D1 is a continuous TREND REGIME (persistent daily
+                                    # bias), not a reversal pivot: RSI vs a neutral band,
+                                    # and MACD line-vs-0 (or histogram).
+                                    _rv = rsi_mtf[tf_name]
+                                    if len(macd_df) > 0:
+                                        _ref = (float(macd_df['macd'].iloc[-1]) if D1_MACD_MODE == 'line'
+                                                else float(macd_df['hist'].iloc[-1]))
+                                    else:
+                                        _ref = 0.0
+                                    if _ref != _ref:  # NaN guard
+                                        _ref = 0.0
+                                    _rsi_sign = 1 if _rv >= D1_RSI_UP else (-1 if _rv <= D1_RSI_DN else 0)
+                                    _macd_sign = 1 if _ref > 0 else (-1 if _ref < 0 else 0)
+                                    slopes['D1'] = {
+                                        'rsi': {'sign': _rsi_sign, 'value': round(_rv, 2),
+                                                'regime': True, 'slope': None, 'side': None, 'bars_ago': None},
+                                        'macd': {'sign': _macd_sign, 'value': round(_ref, 5),
+                                                 'regime': True, 'slope': None, 'side': None, 'bars_ago': None},
+                                    }
+                                else:
+                                    rsi_slope = self.indicator.latest_pivot_slope(
+                                        rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
+                                        ob_level=RSI_PEAK_OB, os_level=RSI_PEAK_OS
+                                    )
+                                    # MACD has no fixed OB/OS; the signal line's sign is its
+                                    # regime proxy -> read the high (OB) side when signal > 0,
+                                    # the low (OS) side when signal < 0.
+                                    _sig = float(macd_df['signal'].iloc[-1]) if len(macd_df) > 0 else 0.0
+                                    _macd_side = 'high' if _sig > 0 else ('low' if _sig < 0 else None)
+                                    macd_slope = self.indicator.latest_pivot_slope(
+                                        macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
+                                        side=_macd_side
+                                    )
+                                    slopes[tf_name.replace('TIMEFRAME_', '')] = {
+                                        'rsi': rsi_slope, 'macd': macd_slope,
+                                    }
                         else:
                             rsi_mtf[tf_name] = 50.0
                     current_rsi = rsi_mtf.get('TIMEFRAME_M1', 50.0)
