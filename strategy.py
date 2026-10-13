@@ -135,7 +135,8 @@ class Strategy:
             Exits (checked first, Step 7 option C):
               - profit-protect: profit > PROFIT_PROTECT_MIN_USD AND both H1 slopes
                 flipped against -> CLOSE.
-              - hard stop: H4 both flipped against AND (either H1 against) -> CLOSE.
+              - hard stop (retuned): (>=1 D1 against, RSI preferred) AND (H4 both against)
+                AND (H1 both against) -> CLOSE.
             RSI DCA ladder (if no exit): BUY_MORE/SELL_MORE at RSI 35/65, one tier per
             open count - count 1->M1, 2->M5, 3->M15, 4->H1, 5->H4 (max 6 positions).
             Fibo lot sizing. Else HOLD. (An H4 flip still closes the whole basket, so
@@ -148,7 +149,7 @@ class Strategy:
             close_threshold: legacy param, unused in this variant.
             rsi_value: current RSI (dashboard/logs).
             rsi_mtf: {timeframe_name: rsi_value} - drives the DCA ladder tiers.
-            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for H1/H4 -
+            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for D1/H4/H1 -
                     drives entry direction and the slope exits.
             entry_allowed: False during the post-close re-entry cooldown.
 
@@ -176,7 +177,9 @@ class Strategy:
         rsi_1h = rsi_mtf.get('TIMEFRAME_H1', 50.0) if rsi_mtf else 50.0
         rsi_4h = rsi_mtf.get('TIMEFRAME_H4', 50.0) if rsi_mtf else 50.0
 
-        # Slope signs (H1/H4) + fresh-entry direction
+        # Slope signs (D1/H4/H1) + fresh-entry direction
+        d1r = self._slope_sign(slopes, 'D1', 'rsi')
+        d1m = self._slope_sign(slopes, 'D1', 'macd')
         h4r = self._slope_sign(slopes, 'H4', 'rsi')
         h4m = self._slope_sign(slopes, 'H4', 'macd')
         h1r = self._slope_sign(slopes, 'H1', 'rsi')
@@ -195,7 +198,8 @@ class Strategy:
             if buy_profit > PROFIT_PROTECT_MIN_USD and h1r < 0 and h1m < 0:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = 'profit_protect'
-            elif h4r < 0 and h4m < 0 and (h1r < 0 or h1m < 0):
+            # hard-stop (retuned): >=1 D1 against (RSI d1r preferred) AND H4 both against AND H1 both against
+            elif (d1r < 0 or d1m < 0) and h4r < 0 and h4m < 0 and h1r < 0 and h1m < 0:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = 'force_close'
             elif rsi_1m <= RSI_OVERSOLD and buy_count == 1:
@@ -214,7 +218,8 @@ class Strategy:
             if sell_profit > PROFIT_PROTECT_MIN_USD and h1r > 0 and h1m > 0:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = 'profit_protect'
-            elif h4r > 0 and h4m > 0 and (h1r > 0 or h1m > 0):
+            # hard-stop (retuned): >=1 D1 against (RSI d1r preferred) AND H4 both against AND H1 both against
+            elif (d1r > 0 or d1m > 0) and h4r > 0 and h4m > 0 and h1r > 0 and h1m > 0:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = 'force_close'
             elif rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
