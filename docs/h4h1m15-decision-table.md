@@ -3,9 +3,9 @@
 Entry **direction** (fresh entry only) is decided by `strategy._slope_direction()` from
 **three** timeframes. **D1 has been removed on this branch** — there is no daily side-gate.
 The cascade is **4H primary / 1H confirm / 15M trigger**: 4H sets the bias, 1H confirms it,
-and 15M is the finest tier that must also agree before anything fires. The slope exits
-(profit-protect + hard-stop) use the same three-tier agreement (in the opposite direction).
-This document mirrors the code exactly.
+and 15M is the finest tier that must also agree before anything fires. The slope exits also
+read all three tiers in the opposite direction; the hard-stop was retuned 2026-10-13 (4H
+loosened, 1H/15M tightened — see Exits). This document mirrors the code exactly.
 
 > This is the "without-daily" (`_wd`) A/B counterpart of the D1-gated branches. On those,
 > a D1 pivot additionally filtered the side; here that whole stage is gone. 15M was added
@@ -74,20 +74,23 @@ signs: 4H · 1H · 15M (latest-pivot slopes; D1 removed)
 
 ## Exits (open basket) — variant A (slope exits + ladder)
 Slope exits are checked **FIRST**, then the RSI DCA ladder (closing has priority over
-adding). **Both** slope exits gained the 15M gate; the RSI DCA ladder is unchanged. For a
-BUY basket the threat is a DOWN move (shown); SELL mirrors (threat = UP move).
+adding). The RSI DCA ladder is unchanged; profit-protect is unchanged; the **hard-stop was
+retuned 2026-10-13**. For a BUY basket the threat is a DOWN move (shown); SELL mirrors
+(threat = UP move).
 
 1. **Profit-protect** — `profit > PROFIT_PROTECT_MIN_USD AND both 1H slopes − AND ≥1 15M −`
-   → **CLOSE** (reason `profit_protect`). Locks in profit when momentum turns.
-2. **Hard stop (slope force-close)** — `4H both − AND ≥1 1H − AND ≥1 15M −` → **CLOSE**
-   (reason `force_close`). Accepts the loss on a confirmed 3-tier reversal.
+   → **CLOSE** (reason `profit_protect`). Locks in profit when momentum turns. (Unchanged.)
+2. **Hard stop (slope force-close)** (retuned 2026-10-13 — 4H loosened to ≥1, 1H/15M tightened
+   to both) — `≥1 4H − (RSI preferred) AND 1H both − AND 15M both −` → **CLOSE**
+   (reason `force_close`). Fires only on a full 1H + 15M reversal; 4H just needs to lean.
 3. **RSI DCA ladder** — `BUY_MORE`/`SELL_MORE` at RSI 35/65, one tier per count
    (1→M1, 2→M5, 3→M15, 4→H1, 5→H4), Fibo lot sizing (max 6 positions).
 4. else **HOLD**.
 
-Adding the 15M gate makes **both** slope exits slightly **slower** (all three tiers must
-align against), per owner decision 2026-10-13 — consistent with the rolled-back early-cut
-history (v1.1.0 lost money cutting open baskets early; v1.3.0 reverted to holding).
+The hard-stop retune makes force-close fire only on a **full 1H + 15M reversal** (4H only
+needs to lean, RSI preferred) — it no longer capitulates on a full-4H / partial-lower-TF turn,
+which had been booking losses. Consistent with the hold-till-target history (v1.1.0 early cuts
+lost money; v1.3.0 reverted to holding).
 
 ## Notes
 - **Timeframes:** `SLOPE_TIMEFRAMES` is `['TIMEFRAME_M15', 'TIMEFRAME_H1', 'TIMEFRAME_H4']`.

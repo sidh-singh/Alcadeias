@@ -17,6 +17,51 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v2.2.0] — 2026-10-13 — Retune the slope force-close (4H ≥1 / 1H both / 15M both)
+
+**Baseline:** the v2.1.0 HEAD per branch.
+**Branches:** all 4 `_wd` branches — `rsimacd_btcusd1_wd`, `rsimacd_xauusd1_wd` (variant A)
+and `rsimacd_h6_btcusd1_wd`, `rsimacd_h6_xauusd1_wd` (variant B / h6). **EXPERIMENT —
+demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `strategy.py`, `docs/h4h1m15-decision-table.md` (+ this `CHANGELOG.md`).
+
+**Why.** The v2.1.0 force-close (4H **both** against + ≥1 1H + ≥1 15M) was booking a lot of
+losses: it capitulated whenever 4H fully flipped even if the lower timeframes had only hinted.
+The owner retuned it to fire only on a **full lower-TF reversal**, with 4H just needing to lean:
+- **4H:** ≥1 of {RSI, MACD} against (RSI `h4r` is the preferred/primary of the two).
+- **1H:** **both** RSI and MACD against.
+- **15M:** **both** RSI and MACD against.
+So force-close no longer triggers on a full-4H / partial-1H-15M turn — it holds the basket (lets
+the DCA ladder / target work) unless 1H **and** 15M have both fully turned. Consistent with the
+hold-till-target history (v1.1.0 early cuts lost money → v1.3.0 revert).
+
+### Behaviour change
+- **force_close (all 4, uniform).** BUY basket closes on
+  `(h4r<0 or h4m<0) AND h1r<0 AND h1m<0 AND m15r<0 AND m15m<0`; SELL mirrors (signs flipped).
+  Replaces the v2.1.0 `h4 both AND ≥1 h1 AND ≥1 m15`.
+- **Unchanged:** the entry `_slope_direction`, the RSI DCA ladder, the h6 pair's `+$unit`
+  target, and the base pair's `profit_protect` (1H both + ≥1 15M, in profit only — not a
+  loss-booker, so left as-is).
+
+### Change detail per file
+- **`strategy.py`** — both `force_close` elifs (BUY + SELL) rewritten to the new gate + an
+  inline comment; the `calculate_signal` docstring force-close line updated. Entry, ladder,
+  target / profit-protect untouched.
+- **`docs/h4h1m15-decision-table.md`** — intro + Exits section updated to the retuned
+  force-close (4H ≥1 RSI-preferred / 1H both / 15M both) and its rationale.
+
+### Verification
+- `python -m py_compile` → OK.
+- Offline unit-walk (ephemeral): force_close fires only when `≥1 4H against AND 1H both against
+  AND 15M both against`; does NOT fire when 1H is only ≥1 (not both) or 15M only ≥1; a 4H single
+  sub-signal (RSI-only and MACD-only) each suffice; entry matrix + ladder unchanged — all pass.
+
+### Rollback
+`git revert <v2.2.0-sha>` per branch, or restore the two `force_close` elifs to the v2.1.0
+form (`h4r<0 and h4m<0 and (h1r<0 or h1m<0) and (m15r<0 or m15m<0)`).
+
+---
+
 ## [v2.1.0] — 2026-10-13 — Add 15M as the third slope-confirm tier (4H → 1H → 15M)
 
 **Baseline:** `ce02b64` (btcusd1_wd HEAD) / its xauusd1_wd mirror.
