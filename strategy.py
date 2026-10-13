@@ -124,8 +124,8 @@ class Strategy:
             Exits (checked first, Step 7 option C):
               - profit-protect: profit > PROFIT_PROTECT_MIN_USD AND both H1 slopes
                 flipped against AND (>=1 M15 against) -> CLOSE.
-              - hard stop: H4 both flipped against AND (>=1 H1 against) AND
-                (>=1 M15 against) -> CLOSE.
+              - hard stop (retuned): (>=1 H4 against, RSI preferred) AND (H1 both against)
+                AND (M15 both against) -> CLOSE.
             RSI DCA ladder (if no exit): BUY_MORE/SELL_MORE at RSI 35/65, one tier per
             open count - count 1->M1, 2->M5, 3->M15, 4->H1, 5->H4 (max 6 positions).
             Fibo lot sizing. Else HOLD. (An H4 flip still closes the whole basket, so
@@ -187,7 +187,8 @@ class Strategy:
             if buy_profit > PROFIT_PROTECT_MIN_USD and h1r < 0 and h1m < 0 and (m15r < 0 or m15m < 0):
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = 'profit_protect'
-            elif h4r < 0 and h4m < 0 and (h1r < 0 or h1m < 0) and (m15r < 0 or m15m < 0):
+            # hard-stop (retuned): >=1 H4 against (RSI h4r preferred) AND H1 both against AND M15 both against
+            elif (h4r < 0 or h4m < 0) and h1r < 0 and h1m < 0 and m15r < 0 and m15m < 0:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = 'force_close'
             elif rsi_1m <= RSI_OVERSOLD and buy_count == 1:
@@ -206,7 +207,8 @@ class Strategy:
             if sell_profit > PROFIT_PROTECT_MIN_USD and h1r > 0 and h1m > 0 and (m15r > 0 or m15m > 0):
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = 'profit_protect'
-            elif h4r > 0 and h4m > 0 and (h1r > 0 or h1m > 0) and (m15r > 0 or m15m > 0):
+            # hard-stop (retuned): >=1 H4 against (RSI h4r preferred) AND H1 both against AND M15 both against
+            elif (h4r > 0 or h4m > 0) and h1r > 0 and h1m > 0 and m15r > 0 and m15m > 0:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = 'force_close'
             elif rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
