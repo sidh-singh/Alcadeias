@@ -17,6 +17,72 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v2.1.0] — 2026-10-13 — Add 15M as the third slope-confirm tier (4H → 1H → 15M)
+
+**Baseline:** `ce02b64` (btcusd1_wd HEAD) / its xauusd1_wd mirror.
+**Branches:** `rsimacd_btcusd1_wd` and `rsimacd_xauusd1_wd` **only** (variant A, slope-exit pair).
+**EXPERIMENT — demo-testing branches. NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py`, `strategy.py`, `app.py`, `dashboard.py`,
+`docs/h4h1-decision-table.md` → `docs/h4h1m15-decision-table.md` (+ this `CHANGELOG.md`).
+
+**Why.** The owner wanted a finer entry/exit trigger under the existing 4H×1H slope engine:
+keep **4H as the primary** direction-setter, **1H as the confirm**, and add **15M as the
+final trigger** so a signal only fires when the fastest tier also agrees. Applied to **both**
+entry and the slope exits. (Mirror of the v2.1.0 change on the `_h6` variant-B pair, adapted
+to this pair's exits.)
+
+### Behaviour change
+- **Entry (flat only).** Identical to the `_h6` pair: the former 4H×1H table gains a 15M gate
+  on every tradeable row. BUY needs `4H both + AND ≥1 1H + AND ≥1 15M +`; SELL mirrors;
+  4H-SPLIT still needs `1H both` aligned plus `≥1 15M` aligned. 15M strength = **loose
+  (≥1 sign)**. If 15M does not confirm → WAIT.
+- **Exit (open basket) — variant A has TWO slope exits; BOTH gained the gate** (owner chose
+  the uniform rule 2026-10-13):
+  - **profit-protect**: `profit > PROFIT_PROTECT_MIN_USD AND both 1H slopes against AND
+    ≥1 15M against` → CLOSE.
+  - **hard stop (force-close)**: `4H both against AND ≥1 1H against AND ≥1 15M against` →
+    CLOSE.
+  The RSI DCA ladder is **unchanged**. Both slope exits are now slightly **slower** (all
+  three tiers must align against) — consistent with the rolled-back early-cut history
+  (v1.1.0 → v1.3.0).
+
+### Change detail per file
+- **`constants.py`** — `SLOPE_TIMEFRAMES` `['TIMEFRAME_H1','TIMEFRAME_H4']` →
+  `['TIMEFRAME_M15','TIMEFRAME_H1','TIMEFRAME_H4']`; header/comment updated to "4H + 1H + 15M"
+  and the doc reference repointed to `h4h1m15-decision-table.md`. Two nearby comments updated
+  H1/H4 → 15M/H1/H4. Pivot params (`PEAK_LOOKBACK`/`PIVOT_WIDTH`/`RSI_PEAK_OB`/`RSI_PEAK_OS`)
+  shared unchanged.
+- **`strategy.py`** — `_slope_direction` reads `M15` RSI+MACD signs and requires
+  `m15_up`/`m15_dn` (`≥1` sign) on each BUY/SELL branch (identical to the `_h6` pair).
+  `calculate_signal` computes `m15r`/`m15m`; the BUY exits gain `and (m15r < 0 or m15m < 0)`
+  on **both** the `profit_protect` and `force_close` branches, SELL mirrors with
+  `(m15r > 0 or m15m > 0)`. Docstrings/comments updated. RSI DCA ladder untouched.
+- **`app.py`** — **no logic change.** The RSI fetch loop already computes a slope for every
+  `SLOPE_TIMEFRAMES` entry and 15M is already fetched → **zero new MT5 calls**; two comments
+  updated H1/H4 → 15M/H1/H4.
+- **`dashboard.py`** — `build_slope_panel` gains an `m15 = slopes.get('M15', …)`, an **M15
+  row** in the slope grid, and **two M15 pivot mini-charts** (RSI + MACD-hist). Identical to
+  the `_h6` pair.
+- **`docs/`** — `h4h1-decision-table.md` renamed to `h4h1m15-decision-table.md` and rewritten
+  to the 3-timeframe table; the Exits section documents variant A's profit-protect + hard-stop
+  (both gated).
+
+### Verification
+- `python -m py_compile constants.py indicator.py strategy.py app.py dashboard.py` → OK.
+- Offline unit-walk (ephemeral, not committed): full **17-case entry matrix** (same as `_h6`)
+  + variant-A **exit matrix** — profit-protect and hard-stop each firing only when their H1/H4
+  condition AND `≥1 15M against` all hold, HOLD when 15M does not confirm, profit-protect
+  priority over hard-stop, and the DCA ladder still firing — **all pass**.
+
+### Rollback
+Revert the four code files + the doc rename to `ce02b64` (per branch), or
+`git revert <v2.1.0-sha>`. ⚠ Note: merely setting `SLOPE_TIMEFRAMES` back to
+`['TIMEFRAME_H1','TIMEFRAME_H4']` does **not** restore the old behaviour — with `M15` absent,
+`_slope_sign` returns 0 so `m15_up`/`m15_dn` are False and **no** entry, profit-protect, or
+hard-stop can fire (all blocked). A real revert must also drop the `m15_*` conjuncts.
+
+---
+
 ## [v2.0.0] — 2026-10-10 — RSI+MACD Slope Strategy (full rewrite of direction + management)
 
 **Baseline:** the live v1.6.0 fleet HEAD per branch (`adcb1cb` btcusd1 / `dca6788` xauusd1).
