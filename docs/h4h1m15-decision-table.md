@@ -4,8 +4,8 @@ Entry **direction** (fresh entry only) is decided by `strategy._slope_direction(
 **three** timeframes. **D1 has been removed on this branch** — there is no daily side-gate.
 The cascade is **4H primary / 1H confirm / 15M trigger**: 4H sets the bias, 1H confirms it,
 and 15M is the finest tier that must also agree before anything fires. The force-close exit
-uses the same three-tier agreement (in the opposite direction). This document mirrors the
-code exactly.
+also reads all three tiers, but with its own tuned thresholds (4H loosened, 1H/15M
+tightened — see Exits). This document mirrors the code exactly.
 
 > This is the "without-daily" (`_wd`) A/B counterpart of the D1-gated branches. On those,
 > a D1 pivot additionally filtered the side; here that whole stage is gone. 15M was added
@@ -69,21 +69,21 @@ signs: 4H · 1H · 15M (latest-pivot slopes; D1 removed)
 ```
 
 ## Exits (open basket)
-Checked in order; closing has priority over adding. Only the force-close tier changed (it
-gained the 15M gate); the `+$unit` target and the RSI DCA ladder are unchanged.
+Checked in order; closing has priority over adding. The `+$unit` target and the RSI DCA
+ladder are unchanged; the slope force-close was retuned 2026-10-13 (see below).
 
 1. **`+$unit` target** — basket profit > `close_threshold` (= unit) → **CLOSE** (reason `target`).
-2. **Slope force-close** — the three-tier reversal, same shape as entry but opposite the basket:
-   - BUY basket → `4H both − AND ≥1 1H − AND ≥1 15M −` → **CLOSE** (reason `force_close`).
-   - SELL basket → `4H both + AND ≥1 1H + AND ≥1 15M +` → **CLOSE**.
+2. **Slope force-close** (retuned 2026-10-13 — 4H loosened to ≥1, 1H/15M tightened to both):
+   - BUY basket → `≥1 4H − (RSI preferred) AND 1H both − AND 15M both −` → **CLOSE** (reason `force_close`).
+   - SELL basket → `≥1 4H + (RSI preferred) AND 1H both + AND 15M both +` → **CLOSE**.
 3. **RSI DCA ladder** — `BUY_MORE`/`SELL_MORE` at RSI 35/65, one tier per count
    (1→M1, 2→M5, 3→M15, 4→H1, 5→H4), Fibo lot sizing.
 4. else **HOLD**.
 
-Adding the 15M gate makes the force-close slightly **slower** (all three tiers must align
-against the basket), which is the deliberate, owner-approved choice — consistent with the
-rolled-back early-cut history (v1.1.0 lost money cutting open baskets early; v1.3.0 reverted
-to holding till the target).
+The retune makes force-close fire only on a **full 1H + 15M reversal** (4H only needs to
+lean, RSI preferred) — it no longer capitulates on a full-4H / partial-lower-TF turn, which
+had been booking losses. Consistent with the hold-till-target history (v1.1.0 early cuts lost
+money; v1.3.0 reverted to holding).
 
 ## Notes
 - **Timeframes:** `SLOPE_TIMEFRAMES` is `['TIMEFRAME_M15', 'TIMEFRAME_H1', 'TIMEFRAME_H4']`.

@@ -122,8 +122,8 @@ class Strategy:
                           BUY / SELL / WAIT. Opens a single position; cooldown-gated.
           Open  (checked in order; closing has priority over adding):
             - +$unit target: basket profit > close_threshold (= unit) -> CLOSE.
-            - slope force-close: H4 both flipped against AND (>=1 H1 against) AND
-              (>=1 M15 against) -> CLOSE (replaces the old H6 forced close).
+            - slope force-close (retuned): (>=1 H4 against, RSI preferred) AND (H1 both
+              against) AND (M15 both against) -> CLOSE (replaces the old H6 forced close).
             - RSI DCA ladder: BUY_MORE/SELL_MORE at RSI 35/65, one tier per count
               (1->M1, 2->M5, 3->M15, 4->H1, 5->H4), Fibo lot sizing.
             - else HOLD.
@@ -184,7 +184,8 @@ class Strategy:
             if buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = 'target'
-            elif h4r < 0 and h4m < 0 and (h1r < 0 or h1m < 0) and (m15r < 0 or m15m < 0):
+            # force-close (retuned): >=1 H4 against (RSI h4r preferred) AND H1 both against AND M15 both against
+            elif (h4r < 0 or h4m < 0) and h1r < 0 and h1m < 0 and m15r < 0 and m15m < 0:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = 'force_close'
             elif rsi_1m <= RSI_OVERSOLD and buy_count == 1:
@@ -204,7 +205,8 @@ class Strategy:
             if sell_profit > close_threshold:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = 'target'
-            elif h4r > 0 and h4m > 0 and (h1r > 0 or h1m > 0) and (m15r > 0 or m15m > 0):
+            # force-close (retuned): >=1 H4 against (RSI h4r preferred) AND H1 both against AND M15 both against
+            elif (h4r > 0 or h4m > 0) and h1r > 0 and h1m > 0 and m15r > 0 and m15m > 0:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = 'force_close'
             elif rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
