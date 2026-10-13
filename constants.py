@@ -9,7 +9,7 @@ Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 # Main OHLC candle feed pulled each loop. This previously fed the SHA entry
 # indicator (removed in the RSI+MACD rebuild); it is retained for market-liveness
 # / metadata and as a price source. The RSI+MACD slope entry runs on its own
-# H1/H4 fetches (added in a later step), independent of this feed.
+# 15M/H1/H4 fetches, independent of this feed.
 CANDLE_TIMEFRAME = 'TIMEFRAME_M15'   # Timeframe for the main price feed (resolved via mt5 at runtime)
 CANDLE_COUNT = 300
 ALLOW_SYNTHETIC_TICK_BAR = True     # Append provisional bar from tick when MT5 bar feed lags (M1 only)
@@ -57,11 +57,12 @@ MACD_FAST = 12                      # fast EMA length (TradingView ta.macd defau
 MACD_SLOW = 26                      # slow EMA length
 MACD_SIGNAL = 9                     # signal EMA length
 
-# ─── Slope Entry/Exit Engine (H4 + H1 RSI & MACD-histogram pivot slopes) ───
-# Both timeframes are latest-pivot slopes. H4 primary / H1 confirm gives the entry
-# direction. (D1 removed on this "_wd" / without-daily branch - no daily side-gate.)
-# See docs/h4h1-decision-table.md.
-SLOPE_TIMEFRAMES = ['TIMEFRAME_H1', 'TIMEFRAME_H4']  # H4/H1 latest-pivot slopes
+# ─── Slope Entry/Exit Engine (4H + 1H + 15M RSI & MACD-histogram pivot slopes) ───
+# All three timeframes are latest-pivot slopes. 4H primary / 1H confirm / 15M trigger
+# gives the entry direction (and the force-close exit). 15M is the finest tier - an
+# entry/exit only fires when it also agrees (>=1 of its two signs). (D1 removed on this
+# "_wd" / without-daily branch - no daily side-gate.) See docs/h4h1m15-decision-table.md.
+SLOPE_TIMEFRAMES = ['TIMEFRAME_M15', 'TIMEFRAME_H1', 'TIMEFRAME_H4']  # 4H/1H/15M latest-pivot slopes
 PEAK_LOOKBACK = 20                  # candles scanned for the latest pivot (configurable)
 PIVOT_WIDTH = 2                     # bars required on each side to confirm a pivot (k)
 # RSI pivots only count as real OB/OS turns inside these bands (MACD stays unbounded):
@@ -69,7 +70,7 @@ PIVOT_WIDTH = 2                     # bars required on each side to confirm a pi
 #   RSI <= RSI_PEAK_OS (35+5 -> [0,40]). Neutral-zone RSI wiggles (41-59) are ignored.
 RSI_PEAK_OB = 60                    # a HIGH pivot on RSI counts only if value >= this
 RSI_PEAK_OS = 40                    # a LOW  pivot on RSI counts only if value <= this
-# Dashboard RSI pivot graphs (H1/H4): recent RSI bars each mini-chart plots.
+# Dashboard RSI pivot graphs (15M/H1/H4): recent RSI bars each mini-chart plots.
 # Must exceed PEAK_LOOKBACK so the latest pivot is always within the drawn window.
 RSI_GRAPH_BARS = 40
 REENTRY_COOLDOWN_SECONDS = 300      # block a fresh entry for this long after any close

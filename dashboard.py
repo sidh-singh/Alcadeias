@@ -882,7 +882,7 @@ def _pivot_mini_graph(tf_label, g):
 
 
 def build_slope_panel(symbol, analysis, last_updated=''):
-    """RSI+MACD slope direction panel — H1/H4 pivot slopes + the current decision."""
+    """RSI+MACD slope direction panel — 15M/H1/H4 pivot slopes + the current decision."""
     slopes = analysis.get('slopes', {}) or {}
     decision = analysis.get('slope_direction', 'WAIT') or 'WAIT'
     entry_allowed = analysis.get('entry_allowed', True)
@@ -897,6 +897,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
 
     h1 = slopes.get('H1', {}) or {}
     h4 = slopes.get('H4', {}) or {}
+    m15 = slopes.get('M15', {}) or {}
 
     dec_color = {'BUY': COLORS['buy'], 'SELL': COLORS['sell']}.get(decision, COLORS['text_dim'])
     dec_icon = {'BUY': '🟢', 'SELL': '🔴'}.get(decision, '⚪')
@@ -938,7 +939,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                         'borderRadius': '10px'}),
                 ],
             ),
-            # slope grid (rows H4 / H1; latest-pivot slopes)
+            # slope grid (rows H4 / H1 / M15; latest-pivot slopes)
             html.Div(style=grid_style, children=[
                 html.Span(''),
                 html.Span('RSI', style=col_hdr),
@@ -947,6 +948,8 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                 _slope_cell(h4.get('rsi')), _slope_cell(h4.get('macd')),
                 html.Span('H1', style=row_lbl),
                 _slope_cell(h1.get('rsi')), _slope_cell(h1.get('macd')),
+                html.Span('M15', style=row_lbl),
+                _slope_cell(m15.get('rsi')), _slope_cell(m15.get('macd')),
             ]),
             # Pivot mini-charts — RSI (left) + MACD-hist (right) per timeframe:
             # series line + latest-pivot marker + dotted peak->current slope line
@@ -963,6 +966,8 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                     _pivot_mini_graph('H4', macd_graphs.get('H4')),
                     _pivot_mini_graph('H1', rsi_graphs.get('H1')),
                     _pivot_mini_graph('H1', macd_graphs.get('H1')),
+                    _pivot_mini_graph('M15', rsi_graphs.get('M15')),
+                    _pivot_mini_graph('M15', macd_graphs.get('M15')),
                 ]),
             ]),
             # Status (cooldown / exit reason)

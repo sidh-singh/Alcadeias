@@ -74,15 +74,16 @@ class Strategy:
 
     def _slope_direction(self, slopes):
         """
-        Fresh-entry direction from the H4 / H1 latest-pivot slope signs.
+        Fresh-entry direction from the 4H / 1H / 15M latest-pivot slope signs.
 
-        H4 primary, H1 confirm (D1 removed on this "_wd" / without-daily branch -
-        no daily side-gate):
-          H4 both +ve & (>=1 H1 +ve)  -> BUY
-          H4 both -ve & (>=1 H1 -ve)  -> SELL
-          H4 split    & H1 both +ve   -> BUY
-          H4 split    & H1 both -ve   -> SELL
-          else                        -> WAIT
+        4H primary, 1H confirm, 15M trigger (D1 removed on this "_wd" / without-daily
+        branch - no daily side-gate). 15M is the finest tier: an entry fires only when
+        >=1 of its two signs also agrees with the trade direction.
+          H4 both +ve & (>=1 H1 +ve) & (>=1 M15 +ve)  -> BUY
+          H4 both -ve & (>=1 H1 -ve) & (>=1 M15 -ve)  -> SELL
+          H4 split    & H1 both +ve  & (>=1 M15 +ve)  -> BUY
+          H4 split    & H1 both -ve  & (>=1 M15 -ve)  -> SELL
+          else                                        -> WAIT
 
         Returns 'BUY', 'SELL', or None (WAIT). Missing / zero slope = "no direction".
         """
@@ -91,15 +92,20 @@ class Strategy:
         h4m = self._slope_sign(slopes, 'H4', 'macd')
         h1r = self._slope_sign(slopes, 'H1', 'rsi')
         h1m = self._slope_sign(slopes, 'H1', 'macd')
+        m15r = self._slope_sign(slopes, 'M15', 'rsi')
+        m15m = self._slope_sign(slopes, 'M15', 'macd')
+
+        m15_up = (m15r > 0 or m15m > 0)   # >=1 M15 sign up (the entry trigger)
+        m15_dn = (m15r < 0 or m15m < 0)   # >=1 M15 sign down
 
         if h4r > 0 and h4m > 0:
-            return 'BUY' if (h1r > 0 or h1m > 0) else None
+            return 'BUY' if ((h1r > 0 or h1m > 0) and m15_up) else None
         if h4r < 0 and h4m < 0:
-            return 'SELL' if (h1r < 0 or h1m < 0) else None
+            return 'SELL' if ((h1r < 0 or h1m < 0) and m15_dn) else None
         if (h4r > 0 and h4m < 0) or (h4r < 0 and h4m > 0):
-            if h1r > 0 and h1m > 0:
+            if h1r > 0 and h1m > 0 and m15_up:
                 return 'BUY'
-            if h1r < 0 and h1m < 0:
+            if h1r < 0 and h1m < 0 and m15_dn:
                 return 'SELL'
             return None
         return None
@@ -112,13 +118,14 @@ class Strategy:
         """
         RSI+MACD slope strategy (slope-exit variant).
 
-          Flat  (Step 6): H4-primary / H1-confirm slope direction -> BUY / SELL / WAIT.
-                          Opens a single position; gated by the re-entry cooldown.
+          Flat  (Step 6): 4H-primary / 1H-confirm / 15M-trigger slope direction ->
+                          BUY / SELL / WAIT. Opens a single position; cooldown-gated.
           Open:
             Exits (checked first, Step 7 option C):
               - profit-protect: profit > PROFIT_PROTECT_MIN_USD AND both H1 slopes
-                flipped against -> CLOSE.
-              - hard stop: H4 both flipped against AND (either H1 against) -> CLOSE.
+                flipped against AND (>=1 M15 against) -> CLOSE.
+              - hard stop: H4 both flipped against AND (>=1 H1 against) AND
+                (>=1 M15 against) -> CLOSE.
             RSI DCA ladder (if no exit): BUY_MORE/SELL_MORE at RSI 35/65, one tier per
             open count - count 1->M1, 2->M5, 3->M15, 4->H1, 5->H4 (max 6 positions).
             Fibo lot sizing. Else HOLD. (An H4 flip still closes the whole basket, so
@@ -131,7 +138,7 @@ class Strategy:
             close_threshold: legacy param, unused in this variant.
             rsi_value: current RSI (dashboard/logs).
             rsi_mtf: {timeframe_name: rsi_value} - drives the DCA ladder tiers.
-            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for H1/H4 -
+            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for 15M/H1/H4 -
                     drives entry direction and the slope exits.
             entry_allowed: False during the post-close re-entry cooldown.
 
@@ -159,15 +166,17 @@ class Strategy:
         rsi_1h = rsi_mtf.get('TIMEFRAME_H1', 50.0) if rsi_mtf else 50.0
         rsi_4h = rsi_mtf.get('TIMEFRAME_H4', 50.0) if rsi_mtf else 50.0
 
-        # Slope signs (H1/H4) + fresh-entry direction
+        # Slope signs (15M/H1/H4) + fresh-entry direction
         h4r = self._slope_sign(slopes, 'H4', 'rsi')
         h4m = self._slope_sign(slopes, 'H4', 'macd')
         h1r = self._slope_sign(slopes, 'H1', 'rsi')
         h1m = self._slope_sign(slopes, 'H1', 'macd')
+        m15r = self._slope_sign(slopes, 'M15', 'rsi')
+        m15m = self._slope_sign(slopes, 'M15', 'macd')
         slope_direction = self._slope_direction(slopes)
 
         if buy_count == 0 and sell_count == 0:
-            # Fresh entry (single position; H4-primary / H1-confirm), cooldown-gated.
+            # Fresh entry (single position; 4H-primary / 1H-confirm / 15M-trigger), cooldown-gated.
             if entry_allowed and slope_direction == 'BUY':
                 buy_status = Signal.BUY
             elif entry_allowed and slope_direction == 'SELL':
@@ -175,10 +184,10 @@ class Strategy:
 
         elif buy_count > 0 and sell_count == 0:
             # Open BUY: slope exits FIRST, then the RSI DCA ladder (threat = DOWN move).
-            if buy_profit > PROFIT_PROTECT_MIN_USD and h1r < 0 and h1m < 0:
+            if buy_profit > PROFIT_PROTECT_MIN_USD and h1r < 0 and h1m < 0 and (m15r < 0 or m15m < 0):
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = 'profit_protect'
-            elif h4r < 0 and h4m < 0 and (h1r < 0 or h1m < 0):
+            elif h4r < 0 and h4m < 0 and (h1r < 0 or h1m < 0) and (m15r < 0 or m15m < 0):
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = 'force_close'
             elif rsi_1m <= RSI_OVERSOLD and buy_count == 1:
@@ -194,10 +203,10 @@ class Strategy:
 
         elif buy_count == 0 and sell_count > 0:
             # Open SELL (mirror): slope exits FIRST, then the RSI DCA ladder.
-            if sell_profit > PROFIT_PROTECT_MIN_USD and h1r > 0 and h1m > 0:
+            if sell_profit > PROFIT_PROTECT_MIN_USD and h1r > 0 and h1m > 0 and (m15r > 0 or m15m > 0):
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = 'profit_protect'
-            elif h4r > 0 and h4m > 0 and (h1r > 0 or h1m > 0):
+            elif h4r > 0 and h4m > 0 and (h1r > 0 or h1m > 0) and (m15r > 0 or m15m > 0):
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = 'force_close'
             elif rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
