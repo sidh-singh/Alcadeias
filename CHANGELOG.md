@@ -17,6 +17,71 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v2.1.0] — 2026-10-13 — Add 15M as the third slope-confirm tier (4H → 1H → 15M)
+
+**Baseline:** `c38f507` (btcusd1_wd HEAD) / its xauusd1_wd mirror.
+**Branches:** `rsimacd_h6_btcusd1_wd` and `rsimacd_h6_xauusd1_wd` **only**.
+**EXPERIMENT — demo-testing branches. NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py`, `strategy.py`, `app.py`, `dashboard.py`,
+`docs/h4h1-decision-table.md` → `docs/h4h1m15-decision-table.md` (+ this `CHANGELOG.md`).
+
+**Why.** The owner wanted a finer entry/exit trigger under the existing 4H×1H slope engine:
+keep **4H as the primary** direction-setter, **1H as the confirm**, and add **15M as the
+final trigger** so a signal only fires when the fastest tier also agrees. Applied to **both**
+entry and the force-close exit.
+
+### Behaviour change
+- **Entry (flat only).** The former 4H×1H table gains a 15M gate on every tradeable row:
+  BUY needs `4H both + AND ≥1 1H + AND ≥1 15M +`; SELL mirrors; 4H-SPLIT still needs
+  `1H both` aligned plus `≥1 15M` aligned. If 15M does not confirm (`≥1` of its two signs in
+  the trade direction), the decision is WAIT. 15M strength = **loose (≥1 sign)** — a timing
+  trigger, not a hard choke.
+- **Exit (open basket).** The slope **force-close** gains the same `≥1 15M against` gate:
+  BUY basket closes on `4H both − AND ≥1 1H − AND ≥1 15M −` (SELL mirrors). The `+$unit`
+  profit target and the RSI DCA ladder are **unchanged**. This makes capitulation slightly
+  **slower** (all three tiers must align against) — the owner-approved choice, consistent
+  with the rolled-back early-cut history (v1.1.0 → v1.3.0).
+
+### Change detail per file
+- **`constants.py`** — `SLOPE_TIMEFRAMES` `['TIMEFRAME_H1','TIMEFRAME_H4']` →
+  `['TIMEFRAME_M15','TIMEFRAME_H1','TIMEFRAME_H4']`; header/comment updated to "4H + 1H + 15M"
+  and the doc reference repointed to `h4h1m15-decision-table.md`. Two nearby comments
+  (price-feed note, RSI-graph note) updated H1/H4 → 15M/H1/H4. No other key changed; pivot
+  params (`PEAK_LOOKBACK`/`PIVOT_WIDTH`/`RSI_PEAK_OB`/`RSI_PEAK_OS`) shared unchanged.
+- **`strategy.py`** — `_slope_direction` reads `M15` RSI+MACD signs and requires
+  `m15_up`/`m15_dn` (`≥1` sign) on each BUY/SELL branch (UP, DOWN, and both SPLIT paths).
+  `calculate_signal` computes `m15r`/`m15m` and adds `and (m15r < 0 or m15m < 0)` to the BUY
+  force-close and `and (m15r > 0 or m15m > 0)` to the SELL force-close. Docstrings/comments
+  updated. No change to the `+$unit` target, the DCA ladder, or `analysis_data` keys.
+- **`app.py`** — **no logic change.** The RSI fetch loop already computes a slope for every
+  `SLOPE_TIMEFRAMES` entry, and 15M is already fetched (it is in `RSI_MTF_TIMEFRAMES` and the
+  DCA ladder), so adding 15M yields its slopes + mini-chart payloads with **zero new MT5
+  calls**. Two comments updated H1/H4 → 15M/H1/H4.
+- **`dashboard.py`** — `build_slope_panel` gains an `m15 = slopes.get('M15', …)`, an **M15
+  row** in the slope grid (after H4/H1), and **two M15 pivot mini-charts** (RSI + MACD-hist).
+  Panel docstring / section comment updated.
+- **`docs/`** — `h4h1-decision-table.md` renamed to `h4h1m15-decision-table.md` and rewritten
+  to the 3-timeframe table, worked examples, flowchart and the exit section.
+
+### Verification
+- `python -m py_compile constants.py indicator.py strategy.py app.py dashboard.py` → OK.
+- Offline unit-walk (ephemeral, not committed): full **17-case entry matrix** (the three
+  4H-clean "15M no-confirm → WAIT" rows, both SPLIT+15M paths, 4H-FLAT short-circuit, and the
+  `≥1`-sign edge cases incl. one-up/one-flat and both-flat); **exit matrix** (M15-no-confirm →
+  HOLD vs all-three-against → force-close, for both BUY and SELL baskets); `+$unit` target
+  priority over force-close; and the DCA ladder still firing — **all pass**.
+
+### Rollback
+Revert the four code files + the doc rename to `c38f507` (per branch), or
+`git revert <v2.1.0-sha>`. To keep the code but disable 15M with no code edit: set
+`SLOPE_TIMEFRAMES = ['TIMEFRAME_H1','TIMEFRAME_H4']` in `constants.py` — `_slope_direction`
+then reads `M15` as all-zero (`_slope_sign` returns 0 for the missing key), so `m15_up`/`m15_dn`
+are False and **no** entry or force-close can fire. ⚠ Note: with 15M removed this way the
+gate is never satisfied, so entries/force-closes are fully blocked — to restore the old 4H×1H
+behaviour you must also drop the `m15_*` conjuncts (i.e. the full revert above).
+
+---
+
 ## [v2.0.0] — 2026-10-10 — RSI+MACD Slope Strategy (full rewrite of direction + management)
 
 **Baseline:** the live v1.6.0 fleet HEAD per branch (`adcb1cb` btcusd1 / `dca6788` xauusd1).
