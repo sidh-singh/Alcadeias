@@ -2,7 +2,8 @@
 
 Entry **direction** (fresh entry only) is decided by `strategy._slope_direction()` from
 three timeframes. **All three (D1, H4, H1) are latest-pivot slopes** — D1 is a *pivot*,
-not a trend regime. Exits are unchanged (H4/H1). This document mirrors the code exactly.
+not a trend regime. The slope force-close exit also reads all three tiers (retuned
+2026-10-13 — see Notes). This document mirrors the code exactly.
 
 ## How it works — two stages
 1. **Base direction** — H4 **primary**, H1 **confirm** (the H4/H1 engine).
@@ -88,5 +89,10 @@ signs: D1 · H4 · H1 (all latest-pivot slopes)
   D1 UP + H4 split + H1 both up → BUY) — the base engine decides, D1 just allows the side.
 - Config knobs: `PEAK_LOOKBACK` (20), `PIVOT_WIDTH` (2), `RSI_PEAK_OB`/`RSI_PEAK_OS`
   (60/40) — shared by D1/H4/H1.
-- Exits are unchanged (H4/H1): variant-A slope exits; `_h6` variant = +$unit target +
-  slope force-close.
+- **Slope force-close (retuned 2026-10-13):** fires when `>=1 D1 against (RSI preferred)
+  AND H4 both against AND H1 both against` (opposite the open basket; SELL mirrors). D1
+  just needs to lean; H4 and H1 must both fully reverse. Previously `H4 both + >=1 H1`
+  (no D1) — it was booking losses by capitulating on a partial lower-TF turn. The `_h6`
+  variant pairs this with the `+$unit` target; variant A pairs it with profit-protect
+  (profit > min AND H1 both against — in-profit only, **unchanged**). The RSI DCA ladder
+  is unchanged.

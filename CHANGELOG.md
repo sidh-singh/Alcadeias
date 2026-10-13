@@ -17,6 +17,55 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v2.1.0] — 2026-10-13 — Retune the slope force-close (add D1 ≥1 / H4 both / H1 both)
+
+**Baseline:** the v2.0.0 + D1-pivot HEAD per branch (`6c07262` h6_btcusd1 / per-branch mirror).
+**Branches:** the 4 **D1-gated** branches — `rsimacd_btcusd1`, `rsimacd_xauusd1` (variant A)
+and `rsimacd_h6_btcusd1`, `rsimacd_h6_xauusd1` (variant B / h6). **EXPERIMENT — demo-testing,
+NOT propagated to the 20 live fleet branches.** (Mirror of the `_wd` v2.2.0 retune, one tier
+higher: D1/H4/H1 instead of H4/H1/15M.)
+**Files touched:** `strategy.py`, `docs/d1-decision-table.md` (+ this `CHANGELOG.md`).
+
+**Why.** The force-close (`H4 both against + ≥1 H1`, no D1) was booking a lot of losses — it
+capitulated on a full H4 flip even when H1 had only hinted, and ignored the daily tier entirely.
+Retuned to fire only on a **full H4 + H1 reversal**, with the daily just needing to lean:
+- **D1:** ≥1 of {RSI, MACD} against (RSI `d1r` is the preferred/primary of the two) — **newly
+  added to the exit** (D1 was previously entry-only, the side-gate).
+- **H4:** **both** RSI and MACD against (unchanged).
+- **H1:** **both** RSI and MACD against (tightened from ≥1).
+So force-close now holds the basket (lets the DCA ladder / target work) unless H4 **and** H1 have
+both fully turned against it and the daily at least leans. Consistent with the hold-till-target
+history (v1.1.0 early cuts lost money → v1.3.0 revert).
+
+### Behaviour change
+- **force_close (all 4, uniform).** BUY basket closes on
+  `(d1r<0 or d1m<0) AND h4r<0 AND h4m<0 AND h1r<0 AND h1m<0`; SELL mirrors (signs flipped).
+  Replaces `h4 both AND ≥1 h1`.
+- **Unchanged:** the entry `_slope_direction` (base H4/H1 + D1 side-gate — D1 still gates entry
+  too), the RSI DCA ladder, the h6 pair's `+$unit` target, and the base pair's `profit_protect`
+  (H1 both, in profit only — not a loss-booker, so left as-is).
+
+### Change detail per file
+- **`strategy.py`** — `calculate_signal` now extracts `d1r`/`d1m` (previously only
+  `_slope_direction` read D1). Both `force_close` elifs (BUY + SELL) rewritten to the new gate +
+  an inline comment; docstring force-close + `slopes` arg lines updated. Entry, ladder, target /
+  profit-protect untouched.
+- **`docs/d1-decision-table.md`** — intro + the Exits note updated to the retuned force-close
+  (D1 ≥1 RSI-preferred / H4 both / H1 both); the stale "exits unchanged (H4/H1)" lines fixed.
+
+### Verification
+- `python -m py_compile` → OK.
+- Offline unit-walk (ephemeral): force_close fires only when `≥1 D1 against AND H4 both against
+  AND H1 both against`; does NOT fire when H4 or H1 is only ≥1 (not both) or D1 is flat; a D1
+  single sub-signal (RSI-only and MACD-only) each suffice; entry (base + D1 side-gate) + ladder
+  unchanged — all pass.
+
+### Rollback
+`git revert <v2.1.0-sha>` per branch, or restore the two `force_close` elifs to
+`h4r<0 and h4m<0 and (h1r<0 or h1m<0)` (and drop the `d1r`/`d1m` extraction in `calculate_signal`).
+
+---
+
 ## [v2.0.0] — 2026-10-10 — RSI+MACD Slope Strategy (full rewrite of direction + management)
 
 **Baseline:** the live v1.6.0 fleet HEAD per branch (`adcb1cb` btcusd1 / `dca6788` xauusd1).
