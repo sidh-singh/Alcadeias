@@ -17,6 +17,59 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v2.3.0] — 2026-10-17 — D1-regime force-close (Daily-aligned baskets get room; counter-trend cut fast) [_exp]
+
+**Baseline:** the v2.2.0 HEAD per branch.
+**Branches:** the 4 **`_exp`** branches only — `rsimacd_btcusd1_wd_exp`, `rsimacd_xauusd1_wd_exp`
+(variant A) and `rsimacd_h6_btcusd1_wd_exp`, `rsimacd_h6_xauusd1_wd_exp` (variant B), derived
+from the 4 `_wd` branches. **EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py`, `strategy.py`, `app.py`, `dashboard.py`,
+`docs/h4h1m15-decision-table.md` (+ this `CHANGELOG.md`).
+
+**Why.** When an open basket is aligned with the Daily trend the move tends to last, so small
+corrections should be tolerated (hold the DCA ladder longer). When the Daily is *against* the
+basket the move is more likely short-lived — so the force-close should be quick. This conditions
+exit aggressiveness on a Daily (D1) RSI+MACD slope regime. **D1 is EXIT-only** — entry stays the
+pure 4H/1H/15M table (`_slope_direction` never reads D1).
+
+### Behaviour change — force-close only (BUY shown; SELL mirrors, signs flipped)
+Classify the Daily slope vs the open basket, then pick the force-close condition:
+- **D1 AGAINST** (BUY: `d1r<0 and d1m<0`) → **sensitive**: `m15r<0 and m15m<0` → CLOSE
+  (`exit_reason='force_close_fast'`).
+- **else** (D1 with-trend, flat, or mixed) → **normal** (v2.2.0): `(h4r<0 or h4m<0) and h1r<0 and
+  h1m<0 and m15r<0 and m15m<0` → CLOSE (`exit_reason='force_close'`).
+**Unchanged:** entry `_slope_direction`, the RSI DCA ladder, the h6 `+$unit` target, and the
+variant-A `profit_protect`. A flat/mixed Daily → NORMAL (not sensitive), so a ranging daily never
+hair-triggers and the rule degrades gracefully when D1 pivots are undefined (daily pivots are sparse).
+
+### Change detail per file
+- **`constants.py`** — `SLOPE_TIMEFRAMES` gains `'TIMEFRAME_D1'` →
+  `['TIMEFRAME_M15','TIMEFRAME_H1','TIMEFRAME_H4','TIMEFRAME_D1']`; header/comment updated. ⚠ D1
+  is not fetched elsewhere, so this is **+1 MT5 rates call per loop** (~500 daily bars).
+- **`strategy.py`** — `calculate_signal` extracts `d1r`/`d1m` and precomputes
+  `buy_fc`/`buy_fc_reason` + `sell_fc`/`sell_fc_reason` (the D1-regime classifier) above the exit
+  chain; the force-close/hard-stop elifs become `elif buy_fc:` / `elif sell_fc:`. Ladder, target,
+  profit_protect and entry untouched. Docstrings updated.
+- **`app.py`** — no logic change (the slope loop already computes a slope for every
+  `SLOPE_TIMEFRAMES` entry; D1 is now in the list so it's fetched + computed). Comments updated.
+- **`dashboard.py`** — `build_slope_panel` gains a **D1 row** (top) + **two D1 pivot mini-charts**;
+  panel is now D1/H4/H1/M15 (8 charts).
+- **`docs/h4h1m15-decision-table.md`** — intro + Exits section + Notes updated to the D1-regime exit.
+
+### Verification
+- `python -m py_compile constants.py indicator.py strategy.py app.py dashboard.py` → OK.
+- Offline unit-walk (ephemeral): D1-against → `force_close_fast` on M15-both only; D1
+  with/flat/mixed → normal `force_close` (needs ≥1 H4 + H1 both + M15 both); +$unit target /
+  profit_protect / DCA ladder / entry all unchanged — all pass.
+
+### Rollback
+`git revert <v2.3.0-sha>` per branch, or delete the 4 `_exp` branches (the `_wd` parents are
+untouched). **Clean config disable:** remove `'TIMEFRAME_D1'` from `SLOPE_TIMEFRAMES` → D1 signs
+read 0 → the `d1r<0 and d1m<0` / `d1r>0 and d1m>0` classifier is never true → force-close falls
+back to the exact v2.2.0 normal path (and the fetch is dropped; the D1 dashboard row just goes blank).
+
+---
+
 ## [v2.2.0] — 2026-10-13 — Retune the slope force-close (4H ≥1 / 1H both / 15M both)
 
 **Baseline:** the v2.1.0 HEAD per branch.

@@ -567,7 +567,7 @@ class MT5TradingBot:
                     # by the SHA timeframe/candle-count. Union of all needed timeframes,
                     # de-duplicated while preserving order.
                     rsi_mtf = {}
-                    slopes = {}   # 15M/H1/H4 RSI + MACD-histogram pivot slopes (direction engine)
+                    slopes = {}   # 15M/H1/H4 entry slopes + D1 exit-regime slope (RSI+MACD pivot)
                     rsi_graphs = {}  # per-TF RSI series + pivot for the dashboard mini-charts
                     macd_graphs = {}  # per-TF MACD-histogram series + pivot for the mini-charts
                     rsi_tf_list = []
@@ -587,14 +587,15 @@ class MT5TradingBot:
                                 tf_df['close'], length=RSI_LENGTH, ma_type=RSI_MA_TYPE
                             )
                             rsi_mtf[tf_name] = float(rsi_s.iloc[-1]) if len(rsi_s) > 0 else 50.0
-                            # RSI + MACD-histogram slopes on the 15M/H1/H4 direction
-                            # timeframes (reuses this fetch - no extra MT5 call).
+                            # RSI + MACD-histogram slopes on the slope timeframes (15M/H1/H4
+                            # for entry+exit, D1 for the exit-regime). Reuses this TF's RSI
+                            # fetch - no extra call beyond the per-TF rates already pulled.
                             if tf_name in SLOPE_TIMEFRAMES:
                                 macd_df = self.indicator.calculate_macd(
                                     tf_df['close'], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL
                                 )
-                                # 4H / 1H / 15M latest-pivot slopes - identical computation.
-                                # (D1 removed on this "_wd" / without-daily branch.)
+                                # 15M / 1H / 4H / D1 latest-pivot slopes - identical computation.
+                                # (D1 re-added on "_exp" for the force-close regime; entry ignores it.)
                                 rsi_slope = self.indicator.latest_pivot_slope(
                                     rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
                                     ob_level=RSI_PEAK_OB, os_level=RSI_PEAK_OS
