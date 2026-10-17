@@ -882,7 +882,7 @@ def _pivot_mini_graph(tf_label, g):
 
 
 def build_slope_panel(symbol, analysis, last_updated=''):
-    """RSI+MACD slope direction panel — 15M/H1/H4 pivot slopes + the current decision."""
+    """RSI+MACD slope panel — D1/15M/H1/H4 pivot slopes (D1 = exit-regime) + the decision."""
     slopes = analysis.get('slopes', {}) or {}
     decision = analysis.get('slope_direction', 'WAIT') or 'WAIT'
     entry_allowed = analysis.get('entry_allowed', True)
@@ -898,6 +898,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
     h1 = slopes.get('H1', {}) or {}
     h4 = slopes.get('H4', {}) or {}
     m15 = slopes.get('M15', {}) or {}
+    d1 = slopes.get('D1', {}) or {}   # exit-regime only (not part of the entry decision)
 
     dec_color = {'BUY': COLORS['buy'], 'SELL': COLORS['sell']}.get(decision, COLORS['text_dim'])
     dec_icon = {'BUY': '🟢', 'SELL': '🔴'}.get(decision, '⚪')
@@ -939,11 +940,13 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                         'borderRadius': '10px'}),
                 ],
             ),
-            # slope grid (rows H4 / H1 / M15; latest-pivot slopes)
+            # slope grid (rows D1 / H4 / H1 / M15; latest-pivot slopes; D1 = exit-regime only)
             html.Div(style=grid_style, children=[
                 html.Span(''),
                 html.Span('RSI', style=col_hdr),
                 html.Span('MACD', style=col_hdr),
+                html.Span('D1', style=row_lbl),
+                _slope_cell(d1.get('rsi')), _slope_cell(d1.get('macd')),
                 html.Span('H4', style=row_lbl),
                 _slope_cell(h4.get('rsi')), _slope_cell(h4.get('macd')),
                 html.Span('H1', style=row_lbl),
@@ -962,6 +965,8 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                     'display': 'grid', 'gridTemplateColumns': '1fr 1fr',
                     'columnGap': '10px', 'rowGap': '2px',
                 }, children=[
+                    _pivot_mini_graph('D1', rsi_graphs.get('D1')),
+                    _pivot_mini_graph('D1', macd_graphs.get('D1')),
                     _pivot_mini_graph('H4', rsi_graphs.get('H4')),
                     _pivot_mini_graph('H4', macd_graphs.get('H4')),
                     _pivot_mini_graph('H1', rsi_graphs.get('H1')),
