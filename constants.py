@@ -57,12 +57,14 @@ MACD_FAST = 12                      # fast EMA length (TradingView ta.macd defau
 MACD_SLOW = 26                      # slow EMA length
 MACD_SIGNAL = 9                     # signal EMA length
 
-# ─── Slope Entry/Exit Engine (4H + 1H + 15M RSI & MACD-histogram pivot slopes) ───
-# All three timeframes are latest-pivot slopes. 4H primary / 1H confirm / 15M trigger
-# gives the entry direction (and the force-close exit). 15M is the finest tier - an
-# entry/exit only fires when it also agrees (>=1 of its two signs). (D1 removed on this
-# "_wd" / without-daily branch - no daily side-gate.) See docs/h4h1m15-decision-table.md.
-SLOPE_TIMEFRAMES = ['TIMEFRAME_M15', 'TIMEFRAME_H1', 'TIMEFRAME_H4']  # 4H/1H/15M latest-pivot slopes
+# ─── Slope Engine (4H + 1H + 15M entry; D1 regime for the force-close EXIT) ───
+# ENTRY (4H primary / 1H confirm / 15M trigger) uses ONLY 4H/1H/15M latest-pivot slopes -
+# D1 does NOT enter the entry decision. D1 (_exp) is computed only to modulate the
+# force-close EXIT: when the Daily slope is actively AGAINST an open basket (both D1 signs
+# oppose it) the force-close turns SENSITIVE (M15-both reversal alone); otherwise it keeps
+# the normal 4H>=1 / 1H-both / 15M-both close. See docs/h4h1m15-decision-table.md.
+# NOTE: unlike 15M, D1 is not fetched elsewhere, so adding it = +1 MT5 rates call per loop.
+SLOPE_TIMEFRAMES = ['TIMEFRAME_M15', 'TIMEFRAME_H1', 'TIMEFRAME_H4', 'TIMEFRAME_D1']  # 15M/1H/4H entry + D1 exit-regime
 PEAK_LOOKBACK = 20                  # candles scanned for the latest pivot (configurable)
 PIVOT_WIDTH = 2                     # bars required on each side to confirm a pivot (k)
 # RSI pivots only count as real OB/OS turns inside these bands (MACD stays unbounded):
