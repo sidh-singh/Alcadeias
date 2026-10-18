@@ -72,17 +72,18 @@ signs: 4H · 1H · 15M (latest-pivot slopes; D1 removed)
         └─ else                                → WAIT
 ```
 
-## Exits (open basket) — variant A (slope exits + ladder), `_exp` D1-regime hard-stop
+## Exits (open basket) — variant A (slope exits + ladder), `_exp`/`_h` D1-regime hard-stop
 Slope exits are checked **FIRST**, then the RSI DCA ladder (closing has priority over
-adding). The RSI DCA ladder and **profit-protect are unchanged**; the **hard-stop is now
-D1-regime-aware** (`_exp`, v2.3.0). For a BUY basket the threat is a DOWN move (shown); SELL
-mirrors (threat = UP move).
+adding). The RSI DCA ladder and **profit-protect are unchanged**; the **hard-stop is
+D1-regime-aware** (`_exp` v2.3.0; on `_h`, v2.4.0, the sensitive path also needs a 1H confirm).
+For a BUY basket the threat is a DOWN move (shown); SELL mirrors (threat = UP move).
 
 1. **Profit-protect** — `profit > PROFIT_PROTECT_MIN_USD AND both 1H slopes − AND ≥1 15M −`
    → **CLOSE** (reason `profit_protect`). Locks in profit when momentum turns. (Unchanged.)
 2. **Hard stop (D1-regime).** Classify the Daily slope vs the basket, then pick:
    - **D1 AGAINST** the basket (both D1 signs oppose; BUY→both −) → **sensitive**: close on
-     **15M both −** alone → **CLOSE** (reason `force_close_fast`). Counter-trend cut fast.
+     **15M both − AND ≥1 1H −** → **CLOSE** (reason `force_close_fast`). Counter-trend cut fast;
+     `_h` adds the `≥1 1H` confirm (`_exp` was 15M-both only).
    - **else** (D1 with-trend OR flat/mixed) → the v2.2.0 close:
      `≥1 4H − (RSI pref.) AND 1H both − AND 15M both −` → **CLOSE** (reason `force_close`).
 3. **RSI DCA ladder** — `BUY_MORE`/`SELL_MORE` at RSI 35/65, one tier per count

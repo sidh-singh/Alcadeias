@@ -124,9 +124,10 @@ class Strategy:
             Exits (checked first, Step 7 option C):
               - profit-protect: profit > PROFIT_PROTECT_MIN_USD AND both H1 slopes
                 flipped against AND (>=1 M15 against) -> CLOSE.
-              - hard stop (D1-regime): if the Daily slope is AGAINST the basket (both D1
-                signs oppose) -> SENSITIVE close on M15 both against ('force_close_fast');
-                else the normal (>=1 H4) AND (H1 both) AND (M15 both) close ('force_close').
+              - hard stop (D1-regime, _h): if the Daily slope is AGAINST the basket (both D1
+                signs oppose) -> SENSITIVE close on M15 both AND >=1 H1 against
+                ('force_close_fast'); else the normal (>=1 H4) AND (H1 both) AND (M15 both)
+                close ('force_close').
             RSI DCA ladder (if no exit): BUY_MORE/SELL_MORE at RSI 35/65, one tier per
             open count - count 1->M1, 2->M5, 3->M15, 4->H1, 5->H4 (max 6 positions).
             Fibo lot sizing. Else HOLD. (An H4 flip still closes the whole basket, so
@@ -178,17 +179,17 @@ class Strategy:
         d1m = self._slope_sign(slopes, 'D1', 'macd')
         slope_direction = self._slope_direction(slopes)   # entry: 4H/1H/15M only (D1 excluded)
 
-        # D1-regime-aware force-close (EXIT only, _exp). When the Daily slope is actively
+        # D1-regime-aware force-close (EXIT only, _exp/_h). When the Daily slope is actively
         # AGAINST an open basket (both D1 signs oppose it) the hard-stop is SENSITIVE
-        # (M15-both reversal alone); otherwise the normal 4H>=1 / 1H-both / 15M-both close
+        # (M15 both + >=1 H1 against); otherwise the normal 4H>=1 / 1H-both / 15M-both close
         # applies. Precomputed so the profit-protect / DCA ladder chain stays unchanged.
         if d1r < 0 and d1m < 0:          # daily AGAINST a long
-            buy_fc, buy_fc_reason = (m15r < 0 and m15m < 0), 'force_close_fast'
+            buy_fc, buy_fc_reason = ((m15r < 0 and m15m < 0) and (h1r < 0 or h1m < 0)), 'force_close_fast'
         else:
             buy_fc = (h4r < 0 or h4m < 0) and h1r < 0 and h1m < 0 and m15r < 0 and m15m < 0
             buy_fc_reason = 'force_close'
         if d1r > 0 and d1m > 0:          # daily AGAINST a short
-            sell_fc, sell_fc_reason = (m15r > 0 and m15m > 0), 'force_close_fast'
+            sell_fc, sell_fc_reason = ((m15r > 0 and m15m > 0) and (h1r > 0 or h1m > 0)), 'force_close_fast'
         else:
             sell_fc = (h4r > 0 or h4m > 0) and h1r > 0 and h1m > 0 and m15r > 0 and m15m > 0
             sell_fc_reason = 'force_close'
