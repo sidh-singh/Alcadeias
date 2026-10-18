@@ -17,6 +17,50 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v2.4.0] — 2026-10-18 — Sensitive force-close gains a 1H confirm (D1-against path) [_exp_h]
+
+**Baseline:** the v2.3.0 HEAD per branch (the `_exp` creds HEADs).
+**Branches:** the 4 **`_h`** branches only — `rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`
+(variant A) and `rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h` (variant B), derived
+from the 4 `_exp` branches. **EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `strategy.py`, `docs/h4h1m15-decision-table.md` (+ this `CHANGELOG.md`).
+
+**Why.** On `_exp` (v2.3.0) the D1-against "sensitive" force-close fired on **15M both** alone — a
+very twitchy trigger that can cut counter-trend baskets on pure-M15 noise. Add a **1H confirm**: the
+sensitive path now also needs **≥1 of {1H RSI, 1H MACD}** against. Still clearly looser than the
+normal path (which needs 1H *both* + ≥1 4H), so it keeps the "cut counter-trend faster" intent while
+filtering single-TF noise. (Owner chose ≥1 H1 over 1H-both: 1H-both would collapse the sensitive
+path into ≈ the normal path, since that only differs by the dropped 4H lean.)
+
+### Behaviour change — the D1-against (sensitive) force-close ONLY (BUY shown; SELL mirrors)
+- **Was** (`_exp`): `m15r<0 and m15m<0` → CLOSE (`force_close_fast`).
+- **Now** (`_h`):  `(m15r<0 and m15m<0) and (h1r<0 or h1m<0)` → CLOSE (`force_close_fast`).
+
+**Unchanged:** the D1 classifier itself (sensitive only when D1 is **both-against**; D1 with-trend
+OR flat/mixed still → the normal path), the **normal** force-close (`≥1 4H AND 1H both AND 15M both`),
+the h6 `+$unit` target, the variant-A `profit_protect`, the RSI DCA ladder, and entry
+(`_slope_direction`, 4H/1H/15M only). No new data/TF — D1 already fetched on `_exp`.
+
+### Change detail per file
+- **`strategy.py`** — in the `d1r<0 and d1m<0` / `d1r>0 and d1m>0` branches of the force-close
+  precompute, `buy_fc`/`sell_fc` gain `and (h1r<0 or h1m<0)` / `and (h1r>0 or h1m>0)`; the inline
+  comment + `calculate_signal` docstring updated. Nothing else touched (identical edit in variant A
+  and B — the precompute block is the same).
+- **`docs/h4h1m15-decision-table.md`** — the Exits "Sensitive path" bullet updated to `15M both AND ≥1 H1`.
+
+### Verification
+- `python -m py_compile constants.py indicator.py strategy.py app.py dashboard.py` → OK.
+- Offline unit-walk (ephemeral): D1-against fires `force_close_fast` only when `15M both AND ≥1 H1`
+  against (does NOT fire on 15M-both with 1H flat/with); D1 with/flat/mixed → normal `force_close`
+  unchanged; `+$unit` target / profit_protect / DCA ladder / entry all unchanged — all pass.
+
+### Rollback
+`git revert <v2.4.0-sha>` per branch, or delete the 4 `_h` branches (the `_exp` parents are
+untouched). To revert just this tweak: drop the `and (h1r…)` / `and (h1r>0…)` conjuncts from the
+two sensitive lines (back to the `_exp` 15M-both form).
+
+---
+
 ## [v2.3.0] — 2026-10-17 — D1-regime force-close (Daily-aligned baskets get room; counter-trend cut fast) [_exp]
 
 **Baseline:** the v2.2.0 HEAD per branch.

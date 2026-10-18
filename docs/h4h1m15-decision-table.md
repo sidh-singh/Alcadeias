@@ -68,15 +68,17 @@ signs: 4H · 1H · 15M (latest-pivot slopes; D1 removed)
         └─ else                                → WAIT
 ```
 
-## Exits (open basket) — `_exp` D1-regime force-close
+## Exits (open basket) — `_exp`/`_h` D1-regime force-close
 Checked in order; closing has priority over adding. The `+$unit` target and the RSI DCA
-ladder are **unchanged**; the slope force-close is **D1-regime-aware** (`_exp`, v2.3.0).
+ladder are **unchanged**; the slope force-close is **D1-regime-aware** (`_exp` v2.3.0; on
+`_h`, v2.4.0, the sensitive path also requires a 1H confirm — see below).
 
 1. **`+$unit` target** — basket profit > `close_threshold` (= unit) → **CLOSE** (reason `target`).
 2. **Slope force-close (D1-regime).** First classify the Daily slope vs the open basket:
    - **D1 AGAINST** the basket = *both* D1 signs oppose it (BUY→both −, SELL→both +).
-   - **Sensitive path (D1 against):** close as soon as **15M both** oppose → **CLOSE**
-     (reason `force_close_fast`). Counter-trend baskets are cut quickly.
+   - **Sensitive path (D1 against):** close as soon as **15M both AND ≥1 H1** oppose → **CLOSE**
+     (reason `force_close_fast`). Counter-trend baskets are cut quickly — `_h` adds the `≥1 H1`
+     confirm to filter pure-M15 noise (`_exp` was 15M-both only).
    - **Normal path (D1 with-trend OR neutral/mixed):** the v2.2.0 close —
      `≥1 4H (RSI pref.) AND 1H both AND 15M both` against → **CLOSE** (reason `force_close`).
      With or without a clear daily trend, pullbacks get room.
