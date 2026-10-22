@@ -76,10 +76,11 @@ RSI_PEAK_OS = 40                    # a LOW  pivot on RSI counts only if value <
 # Must exceed PEAK_LOOKBACK so the latest pivot is always within the drawn window.
 RSI_GRAPH_BARS = 40
 REENTRY_COOLDOWN_SECONDS = 300      # block a fresh entry for this long after any close
-# Profit-protect fires only when basket profit exceeds this USD buffer. Set it to
-# cover the round-trip spread + commission so a protect-close never locks a net loss.
-# 0.0 = protect at any profit > 0 (TUNE from the backtest / your broker costs).
-PROFIT_PROTECT_MIN_USD = 0.0
+# Profit-protect threshold scales with the unit (= the entry lot): the basket must be in
+# profit by at least PROFIT_PROTECT_USD_PER_UNIT * unit before a protect-close can fire, so the
+# buffer tracks position size (unit 1 / lot 0.01 -> $1; unit 5 / lot 0.05 -> $5). Tune to cover
+# round-trip costs per unit. (Variant A `_h` only; replaces the old flat PROFIT_PROTECT_MIN_USD.)
+PROFIT_PROTECT_USD_PER_UNIT = 1.0
 
 
 # ─── Risk Management ───
