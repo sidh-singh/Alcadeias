@@ -124,10 +124,10 @@ class Strategy:
             Exits (checked first, Step 7 option C):
               - profit-protect: profit > PROFIT_PROTECT_MIN_USD AND both H1 slopes
                 flipped against AND (>=1 M15 against) -> CLOSE.
-              - hard stop (D1-regime, _h): if the Daily slope is AGAINST the basket (both D1
-                signs oppose) -> SENSITIVE close on M15 both AND >=1 H1 against
-                ('force_close_fast'); else the normal (>=1 H4) AND (H1 both) AND (M15 both)
-                close ('force_close').
+              - hard stop (D1-regime): D1 AGAINST -> SENSITIVE (M15 both AND >=1 H1,
+                'force_close_fast'); D1 with/flat -> NORMAL (>=1 H4 AND H1 both AND M15 both,
+                'force_close'); D1 SPLIT -> cascade 4H->H1->floor ('fc_split_*'). See
+                docs/h4h1m15-decision-table.md.
             RSI DCA ladder (if no exit): BUY_MORE/SELL_MORE at RSI 35/65, one tier per
             open count - count 1->M1, 2->M5, 3->M15, 4->H1, 5->H4 (max 6 positions).
             Fibo lot sizing. Else HOLD. (An H4 flip still closes the whole basket, so
@@ -179,19 +179,48 @@ class Strategy:
         d1m = self._slope_sign(slopes, 'D1', 'macd')
         slope_direction = self._slope_direction(slopes)   # entry: 4H/1H/15M only (D1 excluded)
 
-        # D1-regime-aware force-close (EXIT only, _exp/_h). When the Daily slope is actively
-        # AGAINST an open basket (both D1 signs oppose it) the hard-stop is SENSITIVE
-        # (M15 both + >=1 H1 against); otherwise the normal 4H>=1 / 1H-both / 15M-both close
-        # applies. Precomputed so the profit-protect / DCA ladder chain stays unchanged.
-        if d1r < 0 and d1m < 0:          # daily AGAINST a long
-            buy_fc, buy_fc_reason = ((m15r < 0 and m15m < 0) and (h1r < 0 or h1m < 0)), 'force_close_fast'
-        else:
-            buy_fc = (h4r < 0 or h4m < 0) and h1r < 0 and h1m < 0 and m15r < 0 and m15m < 0
+        # D1-regime-aware force-close (EXIT only). Three D1 regimes vs the open basket (for a
+        # long: up=supportive, down=against, split=RSI/MACD disagree, flat=a 0):
+        #   * D1 AGAINST (both oppose)   -> SENSITIVE: 15M both + >=1 H1 against ('force_close_fast').
+        #   * D1 WITH (both support)/FLAT -> NORMAL:   >=1 4H + 1H both + 15M both ('force_close').
+        #   * D1 SPLIT -> cascade 4H -> H1 -> floor. First decisive TF sets the band; a supportive
+        #     verdict is +1 stricter (wait), descending deeper = more sensitive (less higher-TF
+        #     backing). Ladder: C3 = H1 RSI + 15M both; C2 = 15M both; C1 = 15M RSI (floor).
+        # Precomputed so the profit-protect / DCA ladder chain stays unchanged.
+        m15_both_dn = (m15r < 0 and m15m < 0)
+        if d1r < 0 and d1m < 0:                                 # D1 against the long -> sensitive
+            buy_fc, buy_fc_reason = (m15_both_dn and (h1r < 0 or h1m < 0)), 'force_close_fast'
+        elif (d1r < 0 and d1m > 0) or (d1r > 0 and d1m < 0):    # D1 SPLIT -> cascade 4H->H1->floor
+            if h4r > 0 and h4m > 0:                             # 4H supportive -> wait (C3)
+                buy_fc, buy_fc_reason = ((h1r < 0) and m15_both_dn), 'fc_split_4h_sup'
+            elif h4r < 0 and h4m < 0:                           # 4H against (C2)
+                buy_fc, buy_fc_reason = m15_both_dn, 'fc_split_4h_opp'
+            elif h1r > 0 and h1m > 0:                           # 4H indecisive, H1 supportive (C2)
+                buy_fc, buy_fc_reason = m15_both_dn, 'fc_split_h1_sup'
+            elif h1r < 0 and h1m < 0:                           # 4H indecisive, H1 against (C1)
+                buy_fc, buy_fc_reason = (m15r < 0), 'fc_split_h1_opp'
+            else:                                               # 4H & H1 indecisive -> floor (C1)
+                buy_fc, buy_fc_reason = (m15r < 0), 'fc_split_floor'
+        else:                                                   # D1 with-trend or flat -> normal
+            buy_fc = (h4r < 0 or h4m < 0) and h1r < 0 and h1m < 0 and m15_both_dn
             buy_fc_reason = 'force_close'
-        if d1r > 0 and d1m > 0:          # daily AGAINST a short
-            sell_fc, sell_fc_reason = ((m15r > 0 and m15m > 0) and (h1r > 0 or h1m > 0)), 'force_close_fast'
-        else:
-            sell_fc = (h4r > 0 or h4m > 0) and h1r > 0 and h1m > 0 and m15r > 0 and m15m > 0
+
+        m15_both_up = (m15r > 0 and m15m > 0)
+        if d1r > 0 and d1m > 0:                                 # D1 against the short -> sensitive
+            sell_fc, sell_fc_reason = (m15_both_up and (h1r > 0 or h1m > 0)), 'force_close_fast'
+        elif (d1r < 0 and d1m > 0) or (d1r > 0 and d1m < 0):    # D1 SPLIT -> cascade (mirror)
+            if h4r < 0 and h4m < 0:                             # 4H supportive -> wait (C3)
+                sell_fc, sell_fc_reason = ((h1r > 0) and m15_both_up), 'fc_split_4h_sup'
+            elif h4r > 0 and h4m > 0:                           # 4H against (C2)
+                sell_fc, sell_fc_reason = m15_both_up, 'fc_split_4h_opp'
+            elif h1r < 0 and h1m < 0:                           # 4H indecisive, H1 supportive (C2)
+                sell_fc, sell_fc_reason = m15_both_up, 'fc_split_h1_sup'
+            elif h1r > 0 and h1m > 0:                           # 4H indecisive, H1 against (C1)
+                sell_fc, sell_fc_reason = (m15r > 0), 'fc_split_h1_opp'
+            else:                                               # 4H & H1 indecisive -> floor (C1)
+                sell_fc, sell_fc_reason = (m15r > 0), 'fc_split_floor'
+        else:                                                   # D1 with-trend or flat -> normal
+            sell_fc = (h4r > 0 or h4m > 0) and h1r > 0 and h1m > 0 and m15_both_up
             sell_fc_reason = 'force_close'
 
         if buy_count == 0 and sell_count == 0:
