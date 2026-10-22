@@ -68,29 +68,42 @@ signs: 4H · 1H · 15M (latest-pivot slopes; D1 removed)
         └─ else                                → WAIT
 ```
 
-## Exits (open basket) — `_exp`/`_h` D1-regime force-close
+## Exits (open basket) — `_h` D1-regime force-close (with D1-split cascade)
 Checked in order; closing has priority over adding. The `+$unit` target and the RSI DCA
-ladder are **unchanged**; the slope force-close is **D1-regime-aware** (`_exp` v2.3.0; on
-`_h`, v2.4.0, the sensitive path also requires a 1H confirm — see below).
+ladder are **unchanged**; the slope force-close is **D1-regime-aware** (`_exp` v2.3.0 → `_h`
+v2.4.0 → **v2.5.0** adds the D1-split cascade below).
 
 1. **`+$unit` target** — basket profit > `close_threshold` (= unit) → **CLOSE** (reason `target`).
-2. **Slope force-close (D1-regime).** First classify the Daily slope vs the open basket:
-   - **D1 AGAINST** the basket = *both* D1 signs oppose it (BUY→both −, SELL→both +).
-   - **Sensitive path (D1 against):** close as soon as **15M both AND ≥1 H1** oppose → **CLOSE**
-     (reason `force_close_fast`). Counter-trend baskets are cut quickly — `_h` adds the `≥1 H1`
-     confirm to filter pure-M15 noise (`_exp` was 15M-both only).
-   - **Normal path (D1 with-trend OR neutral/mixed):** the v2.2.0 close —
-     `≥1 4H (RSI pref.) AND 1H both AND 15M both` against → **CLOSE** (reason `force_close`).
-     With or without a clear daily trend, pullbacks get room.
+2. **Slope force-close (D1-regime).** Classify the Daily slope vs the open basket (for a BUY:
+   `up`=supportive, `down`=against, `split`=RSI/MACD disagree, `flat`=a 0; SELL mirrors):
+   - **D1 AGAINST** (both D1 signs oppose) → **sensitive**: `15M both AND ≥1 H1` against → CLOSE
+     (reason `force_close_fast`).
+   - **D1 WITH-trend (both support) OR FLAT** → **normal**: `≥1 4H AND 1H both AND 15M both`
+     against → CLOSE (reason `force_close`). Pullbacks get room.
+   - **D1 SPLIT** → **cascade 4H → H1 → floor.** The first decisive timeframe sets the band; a
+     *supportive* verdict is one notch stricter (wait), descending deeper = more sensitive (the
+     position has less higher-TF backing). Ladder (all sub-signals *against* the position):
+     **C3** `H1 RSI AND 15M both` · **C2** `15M both` · **C1** `15M RSI` (floor).
+
+     | first decisive TF | verdict | close | reason |
+     |---|---|---|---|
+     | 4H | supportive | C3 `H1 RSI AND 15M both` | `fc_split_4h_sup` |
+     | 4H | against | C2 `15M both` | `fc_split_4h_opp` |
+     | H1 (4H indecisive) | supportive | C2 `15M both` | `fc_split_h1_sup` |
+     | H1 (4H indecisive) | against | C1 `15M RSI` | `fc_split_h1_opp` |
+     | none (4H & H1 indecisive) | — | C1 `15M RSI` (floor) | `fc_split_floor` |
+
+     ("indecisive" = split **or** flat.)
 3. **RSI DCA ladder** — `BUY_MORE`/`SELL_MORE` at RSI 35/65, one tier per count
    (1→M1, 2→M5, 3→M15, 4→H1, 5→H4), Fibo lot sizing.
 4. else **HOLD**.
 
-**Why.** A basket aligned with the Daily trend is likely in a longer move, so small corrections
-should be tolerated (hold the ladder) — only a Daily actively *against* the basket signals a
-short-lived move that warrants a fast cut. D1 is deliberately **exit-only**: entry stays the
-pure 4H/1H/15M table. A flat/mixed Daily is treated as "normal", not sensitive, so a ranging
-Daily — common, since daily pivots are sparse — never puts baskets on a hair-trigger.
+**Why.** Standard multi-timeframe exit logic: hold *with* the higher-TF trend, tighten *against*
+it. A basket backed by the Daily (or by the first decisive TF in a split cascade) gets more
+confirmation before closing (wait); one fighting it is cut faster. D1 is **exit-only** — entry
+stays the pure 4H/1H/15M table. Note: with the floor at `15M RSI`, a fully-split/choppy Daily can
+cut *faster* than a cleanly-against Daily (`15M both + ≥1 H1`) — intentional: chop → quick exits,
+clean counter-trend → the v2.4.0 anti-whipsaw confirm.
 
 ## Notes
 - **Timeframes:** `SLOPE_TIMEFRAMES` is

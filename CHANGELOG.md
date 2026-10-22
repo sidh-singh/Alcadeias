@@ -17,6 +17,63 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v2.5.0] — 2026-10-22 — D1-SPLIT force-close cascade (4H → 1H → 15M-RSI floor) [_exp_h]
+
+**Baseline:** the v2.4.0 HEAD per branch (the `_h` creds HEADs).
+**Branches:** the 4 **`_h`** branches only — `rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`
+(variant A) and `rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h` (variant B).
+**EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `strategy.py`, `docs/h4h1m15-decision-table.md` (+ this `CHANGELOG.md`).
+
+**Why.** Until now the force-close classified D1 only three ways and lumped **D1-SPLIT**
+(daily RSI vs MACD disagree) into the NORMAL close. The owner wanted a graded, recursive
+response for a *split/confused daily*: defer to the next lower timeframe, and the deeper you
+must descend to find a decisive verdict, the more sensitive the exit (less higher-TF backing);
+a *supportive* verdict adds confirmation (wait). Standard MTF exit logic — hold with the higher
+TF, tighten against it.
+
+### Behaviour change — force-close only (BUY shown; SELL mirrors, signs flipped)
+D1 is now classified four ways vs the basket (up=supportive, down=against, split, flat):
+- **D1 AGAINST** (`d1r<0 and d1m<0`) → **sensitive** `15M both AND ≥1 H1` (`force_close_fast`) — unchanged.
+- **D1 WITH (both up) OR FLAT** → **normal** `≥1 4H AND 1H both AND 15M both` (`force_close`) — unchanged.
+- **D1 SPLIT** (`(d1r<0 and d1m>0) or (d1r>0 and d1m<0)`) → **NEW cascade** 4H → H1 → floor. First
+  decisive TF sets the close band; supportive = +1 stricter, deeper = more sensitive. Ladder:
+  **C3** `H1 RSI− AND 15M both−` · **C2** `15M both−` · **C1** `15M RSI−` (floor):
+  | first decisive TF | verdict | close | reason |
+  |---|---|---|---|
+  | 4H | supportive (both up) | C3 | `fc_split_4h_sup` |
+  | 4H | against (both down) | C2 | `fc_split_4h_opp` |
+  | H1 (4H indecisive) | supportive | C2 | `fc_split_h1_sup` |
+  | H1 (4H indecisive) | against | C1 | `fc_split_h1_opp` |
+  | none (4H & H1 indecisive) | — | C1 (floor) | `fc_split_floor` |
+
+  "indecisive" = split **or** flat. Note: with the C1 floor at `15M RSI−`, a fully-split daily can
+  cut faster than a cleanly-against daily (`15M both + ≥1 H1`) — intentional (chop → quick exits).
+
+**Unchanged:** the D1-against (`force_close_fast`) and D1-with/flat (`force_close`) conditions,
+the h6 `+$unit` target, the variant-A `profit_protect`, the RSI DCA ladder, and entry
+(`_slope_direction`, 4H/1H/15M only — D1 stays exit-only). No new data/TF.
+
+### Change detail per file
+- **`strategy.py`** — the force-close precompute (per side) goes from a 2-way `if/else` to a
+  3-way `if (D1 against) / elif (D1 split → nested 4H→H1→floor) / else (normal)`; adds `m15_both_dn`
+  /`m15_both_up` locals and five `fc_split_*` reason labels. Comment + `calculate_signal` docstring
+  updated. Identical edit in variant A & B (same precompute block).
+- **`docs/h4h1m15-decision-table.md`** — Exits section rewritten to the 4-way regime + the cascade table.
+
+### Verification
+- `python -m py_compile constants.py indicator.py strategy.py app.py dashboard.py` → OK.
+- Offline unit-walk (ephemeral): every cascade terminal (4H sup/opp, H1 sup/opp, floor) + both
+  mirrors + the C1-floor "15M-RSI-alone fires even if 15M-MACD is with" edge + D1-against/with/flat
+  unchanged + `+$unit` target priority + profit_protect + DCA ladder + entry — all pass.
+
+### Rollback
+`git revert <v2.5.0-sha>` per branch, or delete the 4 `_h` branches. To revert just this: replace
+the `elif (D1 split)` cascade with the v2.4.0 `else: buy_fc = (h4r<0 or h4m<0) and h1r<0 and h1m<0
+and m15r<0 and m15m<0` (D1-split falls back into NORMAL).
+
+---
+
 ## [v2.4.0] — 2026-10-18 — Sensitive force-close gains a 1H confirm (D1-against path) [_exp_h]
 
 **Baseline:** the v2.3.0 HEAD per branch (the `_exp` creds HEADs).
