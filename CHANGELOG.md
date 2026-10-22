@@ -17,6 +17,59 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v2.6.0] — 2026-10-23 — Profit-protect: D1-regime book + lot-dynamic threshold (variant A) [_exp_h]
+
+**Baseline:** the v2.5.0 HEAD per branch.
+**Branches:** the **variant-A `_h`** pair ONLY — `rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`.
+(The h6/variant-B `_h` pair has no `profit_protect` — it uses a `+$unit` target — so it is NOT touched.)
+**EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py`, `strategy.py`, `docs/h4h1m15-decision-table.md` (+ this `CHANGELOG.md`).
+
+**Why.** `profit_protect` is variant A's *only* profit-booking exit (no `+$unit` target). Two
+upgrades: (1) its USD threshold was a flat constant (`0.0`) that didn't scale with position size;
+(2) it booked on a single fixed reversal regardless of the Daily trend. Both now scale with context.
+
+### Behaviour change — `profit_protect` only (BUY shown; SELL mirrors)
+- **Lot-dynamic threshold.** `profit_protect_min = times × PROFIT_PROTECT_USD_PER_UNIT` (new const,
+  default **1.0**). `times` is the effective unit (= balance tier); entry lot = `times × mtqty`
+  (mtqty 0.01), so the buffer is **$1 per unit** — lot 0.01→$1, 0.05→$5. Replaces the flat
+  `PROFIT_PROTECT_MIN_USD` (0.0).
+- **D1-regime reversal strength** (book only once `buy_profit > profit_protect_min` AND):
+  | D1 vs long | reversal to book | reason |
+  |---|---|---|
+  | WITH (both up) | `H1 both− AND 15M both−` (strict — let it run) | `pp_trend` |
+  | split / flat | `H1 both− AND ≥1 15M−` (the prior rule) | `profit_protect` |
+  | AGAINST (both down) | `≥1 H1− AND ≥1 15M−` (loose — grab it) | `pp_counter` |
+
+  Principle: let a with-trend winner run (full reversal needed), grab a counter-trend winner fast.
+  Still checked **before** the hard-stop, so in profit a book wins over a capitulation.
+
+**Unchanged:** the hard-stop (D1-regime cascade, v2.5.0), the RSI DCA ladder, entry, and (h6 pair)
+the `+$unit` target. No new data/TF.
+
+### Change detail per file
+- **`constants.py`** — `PROFIT_PROTECT_MIN_USD = 0.0` replaced by `PROFIT_PROTECT_USD_PER_UNIT = 1.0`
+  (+ comment). (Variant-A `_h` only; other branches keep `PROFIT_PROTECT_MIN_USD`.)
+- **`strategy.py`** — import swap; new precompute (after the force-close precompute) sets
+  `profit_protect_min = times × PROFIT_PROTECT_USD_PER_UNIT` and `buy_pp`/`sell_pp` (+`_reason`) via
+  the 3-way D1 book table; the two open-basket `profit_protect` `if`s become `if buy_pp:` /
+  `if sell_pp:`. Docstring updated. Hard-stop/ladder/entry untouched.
+- **`docs/h4h1m15-decision-table.md`** — variant-A Exits §1 rewritten to the D1 book table + dynamic threshold.
+
+### Verification
+- `python -m py_compile constants.py indicator.py strategy.py app.py dashboard.py` → OK.
+- Offline unit-walk (ephemeral): threshold scales (same $1.5 books at times=1, holds at times=2);
+  WITH→`pp_trend` (needs 15M both), split/flat→`profit_protect` (≥1 15M), AGAINST→`pp_counter`
+  (≥1 H1 + ≥1 15M); profit-book priority over the hard-stop; force-close cascade unaffected when
+  not in profit; SELL mirror; ladder — all pass.
+
+### Rollback
+`git revert <v2.6.0-sha>` per branch. To revert just the threshold: set the book gate back to a
+flat const. To revert the D1 book table: restore the single `if buy_profit > min and h1 both and
+≥1 m15` form.
+
+---
+
 ## [v2.5.0] — 2026-10-22 — D1-SPLIT force-close cascade (4H → 1H → 15M-RSI floor) [_exp_h]
 
 **Baseline:** the v2.4.0 HEAD per branch (the `_h` creds HEADs).

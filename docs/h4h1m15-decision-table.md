@@ -74,12 +74,21 @@ signs: 4H · 1H · 15M (latest-pivot slopes; D1 removed)
 
 ## Exits (open basket) — variant A (slope exits + ladder), `_h` D1-regime hard-stop (+ D1-split cascade)
 Slope exits are checked **FIRST**, then the RSI DCA ladder (closing has priority over
-adding). The RSI DCA ladder and **profit-protect are unchanged**; the **hard-stop is
-D1-regime-aware** (`_exp` v2.3.0 → `_h` v2.4.0 → **v2.5.0** adds the D1-split cascade).
-For a BUY basket the threat is a DOWN move (shown); SELL mirrors (threat = UP move).
+adding). The RSI DCA ladder is unchanged. Both slope exits are **D1-regime-aware**: the
+**hard-stop** (`_exp` v2.3.0 → `_h` v2.4.0 → v2.5.0 D1-split cascade) and now **profit-protect**
+(**v2.6.0** — D1-graded reversal + a lot-dynamic profit threshold). For a BUY basket the threat
+is a DOWN move (shown); SELL mirrors (threat = UP move).
 
-1. **Profit-protect** — `profit > PROFIT_PROTECT_MIN_USD AND both 1H slopes − AND ≥1 15M −`
-   → **CLOSE** (reason `profit_protect`). Locks in profit when momentum turns. (Unchanged.)
+1. **Profit-protect (D1-regime, v2.6.0).** Books when the basket is in profit by at least
+   `times × PROFIT_PROTECT_USD_PER_UNIT` (threshold **scales with the unit / entry lot** — lot
+   0.01→$1, 0.05→$5) **AND** a momentum reversal fires, whose strength scales with the Daily:
+   | D1 vs position | reversal to book | reason | why |
+   |---|---|---|---|
+   | **WITH** (both up) | `1H both − AND 15M both −` | `pp_trend` | trend-aligned winner → wait a full reversal, let it run |
+   | **split / flat** | `1H both − AND ≥1 15M −` | `profit_protect` | no daily opinion → the prior rule |
+   | **AGAINST** (both down) | `≥1 1H − AND ≥1 15M −` | `pp_counter` | counter-trend profit → grab it on a lighter turn |
+
+   Checked **before** the hard-stop, so in profit a book always wins over a capitulation.
 2. **Hard stop (D1-regime).** Classify the Daily slope vs the basket (up=supportive, down=against,
    split=RSI/MACD disagree, flat=a 0):
    - **D1 AGAINST** (both oppose) → **sensitive**: `15M both − AND ≥1 1H −` → **CLOSE**

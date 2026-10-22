@@ -3,7 +3,7 @@ from constants import (
     STRATEGY_HEDGE,
     FIBO_SEQUENCE_LENGTH,
     RSI_OVERSOLD, RSI_OVERBOUGHT,
-    PROFIT_PROTECT_MIN_USD,
+    PROFIT_PROTECT_USD_PER_UNIT,
 )
 
 
@@ -122,8 +122,10 @@ class Strategy:
                           BUY / SELL / WAIT. Opens a single position; cooldown-gated.
           Open:
             Exits (checked first, Step 7 option C):
-              - profit-protect: profit > PROFIT_PROTECT_MIN_USD AND both H1 slopes
-                flipped against AND (>=1 M15 against) -> CLOSE.
+              - profit-protect (D1-regime): profit > times * PROFIT_PROTECT_USD_PER_UNIT
+                (buffer scales with the unit/lot) AND a momentum reversal gated by the Daily
+                regime (D1 with -> strict 'pp_trend'; split/flat -> 'profit_protect'; D1 against
+                -> loose 'pp_counter') -> CLOSE.
               - hard stop (D1-regime): D1 AGAINST -> SENSITIVE (M15 both AND >=1 H1,
                 'force_close_fast'); D1 with/flat -> NORMAL (>=1 H4 AND H1 both AND M15 both,
                 'force_close'); D1 SPLIT -> cascade 4H->H1->floor ('fc_split_*'). See
@@ -223,6 +225,29 @@ class Strategy:
             sell_fc = (h4r > 0 or h4m > 0) and h1r > 0 and h1m > 0 and m15_both_up
             sell_fc_reason = 'force_close'
 
+        # Profit-book (D1-regime). Book when the basket is in profit by at least
+        # times * PROFIT_PROTECT_USD_PER_UNIT (the buffer scales with the unit / entry lot) AND
+        # a momentum reversal fires, whose required strength scales with the Daily regime:
+        #   D1 WITH the position -> strict  (H1 both + 15M both): let the with-trend winner run.
+        #   D1 AGAINST           -> loose   (>=1 H1 + >=1 15M):   grab the counter-trend profit.
+        #   D1 split / flat      -> current (H1 both + >=1 15M).
+        # Checked before the hard-stop (priority preserved); precomputed to keep the chain clean.
+        profit_protect_min = times * PROFIT_PROTECT_USD_PER_UNIT
+        if d1r > 0 and d1m > 0:                                 # D1 with the long -> strict book
+            buy_rev, buy_pp_reason = (h1r < 0 and h1m < 0 and m15_both_dn), 'pp_trend'
+        elif d1r < 0 and d1m < 0:                               # D1 against the long -> loose book
+            buy_rev, buy_pp_reason = ((h1r < 0 or h1m < 0) and (m15r < 0 or m15m < 0)), 'pp_counter'
+        else:                                                   # D1 split / flat -> current
+            buy_rev, buy_pp_reason = (h1r < 0 and h1m < 0 and (m15r < 0 or m15m < 0)), 'profit_protect'
+        buy_pp = (buy_profit > profit_protect_min) and buy_rev
+        if d1r < 0 and d1m < 0:                                 # D1 with the short -> strict book
+            sell_rev, sell_pp_reason = (h1r > 0 and h1m > 0 and m15_both_up), 'pp_trend'
+        elif d1r > 0 and d1m > 0:                               # D1 against the short -> loose book
+            sell_rev, sell_pp_reason = ((h1r > 0 or h1m > 0) and (m15r > 0 or m15m > 0)), 'pp_counter'
+        else:                                                   # D1 split / flat -> current
+            sell_rev, sell_pp_reason = (h1r > 0 and h1m > 0 and (m15r > 0 or m15m > 0)), 'profit_protect'
+        sell_pp = (sell_profit > profit_protect_min) and sell_rev
+
         if buy_count == 0 and sell_count == 0:
             # Fresh entry (single position; 4H-primary / 1H-confirm / 15M-trigger), cooldown-gated.
             if entry_allowed and slope_direction == 'BUY':
@@ -232,9 +257,9 @@ class Strategy:
 
         elif buy_count > 0 and sell_count == 0:
             # Open BUY: slope exits FIRST, then the RSI DCA ladder (threat = DOWN move).
-            if buy_profit > PROFIT_PROTECT_MIN_USD and h1r < 0 and h1m < 0 and (m15r < 0 or m15m < 0):
+            if buy_pp:
                 buy_status = Signal.CLOSE_BUY
-                exit_reason = 'profit_protect'
+                exit_reason = buy_pp_reason
             elif buy_fc:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = buy_fc_reason
@@ -251,9 +276,9 @@ class Strategy:
 
         elif buy_count == 0 and sell_count > 0:
             # Open SELL (mirror): slope exits FIRST, then the RSI DCA ladder.
-            if sell_profit > PROFIT_PROTECT_MIN_USD and h1r > 0 and h1m > 0 and (m15r > 0 or m15m > 0):
+            if sell_pp:
                 sell_status = Signal.CLOSE_SELL
-                exit_reason = 'profit_protect'
+                exit_reason = sell_pp_reason
             elif sell_fc:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = sell_fc_reason
