@@ -4,6 +4,7 @@ from constants import (
     FIBO_SEQUENCE_LENGTH,
     RSI_OVERSOLD, RSI_OVERBOUGHT,
     REGIME_RSI_BULL, REGIME_RSI_BEAR, REGIME_LADDER_S,
+    FORCE_CLOSE_S_WITH, FORCE_CLOSE_S_NEUTRAL, FORCE_CLOSE_S_AGAINST,
 )
 
 
@@ -152,16 +153,17 @@ class Strategy:
         RSI+MACD slope entry + RSI Fibo ladder; exits are the +$unit target or the
         slope force-close (variant B; the old H6 forced close was replaced).
 
-          Flat  (Step 6): 4H-primary / 1H-confirm / 15M-trigger slope direction ->
-                          BUY / SELL / WAIT. Opens a single position; cooldown-gated.
-          Open  (checked in order; closing has priority over adding):
+          Flat: 4H-primary / 1H-confirm / 15M-trigger slope direction ->
+                BUY / SELL / WAIT. Opens a single position; cooldown-gated.
+          Open (checked in order; closing has priority over adding):
             - +$unit target: basket profit > close_threshold (= unit) -> CLOSE.
-            - slope force-close (D1-regime): D1 AGAINST -> SENSITIVE (M15 both AND >=1 H1,
-              'force_close_fast'); D1 with/flat -> NORMAL (>=1 H4 AND H1 both AND M15 both,
-              'force_close'); D1 SPLIT -> cascade 4H->H1->floor ('fc_split_*'). See
-              docs/h4h1m15-decision-table.md.
-            - RSI DCA ladder: BUY_MORE/SELL_MORE at RSI 35/65, one tier per count
-              (1->M1, 2->M5, 3->M15, 4->H1, 5->H4), Fibo lot sizing.
+            - force-close (score + regime, Step 4): close when the weighted score S is far
+              enough AGAINST the basket, scaled by the tide - BUY: BULL S<=-12 / NEUTRAL
+              S<=-8 / BEAR S<=-4 ('fc_bull'/'fc_neutral'/'fc_bear'); SELL mirrors. See
+              docs/weighted-regime-redesign.md §6.
+            - RSI DCA ladder (score+regime gated, Step 3): BUY_MORE/SELL_MORE at RSI 35/65,
+              one tier per count (1->M1, 2->M5, 3->M15, 4->H1, 5->H4), Fibo lot sizing; an add
+              fires only when the tide/score is not against the position.
             - else HOLD.
 
         Args:
@@ -233,49 +235,32 @@ class Strategy:
         buy_add_ok = (regime != 'BEAR') and (slope_score > -REGIME_LADDER_S)
         sell_add_ok = (regime != 'BULL') and (slope_score < REGIME_LADDER_S)
 
-        # D1-regime-aware force-close (EXIT only). Three D1 regimes vs the open basket (for a
-        # long: up=supportive, down=against, split=RSI/MACD disagree, flat=a 0):
-        #   * D1 AGAINST (both oppose)   -> SENSITIVE: 15M both + >=1 H1 against ('force_close_fast').
-        #   * D1 WITH (both support)/FLAT -> NORMAL:   >=1 4H + 1H both + 15M both ('force_close').
-        #   * D1 SPLIT -> cascade 4H -> H1 -> floor. First decisive TF sets the band; a supportive
-        #     verdict is +1 stricter (wait), descending deeper = more sensitive (less higher-TF
-        #     backing). Ladder: C3 = H1 RSI + 15M both; C2 = 15M both; C1 = 15M RSI (floor).
-        # Precomputed so the target / profit-protect / DCA ladder chain stays unchanged.
+        # Force-close (EXIT) via the weighted score + regime (Step 4, LIVE). Replaces the v2.x
+        # D1 cascade (sensitive / normal / split paths). Close a basket when the score has moved
+        # far enough AGAINST it; the distance scales with the tide -- WITH the tide give a winner
+        # room (deep reversal needed), AGAINST the tide cut fast. BUY shown; SELL mirrors (flip
+        # the score, swap BULL<->BEAR). Thresholds tunable in constants.py; see doc §6.
+        #   BUY : BULL -> S <= -WITH ; NEUTRAL -> S <= -NEUTRAL ; BEAR -> S <= -AGAINST
+        # (m15_both_* are retained here for the variant-A profit-book; unused on variant B.)
         m15_both_dn = (m15r < 0 and m15m < 0)
-        if d1r < 0 and d1m < 0:                                 # D1 against the long -> sensitive
-            buy_fc, buy_fc_reason = (m15_both_dn and (h1r < 0 or h1m < 0)), 'force_close_fast'
-        elif (d1r < 0 and d1m > 0) or (d1r > 0 and d1m < 0):    # D1 SPLIT -> cascade 4H->H1->floor
-            if h4r > 0 and h4m > 0:                             # 4H supportive -> wait (C3)
-                buy_fc, buy_fc_reason = ((h1r < 0) and m15_both_dn), 'fc_split_4h_sup'
-            elif h4r < 0 and h4m < 0:                           # 4H against (C2)
-                buy_fc, buy_fc_reason = m15_both_dn, 'fc_split_4h_opp'
-            elif h1r > 0 and h1m > 0:                           # 4H indecisive, H1 supportive (C2)
-                buy_fc, buy_fc_reason = m15_both_dn, 'fc_split_h1_sup'
-            elif h1r < 0 and h1m < 0:                           # 4H indecisive, H1 against (C1)
-                buy_fc, buy_fc_reason = (m15r < 0), 'fc_split_h1_opp'
-            else:                                               # 4H & H1 indecisive -> floor (C1)
-                buy_fc, buy_fc_reason = (m15r < 0), 'fc_split_floor'
-        else:                                                   # D1 with-trend or flat -> normal
-            buy_fc = (h4r < 0 or h4m < 0) and h1r < 0 and h1m < 0 and m15_both_dn
-            buy_fc_reason = 'force_close'
-
         m15_both_up = (m15r > 0 and m15m > 0)
-        if d1r > 0 and d1m > 0:                                 # D1 against the short -> sensitive
-            sell_fc, sell_fc_reason = (m15_both_up and (h1r > 0 or h1m > 0)), 'force_close_fast'
-        elif (d1r < 0 and d1m > 0) or (d1r > 0 and d1m < 0):    # D1 SPLIT -> cascade (mirror)
-            if h4r < 0 and h4m < 0:                             # 4H supportive -> wait (C3)
-                sell_fc, sell_fc_reason = ((h1r > 0) and m15_both_up), 'fc_split_4h_sup'
-            elif h4r > 0 and h4m > 0:                           # 4H against (C2)
-                sell_fc, sell_fc_reason = m15_both_up, 'fc_split_4h_opp'
-            elif h1r < 0 and h1m < 0:                           # 4H indecisive, H1 supportive (C2)
-                sell_fc, sell_fc_reason = m15_both_up, 'fc_split_h1_sup'
-            elif h1r > 0 and h1m > 0:                           # 4H indecisive, H1 against (C1)
-                sell_fc, sell_fc_reason = (m15r > 0), 'fc_split_h1_opp'
-            else:                                               # 4H & H1 indecisive -> floor (C1)
-                sell_fc, sell_fc_reason = (m15r > 0), 'fc_split_floor'
-        else:                                                   # D1 with-trend or flat -> normal
-            sell_fc = (h4r > 0 or h4m > 0) and h1r > 0 and h1m > 0 and m15_both_up
-            sell_fc_reason = 'force_close'
+        if regime == 'BULL':                                   # tide with the long -> give it room
+            buy_close_at = -FORCE_CLOSE_S_WITH
+        elif regime == 'BEAR':                                 # tide against the long -> cut fast
+            buy_close_at = -FORCE_CLOSE_S_AGAINST
+        else:                                                  # NEUTRAL
+            buy_close_at = -FORCE_CLOSE_S_NEUTRAL
+        buy_fc = slope_score <= buy_close_at
+        buy_fc_reason = 'fc_' + regime.lower()                 # fc_bull / fc_neutral / fc_bear
+
+        if regime == 'BEAR':                                   # tide with the short -> give it room
+            sell_close_at = FORCE_CLOSE_S_WITH
+        elif regime == 'BULL':                                 # tide against the short -> cut fast
+            sell_close_at = FORCE_CLOSE_S_AGAINST
+        else:                                                  # NEUTRAL
+            sell_close_at = FORCE_CLOSE_S_NEUTRAL
+        sell_fc = slope_score >= sell_close_at
+        sell_fc_reason = 'fc_' + regime.lower()
 
         if buy_count == 0 and sell_count == 0:
             # Fresh entry (single position; 4H-primary / 1H-confirm / 15M-trigger), cooldown-gated.
