@@ -4,6 +4,7 @@ from constants import (
     FIBO_SEQUENCE_LENGTH,
     RSI_OVERSOLD, RSI_OVERBOUGHT,
     PROFIT_PROTECT_USD_PER_UNIT,
+    REGIME_RSI_BULL, REGIME_RSI_BEAR,
 )
 
 
@@ -71,6 +72,39 @@ class Strategy:
         except (KeyError, TypeError, IndexError):
             return 0
         return s if s in (-1, 0, 1) else 0
+
+    @staticmethod
+    def _macd_line(slopes, tf):
+        """Latest MACD-line value for a timeframe (0.0 if missing). Distinct from the
+        histogram pivot slope - this is the raw MACD line, the regime's level input."""
+        try:
+            v = slopes[tf]['macd_line']
+        except (KeyError, TypeError, IndexError):
+            return 0.0
+        return v if isinstance(v, (int, float)) else 0.0
+
+    @staticmethod
+    def _regime_tf(rsi_level, macd_line):
+        """Per-TF regime verdict from LEVEL (not slope): 'BULL' / 'BEAR' / 'NEUTRAL'.
+        BULL = RSI > REGIME_RSI_BULL AND MACD line > 0; BEAR = RSI < REGIME_RSI_BEAR AND
+        MACD line < 0; else NEUTRAL. The 'tide' direction for one big TF (D1 or H4);
+        see docs/weighted-regime-redesign.md §4."""
+        if rsi_level > REGIME_RSI_BULL and macd_line > 0:
+            return 'BULL'
+        if rsi_level < REGIME_RSI_BEAR and macd_line < 0:
+            return 'BEAR'
+        return 'NEUTRAL'
+
+    @staticmethod
+    def _regime_combine(d1_regime, h4_regime):
+        """Combine the big-TF verdicts into one tide - D1 leads, H4 confirms. D1 sets the
+        bias; H4 can only downgrade a biased D1 to NEUTRAL when it directly opposes, and
+        cannot create a bias when D1 is NEUTRAL (table in the design doc §4)."""
+        if d1_regime == 'BULL':
+            return 'NEUTRAL' if h4_regime == 'BEAR' else 'BULL'
+        if d1_regime == 'BEAR':
+            return 'NEUTRAL' if h4_regime == 'BULL' else 'BEAR'
+        return 'NEUTRAL'
 
     def _slope_direction(self, slopes):
         """
@@ -187,6 +221,16 @@ class Strategy:
         # docs/weighted-regime-redesign.md. Higher TF dominates; one noisy sign moves S by <=1.
         slope_score = (4 * (d1r + d1m) + 3 * (h4r + h4m)
                        + 2 * (h1r + h1m) + 1 * (m15r + m15m))
+
+        # Regime "tide" (SHADOW — telemetry/dashboard only; NO decision reads it yet).
+        # From the big-TF LEVEL (not the pivot slope): per-TF BULL/BEAR/NEUTRAL (RSI vs
+        # REGIME_RSI_BULL/BEAR + MACD line vs 0), combined D1-leads-H4. Step 2 of the
+        # weighted-score + regime redesign; see docs/weighted-regime-redesign.md §4. Pairs
+        # with slope_score: the tide = slow bias/direction, the score ("waves") = fast timing.
+        rsi_d1 = rsi_mtf.get('TIMEFRAME_D1', 50.0) if rsi_mtf else 50.0
+        d1_regime = self._regime_tf(rsi_d1, self._macd_line(slopes, 'D1'))
+        h4_regime = self._regime_tf(rsi_4h, self._macd_line(slopes, 'H4'))
+        regime = self._regime_combine(d1_regime, h4_regime)
 
         # D1-regime-aware force-close (EXIT only). Three D1 regimes vs the open basket (for a
         # long: up=supportive, down=against, split=RSI/MACD disagree, flat=a 0):
@@ -306,6 +350,9 @@ class Strategy:
             'slopes': slopes or {},
             'slope_direction': slope_direction or 'WAIT',
             'score': slope_score,
+            'regime': regime,
+            'regime_d1': d1_regime,
+            'regime_h4': h4_regime,
             'entry_allowed': bool(entry_allowed),
             'exit_reason': exit_reason,
         }
