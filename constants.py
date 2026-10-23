@@ -57,14 +57,19 @@ MACD_FAST = 12                      # fast EMA length (TradingView ta.macd defau
 MACD_SLOW = 26                      # slow EMA length
 MACD_SIGNAL = 9                     # signal EMA length
 
-# ─── Shadow Regime ("tide") — weighted-score + regime redesign ───
+# ─── Regime ("tide") + ladder gate — weighted-score + regime redesign ───
 # Per big-TF (D1 / H4) bias from LEVEL (not the pivot slope): BULL when RSI is above
 # REGIME_RSI_BULL AND the MACD line > 0; BEAR when RSI is below REGIME_RSI_BEAR AND the
 # MACD line < 0; else NEUTRAL. D1 leads / H4 confirms (see Strategy._regime_combine and
-# docs/weighted-regime-redesign.md §4). SHADOW: computed for telemetry/dashboard only —
-# NO decision reads it yet. Tunable on demo.
+# docs/weighted-regime-redesign.md §4). The regime + the weighted slope score now gate the
+# DCA ladder (Step 3, LIVE); the force-close / entry / profit-book still ignore them
+# (Steps 4-6, still shadow). Tunable on demo.
 REGIME_RSI_BULL = 55                # RSI strictly above this (and MACD line > 0) -> BULL
 REGIME_RSI_BEAR = 45                # RSI strictly below this (and MACD line < 0) -> BEAR
+# DCA ladder gate: a position may only average in when the tide is NOT against it AND the
+# weighted slope score is not this far adverse. A BUY add is blocked when the regime is BEAR
+# or the score <= -REGIME_LADDER_S; a SELL add is blocked when BULL or score >= +REGIME_LADDER_S.
+REGIME_LADDER_S = 6                 # adverse slope-score magnitude that blocks a ladder add
 
 # ─── Slope Engine (4H + 1H + 15M entry; D1 regime for the force-close EXIT) ───
 # ENTRY (4H primary / 1H confirm / 15M trigger) uses ONLY 4H/1H/15M latest-pivot slopes -
