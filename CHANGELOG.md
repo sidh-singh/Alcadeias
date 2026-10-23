@@ -17,6 +17,55 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.0.0] — 2026-10-23 — Weighted-score + regime redesign, Step 3: DCA ladder gate (LIVE) [_exp_h]
+
+**Baseline:** the Step-2 (shadow regime) HEAD per branch — `225a4e7` (btcusd1), `3542c67`
+(xauusd1), `405c82c` (h6_btcusd1), `692e8ce` (h6_xauusd1).
+**Branches:** all 4 `_h` — `rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
+`rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h`.
+**EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py`, `strategy.py`, `docs/weighted-regime-redesign.md` (+ this `CHANGELOG.md`).
+
+**Why.** First behaviour change of the weighted-score + regime redesign (see
+`docs/weighted-regime-redesign.md`); opens the v3.x line. A ~$1000 demo loss came half from the
+DCA ladder averaging *down into* a bear trend — the adds had no higher-TF gate. This stops that:
+the ladder may add only when the big-TF **tide** (regime) is not against the position AND the
+weighted slope **score** is not strongly adverse. The score + regime shipped as shadow in
+Steps 1–2 (telemetry only); this is the first decision wired to them.
+
+### Behaviour change — DCA ladder adds only (BUY shown; SELL mirrors)
+- **Gate.** A BUY add (`BUY_MORE`) fires only when `regime != BEAR` AND `score > -REGIME_LADDER_S`
+  (new const, default **6**); a SELL add (`SELL_MORE`) only when `regime != BULL` AND
+  `score < +REGIME_LADDER_S`. When blocked the basket **HOLDs** at its current size (no add).
+
+  | tide vs position | ladder add |
+  |---|---|
+  | with (BULL for a long / BEAR for a short) | allowed if score not strongly adverse |
+  | NEUTRAL | allowed if score not strongly adverse |
+  | against (BEAR for a long / BULL for a short) | **blocked** |
+
+- **Regime (tide):** per big-TF (D1/H4) BULL/BEAR/NEUTRAL from RSI level (vs 55/45) + MACD-line
+  sign, combined D1-leads-H4 (shipped Step 2). **Score (waves):** `S = 4·D1 + 3·H4 + 2·H1 + 1·M15`
+  (shipped Step 1).
+- **Unchanged:** fresh entry (`_slope_direction`, 4H/1H/15M), the force-close cascade
+  (`force_close` / `force_close_fast` / `fc_split_*`), the h6 `+$unit` target, variant-A
+  `profit_protect`, the RSI tiers (35/65, count→TF map) and Fibo lot sizing. The gate only
+  decides *whether* a tier add is allowed; it never touches the exits.
+
+### Per-file
+- `constants.py`: new `REGIME_LADDER_S = 6`; regime section header/note updated (no longer pure
+  shadow — the ladder now reads the regime + score).
+- `strategy.py`: import `REGIME_LADDER_S`; precompute `buy_add_ok` / `sell_add_ok` after the
+  regime; wrap the 5-tier BUY and SELL ladders under `elif buy_add_ok:` / `elif sell_add_ok:`;
+  refreshed the score/regime comments.
+- `docs/weighted-regime-redesign.md`: status header + §8 Step 3 marked done.
+
+**Rollback.** Full: `git revert` the Step-3 commit (restores the ungated always-add ladder).
+Soften only the score half: raise `REGIME_LADDER_S` (e.g. `9999`) so the score never binds — the
+regime BEAR/BULL block has no separate off-knob, so revert for that.
+
+---
+
 ## [v2.6.0] — 2026-10-23 — Profit-protect: D1-regime book + lot-dynamic threshold (variant A) [_exp_h]
 
 **Baseline:** the v2.5.0 HEAD per branch.

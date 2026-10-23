@@ -1,12 +1,13 @@
 # Exit/Entry Redesign — Weighted Score + Regime (+ ADX)
 
-> **STATUS: IN PROGRESS — shadow steps shipped, no behaviour change yet.** Living design doc
-> for the 4 `_h` branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
+> **STATUS: IN PROGRESS — first behaviour change LIVE (v3.0.0).** Living design doc for the 4
+> `_h` branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
 > `rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h`). Started 2026-10-24 after a
-> ~$1000 demo loss. **Step 1 (Score, shadow)** and **Step 2 (Regime, shadow)** are now in the
-> code — telemetry/dashboard only, NO decision reads them yet (see §8). The live steps (3–6)
-> still supersede the current v2.6.0 exit logic *if/when* built. Profit-book bits = variant A
-> (`rsimacd_*_wd_exp_h`) only.
+> ~$1000 demo loss. **Step 1 (Score)** and **Step 2 (Regime)** shipped as shadow; **Step 3
+> (ladder gate)** is now LIVE — the score + regime gate the DCA ladder (the first decision
+> wired to them). The remaining live steps (4–6: force-close, entry, profit-book) still read
+> the score/regime as shadow and supersede the current v2.x exit logic *if/when* built.
+> Profit-book bits = variant A (`rsimacd_*_wd_exp_h`) only.
 
 ---
 
@@ -171,7 +172,7 @@ down-move). Noisy M15 MACD irrelevant (D1/H4 carry S; tide is bear).
 ADX is deferred (§5). Each step: implement → owner watches demo → confirm it matches expectation → next.
 1. ✅ **Score (shadow) — DONE 2026-10-23.** `slope_score` in `strategy.py` + `_score_gauge` tile in `dashboard.py`; `analysis_data['score']`. No behaviour change (loss case = S −14).
 2. ✅ **Regime (shadow) — DONE 2026-10-23.** `_regime_tf` / `_regime_combine` in `strategy.py` (RSI-level vs `REGIME_RSI_BULL`/`BEAR` + MACD-line vs 0, D1-leads-H4); `app.py` now carries `slopes[tf]['macd_line']`; `analysis_data['regime'|'regime_d1'|'regime_h4']`; `_regime_badge` "TIDE" tile in `dashboard.py`. No behaviour change.
-3. **Ladder gate (live):** block `BUY_MORE` in BEAR / when `S` strongly against. (The $1000 fix; surgical.) ← NEXT
+3. ✅ **Ladder gate (LIVE) — DONE 2026-10-23 (v3.0.0).** `buy_add_ok`/`sell_add_ok` in `strategy.py` wrap the DCA adds: a BUY may add only if regime ≠ BEAR AND `S > -REGIME_LADDER_S` (6); SELL mirror. Blocks the "average down into a trend" half of the loss. `constants.py` `REGIME_LADDER_S=6`. Entry/exits unchanged.
 4. **Force-close (live):** replace the exit with the `S`+regime table (§6).
 5. **Entry (live):** `S`+regime (⚠ re-introduces D1/H4 into entry).
 6. **Profit-book (live, variant A):** `S`+regime.
