@@ -966,7 +966,8 @@ def _regime_badge(regime, d1_regime, h4_regime):
 def build_slope_panel(symbol, analysis, last_updated=''):
     """RSI+MACD slope panel — D1/15M/H1/H4 pivot slopes (D1 = exit-regime) + the decision."""
     slopes = analysis.get('slopes', {}) or {}
-    decision = analysis.get('slope_direction', 'WAIT') or 'WAIT'
+    decision = analysis.get('entry_direction', analysis.get('slope_direction', 'WAIT')) or 'WAIT'
+    structural = analysis.get('slope_direction', 'WAIT') or 'WAIT'
     entry_allowed = analysis.get('entry_allowed', True)
     exit_reason = analysis.get('exit_reason')
     rsi_value = analysis.get('rsi_value', 50.0)
@@ -994,6 +995,9 @@ def build_slope_panel(symbol, analysis, last_updated=''):
         status_bits.append('⏳ entry cooldown')
     if exit_reason:
         status_bits.append(f'exit: {exit_reason}')
+    # Structural 4H/1H/15M slope read, shown for comparison (the live entry now uses score+regime).
+    if structural != decision:
+        status_bits.append(f'structural {structural}')
     status_text = '   ·   '.join(status_bits) if status_bits else 'idle'
 
     col_hdr = {'fontSize': '0.62rem', 'color': COLORS['text_dim'], 'fontWeight': '600'}
