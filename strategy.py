@@ -175,6 +175,13 @@ class Strategy:
         d1m = self._slope_sign(slopes, 'D1', 'macd')
         slope_direction = self._slope_direction(slopes)   # entry: 4H/1H/15M only (D1 excluded)
 
+        # Weighted MTF slope score (SHADOW — telemetry/dashboard only; NO decision reads it yet).
+        # S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each TF = its RSI + MACD slope signs; range -20..+20
+        # (negative = bearish). Step 1 of the weighted-score + regime redesign; see
+        # docs/weighted-regime-redesign.md. Higher TF dominates; one noisy sign moves S by <=1.
+        slope_score = (4 * (d1r + d1m) + 3 * (h4r + h4m)
+                       + 2 * (h1r + h1m) + 1 * (m15r + m15m))
+
         # D1-regime-aware force-close (EXIT only). Three D1 regimes vs the open basket (for a
         # long: up=supportive, down=against, split=RSI/MACD disagree, flat=a 0):
         #   * D1 AGAINST (both oppose)   -> SENSITIVE: 15M both + >=1 H1 against ('force_close_fast').
@@ -271,6 +278,7 @@ class Strategy:
             'rsi_mtf': rsi_mtf or {},
             'slopes': slopes or {},
             'slope_direction': slope_direction or 'WAIT',
+            'score': slope_score,
             'entry_allowed': bool(entry_allowed),
             'exit_reason': exit_reason,
         }
