@@ -612,6 +612,11 @@ class MT5TradingBot:
                                 _tf_key = tf_name.replace('TIMEFRAME_', '')
                                 slopes[_tf_key] = {
                                     'rsi': rsi_slope, 'macd': macd_slope,
+                                    # Latest MACD line (fast-slow EMA) value - its SIGN is
+                                    # the shadow regime's level input (BULL/BEAR test),
+                                    # distinct from the histogram pivot slope above.
+                                    'macd_line': (round(float(macd_df['macd'].iloc[-1]), 5)
+                                                  if len(macd_df) > 0 else 0.0),
                                 }
                                 # RSI mini-chart: RSI line + latest (OB/OS-band) pivot +
                                 # peak->current line coloured by the RSI slope sign.
