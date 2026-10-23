@@ -7,6 +7,7 @@ from constants import (
     REGIME_RSI_BULL, REGIME_RSI_BEAR, REGIME_LADDER_S,
     FORCE_CLOSE_S_WITH, FORCE_CLOSE_S_NEUTRAL, FORCE_CLOSE_S_AGAINST,
     ENTRY_S_WITH, ENTRY_S_NEUTRAL,
+    BOOK_S_WITH, BOOK_S_NEUTRAL, BOOK_S_AGAINST,
 )
 
 
@@ -176,10 +177,10 @@ class Strategy:
                 new shorts. Single position, cooldown-gated. See docs/weighted-regime-redesign.md §6.
           Open:
             Exits (checked first):
-              - profit-protect (D1-regime): profit > times * PROFIT_PROTECT_USD_PER_UNIT
-                (buffer scales with the unit/lot) AND a momentum reversal gated by the Daily
-                regime (D1 with -> strict 'pp_trend'; split/flat -> 'profit_protect'; D1 against
-                -> loose 'pp_counter') -> CLOSE.
+              - profit-book (score + regime, Step 6): once profit > times *
+                PROFIT_PROTECT_USD_PER_UNIT, book when the score reverses enough - BUY: BULL
+                S<=-6 / NEUTRAL S<=-4 / BEAR S<=-2 ('book_bull'/'book_neutral'/'book_bear'); SELL
+                mirrors. Let a with-trend winner run, grab a counter-trend one fast. Checked first.
               - force-close (score + regime, Step 4): close when the weighted score S is far
                 enough AGAINST the basket, scaled by the tide - BUY: BULL S<=-12 / NEUTRAL
                 S<=-8 / BEAR S<=-4 ('fc_bull'/'fc_neutral'/'fc_bear'); SELL mirrors. See
@@ -270,9 +271,6 @@ class Strategy:
         # room (deep reversal needed), AGAINST the tide cut fast. BUY shown; SELL mirrors (flip
         # the score, swap BULL<->BEAR). Thresholds tunable in constants.py; see doc §6.
         #   BUY : BULL -> S <= -WITH ; NEUTRAL -> S <= -NEUTRAL ; BEAR -> S <= -AGAINST
-        # (m15_both_* are retained here for the variant-A profit-book below.)
-        m15_both_dn = (m15r < 0 and m15m < 0)
-        m15_both_up = (m15r > 0 and m15m > 0)
         if regime == 'BULL':                                   # tide with the long -> give it room
             buy_close_at = -FORCE_CLOSE_S_WITH
         elif regime == 'BEAR':                                 # tide against the long -> cut fast
@@ -291,28 +289,31 @@ class Strategy:
         sell_fc = slope_score >= sell_close_at
         sell_fc_reason = 'fc_' + regime.lower()
 
-        # Profit-book (D1-regime). Book when the basket is in profit by at least
-        # times * PROFIT_PROTECT_USD_PER_UNIT (the buffer scales with the unit / entry lot) AND
-        # a momentum reversal fires, whose required strength scales with the Daily regime:
-        #   D1 WITH the position -> strict  (H1 both + 15M both): let the with-trend winner run.
-        #   D1 AGAINST           -> loose   (>=1 H1 + >=1 15M):   grab the counter-trend profit.
-        #   D1 split / flat      -> current (H1 both + >=1 15M).
-        # Checked before the hard-stop (priority preserved); precomputed to keep the chain clean.
+        # Profit-book (score + regime, Step 6 - variant A's ONLY profit exit; no +$unit target).
+        # Once the basket is in profit by at least times * PROFIT_PROTECT_USD_PER_UNIT (buffer
+        # scales with the unit / entry lot), book when the score has reversed enough against it;
+        # how far scales with the tide -- let a with-trend winner run (deeper reversal needed),
+        # grab a counter-trend winner fast. BUY shown; SELL mirrors. Checked BEFORE the force-close
+        # (in profit a book beats a capitulation). Thresholds tunable; see doc §6.
+        #   BUY : BULL -> S <= -BOOK_S_WITH ; NEUTRAL -> -BOOK_S_NEUTRAL ; BEAR -> -BOOK_S_AGAINST
         profit_protect_min = times * PROFIT_PROTECT_USD_PER_UNIT
-        if d1r > 0 and d1m > 0:                                 # D1 with the long -> strict book
-            buy_rev, buy_pp_reason = (h1r < 0 and h1m < 0 and m15_both_dn), 'pp_trend'
-        elif d1r < 0 and d1m < 0:                               # D1 against the long -> loose book
-            buy_rev, buy_pp_reason = ((h1r < 0 or h1m < 0) and (m15r < 0 or m15m < 0)), 'pp_counter'
-        else:                                                   # D1 split / flat -> current
-            buy_rev, buy_pp_reason = (h1r < 0 and h1m < 0 and (m15r < 0 or m15m < 0)), 'profit_protect'
-        buy_pp = (buy_profit > profit_protect_min) and buy_rev
-        if d1r < 0 and d1m < 0:                                 # D1 with the short -> strict book
-            sell_rev, sell_pp_reason = (h1r > 0 and h1m > 0 and m15_both_up), 'pp_trend'
-        elif d1r > 0 and d1m > 0:                               # D1 against the short -> loose book
-            sell_rev, sell_pp_reason = ((h1r > 0 or h1m > 0) and (m15r > 0 or m15m > 0)), 'pp_counter'
-        else:                                                   # D1 split / flat -> current
-            sell_rev, sell_pp_reason = (h1r > 0 and h1m > 0 and (m15r > 0 or m15m > 0)), 'profit_protect'
-        sell_pp = (sell_profit > profit_protect_min) and sell_rev
+        if regime == 'BULL':                                   # tide with the long -> let it run
+            buy_book_at = -BOOK_S_WITH
+        elif regime == 'BEAR':                                 # tide against the long -> grab it
+            buy_book_at = -BOOK_S_AGAINST
+        else:                                                  # NEUTRAL
+            buy_book_at = -BOOK_S_NEUTRAL
+        buy_pp = (buy_profit > profit_protect_min) and (slope_score <= buy_book_at)
+        buy_pp_reason = 'book_' + regime.lower()               # book_bull / book_neutral / book_bear
+
+        if regime == 'BEAR':                                   # tide with the short -> let it run
+            sell_book_at = BOOK_S_WITH
+        elif regime == 'BULL':                                 # tide against the short -> grab it
+            sell_book_at = BOOK_S_AGAINST
+        else:                                                  # NEUTRAL
+            sell_book_at = BOOK_S_NEUTRAL
+        sell_pp = (sell_profit > profit_protect_min) and (slope_score >= sell_book_at)
+        sell_pp_reason = 'book_' + regime.lower()
 
         if buy_count == 0 and sell_count == 0:
             # Fresh entry (single position; score + regime, Step 5), cooldown-gated.

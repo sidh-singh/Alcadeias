@@ -61,9 +61,9 @@ MACD_SIGNAL = 9                     # signal EMA length
 # Per big-TF (D1 / H4) bias from LEVEL (not the pivot slope): BULL when RSI is above
 # REGIME_RSI_BULL AND the MACD line > 0; BEAR when RSI is below REGIME_RSI_BEAR AND the
 # MACD line < 0; else NEUTRAL. D1 leads / H4 confirms (see Strategy._regime_combine and
-# docs/weighted-regime-redesign.md §4). The regime + the weighted slope score now drive the
-# DCA ladder gate (Step 3), the force-close (Step 4) and the fresh entry (Step 5), all LIVE;
-# only the variant-A profit-book still ignores them (Step 6, shadow). Tunable on demo.
+# docs/weighted-regime-redesign.md §4). The regime + the weighted slope score drive the DCA
+# ladder gate (Step 3), the force-close (Step 4), the fresh entry (Step 5) and the variant-A
+# profit-book (Step 6) -- all LIVE. Redesign complete. Tunable on demo.
 REGIME_RSI_BULL = 55                # RSI strictly above this (and MACD line > 0) -> BULL
 REGIME_RSI_BEAR = 45                # RSI strictly below this (and MACD line < 0) -> BEAR
 # DCA ladder gate: a position may only average in when the tide is NOT against it AND the
@@ -81,6 +81,13 @@ FORCE_CLOSE_S_AGAINST = 4           # tide AGAINST the position (cut fast)
 # score is required with no tide); BEAR blocks new longs. SELL mirrors (score <= -X; BULL blocks).
 ENTRY_S_WITH = 8                    # open with the tide when |score| >= this
 ENTRY_S_NEUTRAL = 12               # open in a neutral tide when |score| >= this (needs more)
+# Profit-book (Step 6, variant A only): once a basket is in profit by at least the buffer, book
+# when the score has reversed this far against it, scaled by the tide -- let a with-trend winner
+# run (a bigger reversal is needed to book), grab a counter-trend winner fast. A BUY books at
+# score <= -X; a SELL at score >= +X, where X is:
+BOOK_S_WITH = 6                    # tide WITH the position (let the winner run)
+BOOK_S_NEUTRAL = 4                 # no clear tide
+BOOK_S_AGAINST = 2                 # tide AGAINST the position (grab it fast)
 
 # ─── Slope Engine (4H + 1H + 15M entry; D1 regime for the force-close EXIT) ───
 # ENTRY (4H primary / 1H confirm / 15M trigger) uses ONLY 4H/1H/15M latest-pivot slopes -

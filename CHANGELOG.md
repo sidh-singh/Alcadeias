@@ -17,6 +17,48 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.3.0] — 2026-10-23 — Weighted-score + regime redesign, Step 6: profit-book via score+regime (LIVE, variant A) [_exp_h]
+
+**Baseline:** the v3.2.0 (Step-5 entry) HEAD — `8bf5790` (btcusd1), `0a8f4b1` (xauusd1).
+**Branches:** the **variant-A `_h`** pair ONLY — `rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`.
+(The h6/variant-B `_h` pair has no `profit_protect` — it books with the `+$unit` target — so it is
+NOT touched and stays at v3.2.0.)
+**EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py`, `strategy.py`, `docs/weighted-regime-redesign.md` (+ this `CHANGELOG.md`).
+
+**Why.** Final step of the redesign: variant A's profit-book (its only profit exit) moves onto the
+same score+regime brain as the ladder/exit/entry. Replaces the v2.6.0 D1-book (which picked
+strict/loose/current from the D1 slope signs + an H1/15M reversal). Now: in profit, book when the
+score reverses past a regime-set line — let a with-trend winner run, grab a counter-trend one fast.
+
+### Behaviour change — profit-book only (BUY shown; SELL mirrors; checked BEFORE force-close)
+Book once `buy_profit > times × PROFIT_PROTECT_USD_PER_UNIT` (the v2.6.0 lot-dynamic buffer, kept) AND:
+| tide (regime) | book a BUY when | reason |
+|---|---|---|
+| **BULL** (with the long — let it run) | `score ≤ -BOOK_S_WITH` (−6) | `book_bull` |
+| **NEUTRAL** | `score ≤ -BOOK_S_NEUTRAL` (−4) | `book_neutral` |
+| **BEAR** (against the long — grab it) | `score ≤ -BOOK_S_AGAINST` (−2) | `book_bear` |
+
+- New consts `BOOK_S_WITH=6` / `_NEUTRAL=4` / `_AGAINST=2` (tunable). Book thresholds are tighter
+  than the force-close (12/8/4), so in profit the basket books on a smaller reversal than it would
+  capitulate on — and the book is still checked first, so a winner is never turned into a loss-cut.
+- **Removed:** the v2.6.0 D1-book table (`pp_trend` / `pp_counter` / `profit_protect` reasons, the
+  D1-slope-sign strict/loose/current branches). The now-dead `m15_both_dn` / `m15_both_up` locals
+  (left over in the force-close block for the old book) are deleted.
+- **Unchanged:** the force-close (Step 4), ladder gate (Step 3), entry (Step 5), RSI tiers + Fibo.
+
+### Per-file
+- `constants.py`: `BOOK_S_WITH/_NEUTRAL/_AGAINST`; regime-section note → "redesign complete".
+- `strategy.py`: import the three consts; replace the D1-book precompute with the score+regime book
+  (`buy_pp`/`sell_pp` + `book_<regime>` reasons); drop the dead `m15_both_*`; docstring updated.
+- `docs/weighted-regime-redesign.md`: status → COMPLETE; §8 Step 6 marked done.
+
+**Rollback.** `git revert` the Step-6 commit to restore the v2.6.0 D1-book. To only loosen/tighten:
+adjust `BOOK_S_*` (lower = book sooner). The lot-dynamic buffer (`PROFIT_PROTECT_USD_PER_UNIT`) is
+unchanged, so the "only book in real profit" guarantee holds.
+
+---
+
 ## [v3.2.0] — 2026-10-23 — Weighted-score + regime redesign, Step 5: entry via score+regime (LIVE) [_exp_h]
 
 **Baseline:** the v3.1.0 (Step-4 force-close) HEAD per branch — `30aca0e` (btcusd1), `a067079`
