@@ -77,6 +77,10 @@ strong trend from a weak chop (RSI<45 happens in a harmless range too). → that
 
 ## 5. ADX — the missing STRENGTH / trend-vs-range dimension
 
+> **DEFERRED (owner decision 2026-10-24):** ADX is **not** part of the current build. The owner
+> will experiment with it on **new branches** later. The build below uses the §4 v1 regime
+> (RSI-level + MACD-line), no ADX. This section is kept as the research record for that future work.
+
 **What ADX uniquely gives:** trend **strength** (0–100, directionless), with **direction** from
 `+DI` vs `−DI`. `ADX<~20-25` = range/no-trend; `>25` = trending; `>40` = strong trend. This is the
 exact thing the slope AND the v1 regime lack: **"are we in a trend or a range right now?"** — which
@@ -155,18 +159,22 @@ down-move). Noisy M15 MACD irrelevant (D1/H4 carry S; tide is bear).
 ---
 
 ## 7. Open decisions / knobs
-- Regime engine: **A (ADX-qualifies v1)** vs **B (ADX/DI replaces v1)** — leaning **B**.
-- `ADX_TREND_MIN` (~20–25?), ADX TFs (D1, H4).
+- Regime engine for THIS build: **v1 (RSI-level + MACD-line)**, no ADX (ADX deferred, §5).
 - 4 TF weights; RSI>MACD within-TF option.
 - 11 thresholds (table §6). Regime bands (55/45, 0) if v1 kept.
 - Entry: keep a "15M not against" hard gate on top of S? (avoid entering into a 15M reversal.)
 - ⚠️ Re-introduces D1/H4 into **entry** (today entry is slope-only, D1-excluded).
 
-## 8. Rollout (build in order; demo-test each)
-1. **Step 1:** weighted `S` + regime + **ladder gate + force-close** — kills the $1000 pattern (all 4 branches).
-2. **Step 2:** **entry** on `S` + regime.
-3. **Step 3:** **profit-book** on `S` + regime (variant A only).
-Dashboard: show **S** and the **regime** (+ ADX/DI) on every loop so each action is explainable.
+## 8. Rollout — ONE step at a time, shadow-first (owner must comprehend + verify each)
+ADX is deferred (§5). Each step: implement → owner watches demo → confirm it matches expectation → next.
+1. **Score (shadow):** compute `S` from the existing slopes; show on dashboard + log. **No behaviour change.**
+2. **Regime (shadow):** compute BULL/BEAR/NEUTRAL (RSI-level + MACD-line, D1-leads-H4); show it. **No behaviour change.**
+3. **Ladder gate (live):** block `BUY_MORE` in BEAR / when `S` strongly against. (The $1000 fix; surgical.)
+4. **Force-close (live):** replace the exit with the `S`+regime table (§6).
+5. **Entry (live):** `S`+regime (⚠ re-introduces D1/H4 into entry).
+6. **Profit-book (live, variant A):** `S`+regime.
+Dashboard "decision view" grows with each step (S panel → +regime → +what each decision would do),
+built alongside (owner grants multi-prompt for it).
 
 ## 9. Plumbing needed
 - Pass MACD-line sign (D1/H4) into `strategy` (v1 regime) — already computed in `app.py`.
