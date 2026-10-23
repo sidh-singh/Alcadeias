@@ -17,6 +17,54 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.2.0] — 2026-10-23 — Weighted-score + regime redesign, Step 5: entry via score+regime (LIVE) [_exp_h]
+
+**Baseline:** the v3.1.0 (Step-4 force-close) HEAD per branch — `30aca0e` (btcusd1), `a067079`
+(xauusd1), `cf36ebb` (h6_btcusd1), `671bda6` (h6_xauusd1).
+**Branches:** all 4 `_h` — `rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
+`rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h`.
+**EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py`, `strategy.py`, `dashboard.py`, `docs/weighted-regime-redesign.md` (+ this `CHANGELOG.md`).
+
+**Why.** Puts *opening* on the same tide+waves footing as the exit/ladder. The structural entry
+(`_slope_direction`: 4H both + ≥1 H1 + ≥1 M15) opened on lower-TF alignment with no trend
+context. Entry now opens only **with the tide**, once the **score** confirms — so a new trade is
+never taken against the daily/4H bias. ⚠ This re-introduces D1/H4 into the entry (today the
+structural entry was slope-only on 4H/1H/15M), via both the score (D1/H4 weighted) and the regime.
+
+### Behaviour change — fresh entry only (flat → open; BUY shown, SELL mirrors)
+| tide (regime) | open a BUY when | open a SELL when |
+|---|---|---|
+| **BULL** | `score ≥ ENTRY_S_WITH` (+8) | **blocked** (no short vs bull tide) |
+| **NEUTRAL** | `score ≥ ENTRY_S_NEUTRAL` (+12) | `score ≤ -ENTRY_S_NEUTRAL` (−12) |
+| **BEAR** | **blocked** (no long vs bear tide) | `score ≤ -ENTRY_S_WITH` (−8) |
+
+- New consts `ENTRY_S_WITH=8` / `ENTRY_S_NEUTRAL=12` (with the tide = less confirmation; no tide =
+  need more; against the tide = never open). Still single-position and re-entry-cooldown-gated.
+- `_slope_direction` (the structural 4H/1H/15M read) is **retained** but no longer drives entry —
+  it is exposed as `analysis_data['slope_direction']` for the dashboard "structural" comparison,
+  while the live decision is `entry_direction`.
+
+### Per-file
+- `constants.py`: `ENTRY_S_WITH` / `ENTRY_S_NEUTRAL`; regime-section note updated (entry now LIVE;
+  only the variant-A profit-book is still shadow).
+- `strategy.py`: import the two consts; new `_entry_direction(regime, score)` helper; compute
+  `entry_direction`; the flat branch opens on it; `analysis_data['entry_direction']` added
+  (`slope_direction` kept); docstring `Flat:` rewritten; score/regime comments refreshed.
+- `dashboard.py`: the slope-panel headline now shows the live `entry_direction` (fallback
+  `slope_direction`); when they differ, the structural read is shown in the status line.
+- `docs/weighted-regime-redesign.md`: status header + §8 Step 5 marked done.
+
+**Note — §7 open knob not taken.** Shipped the clean §6 rule *without* the optional "15M-not-against"
+hard gate on top of the score. If demo shows poorly-timed opens (entering into a 15M reversal), that
+gate is the documented tightening.
+
+**Rollback.** `git revert` the Step-5 commit to restore the structural `_slope_direction` entry.
+To only loosen/disable the new gate: lower `ENTRY_S_*` (more trades) or raise them very high (the
+bot stops opening). The structural helper is still present, so reverting is clean.
+
+---
+
 ## [v3.1.0] — 2026-10-23 — Weighted-score + regime redesign, Step 4: force-close via score+regime (LIVE) [_exp_h]
 
 **Baseline:** the v3.0.0 (Step-3 ladder-gate) HEAD per branch — `47b147d` (btcusd1), `6f0fddd`

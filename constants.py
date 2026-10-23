@@ -62,8 +62,8 @@ MACD_SIGNAL = 9                     # signal EMA length
 # REGIME_RSI_BULL AND the MACD line > 0; BEAR when RSI is below REGIME_RSI_BEAR AND the
 # MACD line < 0; else NEUTRAL. D1 leads / H4 confirms (see Strategy._regime_combine and
 # docs/weighted-regime-redesign.md §4). The regime + the weighted slope score now drive the
-# DCA ladder gate (Step 3) and the force-close (Step 4), both LIVE; entry + profit-book still
-# ignore them (Steps 5-6, still shadow). Tunable on demo.
+# DCA ladder gate (Step 3), the force-close (Step 4) and the fresh entry (Step 5), all LIVE;
+# only the variant-A profit-book still ignores them (Step 6, shadow). Tunable on demo.
 REGIME_RSI_BULL = 55                # RSI strictly above this (and MACD line > 0) -> BULL
 REGIME_RSI_BEAR = 45                # RSI strictly below this (and MACD line < 0) -> BEAR
 # DCA ladder gate: a position may only average in when the tide is NOT against it AND the
@@ -76,6 +76,11 @@ REGIME_LADDER_S = 6                 # adverse slope-score magnitude that blocks 
 FORCE_CLOSE_S_WITH = 12             # tide WITH the position (BULL for a long / BEAR for a short)
 FORCE_CLOSE_S_NEUTRAL = 8           # no clear tide
 FORCE_CLOSE_S_AGAINST = 4           # tide AGAINST the position (cut fast)
+# Fresh entry (Step 5): open only WITH the tide, once the score confirms. A BUY opens when the
+# regime is BULL and score >= ENTRY_S_WITH, or NEUTRAL and score >= ENTRY_S_NEUTRAL (a bigger
+# score is required with no tide); BEAR blocks new longs. SELL mirrors (score <= -X; BULL blocks).
+ENTRY_S_WITH = 8                    # open with the tide when |score| >= this
+ENTRY_S_NEUTRAL = 12               # open in a neutral tide when |score| >= this (needs more)
 
 # ─── Slope Engine (4H + 1H + 15M entry; D1 regime for the force-close EXIT) ───
 # ENTRY (4H primary / 1H confirm / 15M trigger) uses ONLY 4H/1H/15M latest-pivot slopes -

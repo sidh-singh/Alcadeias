@@ -6,6 +6,7 @@ from constants import (
     PROFIT_PROTECT_USD_PER_UNIT,
     REGIME_RSI_BULL, REGIME_RSI_BEAR, REGIME_LADDER_S,
     FORCE_CLOSE_S_WITH, FORCE_CLOSE_S_NEUTRAL, FORCE_CLOSE_S_AGAINST,
+    ENTRY_S_WITH, ENTRY_S_NEUTRAL,
 )
 
 
@@ -107,6 +108,23 @@ class Strategy:
             return 'NEUTRAL' if h4_regime == 'BULL' else 'BEAR'
         return 'NEUTRAL'
 
+    @staticmethod
+    def _entry_direction(regime, score):
+        """Fresh-entry direction from the score + regime (the 'tide + waves' open rule): open
+        WITH the tide once the score confirms, demand a bigger score with no tide, and never
+        open against the tide. BUY: BULL & score>=ENTRY_S_WITH, or NEUTRAL & score>=ENTRY_S_NEUTRAL.
+        SELL mirrors (score<=-X; swap BULL<->BEAR). Returns 'BUY' / 'SELL' / None (WAIT). A BEAR
+        tide blocks new longs and a BULL tide blocks new shorts. See doc §6."""
+        if regime == 'BULL' and score >= ENTRY_S_WITH:
+            return 'BUY'
+        if regime == 'NEUTRAL' and score >= ENTRY_S_NEUTRAL:
+            return 'BUY'
+        if regime == 'BEAR' and score <= -ENTRY_S_WITH:
+            return 'SELL'
+        if regime == 'NEUTRAL' and score <= -ENTRY_S_NEUTRAL:
+            return 'SELL'
+        return None
+
     def _slope_direction(self, slopes):
         """
         Fresh-entry direction from the 4H / 1H / 15M latest-pivot slope signs.
@@ -153,8 +171,9 @@ class Strategy:
         """
         RSI+MACD slope strategy (slope-exit variant).
 
-          Flat: 4H-primary / 1H-confirm / 15M-trigger slope direction ->
-                BUY / SELL / WAIT. Opens a single position; cooldown-gated.
+          Flat: open from the score + regime (Step 5) - BUY when regime BULL & S>=8 or
+                NEUTRAL & S>=12; SELL mirrors (S<=-8 / -12); BEAR blocks new longs, BULL blocks
+                new shorts. Single position, cooldown-gated. See docs/weighted-regime-redesign.md §6.
           Open:
             Exits (checked first):
               - profit-protect (D1-regime): profit > times * PROFIT_PROTECT_USD_PER_UNIT
@@ -214,23 +233,28 @@ class Strategy:
         m15m = self._slope_sign(slopes, 'M15', 'macd')
         d1r = self._slope_sign(slopes, 'D1', 'rsi')
         d1m = self._slope_sign(slopes, 'D1', 'macd')
-        slope_direction = self._slope_direction(slopes)   # entry: 4H/1H/15M only (D1 excluded)
+        slope_direction = self._slope_direction(slopes)   # structural 4H/1H/15M read (dashboard/compare only; entry uses score+regime)
 
         # Weighted MTF slope score. S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each TF = its RSI + MACD
         # slope signs; range -20..+20 (negative = bearish). Weighted-score + regime redesign;
-        # read LIVE by the DCA ladder gate (Step 3). Higher TF dominates; one noisy sign moves
-        # S by <=1. See docs/weighted-regime-redesign.md.
+        # read LIVE by the ladder gate (Step 3), force-close (Step 4) and entry (Step 5). Higher
+        # TF dominates; one noisy sign moves S by <=1. See docs/weighted-regime-redesign.md.
         slope_score = (4 * (d1r + d1m) + 3 * (h4r + h4m)
                        + 2 * (h1r + h1m) + 1 * (m15r + m15m))
 
         # Regime "tide". From the big-TF LEVEL (not the pivot slope): per-TF BULL/BEAR/NEUTRAL
         # (RSI vs REGIME_RSI_BULL/BEAR + MACD line vs 0), combined D1-leads-H4. Weighted-score +
         # regime redesign (doc §4). Pairs with slope_score: the tide = slow bias/direction, the
-        # score ("waves") = fast timing. Read LIVE by the DCA ladder gate (Step 3) below.
+        # score ("waves") = fast timing. Read LIVE by the ladder gate (3), force-close (4), entry (5).
         rsi_d1 = rsi_mtf.get('TIMEFRAME_D1', 50.0) if rsi_mtf else 50.0
         d1_regime = self._regime_tf(rsi_d1, self._macd_line(slopes, 'D1'))
         h4_regime = self._regime_tf(rsi_4h, self._macd_line(slopes, 'H4'))
         regime = self._regime_combine(d1_regime, h4_regime)
+
+        # Fresh-entry direction (Step 5, LIVE) from the score + regime -- replaces the structural
+        # _slope_direction for OPENING: open with the tide once the score confirms, never against
+        # it (slope_direction is kept above only as the dashboard's structural read). See doc §6.
+        entry_direction = self._entry_direction(regime, slope_score)
 
         # DCA ladder gate (Step 3, LIVE — the first decision wired to the score + regime).
         # Average into a position ONLY when the tide is not against it AND the score is not
@@ -291,10 +315,10 @@ class Strategy:
         sell_pp = (sell_profit > profit_protect_min) and sell_rev
 
         if buy_count == 0 and sell_count == 0:
-            # Fresh entry (single position; 4H-primary / 1H-confirm / 15M-trigger), cooldown-gated.
-            if entry_allowed and slope_direction == 'BUY':
+            # Fresh entry (single position; score + regime, Step 5), cooldown-gated.
+            if entry_allowed and entry_direction == 'BUY':
                 buy_status = Signal.BUY
-            elif entry_allowed and slope_direction == 'SELL':
+            elif entry_allowed and entry_direction == 'SELL':
                 sell_status = Signal.SELL
 
         elif buy_count > 0 and sell_count == 0:
@@ -344,6 +368,7 @@ class Strategy:
             'rsi_mtf': rsi_mtf or {},
             'slopes': slopes or {},
             'slope_direction': slope_direction or 'WAIT',
+            'entry_direction': entry_direction or 'WAIT',
             'score': slope_score,
             'regime': regime,
             'regime_d1': d1_regime,

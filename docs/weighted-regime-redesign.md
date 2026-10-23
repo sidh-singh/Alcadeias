@@ -1,12 +1,13 @@
 # Exit/Entry Redesign — Weighted Score + Regime (+ ADX)
 
-> **STATUS: IN PROGRESS — ladder gate + force-close LIVE (v3.1.0).** Living design doc for the 4
-> `_h` branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
+> **STATUS: IN PROGRESS — ladder gate + force-close + entry LIVE (v3.2.0).** Living design doc for
+> the 4 `_h` branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
 > `rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h`). Started 2026-10-24 after a
 > ~$1000 demo loss. **Steps 1–2 (Score, Regime)** shipped as shadow; **Step 3 (ladder gate,
-> v3.0.0)** and **Step 4 (force-close, v3.1.0)** are now LIVE — the DCA ladder and the exit are
-> driven by the score + regime, replacing the v2.x cascade. The remaining live steps (5–6:
-> entry, profit-book) still read the score/regime as shadow. Profit-book bits = variant A
+> v3.0.0)**, **Step 4 (force-close, v3.1.0)** and **Step 5 (entry, v3.2.0)** are now LIVE — the
+> ladder, the exit and the fresh entry are all driven by the score + regime, replacing the v2.x
+> cascade and the structural `_slope_direction` entry. Only **Step 6 (profit-book, variant A)**
+> remains, still reading the score/regime as shadow. Profit-book bits = variant A
 > (`rsimacd_*_wd_exp_h`) only.
 
 ---
@@ -174,7 +175,7 @@ ADX is deferred (§5). Each step: implement → owner watches demo → confirm i
 2. ✅ **Regime (shadow) — DONE 2026-10-23.** `_regime_tf` / `_regime_combine` in `strategy.py` (RSI-level vs `REGIME_RSI_BULL`/`BEAR` + MACD-line vs 0, D1-leads-H4); `app.py` now carries `slopes[tf]['macd_line']`; `analysis_data['regime'|'regime_d1'|'regime_h4']`; `_regime_badge` "TIDE" tile in `dashboard.py`. No behaviour change.
 3. ✅ **Ladder gate (LIVE) — DONE 2026-10-23 (v3.0.0).** `buy_add_ok`/`sell_add_ok` in `strategy.py` wrap the DCA adds: a BUY may add only if regime ≠ BEAR AND `S > -REGIME_LADDER_S` (6); SELL mirror. Blocks the "average down into a trend" half of the loss. `constants.py` `REGIME_LADDER_S=6`. Entry/exits unchanged.
 4. ✅ **Force-close (LIVE) — DONE 2026-10-23 (v3.1.0).** Replaced the v2.x D1 cascade with the S+regime table: close a BUY at `S ≤ −12` (BULL) / `−8` (NEUTRAL) / `−4` (BEAR); SELL mirror. Reasons `fc_bull`/`fc_neutral`/`fc_bear`. Consts `FORCE_CLOSE_S_WITH`/`_NEUTRAL`/`_AGAINST` = 12/8/4. `m15_both_*` kept for the variant-A profit-book. ← profit_protect (var A) still checked first.
-5. **Entry (live):** `S`+regime (⚠ re-introduces D1/H4 into entry). ← NEXT
+5. ✅ **Entry (LIVE) — DONE 2026-10-23 (v3.2.0).** `_entry_direction(regime, score)` replaces the structural `_slope_direction` for OPENING: BUY when regime BULL & `S≥ENTRY_S_WITH`(8) or NEUTRAL & `S≥ENTRY_S_NEUTRAL`(12); SELL mirror (`S≤−8`/`−12`); BEAR blocks longs, BULL blocks shorts. ⚠ re-introduces D1/H4 into entry (via the score + the tide). `_slope_direction` is kept as the dashboard's "structural" read; the panel headline now shows the live `entry_direction`. Shipped WITHOUT the optional §7 "15M-not-against" gate (still available if demo shows poorly-timed opens). ← NEXT after this: Step 6.
 6. **Profit-book (live, variant A):** `S`+regime.
 Dashboard "decision view" grows with each step (S panel → +regime → +what each decision would do),
 built alongside (owner grants multi-prompt for it).
