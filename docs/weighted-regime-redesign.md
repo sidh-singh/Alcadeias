@@ -1,14 +1,15 @@
 # Exit/Entry Redesign — Weighted Score + Regime (+ ADX)
 
-> **STATUS: IN PROGRESS — ladder gate + force-close + entry LIVE (v3.2.0).** Living design doc for
-> the 4 `_h` branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
+> **STATUS: COMPLETE — the full strategy runs on score + regime.** Living design doc for the 4
+> `_h` branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
 > `rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h`). Started 2026-10-24 after a
-> ~$1000 demo loss. **Steps 1–2 (Score, Regime)** shipped as shadow; **Step 3 (ladder gate,
-> v3.0.0)**, **Step 4 (force-close, v3.1.0)** and **Step 5 (entry, v3.2.0)** are now LIVE — the
-> ladder, the exit and the fresh entry are all driven by the score + regime, replacing the v2.x
-> cascade and the structural `_slope_direction` entry. Only **Step 6 (profit-book, variant A)**
-> remains, still reading the score/regime as shadow. Profit-book bits = variant A
-> (`rsimacd_*_wd_exp_h`) only.
+> ~$1000 demo loss. **Steps 1–2 (Score, Regime)** shipped as shadow; **Steps 3–6** are LIVE —
+> ladder gate (v3.0.0), force-close (v3.1.0) and entry (v3.2.0) on all 4, and the profit-book
+> (v3.3.0) on variant A. The h6/variant-B pair has no profit-book (it uses the `+$unit` target),
+> so it is complete at Step 5 (v3.2.0). The v2.x cascade, the structural `_slope_direction` entry,
+> and the D1-book are fully replaced; the whole brain (ladder / exit / entry / book) is now the
+> weighted score crossing regime-set lines. Profit-book bits = variant A (`rsimacd_*_wd_exp_h`) only.
+> ADX (§5) remains the documented future enhancement.
 
 ---
 
@@ -176,7 +177,7 @@ ADX is deferred (§5). Each step: implement → owner watches demo → confirm i
 3. ✅ **Ladder gate (LIVE) — DONE 2026-10-23 (v3.0.0).** `buy_add_ok`/`sell_add_ok` in `strategy.py` wrap the DCA adds: a BUY may add only if regime ≠ BEAR AND `S > -REGIME_LADDER_S` (6); SELL mirror. Blocks the "average down into a trend" half of the loss. `constants.py` `REGIME_LADDER_S=6`. Entry/exits unchanged.
 4. ✅ **Force-close (LIVE) — DONE 2026-10-23 (v3.1.0).** Replaced the v2.x D1 cascade with the S+regime table: close a BUY at `S ≤ −12` (BULL) / `−8` (NEUTRAL) / `−4` (BEAR); SELL mirror. Reasons `fc_bull`/`fc_neutral`/`fc_bear`. Consts `FORCE_CLOSE_S_WITH`/`_NEUTRAL`/`_AGAINST` = 12/8/4. `m15_both_*` kept for the variant-A profit-book. ← profit_protect (var A) still checked first.
 5. ✅ **Entry (LIVE) — DONE 2026-10-23 (v3.2.0).** `_entry_direction(regime, score)` replaces the structural `_slope_direction` for OPENING: BUY when regime BULL & `S≥ENTRY_S_WITH`(8) or NEUTRAL & `S≥ENTRY_S_NEUTRAL`(12); SELL mirror (`S≤−8`/`−12`); BEAR blocks longs, BULL blocks shorts. ⚠ re-introduces D1/H4 into entry (via the score + the tide). `_slope_direction` is kept as the dashboard's "structural" read; the panel headline now shows the live `entry_direction`. Shipped WITHOUT the optional §7 "15M-not-against" gate (still available if demo shows poorly-timed opens). ← NEXT after this: Step 6.
-6. **Profit-book (live, variant A):** `S`+regime.
+6. ✅ **Profit-book (LIVE, variant A) — DONE 2026-10-23 (v3.3.0).** `profit_protect` now books on score+regime: once in profit ≥ `times·PROFIT_PROTECT_USD_PER_UNIT`, close a BUY at `S ≤ −BOOK_S_WITH`(6) BULL / `−BOOK_S_NEUTRAL`(4) NEUTRAL / `−BOOK_S_AGAINST`(2) BEAR; SELL mirror. Reasons `book_bull`/`book_neutral`/`book_bear`. Replaces the v2.6.0 D1-book (`pp_trend`/`pp_counter`/`profit_protect`). Checked before the force-close (in profit, a book beats a capitulation). The h6/variant-B pair is N/A (no profit-book; uses the `+$unit` target). **← REDESIGN COMPLETE.**
 Dashboard "decision view" grows with each step (S panel → +regime → +what each decision would do),
 built alongside (owner grants multi-prompt for it).
 
