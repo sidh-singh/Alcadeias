@@ -1,10 +1,12 @@
 # Exit/Entry Redesign — Weighted Score + Regime (+ ADX)
 
-> **STATUS: ANALYSIS / PROPOSED — NOT IMPLEMENTED.** Living design doc for the 4 `_h`
-> branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
+> **STATUS: IN PROGRESS — shadow steps shipped, no behaviour change yet.** Living design doc
+> for the 4 `_h` branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
 > `rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h`). Started 2026-10-24 after a
-> ~$1000 demo loss. Nothing here is in the code yet; it supersedes the current v2.6.0 exit
-> logic *if/when* built. Profit-book bits = variant A (`rsimacd_*_wd_exp_h`) only.
+> ~$1000 demo loss. **Step 1 (Score, shadow)** and **Step 2 (Regime, shadow)** are now in the
+> code — telemetry/dashboard only, NO decision reads them yet (see §8). The live steps (3–6)
+> still supersede the current v2.6.0 exit logic *if/when* built. Profit-book bits = variant A
+> (`rsimacd_*_wd_exp_h`) only.
 
 ---
 
@@ -167,9 +169,9 @@ down-move). Noisy M15 MACD irrelevant (D1/H4 carry S; tide is bear).
 
 ## 8. Rollout — ONE step at a time, shadow-first (owner must comprehend + verify each)
 ADX is deferred (§5). Each step: implement → owner watches demo → confirm it matches expectation → next.
-1. **Score (shadow):** compute `S` from the existing slopes; show on dashboard + log. **No behaviour change.**
-2. **Regime (shadow):** compute BULL/BEAR/NEUTRAL (RSI-level + MACD-line, D1-leads-H4); show it. **No behaviour change.**
-3. **Ladder gate (live):** block `BUY_MORE` in BEAR / when `S` strongly against. (The $1000 fix; surgical.)
+1. ✅ **Score (shadow) — DONE 2026-10-23.** `slope_score` in `strategy.py` + `_score_gauge` tile in `dashboard.py`; `analysis_data['score']`. No behaviour change (loss case = S −14).
+2. ✅ **Regime (shadow) — DONE 2026-10-23.** `_regime_tf` / `_regime_combine` in `strategy.py` (RSI-level vs `REGIME_RSI_BULL`/`BEAR` + MACD-line vs 0, D1-leads-H4); `app.py` now carries `slopes[tf]['macd_line']`; `analysis_data['regime'|'regime_d1'|'regime_h4']`; `_regime_badge` "TIDE" tile in `dashboard.py`. No behaviour change.
+3. **Ladder gate (live):** block `BUY_MORE` in BEAR / when `S` strongly against. (The $1000 fix; surgical.) ← NEXT
 4. **Force-close (live):** replace the exit with the `S`+regime table (§6).
 5. **Entry (live):** `S`+regime (⚠ re-introduces D1/H4 into entry).
 6. **Profit-book (live, variant A):** `S`+regime.
