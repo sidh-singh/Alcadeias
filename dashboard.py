@@ -881,6 +881,51 @@ def _pivot_mini_graph(tf_label, g):
             'fontSize': '0.6rem', 'color': COLORS['text_muted'], 'padding': '6px 4px'})
 
 
+def _score_gauge(score):
+    """Horizontal −20…+20 gauge for the weighted MTF slope score (SHADOW — display only).
+    Green right / red left of a centre (0) line; bigger timeframe dominates the number."""
+    try:
+        s = float(score)
+    except (TypeError, ValueError):
+        s = 0.0
+    frac = max(-1.0, min(1.0, s / 20.0))                    # -1..+1
+    col = COLORS['buy'] if s > 0.5 else (COLORS['sell'] if s < -0.5 else COLORS['text_dim'])
+    if frac >= 0:
+        fill_left, fill_width = 50.0, frac * 50.0
+    else:
+        fill_left, fill_width = 50.0 + frac * 50.0, -frac * 50.0
+    return html.Div(
+        style={'padding': '8px 16px 10px', 'borderBottom': f'1px solid {COLORS["divider"]}'},
+        children=[
+            html.Div(style={'display': 'flex', 'justifyContent': 'space-between',
+                            'alignItems': 'baseline', 'marginBottom': '5px'}, children=[
+                html.Span('MTF SCORE', style={
+                    'fontSize': '0.62rem', 'fontWeight': '700',
+                    'color': COLORS['text_dim'], 'letterSpacing': '0.5px'}),
+                html.Span('shadow · 4·D1 + 3·H4 + 2·H1 + 1·M15 · −20…+20', style={
+                    'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
+            ]),
+            html.Div(style={'display': 'flex', 'alignItems': 'center', 'gap': '10px'}, children=[
+                html.Span(f'{s:+.0f}', style={
+                    'fontWeight': '800', 'fontSize': '1.15rem', 'color': col,
+                    'minWidth': '40px', 'textAlign': 'right'}),
+                html.Div(style={
+                    'position': 'relative', 'flex': '1', 'height': '10px',
+                    'background': COLORS['bg'], 'borderRadius': '5px',
+                    'border': f'1px solid {COLORS["card_border"]}',
+                }, children=[
+                    html.Div(style={'position': 'absolute', 'left': '50%', 'top': '-2px',
+                                    'bottom': '-2px', 'width': '1px',
+                                    'background': COLORS['text_muted']}),
+                    html.Div(style={'position': 'absolute', 'top': '1px', 'bottom': '1px',
+                                    'left': f'{fill_left}%', 'width': f'{fill_width}%',
+                                    'background': col, 'borderRadius': '3px', 'opacity': '0.85'}),
+                ]),
+            ]),
+        ],
+    )
+
+
 def build_slope_panel(symbol, analysis, last_updated=''):
     """RSI+MACD slope panel — D1/15M/H1/H4 pivot slopes (D1 = exit-regime) + the decision."""
     slopes = analysis.get('slopes', {}) or {}
@@ -891,6 +936,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
     rsi_mtf = analysis.get('rsi_mtf', {})
     rsi_graphs = analysis.get('rsi_graphs', {}) or {}
     macd_graphs = analysis.get('macd_graphs', {}) or {}
+    score = analysis.get('score', 0)
     iteration_ms = analysis.get('iteration_ms')
     src_count = analysis.get('source_candle_count', 0)
     src_last_time = analysis.get('last_source_candle_time', '-')
@@ -940,6 +986,8 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                         'borderRadius': '10px'}),
                 ],
             ),
+            # Weighted MTF slope score gauge (SHADOW — Step 1 of the weighted-score+regime redesign)
+            _score_gauge(score),
             # slope grid (rows D1 / H4 / H1 / M15; latest-pivot slopes; D1 = exit-regime only)
             html.Div(style=grid_style, children=[
                 html.Span(''),
