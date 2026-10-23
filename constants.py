@@ -61,9 +61,9 @@ MACD_SIGNAL = 9                     # signal EMA length
 # Per big-TF (D1 / H4) bias from LEVEL (not the pivot slope): BULL when RSI is above
 # REGIME_RSI_BULL AND the MACD line > 0; BEAR when RSI is below REGIME_RSI_BEAR AND the
 # MACD line < 0; else NEUTRAL. D1 leads / H4 confirms (see Strategy._regime_combine and
-# docs/weighted-regime-redesign.md §4). The regime + the weighted slope score now drive the
-# DCA ladder gate (Step 3), the force-close (Step 4) and the fresh entry (Step 5), all LIVE;
-# only the variant-A profit-book still ignores them (Step 6, shadow). Tunable on demo.
+# docs/weighted-regime-redesign.md §4). The regime + the weighted slope score drive the DCA
+# ladder gate (Step 3), the force-close (Step 4) and the fresh entry (Step 5) -- all LIVE.
+# (Step 6 profit-book is variant-A only; this branch books with the +$unit target.) Complete.
 REGIME_RSI_BULL = 55                # RSI strictly above this (and MACD line > 0) -> BULL
 REGIME_RSI_BEAR = 45                # RSI strictly below this (and MACD line < 0) -> BEAR
 # DCA ladder gate: a position may only average in when the tide is NOT against it AND the
