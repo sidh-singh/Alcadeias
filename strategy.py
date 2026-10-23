@@ -3,7 +3,7 @@ from constants import (
     STRATEGY_HEDGE,
     FIBO_SEQUENCE_LENGTH,
     RSI_OVERSOLD, RSI_OVERBOUGHT,
-    REGIME_RSI_BULL, REGIME_RSI_BEAR,
+    REGIME_RSI_BULL, REGIME_RSI_BEAR, REGIME_LADDER_S,
 )
 
 
@@ -209,22 +209,29 @@ class Strategy:
         d1m = self._slope_sign(slopes, 'D1', 'macd')
         slope_direction = self._slope_direction(slopes)   # entry: 4H/1H/15M only (D1 excluded)
 
-        # Weighted MTF slope score (SHADOW — telemetry/dashboard only; NO decision reads it yet).
-        # S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each TF = its RSI + MACD slope signs; range -20..+20
-        # (negative = bearish). Step 1 of the weighted-score + regime redesign; see
-        # docs/weighted-regime-redesign.md. Higher TF dominates; one noisy sign moves S by <=1.
+        # Weighted MTF slope score. S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each TF = its RSI + MACD
+        # slope signs; range -20..+20 (negative = bearish). Weighted-score + regime redesign;
+        # read LIVE by the DCA ladder gate (Step 3). Higher TF dominates; one noisy sign moves
+        # S by <=1. See docs/weighted-regime-redesign.md.
         slope_score = (4 * (d1r + d1m) + 3 * (h4r + h4m)
                        + 2 * (h1r + h1m) + 1 * (m15r + m15m))
 
-        # Regime "tide" (SHADOW — telemetry/dashboard only; NO decision reads it yet).
-        # From the big-TF LEVEL (not the pivot slope): per-TF BULL/BEAR/NEUTRAL (RSI vs
-        # REGIME_RSI_BULL/BEAR + MACD line vs 0), combined D1-leads-H4. Step 2 of the
-        # weighted-score + regime redesign; see docs/weighted-regime-redesign.md §4. Pairs
-        # with slope_score: the tide = slow bias/direction, the score ("waves") = fast timing.
+        # Regime "tide". From the big-TF LEVEL (not the pivot slope): per-TF BULL/BEAR/NEUTRAL
+        # (RSI vs REGIME_RSI_BULL/BEAR + MACD line vs 0), combined D1-leads-H4. Weighted-score +
+        # regime redesign (doc §4). Pairs with slope_score: the tide = slow bias/direction, the
+        # score ("waves") = fast timing. Read LIVE by the DCA ladder gate (Step 3) below.
         rsi_d1 = rsi_mtf.get('TIMEFRAME_D1', 50.0) if rsi_mtf else 50.0
         d1_regime = self._regime_tf(rsi_d1, self._macd_line(slopes, 'D1'))
         h4_regime = self._regime_tf(rsi_4h, self._macd_line(slopes, 'H4'))
         regime = self._regime_combine(d1_regime, h4_regime)
+
+        # DCA ladder gate (Step 3, LIVE — the first decision wired to the score + regime).
+        # Average into a position ONLY when the tide is not against it AND the score is not
+        # strongly adverse: a BUY may add unless regime BEAR or S <= -REGIME_LADDER_S; a SELL
+        # may add unless regime BULL or S >= +REGIME_LADDER_S. Blocks the "average down into a
+        # trend" half of the 2026-10 loss (doc §6). Exits / entry are unchanged (Steps 4-6).
+        buy_add_ok = (regime != 'BEAR') and (slope_score > -REGIME_LADDER_S)
+        sell_add_ok = (regime != 'BULL') and (slope_score < REGIME_LADDER_S)
 
         # D1-regime-aware force-close (EXIT only). Three D1 regimes vs the open basket (for a
         # long: up=supportive, down=against, split=RSI/MACD disagree, flat=a 0):
@@ -286,16 +293,18 @@ class Strategy:
             elif buy_fc:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = buy_fc_reason
-            elif rsi_1m <= RSI_OVERSOLD and buy_count == 1:
-                buy_status = Signal.BUY_MORE
-            elif rsi_5m <= RSI_OVERSOLD and buy_count == 2:
-                buy_status = Signal.BUY_MORE
-            elif rsi_15m <= RSI_OVERSOLD and buy_count == 3:
-                buy_status = Signal.BUY_MORE
-            elif rsi_1h <= RSI_OVERSOLD and buy_count == 4:
-                buy_status = Signal.BUY_MORE
-            elif rsi_4h <= RSI_OVERSOLD and buy_count == 5:
-                buy_status = Signal.BUY_MORE
+            elif buy_add_ok:
+                # DCA add - gated: averages into the long only when the tide/score is not against it.
+                if rsi_1m <= RSI_OVERSOLD and buy_count == 1:
+                    buy_status = Signal.BUY_MORE
+                elif rsi_5m <= RSI_OVERSOLD and buy_count == 2:
+                    buy_status = Signal.BUY_MORE
+                elif rsi_15m <= RSI_OVERSOLD and buy_count == 3:
+                    buy_status = Signal.BUY_MORE
+                elif rsi_1h <= RSI_OVERSOLD and buy_count == 4:
+                    buy_status = Signal.BUY_MORE
+                elif rsi_4h <= RSI_OVERSOLD and buy_count == 5:
+                    buy_status = Signal.BUY_MORE
 
         elif buy_count == 0 and sell_count > 0:
             # Open SELL (mirror): close first (+$unit target, then slope force-close),
@@ -306,16 +315,18 @@ class Strategy:
             elif sell_fc:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = sell_fc_reason
-            elif rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
-                sell_status = Signal.SELL_MORE
-            elif rsi_5m >= RSI_OVERBOUGHT and sell_count == 2:
-                sell_status = Signal.SELL_MORE
-            elif rsi_15m >= RSI_OVERBOUGHT and sell_count == 3:
-                sell_status = Signal.SELL_MORE
-            elif rsi_1h >= RSI_OVERBOUGHT and sell_count == 4:
-                sell_status = Signal.SELL_MORE
-            elif rsi_4h >= RSI_OVERBOUGHT and sell_count == 5:
-                sell_status = Signal.SELL_MORE
+            elif sell_add_ok:
+                # DCA add - gated: averages into the short only when the tide/score is not against it.
+                if rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
+                    sell_status = Signal.SELL_MORE
+                elif rsi_5m >= RSI_OVERBOUGHT and sell_count == 2:
+                    sell_status = Signal.SELL_MORE
+                elif rsi_15m >= RSI_OVERBOUGHT and sell_count == 3:
+                    sell_status = Signal.SELL_MORE
+                elif rsi_1h >= RSI_OVERBOUGHT and sell_count == 4:
+                    sell_status = Signal.SELL_MORE
+                elif rsi_4h >= RSI_OVERBOUGHT and sell_count == 5:
+                    sell_status = Signal.SELL_MORE
 
         analysis_data = {
             'rsi_value': round(current_rsi, 2),
@@ -326,6 +337,8 @@ class Strategy:
             'regime': regime,
             'regime_d1': d1_regime,
             'regime_h4': h4_regime,
+            'buy_add_ok': bool(buy_add_ok),
+            'sell_add_ok': bool(sell_add_ok),
             'entry_allowed': bool(entry_allowed),
             'exit_reason': exit_reason,
         }
