@@ -17,6 +17,52 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.1.0] — 2026-10-23 — Weighted-score + regime redesign, Step 4: force-close via score+regime (LIVE) [_exp_h]
+
+**Baseline:** the v3.0.0 (Step-3 ladder-gate) HEAD per branch — `47b147d` (btcusd1), `6f0fddd`
+(xauusd1), `df578ba` (h6_btcusd1), `38bfbb9` (h6_xauusd1).
+**Branches:** all 4 `_h` — `rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
+`rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h`.
+**EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py`, `strategy.py`, `docs/weighted-regime-redesign.md` (+ this `CHANGELOG.md`).
+
+**Why.** Second half of the ~$1000-loss fix and a large simplification. The v2.x force-close was a
+D1-regime **cascade** (sensitive / normal / D1-split 4H→H1→floor, reasons `force_close_fast` /
+`force_close` / `fc_split_*`) hard-gated on noisy M15/H1 slope *signs* — the exact structure that
+failed to cut the loss. It is replaced by one rule on the weighted **score** crossing a
+**regime-set** line: close when the score has moved far enough against the basket, with the
+distance scaled by the tide (give a with-trend winner room, cut a counter-trend loser fast).
+
+### Behaviour change — force-close only (BUY shown; SELL mirrors: flip score, swap BULL↔BEAR)
+| tide (regime) | close a BUY when | reason |
+|---|---|---|
+| **BULL** (with the long) | `score ≤ -FORCE_CLOSE_S_WITH` (−12) | `fc_bull` |
+| **NEUTRAL** | `score ≤ -FORCE_CLOSE_S_NEUTRAL` (−8) | `fc_neutral` |
+| **BEAR** (against the long) | `score ≤ -FORCE_CLOSE_S_AGAINST` (−4) | `fc_bear` |
+
+- New consts `FORCE_CLOSE_S_WITH=12` / `_NEUTRAL=8` / `_AGAINST=4` (tunable). The score is
+  `S = 4·D1 + 3·H4 + 2·H1 + 1·M15` (Step 1); the regime is the D1-leads-H4 tide (Step 2).
+- **Removed:** the entire D1 cascade — `force_close_fast`, the D1-split `fc_split_*` ladder, the
+  M15-both / ≥1-H1 sign gates. (`m15_both_dn` / `m15_both_up` are retained only because the
+  variant-A `profit_protect` still uses them.)
+- **Unchanged / still checked first:** variant-A `profit_protect` (in profit, a book beats a
+  capitulation), the h6 `+$unit` target, the Step-3 ladder gate, entry (`_slope_direction`), the
+  RSI tiers + Fibo sizing.
+
+### Per-file
+- `constants.py`: `FORCE_CLOSE_S_WITH/_NEUTRAL/_AGAINST`; regime-section note updated (force-close
+  now LIVE too).
+- `strategy.py`: import the three consts; replace the force-close cascade precompute with the
+  score+regime close (per-side threshold by regime; `buy_fc`/`sell_fc` + `fc_<regime>` reasons);
+  docstring exit section rewritten; obsolete build-phase labels dropped.
+- `docs/weighted-regime-redesign.md`: status header + §8 Step 4 marked done.
+
+**Rollback.** `git revert` the Step-4 commit to restore the v2.x cascade. To only widen/disable
+the new close, raise `FORCE_CLOSE_S_*` (e.g. all `9999` → the basket never force-closes; exits
+then rest on `profit_protect` (var A) / the `+$unit` target (h6) alone).
+
+---
+
 ## [v3.0.0] — 2026-10-23 — Weighted-score + regime redesign, Step 3: DCA ladder gate (LIVE) [_exp_h]
 
 **Baseline:** the Step-2 (shadow regime) HEAD per branch — `225a4e7` (btcusd1), `3542c67`
