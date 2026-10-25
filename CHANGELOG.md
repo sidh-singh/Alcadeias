@@ -17,6 +17,28 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v1.7.0] — 2026-10-25 — SHA base candle timeframe M15 → M5
+
+**Baseline commit (state before this change):** `adcb1cb` — *feat: regime entry filter (ADX + ATR-spike) — OFF by default (CHANGELOG v1.6.0)*.
+**Branches:** all 20 live-money fleet branches — `dev_btcusd1_v2`…`dev_btcusd10_v2` (BTCUSDm) and `dev_xauusd1_v2`…`dev_xauusd10_v2` (XAUUSDm). Per-branch credentials / asset / trading window are preserved (untouched by this change).
+**Files touched:** `constants.py` (+ this `CHANGELOG.md`).
+
+**Why.** Promote the single-knob `five_` experiment (`five_dev_btcusd2_v2` / `five_dev_xauusd2_v2`,
+commits `eacf03b` / `2c326cf`) to the whole fleet: compute the Smoothed Heiken Ashi signal/trend on
+**5-minute** base candles instead of 15-minute, for faster reaction. The experiment's separate demo-
+credential commit is deliberately NOT propagated — each fleet branch keeps its own live credentials.
+
+### Behaviour change
+- `constants.py`: `CANDLE_TIMEFRAME` `'TIMEFRAME_M15'` → `'TIMEFRAME_M5'`. The SHA signal/trend now
+  read 5-minute OHLC. **Unchanged:** `CANDLE_COUNT` (300), the SHA lengths (signal TEMA 10 / trend
+  DEMA 20), and every other parameter — only the base candle timeframe feeding the SHA changes.
+
+### Rollback
+`constants.py`: set `CANDLE_TIMEFRAME` back to `'TIMEFRAME_M15'`. Nothing else changed, so that single
+line fully reverts the behaviour.
+
+---
+
 ## [v1.6.0] — 2026-10-01 — Regime Entry Filter (ADX + ATR-spike fresh-entry gate; OFF + shadow by default)
 
 **Baseline commit (state before this change):** `60540a3` — *feat: MTF entry-filter thresholds 30/70 -> 35/65 (CHANGELOG v1.5.0)*.
