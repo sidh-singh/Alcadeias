@@ -185,3 +185,23 @@ built alongside (owner grants multi-prompt for it).
 - Pass MACD-line sign (D1/H4) into `strategy` (v1 regime) — already computed in `app.py`.
 - If ADX: recover `calculate_adx` into `indicator.py`; fetch D1/H4 as OHLC (not close-only); compute
   ADX/+DI/−DI on D1/H4; pass into `strategy`; add ADX/DI to the dashboard rows.
+
+## 10. Open observations (watching on demo — no code change)
+- **Indecisive / "grey" slope (sign 0), esp. at a peak — raised by owner 2026-10-26; KEEP as-is.**
+  A timeframe's slope reads `0` (grey on the dashboard) when: it is at a peak/plateau (current ≈ the
+  latest pivot value, so the per-bar slope ≈ 0), an RSI peak formed *below* the OB band (`RSI_PEAK_OB`
+  = 60, so that high is skipped as a non-OB turn), there is no qualifying pivot in the 20-bar window
+  (monotonic run), or the MACD side-filter (signal-line side) excludes the only recent pivot. See
+  `indicator.latest_pivot_slope` and `Strategy._slope_sign`.
+  **Decision: no change — grey = a neutral "zero vote".** It contributes `0` to the weighted score,
+  and the regime ignores slope signs entirely (it reads *levels*), so the live decisions (entry /
+  force-close / ladder / book) lean on the timeframes that *do* have a clear sign + the tide. One grey
+  TF can never, by itself, force or veto a decision — graceful degradation. (The only place a grey
+  "counts against" is the dashboard-only structural `_slope_direction`, which needs strict `>0`/`<0`.)
+  *Watch:* whether a grey on a heavy TF (D1 w4 / H4 w3) noticeably delays an entry/exit. If it does,
+  un-taken options are: tie-break a flat slope to the confirmed pivot's side; widen the OB/OS band
+  (e.g. 58/42); or fall back to the raw recent-slope sign when no banded pivot qualifies.
+- **Entry thresholds lowered `ENTRY_S` 8/12 → 4/6 — 2026-10-26 (v3.3.1 var-A / v3.2.1 h6).** Entry
+  was too slow to start (bullish D1/H4 slope while the level-based regime lagged bearish/neutral).
+  Watching 1–2 days. ⚠ only helps in a BULL/NEUTRAL regime — a BEAR tide still blocks new longs at
+  *any* score; if still no trade, the next step is removing the regime from entry (keep slope only).
