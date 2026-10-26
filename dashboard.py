@@ -19,6 +19,7 @@ from constants import (
     GRAPH_TEXT_LABEL_THRESHOLD, GRAPH_CUM_LABEL_THRESHOLD,
     STRATEGY_LOG_FILENAME,
     ACTIVE_CONFIG_FILENAME,
+    ENTRY_S,
 )
 
 # ─── Configuration ───
@@ -882,45 +883,119 @@ def _pivot_mini_graph(tf_label, g):
 
 
 def _score_gauge(score):
-    """Horizontal −20…+20 gauge for the weighted MTF slope score (SHADOW — display only).
-    Green right / red left of a centre (0) line; bigger timeframe dominates the number."""
+    """Horizontal −20…+20 threshold-meter for the weighted MTF slope score (drives entry).
+    Diverging meter: a grey 'no-open' band spans −ENTRY_S…+ENTRY_S, BUY (+ENTRY_S) and SELL
+    (−ENTRY_S) threshold lines mark where a position opens, the fill is coloured by zone
+    (green BUY / grey within / red SELL) with the current-score marker on top, and the scale
+    is labelled −20 … 0 … +20. Colour is reinforced by position, the signed value and the zone
+    chip (never colour-alone)."""
     try:
         s = float(score)
     except (TypeError, ValueError):
         s = 0.0
-    frac = max(-1.0, min(1.0, s / 20.0))                    # -1..+1
-    col = COLORS['buy'] if s > 0.5 else (COLORS['sell'] if s < -0.5 else COLORS['text_dim'])
-    if frac >= 0:
-        fill_left, fill_width = 50.0, frac * 50.0
+    thr = float(ENTRY_S)
+
+    def pos(x):   # score -> % along the -20..+20 track (clamped)
+        return max(0.0, min(100.0, (x + 20.0) / 40.0 * 100.0))
+
+    sell_pct, buy_pct, zero_pct, p = pos(-thr), pos(thr), pos(0), pos(s)
+    if s >= 0:                                   # diverging fill, anchored at the 0 centre
+        fill_left, fill_width = zero_pct, p - zero_pct
     else:
-        fill_left, fill_width = 50.0 + frac * 50.0, -frac * 50.0
+        fill_left, fill_width = p, zero_pct - p
+
+    if s >= thr:                                 # zone -> colour + label (opens only outside the band)
+        col, zone_txt, zone_icon = COLORS['buy'], 'BUY ZONE · opens', '🟢'
+    elif s <= -thr:
+        col, zone_txt, zone_icon = COLORS['sell'], 'SELL ZONE · opens', '🔴'
+    else:
+        col, zone_txt, zone_icon = COLORS['neutral'], f'WAIT · within ±{thr:.0f}', '⚪'
+
+    tip = f'score {s:+.0f}   ·   BUY ≥ +{thr:.0f}   ·   SELL ≤ −{thr:.0f}   ·   range −20…+20'
+
+    def _tick(x_pct, label, edge=None):          # axis data-label at a % position
+        st = {'position': 'absolute', 'fontSize': '0.5rem',
+              'color': COLORS['text_muted'], 'whiteSpace': 'nowrap'}
+        if edge == 'left':
+            st['left'] = '0'
+        elif edge == 'right':
+            st['right'] = '0'
+        else:
+            st['left'] = f'{x_pct}%'; st['transform'] = 'translateX(-50%)'
+        return html.Span(label, style=st)
+
+    def _thr_label(x_pct, label, colr):
+        return html.Span(label, style={
+            'position': 'absolute', 'left': f'{x_pct}%', 'transform': 'translateX(-50%)',
+            'fontSize': '0.5rem', 'fontWeight': '700', 'color': colr, 'whiteSpace': 'nowrap'})
+
     return html.Div(
         style={'padding': '8px 16px 10px', 'borderBottom': f'1px solid {COLORS["divider"]}'},
         children=[
+            # header: label + open-threshold note + formula
             html.Div(style={'display': 'flex', 'justifyContent': 'space-between',
-                            'alignItems': 'baseline', 'marginBottom': '5px'}, children=[
+                            'alignItems': 'baseline', 'marginBottom': '7px'}, children=[
                 html.Span('MTF SCORE', style={
                     'fontSize': '0.62rem', 'fontWeight': '700',
                     'color': COLORS['text_dim'], 'letterSpacing': '0.5px'}),
-                html.Span('shadow · 4·D1 + 3·H4 + 2·H1 + 1·M15 · −20…+20', style={
+                html.Span(f'opens at ±{thr:.0f} · 4·D1 + 3·H4 + 2·H1 + 1·M15', style={
                     'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
             ]),
-            html.Div(style={'display': 'flex', 'alignItems': 'center', 'gap': '10px'}, children=[
+            # value + meter column + zone chip
+            html.Div(style={'display': 'flex', 'alignItems': 'center', 'gap': '10px'},
+                     title=tip, children=[
                 html.Span(f'{s:+.0f}', style={
-                    'fontWeight': '800', 'fontSize': '1.15rem', 'color': col,
-                    'minWidth': '40px', 'textAlign': 'right'}),
-                html.Div(style={
-                    'position': 'relative', 'flex': '1', 'height': '10px',
-                    'background': COLORS['bg'], 'borderRadius': '5px',
-                    'border': f'1px solid {COLORS["card_border"]}',
-                }, children=[
-                    html.Div(style={'position': 'absolute', 'left': '50%', 'top': '-2px',
-                                    'bottom': '-2px', 'width': '1px',
-                                    'background': COLORS['text_muted']}),
-                    html.Div(style={'position': 'absolute', 'top': '1px', 'bottom': '1px',
-                                    'left': f'{fill_left}%', 'width': f'{fill_width}%',
-                                    'background': col, 'borderRadius': '3px', 'opacity': '0.85'}),
+                    'fontWeight': '800', 'fontSize': '1.25rem', 'color': col,
+                    'minWidth': '42px', 'textAlign': 'right'}),
+                html.Div(style={'flex': '1'}, children=[
+                    # threshold labels (above the track)
+                    html.Div(style={'position': 'relative', 'height': '11px'}, children=[
+                        _thr_label(sell_pct, f'SELL −{thr:.0f}', COLORS['sell']),
+                        _thr_label(buy_pct, f'BUY +{thr:.0f}', COLORS['buy']),
+                    ]),
+                    # the track
+                    html.Div(style={
+                        'position': 'relative', 'height': '12px',
+                        'background': COLORS['bg'], 'borderRadius': '6px',
+                        'border': f'1px solid {COLORS["card_border"]}',
+                    }, children=[
+                        # grey no-open band (−ENTRY_S … +ENTRY_S)
+                        html.Div(style={'position': 'absolute', 'top': '0', 'bottom': '0',
+                                        'left': f'{sell_pct}%', 'width': f'{buy_pct - sell_pct}%',
+                                        'background': COLORS['neutral'], 'opacity': '0.18'}),
+                        # zone fill (rounded end, anchored at the 0 centre)
+                        html.Div(style={'position': 'absolute', 'top': '1px', 'bottom': '1px',
+                                        'left': f'{fill_left}%', 'width': f'{fill_width}%',
+                                        'background': col, 'borderRadius': '3px', 'opacity': '0.9'}),
+                        # 0 centre line (recessive)
+                        html.Div(style={'position': 'absolute', 'left': f'{zero_pct}%', 'top': '-2px',
+                                        'bottom': '-2px', 'width': '1px', 'background': COLORS['text_muted']}),
+                        # SELL / BUY threshold lines (2px)
+                        html.Div(style={'position': 'absolute', 'left': f'{sell_pct}%', 'top': '-3px',
+                                        'bottom': '-3px', 'width': '2px', 'background': COLORS['sell']}),
+                        html.Div(style={'position': 'absolute', 'left': f'{buy_pct}%', 'top': '-3px',
+                                        'bottom': '-3px', 'width': '2px', 'background': COLORS['buy']}),
+                        # current-score marker (>=8px, 2px surface ring so it reads over the fill)
+                        html.Div(style={'position': 'absolute', 'left': f'{p}%', 'top': '50%',
+                                        'transform': 'translate(-50%, -50%)', 'width': '11px',
+                                        'height': '11px', 'borderRadius': '50%', 'background': col,
+                                        'border': f'2px solid {COLORS["card_solid"]}',
+                                        'boxShadow': f'0 0 0 1px {col}'}),
+                    ]),
+                    # axis data-labels (below the track)
+                    html.Div(style={'position': 'relative', 'height': '12px', 'marginTop': '3px'}, children=[
+                        _tick(0, '−20', edge='left'),
+                        _tick(sell_pct, f'−{thr:.0f}'),
+                        _tick(zero_pct, '0'),
+                        _tick(buy_pct, f'+{thr:.0f}'),
+                        _tick(0, '+20', edge='right'),
+                    ]),
                 ]),
+                # zone chip (icon + label -> meaning is never colour-alone)
+                html.Span(f'{zone_icon} {zone_txt}', style={
+                    'fontSize': '0.55rem', 'fontWeight': '700', 'color': col,
+                    'background': COLORS['bg'], 'padding': '2px 8px', 'borderRadius': '9px',
+                    'border': f'1px solid {col}', 'whiteSpace': 'nowrap'}),
             ]),
         ],
     )
