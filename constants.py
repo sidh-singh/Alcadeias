@@ -79,8 +79,8 @@ FORCE_CLOSE_S_AGAINST = 4           # tide AGAINST the position (cut fast)
 # Fresh entry (Step 5): open only WITH the tide, once the score confirms. A BUY opens when the
 # regime is BULL and score >= ENTRY_S_WITH, or NEUTRAL and score >= ENTRY_S_NEUTRAL (a bigger
 # score is required with no tide); BEAR blocks new longs. SELL mirrors (score <= -X; BULL blocks).
-ENTRY_S_WITH = 8                    # open with the tide when |score| >= this
-ENTRY_S_NEUTRAL = 12               # open in a neutral tide when |score| >= this (needs more)
+ENTRY_S_WITH = 4                    # open with the tide when |score| >= this (lowered 8->4 2026-10-26: entry too slow to start)
+ENTRY_S_NEUTRAL = 6                 # open in a neutral tide when |score| >= this (lowered 12->6 2026-10-26)
 # Profit-book (Step 6, variant A only): once a basket is in profit by at least the buffer, book
 # when the score has reversed this far against it, scaled by the tide -- let a with-trend winner
 # run (a bigger reversal is needed to book), grab a counter-trend winner fast. A BUY books at

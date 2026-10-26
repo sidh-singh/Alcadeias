@@ -17,6 +17,35 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.3.1] — 2026-10-26 — Lower the entry score thresholds (entry too slow to start) [_exp_h]
+
+**Baseline:** the v3.3.0 HEAD (variant A) / v3.2.0 HEAD (h6 pair). Applies to **all 4 `_h` branches**
+(entry is identical across them); on the h6/variant-B pair this same change is logged as **v3.2.1**.
+**EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py` (+ this `CHANGELOG.md`).
+
+**Why.** Owner reported ~2 days with no trade started: the Daily/H4 **slope** had turned bullish but
+the level-based **regime** still read bearish/neutral, so the Step-5 entry gate held off. First,
+cheapest fix — keep the regime, just lower the score needed to open (watch 1–2 days, then decide on
+removing the regime). Owner authorized down to 4 and left the exact value to me.
+
+### Behaviour change — entry thresholds only (no logic change)
+- `constants.py`: `ENTRY_S_WITH` **8 → 4**, `ENTRY_S_NEUTRAL` **12 → 6**. A BUY now opens when the
+  regime is BULL and `score ≥ 4`, or NEUTRAL and `score ≥ 6` (SELL mirrors). `WITH < NEUTRAL` is
+  preserved (with the tide needs less confirmation than without). Everything else — the regime gate
+  itself, the score formula, force-close, ladder gate, profit-book (var A), RSI tiers, cooldown — is
+  unchanged.
+
+> **⚠ Known limitation:** this helps only when the regime is **BULL or NEUTRAL**. If the regime is
+> **BEAR**, a new long is still blocked at *any* score (BEAR permits only SELLs) — lowering the
+> threshold cannot start a long there. If no trade starts within 1–2 days, the regime is the gate and
+> removing it from entry (keep slope only) is the next step.
+
+### Rollback
+`constants.py`: restore `ENTRY_S_WITH = 8` / `ENTRY_S_NEUTRAL = 12`.
+
+---
+
 ## [v3.3.0] — 2026-10-23 — Weighted-score + regime redesign, Step 6: profit-book via score+regime (LIVE, variant A) [_exp_h]
 
 **Baseline:** the v3.2.0 (Step-5 entry) HEAD — `8bf5790` (btcusd1), `0a8f4b1` (xauusd1).
