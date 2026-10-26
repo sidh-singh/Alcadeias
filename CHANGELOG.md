@@ -17,6 +17,41 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.4.0] — 2026-10-27 — Entry: remove the regime gate, open on the weighted score alone [_exp_h]
+
+**Baseline:** the v3.3.1 HEAD (variant A) / v3.2.1 HEAD (h6 pair). Applies to **all 4 `_h` branches**
+(entry is byte-identical across them); versioned **v3.4.0 on all 4** (re-unifies the pair lineages —
+variant A 3.3.1→3.4.0, h6 pair 3.2.1→3.4.0, which skips the variant-A-only 3.3.0 profit-book line).
+**EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py`, `strategy.py` (+ this `CHANGELOG.md`).
+
+**Why.** Owner observed a trade that should have opened but didn't: MTF **score +12** with D1/H4/H1
+slopes all rising, yet the **regime/tide read BEAR** (level-based = lagging) so the Step-5 entry gate
+blocked the long — BEAR permits only SELLs at *any* score. Lowering the threshold (v3.3.1/v3.2.1) can't
+fix this: in BEAR a long is blocked regardless of score. The slope (leading) and a lagging level
+regime shouldn't *both* veto an open. Fix: **entry opens on the weighted slope score alone; the regime
+no longer gates opening.** (The regime still governs the exits — force-close, ladder gate, and the
+variant-A profit-book — so a slope entry taken against the tide is still protected: the ladder won't
+average down and the force-close cuts it faster.)
+
+### Behaviour change — entry only
+- `_entry_direction(score)` (regime arg dropped): **BUY** if `score ≥ ENTRY_S`, **SELL** if
+  `score ≤ -ENTRY_S`, else WAIT. No BULL/NEUTRAL/BEAR gate on opening.
+- `constants.py`: the two regime-gated thresholds `ENTRY_S_WITH`/`ENTRY_S_NEUTRAL` (4/6) are replaced
+  by a single **`ENTRY_S = 6`** (there is no entry tide to distinguish "with" vs "neutral" anymore).
+  6 = the old no-tide value (a clear multi-TF slope, e.g. D1-both or H4-both); still far easier than
+  the original 8/12, and the owner's +12 case opens instantly. Lower it for more eager entries.
+- **Unchanged:** the score formula, the regime computation + TIDE badge, force-close (Step 4), ladder
+  gate (Step 3), profit-book (Step 6, var A), RSI tiers, re-entry cooldown, and the dashboard
+  (headline still shows the live `entry_direction`, now score-only; `_slope_direction` structural read
+  kept for comparison).
+
+### Rollback
+Restore `_entry_direction(regime, score)` with the BULL/NEUTRAL/BEAR gate and the two constants
+`ENTRY_S_WITH`/`ENTRY_S_NEUTRAL` (revert this commit).
+
+---
+
 ## [v3.2.1] — 2026-10-26 — Lower the entry score thresholds (entry too slow to start) [_exp_h]
 
 **Baseline:** the v3.2.0 HEAD (h6/variant-B pair). This is the **identical** change applied to all 4
