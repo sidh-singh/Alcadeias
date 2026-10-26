@@ -79,8 +79,8 @@ FORCE_CLOSE_S_AGAINST = 4           # tide AGAINST the position (cut fast)
 # Fresh entry (Step 5): open only WITH the tide, once the score confirms. A BUY opens when the
 # regime is BULL and score >= ENTRY_S_WITH, or NEUTRAL and score >= ENTRY_S_NEUTRAL (a bigger
 # score is required with no tide); BEAR blocks new longs. SELL mirrors (score <= -X; BULL blocks).
-ENTRY_S_WITH = 8                    # open with the tide when |score| >= this
-ENTRY_S_NEUTRAL = 12               # open in a neutral tide when |score| >= this (needs more)
+ENTRY_S_WITH = 4                    # open with the tide when |score| >= this (lowered 8->4 2026-10-26: entry too slow to start)
+ENTRY_S_NEUTRAL = 6                 # open in a neutral tide when |score| >= this (lowered 12->6 2026-10-26)
 
 # ─── Slope Engine (4H + 1H + 15M entry; D1 regime for the force-close EXIT) ───
 # ENTRY (4H primary / 1H confirm / 15M trigger) uses ONLY 4H/1H/15M latest-pivot slopes -

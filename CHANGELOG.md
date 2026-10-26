@@ -17,6 +17,33 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.2.1] — 2026-10-26 — Lower the entry score thresholds (entry too slow to start) [_exp_h]
+
+**Baseline:** the v3.2.0 HEAD (h6/variant-B pair). This is the **identical** change applied to all 4
+`_h` branches (entry is byte-identical across them); on the variant-A pair it is logged as **v3.3.1**.
+**EXPERIMENT — demo-testing, NOT propagated to the 20 live fleet branches.**
+**Files touched:** `constants.py` (+ this `CHANGELOG.md`).
+
+**Why.** Owner reported ~2 days with no trade started: the Daily/H4 **slope** had turned bullish but
+the level-based **regime** still read bearish/neutral, so the Step-5 entry gate held off. First,
+cheapest fix — keep the regime, just lower the score needed to open (watch 1–2 days, then decide on
+removing the regime). Owner authorized down to 4 and left the exact value to me.
+
+### Behaviour change — entry thresholds only (no logic change)
+- `constants.py`: `ENTRY_S_WITH` **8 → 4**, `ENTRY_S_NEUTRAL` **12 → 6**. A BUY now opens when the
+  regime is BULL and `score ≥ 4`, or NEUTRAL and `score ≥ 6` (SELL mirrors). `WITH < NEUTRAL` is
+  preserved. Everything else — the regime gate, the score formula, force-close, ladder gate, the
+  `+$unit` target, RSI tiers, cooldown — is unchanged. (This h6/variant-B pair has no profit-book.)
+
+> **⚠ Known limitation:** this helps only when the regime is **BULL or NEUTRAL**. If the regime is
+> **BEAR**, a new long is still blocked at *any* score — lowering the threshold cannot start a long
+> there. If no trade starts within 1–2 days, removing the regime from entry is the next step.
+
+### Rollback
+`constants.py`: restore `ENTRY_S_WITH = 8` / `ENTRY_S_NEUTRAL = 12`.
+
+---
+
 ## [v3.2.0] — 2026-10-23 — Weighted-score + regime redesign, Step 5: entry via score+regime (LIVE) [_exp_h]
 
 **Baseline:** the v3.1.0 (Step-4 force-close) HEAD per branch — `30aca0e` (btcusd1), `a067079`
