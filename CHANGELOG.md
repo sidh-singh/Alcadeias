@@ -17,6 +17,24 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.4.1] — 2026-10-27 — Dashboard: score threshold-meter (BUY/SELL lines + no-open band) [_exp_h]
+
+**Branches:** all 4 `_h` (dashboard.py only — a display change, no trading-behaviour change).
+**Files touched:** `dashboard.py` (+ this `CHANGELOG.md`).
+
+**Why / what.** Owner wanted to see at a glance whether the MTF score will open a position. The score
+tile (`_score_gauge`) is now a diverging −20…+20 **threshold-meter**: BUY (+`ENTRY_S`) and SELL
+(−`ENTRY_S`) threshold lines, a grey **no-open band** spanning −`ENTRY_S`…+`ENTRY_S`, the fill coloured
+by zone (green BUY / grey within / red SELL) with the current-score marker (surface-ringed) on top, a
+labelled scale (−20 … −`ENTRY_S` … 0 … +`ENTRY_S` … +20), a zone chip ("BUY ZONE · opens" / "SELL ZONE ·
+opens" / "WAIT · within ±N") and a hover tooltip. Reads the live `ENTRY_S` (now imported into
+`dashboard.py`) so the lines move if the threshold is tuned. Colour is reinforced by position, the
+signed value and the chip (never colour-alone).
+
+**Rollback.** Revert `dashboard.py` `_score_gauge` to the previous plain-fill gauge.
+
+---
+
 ## [v3.4.0] — 2026-10-27 — Entry: remove the regime gate, open on the weighted score alone [_exp_h]
 
 **Baseline:** the v3.3.1 HEAD (variant A) / v3.2.1 HEAD (h6 pair). Applies to **all 4 `_h` branches**
