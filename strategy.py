@@ -6,7 +6,7 @@ from constants import (
     PROFIT_PROTECT_USD_PER_UNIT,
     REGIME_RSI_BULL, REGIME_RSI_BEAR, REGIME_LADDER_S,
     FORCE_CLOSE_S_WITH, FORCE_CLOSE_S_NEUTRAL, FORCE_CLOSE_S_AGAINST,
-    ENTRY_S_WITH, ENTRY_S_NEUTRAL,
+    ENTRY_S,
     BOOK_S_WITH, BOOK_S_NEUTRAL, BOOK_S_AGAINST,
 )
 
@@ -110,19 +110,17 @@ class Strategy:
         return 'NEUTRAL'
 
     @staticmethod
-    def _entry_direction(regime, score):
-        """Fresh-entry direction from the score + regime (the 'tide + waves' open rule): open
-        WITH the tide once the score confirms, demand a bigger score with no tide, and never
-        open against the tide. BUY: BULL & score>=ENTRY_S_WITH, or NEUTRAL & score>=ENTRY_S_NEUTRAL.
-        SELL mirrors (score<=-X; swap BULL<->BEAR). Returns 'BUY' / 'SELL' / None (WAIT). A BEAR
-        tide blocks new longs and a BULL tide blocks new shorts. See doc §6."""
-        if regime == 'BULL' and score >= ENTRY_S_WITH:
+    def _entry_direction(score):
+        """Fresh-entry direction from the weighted slope SCORE alone (regime removed from entry
+        2026-10-27). The level-based regime lagged and vetoed valid slope entries (e.g. score +12
+        with D1/H4/H1 all rising, but a BEAR tide blocked the long) - slope and a lagging level
+        regime shouldn't both gate OPENING. Open when the score is clearly directional:
+          score >= ENTRY_S  -> BUY ; score <= -ENTRY_S -> SELL ; else WAIT.
+        The regime no longer gates entry; it still governs the exits / ladder gate / profit-book.
+        Returns 'BUY' / 'SELL' / None."""
+        if score >= ENTRY_S:
             return 'BUY'
-        if regime == 'NEUTRAL' and score >= ENTRY_S_NEUTRAL:
-            return 'BUY'
-        if regime == 'BEAR' and score <= -ENTRY_S_WITH:
-            return 'SELL'
-        if regime == 'NEUTRAL' and score <= -ENTRY_S_NEUTRAL:
+        if score <= -ENTRY_S:
             return 'SELL'
         return None
 
@@ -172,9 +170,9 @@ class Strategy:
         """
         RSI+MACD slope strategy (slope-exit variant).
 
-          Flat: open from the score + regime (Step 5) - BUY when regime BULL & S>=8 or
-                NEUTRAL & S>=12; SELL mirrors (S<=-8 / -12); BEAR blocks new longs, BULL blocks
-                new shorts. Single position, cooldown-gated. See docs/weighted-regime-redesign.md §6.
+          Flat: open from the weighted slope score ALONE (regime removed from entry 2026-10-27) -
+                BUY when score >= ENTRY_S, SELL when score <= -ENTRY_S, else WAIT. Single position,
+                cooldown-gated. (The regime still governs the exits / ladder / book, not opening.)
           Open:
             Exits (checked first):
               - profit-book (score + regime, Step 6): once profit > times *
@@ -246,16 +244,18 @@ class Strategy:
         # Regime "tide". From the big-TF LEVEL (not the pivot slope): per-TF BULL/BEAR/NEUTRAL
         # (RSI vs REGIME_RSI_BULL/BEAR + MACD line vs 0), combined D1-leads-H4. Weighted-score +
         # regime redesign (doc §4). Pairs with slope_score: the tide = slow bias/direction, the
-        # score ("waves") = fast timing. Read LIVE by the ladder gate (3), force-close (4), entry (5).
+        # score ("waves") = fast timing. Read LIVE by the ladder gate (3) + force-close (4); the
+        # ENTRY no longer reads the regime (removed 2026-10-27 - it vetoed valid slope entries).
         rsi_d1 = rsi_mtf.get('TIMEFRAME_D1', 50.0) if rsi_mtf else 50.0
         d1_regime = self._regime_tf(rsi_d1, self._macd_line(slopes, 'D1'))
         h4_regime = self._regime_tf(rsi_4h, self._macd_line(slopes, 'H4'))
         regime = self._regime_combine(d1_regime, h4_regime)
 
-        # Fresh-entry direction (Step 5, LIVE) from the score + regime -- replaces the structural
-        # _slope_direction for OPENING: open with the tide once the score confirms, never against
-        # it (slope_direction is kept above only as the dashboard's structural read). See doc §6.
-        entry_direction = self._entry_direction(regime, slope_score)
+        # Fresh-entry direction from the weighted slope SCORE alone (regime removed from entry
+        # 2026-10-27: the lagging level-regime vetoed valid slope entries). Opens on score >= +ENTRY_S
+        # (BUY) / <= -ENTRY_S (SELL); the regime still governs the exits / ladder / book, NOT opening.
+        # (slope_direction is kept above only as the dashboard's structural read.)
+        entry_direction = self._entry_direction(slope_score)
 
         # DCA ladder gate (Step 3, LIVE — the first decision wired to the score + regime).
         # Average into a position ONLY when the tide is not against it AND the score is not
