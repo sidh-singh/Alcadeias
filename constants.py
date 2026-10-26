@@ -61,9 +61,9 @@ MACD_SIGNAL = 9                     # signal EMA length
 # Per big-TF (D1 / H4) bias from LEVEL (not the pivot slope): BULL when RSI is above
 # REGIME_RSI_BULL AND the MACD line > 0; BEAR when RSI is below REGIME_RSI_BEAR AND the
 # MACD line < 0; else NEUTRAL. D1 leads / H4 confirms (see Strategy._regime_combine and
-# docs/weighted-regime-redesign.md §4). The regime + the weighted slope score drive the DCA
-# ladder gate (Step 3), the force-close (Step 4) and the fresh entry (Step 5) -- all LIVE.
-# (Step 6 profit-book is variant-A only; this branch books with the +$unit target.) Complete.
+# docs/weighted-regime-redesign.md §4). The regime drives the DCA ladder gate (Step 3) and the
+# force-close (Step 4). ENTRY uses the weighted slope score ALONE (regime removed from entry
+# 2026-10-27). (Step 6 profit-book is variant-A only; this branch books with the +$unit target.)
 REGIME_RSI_BULL = 55                # RSI strictly above this (and MACD line > 0) -> BULL
 REGIME_RSI_BEAR = 45                # RSI strictly below this (and MACD line < 0) -> BEAR
 # DCA ladder gate: a position may only average in when the tide is NOT against it AND the
@@ -76,11 +76,11 @@ REGIME_LADDER_S = 6                 # adverse slope-score magnitude that blocks 
 FORCE_CLOSE_S_WITH = 12             # tide WITH the position (BULL for a long / BEAR for a short)
 FORCE_CLOSE_S_NEUTRAL = 8           # no clear tide
 FORCE_CLOSE_S_AGAINST = 4           # tide AGAINST the position (cut fast)
-# Fresh entry (Step 5): open only WITH the tide, once the score confirms. A BUY opens when the
-# regime is BULL and score >= ENTRY_S_WITH, or NEUTRAL and score >= ENTRY_S_NEUTRAL (a bigger
-# score is required with no tide); BEAR blocks new longs. SELL mirrors (score <= -X; BULL blocks).
-ENTRY_S_WITH = 4                    # open with the tide when |score| >= this (lowered 8->4 2026-10-26: entry too slow to start)
-ENTRY_S_NEUTRAL = 6                 # open in a neutral tide when |score| >= this (lowered 12->6 2026-10-26)
+# Fresh entry: OPEN from the weighted slope score ALONE (regime removed from entry 2026-10-27 -
+# the lagging level-regime vetoed valid slope entries, e.g. score +12 with D1/H4/H1 rising but a
+# BEAR tide). A BUY opens when score >= ENTRY_S, a SELL when score <= -ENTRY_S. (Previously two
+# regime-gated thresholds ENTRY_S_WITH/ENTRY_S_NEUTRAL = 4/6; collapsed to one - no entry tide now.)
+ENTRY_S = 6                         # |weighted slope score| needed to open a position (lower = more eager)
 
 # ─── Slope Engine (4H + 1H + 15M entry; D1 regime for the force-close EXIT) ───
 # ENTRY (4H primary / 1H confirm / 15M trigger) uses ONLY 4H/1H/15M latest-pivot slopes -
