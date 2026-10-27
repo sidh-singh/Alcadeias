@@ -567,7 +567,7 @@ class MT5TradingBot:
                     # by the SHA timeframe/candle-count. Union of all needed timeframes,
                     # de-duplicated while preserving order.
                     rsi_mtf = {}
-                    slopes = {}   # 15M/H1/H4 entry slopes + D1 exit-regime slope (RSI+MACD pivot)
+                    slopes = {}   # D1/H4/H1/15M latest-pivot slopes (RSI+MACD) -> the weighted score
                     rsi_graphs = {}  # per-TF RSI series + pivot for the dashboard mini-charts
                     macd_graphs = {}  # per-TF MACD-histogram series + pivot for the mini-charts
                     rsi_tf_list = []
@@ -587,15 +587,15 @@ class MT5TradingBot:
                                 tf_df['close'], length=RSI_LENGTH, ma_type=RSI_MA_TYPE
                             )
                             rsi_mtf[tf_name] = float(rsi_s.iloc[-1]) if len(rsi_s) > 0 else 50.0
-                            # RSI + MACD-histogram slopes on the slope timeframes (15M/H1/H4
-                            # for entry+exit, D1 for the exit-regime). Reuses this TF's RSI
-                            # fetch - no extra call beyond the per-TF rates already pulled.
+                            # RSI + MACD-histogram latest-pivot slopes on the slope timeframes
+                            # (D1/H4/H1/15M -> the weighted score). Reuses this TF's RSI fetch -
+                            # no extra call beyond the per-TF rates already pulled.
                             if tf_name in SLOPE_TIMEFRAMES:
                                 macd_df = self.indicator.calculate_macd(
                                     tf_df['close'], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL
                                 )
-                                # 15M / 1H / 4H / D1 latest-pivot slopes - identical computation.
-                                # (D1 re-added on "_exp" for the force-close regime; entry ignores it.)
+                                # 15M / 1H / 4H / D1 latest-pivot slopes - identical computation;
+                                # all four feed the weighted score (no level-based regime).
                                 rsi_slope = self.indicator.latest_pivot_slope(
                                     rsi_s, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
                                     ob_level=RSI_PEAK_OB, os_level=RSI_PEAK_OS
@@ -612,11 +612,6 @@ class MT5TradingBot:
                                 _tf_key = tf_name.replace('TIMEFRAME_', '')
                                 slopes[_tf_key] = {
                                     'rsi': rsi_slope, 'macd': macd_slope,
-                                    # Latest MACD line (fast-slow EMA) value - its SIGN is
-                                    # the shadow regime's level input (BULL/BEAR test),
-                                    # distinct from the histogram pivot slope above.
-                                    'macd_line': (round(float(macd_df['macd'].iloc[-1]), 5)
-                                                  if len(macd_df) > 0 else 0.0),
                                 }
                                 # RSI mini-chart: RSI line + latest (OB/OS-band) pivot +
                                 # peak->current line coloured by the RSI slope sign.

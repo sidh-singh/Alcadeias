@@ -17,6 +17,44 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.5.0] — 2026-10-27 — Remove the regime ENTIRELY — strategy is now score-only [_exp_h]
+
+**Branches:** all 4 `_h`. **Files touched:** `constants.py`, `strategy.py`, `app.py`, `dashboard.py`,
+`docs/weighted-regime-redesign.md` (+ this `CHANGELOG.md`).
+
+**Why.** Entry (v3.4.0) and the ladder (v3.4.2) were already regime-free; the regime still scaled the
+two EXITS. Owner: "remove all regime calculation and functionality — regime and slope will not work
+together — keep the weightage (score)." So the level-based regime is fully deleted; the two exits
+collapse to single score thresholds. One engine remains: the weighted slope score.
+
+### Behaviour change — exits become single-threshold score-only
+- **Force-close:** `buy_fc = score <= -FORCE_CLOSE_S` / `sell_fc = score >= +FORCE_CLOSE_S` (single
+  `FORCE_CLOSE_S = 8`, replaces the regime trio 12/8/4). Reason `force_close` (was `fc_bull/neutral/bear`).
+- **Profit-book (variant A):** `buy_pp = in-profit AND score <= -BOOK_S` / `sell_pp = … >= +BOOK_S`
+  (single `BOOK_S = 4`, replaces 6/4/2). Reason `book` (was `book_bull/neutral/bear`). Still checked
+  before the force-close.
+- **Net threshold ladder for a long:** open `S≥+6` · ladder-add blocked `S≤−6` · book (in profit)
+  `S≤−4` · force-close `S≤−8`. (The with/against-tide asymmetry on the exits is gone — one fixed line.)
+
+### Removed (regime machinery)
+- `strategy.py`: `_regime_tf`, `_regime_combine`, `_macd_line`; the `regime`/`d1_regime`/`h4_regime`/
+  `rsi_d1` computation; the `regime*` fields from `analysis_data`.
+- `constants.py`: `REGIME_RSI_BULL/BEAR`; the `FORCE_CLOSE_S_*` and `BOOK_S_*` trios (→ single
+  `FORCE_CLOSE_S` / `BOOK_S`). Regime section rewritten as "weighted-score gates (no regime)".
+- `app.py`: `slopes[tf]['macd_line']` (only the regime read it) — removed.
+- `dashboard.py`: the `TIDE` badge (`_regime_badge` + its call + reads) — removed; the SCORE meter stays.
+- `docs`: status rewritten to "score-only"; §4–§6 marked historical.
+
+### Unchanged
+The score formula, entry (`_entry_direction`), the ladder gate (`buy_add_ok`/`sell_add_ok`), RSI tiers
++ Fibo sizing, re-entry cooldown, the h6 `+$unit` target, and the dashboard SCORE threshold-meter.
+
+### Rollback
+`git revert` the Step v3.5.0 commit (restores the regime helpers, the regime-scaled exits, the
+constants trios, `macd_line`, and the TIDE badge).
+
+---
+
 ## [v3.4.2] — 2026-10-27 — DCA ladder: remove the regime gate too (adds open on the score alone) [_exp_h]
 
 **Branches:** all 4 `_h`. **Files touched:** `constants.py`, `strategy.py` (+ this `CHANGELOG.md`).
