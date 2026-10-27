@@ -1001,45 +1001,8 @@ def _score_gauge(score):
     )
 
 
-def _regime_badge(regime, d1_regime, h4_regime):
-    """Regime 'tide' badge (SHADOW — display only): overall BULL/BEAR/NEUTRAL bias from the
-    big-TF LEVEL (D1 leads, H4 confirms) + the two sub-verdicts. Pairs with the score gauge
-    (waves). Step 2 of the weighted-score + regime redesign."""
-    reg_col = {'BULL': COLORS['buy'], 'BEAR': COLORS['sell']}.get(regime, COLORS['neutral'])
-    reg_icon = {'BULL': '🟢', 'BEAR': '🔴'}.get(regime, '⚪')
-
-    def _sub(tf, r):
-        c = {'BULL': COLORS['buy'], 'BEAR': COLORS['sell']}.get(r, COLORS['text_dim'])
-        return html.Span([
-            html.Span(f'{tf} ', style={'color': COLORS['text_muted']}),
-            html.Span(r, style={'color': c, 'fontWeight': '700'}),
-        ], style={'fontSize': '0.6rem'})
-
-    return html.Div(
-        style={'padding': '8px 16px 10px', 'borderBottom': f'1px solid {COLORS["divider"]}',
-               'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center'},
-        children=[
-            html.Div(style={'display': 'flex', 'alignItems': 'baseline', 'gap': '8px'}, children=[
-                html.Span('TIDE', style={
-                    'fontSize': '0.62rem', 'fontWeight': '700',
-                    'color': COLORS['text_dim'], 'letterSpacing': '0.5px'}),
-                html.Span(f'{reg_icon} {regime}', style={
-                    'color': reg_col, 'fontWeight': '800', 'fontSize': '0.85rem',
-                    'background': COLORS['bg'], 'padding': '2px 12px', 'borderRadius': '10px',
-                    'border': f'1px solid {reg_col}'}),
-            ]),
-            html.Div(style={'display': 'flex', 'gap': '12px', 'alignItems': 'center'}, children=[
-                _sub('D1', d1_regime),
-                _sub('H4', h4_regime),
-                html.Span('shadow · RSI 55/45 + MACD·0', style={
-                    'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
-            ]),
-        ],
-    )
-
-
 def build_slope_panel(symbol, analysis, last_updated=''):
-    """RSI+MACD slope panel — D1/15M/H1/H4 pivot slopes (D1 = exit-regime) + the decision."""
+    """RSI+MACD slope panel — D1/15M/H1/H4 pivot slopes (feed the weighted score) + the decision."""
     slopes = analysis.get('slopes', {}) or {}
     decision = analysis.get('entry_direction', analysis.get('slope_direction', 'WAIT')) or 'WAIT'
     structural = analysis.get('slope_direction', 'WAIT') or 'WAIT'
@@ -1050,9 +1013,6 @@ def build_slope_panel(symbol, analysis, last_updated=''):
     rsi_graphs = analysis.get('rsi_graphs', {}) or {}
     macd_graphs = analysis.get('macd_graphs', {}) or {}
     score = analysis.get('score', 0)
-    regime = analysis.get('regime', 'NEUTRAL')
-    regime_d1 = analysis.get('regime_d1', 'NEUTRAL')
-    regime_h4 = analysis.get('regime_h4', 'NEUTRAL')
     iteration_ms = analysis.get('iteration_ms')
     src_count = analysis.get('source_candle_count', 0)
     src_last_time = analysis.get('last_source_candle_time', '-')
@@ -1060,7 +1020,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
     h1 = slopes.get('H1', {}) or {}
     h4 = slopes.get('H4', {}) or {}
     m15 = slopes.get('M15', {}) or {}
-    d1 = slopes.get('D1', {}) or {}   # exit-regime only (not part of the entry decision)
+    d1 = slopes.get('D1', {}) or {}   # part of the weighted score (weight 4)
 
     dec_color = {'BUY': COLORS['buy'], 'SELL': COLORS['sell']}.get(decision, COLORS['text_dim'])
     dec_icon = {'BUY': '🟢', 'SELL': '🔴'}.get(decision, '⚪')
@@ -1070,7 +1030,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
         status_bits.append('⏳ entry cooldown')
     if exit_reason:
         status_bits.append(f'exit: {exit_reason}')
-    # Structural 4H/1H/15M slope read, shown for comparison (the live entry now uses score+regime).
+    # Structural 4H/1H/15M slope read, shown for comparison (the live entry uses the weighted score).
     if structural != decision:
         status_bits.append(f'structural {structural}')
     status_text = '   ·   '.join(status_bits) if status_bits else 'idle'
@@ -1105,11 +1065,9 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                         'borderRadius': '10px'}),
                 ],
             ),
-            # Weighted MTF slope score gauge (SHADOW — Step 1 of the weighted-score+regime redesign)
+            # Weighted MTF slope score meter (the single engine: entry / ladder / exits)
             _score_gauge(score),
-            # Regime "tide" badge (SHADOW — Step 2 of the weighted-score+regime redesign)
-            _regime_badge(regime, regime_d1, regime_h4),
-            # slope grid (rows D1 / H4 / H1 / M15; latest-pivot slopes; D1 = exit-regime only)
+            # slope grid (rows D1 / H4 / H1 / M15; latest-pivot slopes feeding the score)
             html.Div(style=grid_style, children=[
                 html.Span(''),
                 html.Span('RSI', style=col_hdr),
