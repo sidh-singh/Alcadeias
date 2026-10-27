@@ -57,19 +57,21 @@ MACD_FAST = 12                      # fast EMA length (TradingView ta.macd defau
 MACD_SLOW = 26                      # slow EMA length
 MACD_SIGNAL = 9                     # signal EMA length
 
-# ─── Regime ("tide") + ladder gate — weighted-score + regime redesign ───
+# ─── Regime ("tide") + score gates — weighted-score + regime redesign ───
 # Per big-TF (D1 / H4) bias from LEVEL (not the pivot slope): BULL when RSI is above
 # REGIME_RSI_BULL AND the MACD line > 0; BEAR when RSI is below REGIME_RSI_BEAR AND the
 # MACD line < 0; else NEUTRAL. D1 leads / H4 confirms (see Strategy._regime_combine and
-# docs/weighted-regime-redesign.md §4). The regime drives the DCA ladder gate (Step 3), the
-# force-close (Step 4) and the variant-A profit-book (Step 6). ENTRY uses the weighted slope
-# score ALONE (regime removed from entry 2026-10-27 - it vetoed valid slope entries). Tunable on demo.
+# docs/weighted-regime-redesign.md §4). The regime now governs ONLY the EXITS -- the force-close
+# (Step 4) and the variant-A profit-book (Step 6). OPENING -- both fresh entry AND the DCA ladder
+# adds -- uses the weighted slope score ALONE (regime removed from both 2026-10-27, as the lagging
+# level-regime vetoed valid slope-based opens). Tunable on demo.
 REGIME_RSI_BULL = 55                # RSI strictly above this (and MACD line > 0) -> BULL
 REGIME_RSI_BEAR = 45                # RSI strictly below this (and MACD line < 0) -> BEAR
-# DCA ladder gate: a position may only average in when the tide is NOT against it AND the
-# weighted slope score is not this far adverse. A BUY add is blocked when the regime is BEAR
-# or the score <= -REGIME_LADDER_S; a SELL add is blocked when BULL or score >= +REGIME_LADDER_S.
-REGIME_LADDER_S = 6                 # adverse slope-score magnitude that blocks a ladder add
+# DCA ladder gate (score-only; regime removed from ladder adds 2026-10-27, like entry): an RSI-
+# ladder add fires only while the weighted slope score is not this far adverse -- a BUY add is
+# blocked when score <= -LADDER_S, a SELL add when score >= +LADDER_S. (Still catches the
+# "average down into a trend" case; the regime-aware force-close keeps that protection.)
+LADDER_S = 6                        # adverse slope-score magnitude that blocks a ladder add
 # Force-close (Step 4): a basket force-closes when the weighted slope score has moved this far
 # AGAINST it, scaled by the tide -- with the tide give a winner room (deep reversal needed);
 # against the tide cut fast. A BUY closes at score <= -X; a SELL at score >= +X, where X is:

@@ -4,7 +4,7 @@ from constants import (
     FIBO_SEQUENCE_LENGTH,
     RSI_OVERSOLD, RSI_OVERBOUGHT,
     PROFIT_PROTECT_USD_PER_UNIT,
-    REGIME_RSI_BULL, REGIME_RSI_BEAR, REGIME_LADDER_S,
+    REGIME_RSI_BULL, REGIME_RSI_BEAR, LADDER_S,
     FORCE_CLOSE_S_WITH, FORCE_CLOSE_S_NEUTRAL, FORCE_CLOSE_S_AGAINST,
     ENTRY_S,
     BOOK_S_WITH, BOOK_S_NEUTRAL, BOOK_S_AGAINST,
@@ -244,8 +244,8 @@ class Strategy:
         # Regime "tide". From the big-TF LEVEL (not the pivot slope): per-TF BULL/BEAR/NEUTRAL
         # (RSI vs REGIME_RSI_BULL/BEAR + MACD line vs 0), combined D1-leads-H4. Weighted-score +
         # regime redesign (doc §4). Pairs with slope_score: the tide = slow bias/direction, the
-        # score ("waves") = fast timing. Read LIVE by the ladder gate (3) + force-close (4); the
-        # ENTRY no longer reads the regime (removed 2026-10-27 - it vetoed valid slope entries).
+        # score ("waves") = fast timing. Read LIVE by the force-close (4) + variant-A profit-book;
+        # OPENING (fresh entry + the DCA ladder adds) no longer reads the regime (removed 2026-10-27).
         rsi_d1 = rsi_mtf.get('TIMEFRAME_D1', 50.0) if rsi_mtf else 50.0
         d1_regime = self._regime_tf(rsi_d1, self._macd_line(slopes, 'D1'))
         h4_regime = self._regime_tf(rsi_4h, self._macd_line(slopes, 'H4'))
@@ -253,17 +253,18 @@ class Strategy:
 
         # Fresh-entry direction from the weighted slope SCORE alone (regime removed from entry
         # 2026-10-27: the lagging level-regime vetoed valid slope entries). Opens on score >= +ENTRY_S
-        # (BUY) / <= -ENTRY_S (SELL); the regime still governs the exits / ladder / book, NOT opening.
+        # (BUY) / <= -ENTRY_S (SELL); the regime now governs only the EXITS (force-close + book), NOT opening.
         # (slope_direction is kept above only as the dashboard's structural read.)
         entry_direction = self._entry_direction(slope_score)
 
-        # DCA ladder gate (Step 3, LIVE — the first decision wired to the score + regime).
-        # Average into a position ONLY when the tide is not against it AND the score is not
-        # strongly adverse: a BUY may add unless regime BEAR or S <= -REGIME_LADDER_S; a SELL
-        # may add unless regime BULL or S >= +REGIME_LADDER_S. Blocks the "average down into a
-        # trend" half of the 2026-10 loss (doc §6). Exits / entry are unchanged (Steps 4-6).
-        buy_add_ok = (regime != 'BEAR') and (slope_score > -REGIME_LADDER_S)
-        sell_add_ok = (regime != 'BULL') and (slope_score < REGIME_LADDER_S)
+        # DCA ladder gate (score-only; regime removed from ladder adds 2026-10-27, like entry — an
+        # RSI-ladder add is an OPENING, and the lagging level-regime shouldn't veto it). Average into
+        # a position only while the weighted score is not strongly adverse: a BUY may add unless
+        # score <= -LADDER_S; a SELL unless score >= +LADDER_S. This still blocks the "average down
+        # into a trend" half of the 2026-10 loss (that case scored -14, well past -LADDER_S); the
+        # regime no longer gates it, but the regime-aware force-close still protects the basket.
+        buy_add_ok = slope_score > -LADDER_S
+        sell_add_ok = slope_score < LADDER_S
 
         # Force-close (EXIT) via the weighted score + regime (Step 4, LIVE). Replaces the v2.x
         # D1 cascade (sensitive / normal / split paths). Close a basket when the score has moved
