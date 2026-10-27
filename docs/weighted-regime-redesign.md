@@ -1,15 +1,21 @@
-# Exit/Entry Redesign — Weighted Score + Regime (+ ADX)
+# Exit/Entry Redesign — Weighted Score (regime removed)
 
-> **STATUS: COMPLETE — the full strategy runs on score + regime.** Living design doc for the 4
-> `_h` branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
-> `rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h`). Started 2026-10-24 after a
-> ~$1000 demo loss. **Steps 1–2 (Score, Regime)** shipped as shadow; **Steps 3–6** are LIVE —
-> ladder gate (v3.0.0), force-close (v3.1.0) and entry (v3.2.0) on all 4, and the profit-book
-> (v3.3.0) on variant A. The h6/variant-B pair has no profit-book (it uses the `+$unit` target),
-> so it is complete at Step 5 (v3.2.0). The v2.x cascade, the structural `_slope_direction` entry,
-> and the D1-book are fully replaced; the whole brain (ladder / exit / entry / book) is now the
-> weighted score crossing regime-set lines. Profit-book bits = variant A (`rsimacd_*_wd_exp_h`) only.
-> ADX (§5) remains the documented future enhancement.
+> **STATUS: the strategy is now SCORE-ONLY — the regime/tide was fully REMOVED 2026-10-27.** Living
+> design doc for the 4 `_h` branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
+> `rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h`). Started 2026-10-24 after a ~$1000
+> demo loss. The redesign added a weighted **score** (§3) and a level-based **regime/tide** (§4);
+> but the regime lagged and vetoed valid slope-based opens, so over 2026-10-27 it was removed from
+> every decision and the exits were collapsed to single score thresholds. **⚠ §4–§6 below (the
+> regime "tide", ADX, and the regime-scaled decision table) are HISTORICAL — not in the code
+> anymore.** The per-step CHANGELOG (v3.0.0 → v3.5.0) is the authoritative record.
+>
+> **CURRENT STATE — ONE engine, the weighted slope score**  `S = 4·D1 + 3·H4 + 2·H1 + 1·M15` (−20…+20):
+> - **Entry** (flat): BUY `S ≥ +ENTRY_S` (6) · SELL `S ≤ −ENTRY_S`.
+> - **Ladder add**: blocked once `S` is adverse past `LADDER_S` (6) — a BUY add needs `S > −6`.
+> - **Force-close**: BUY `S ≤ −FORCE_CLOSE_S` (8) · SELL `S ≥ +8`   (exit reason `force_close`).
+> - **Profit-book** (variant A only): in profit, BUY `S ≤ −BOOK_S` (4) · SELL `S ≥ +4`  (reason `book`).
+> - No regime/tide anywhere, no TIDE badge. The h6/variant-B pair books with the `+$unit` target (no
+>   profit-book). All thresholds live in `constants.py` and are tunable. ADX (§5) stays a FUTURE idea.
 
 ---
 

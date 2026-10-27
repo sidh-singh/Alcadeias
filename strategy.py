@@ -4,10 +4,7 @@ from constants import (
     FIBO_SEQUENCE_LENGTH,
     RSI_OVERSOLD, RSI_OVERBOUGHT,
     PROFIT_PROTECT_USD_PER_UNIT,
-    REGIME_RSI_BULL, REGIME_RSI_BEAR, LADDER_S,
-    FORCE_CLOSE_S_WITH, FORCE_CLOSE_S_NEUTRAL, FORCE_CLOSE_S_AGAINST,
-    ENTRY_S,
-    BOOK_S_WITH, BOOK_S_NEUTRAL, BOOK_S_AGAINST,
+    ENTRY_S, LADDER_S, FORCE_CLOSE_S, BOOK_S,
 )
 
 
@@ -77,46 +74,12 @@ class Strategy:
         return s if s in (-1, 0, 1) else 0
 
     @staticmethod
-    def _macd_line(slopes, tf):
-        """Latest MACD-line value for a timeframe (0.0 if missing). Distinct from the
-        histogram pivot slope - this is the raw MACD line, the regime's level input."""
-        try:
-            v = slopes[tf]['macd_line']
-        except (KeyError, TypeError, IndexError):
-            return 0.0
-        return v if isinstance(v, (int, float)) else 0.0
-
-    @staticmethod
-    def _regime_tf(rsi_level, macd_line):
-        """Per-TF regime verdict from LEVEL (not slope): 'BULL' / 'BEAR' / 'NEUTRAL'.
-        BULL = RSI > REGIME_RSI_BULL AND MACD line > 0; BEAR = RSI < REGIME_RSI_BEAR AND
-        MACD line < 0; else NEUTRAL. The 'tide' direction for one big TF (D1 or H4);
-        see docs/weighted-regime-redesign.md §4."""
-        if rsi_level > REGIME_RSI_BULL and macd_line > 0:
-            return 'BULL'
-        if rsi_level < REGIME_RSI_BEAR and macd_line < 0:
-            return 'BEAR'
-        return 'NEUTRAL'
-
-    @staticmethod
-    def _regime_combine(d1_regime, h4_regime):
-        """Combine the big-TF verdicts into one tide - D1 leads, H4 confirms. D1 sets the
-        bias; H4 can only downgrade a biased D1 to NEUTRAL when it directly opposes, and
-        cannot create a bias when D1 is NEUTRAL (table in the design doc §4)."""
-        if d1_regime == 'BULL':
-            return 'NEUTRAL' if h4_regime == 'BEAR' else 'BULL'
-        if d1_regime == 'BEAR':
-            return 'NEUTRAL' if h4_regime == 'BULL' else 'BEAR'
-        return 'NEUTRAL'
-
-    @staticmethod
     def _entry_direction(score):
-        """Fresh-entry direction from the weighted slope SCORE alone (regime removed from entry
-        2026-10-27). The level-based regime lagged and vetoed valid slope entries (e.g. score +12
-        with D1/H4/H1 all rising, but a BEAR tide blocked the long) - slope and a lagging level
-        regime shouldn't both gate OPENING. Open when the score is clearly directional:
+        """Fresh-entry direction from the weighted slope SCORE. The level-based regime was fully
+        removed 2026-10-27 (it lagged and vetoed valid slope opens, e.g. score +12 with D1/H4/H1 all
+        rising but a BEAR tide blocking the long). Open when the score is clearly directional:
           score >= ENTRY_S  -> BUY ; score <= -ENTRY_S -> SELL ; else WAIT.
-        The regime no longer gates entry; it still governs the exits / ladder gate / profit-book.
+        Score is now the single engine for every decision (entry, ladder, exits); no regime anywhere.
         Returns 'BUY' / 'SELL' / None."""
         if score >= ENTRY_S:
             return 'BUY'
@@ -170,23 +133,19 @@ class Strategy:
         """
         RSI+MACD slope strategy (slope-exit variant).
 
-          Flat: open from the weighted slope score ALONE (regime removed from entry 2026-10-27) -
+          Flat: open from the weighted slope score (NO regime - fully removed 2026-10-27) -
                 BUY when score >= ENTRY_S, SELL when score <= -ENTRY_S, else WAIT. Single position,
-                cooldown-gated. (The regime still governs the exits / ladder / book, not opening.)
+                cooldown-gated. (slope_direction is the dashboard's structural read only.)
           Open:
             Exits (checked first):
-              - profit-book (score + regime, Step 6): once profit > times *
-                PROFIT_PROTECT_USD_PER_UNIT, book when the score reverses enough - BUY: BULL
-                S<=-6 / NEUTRAL S<=-4 / BEAR S<=-2 ('book_bull'/'book_neutral'/'book_bear'); SELL
-                mirrors. Let a with-trend winner run, grab a counter-trend one fast. Checked first.
-              - force-close (score + regime, Step 4): close when the weighted score S is far
-                enough AGAINST the basket, scaled by the tide - BUY: BULL S<=-12 / NEUTRAL
-                S<=-8 / BEAR S<=-4 ('fc_bull'/'fc_neutral'/'fc_bear'); SELL mirrors. See
-                docs/weighted-regime-redesign.md §6.
-            RSI DCA ladder (if no exit; score+regime gated, Step 3): BUY_MORE/SELL_MORE at
-            RSI 35/65, one tier per open count - count 1->M1, 2->M5, 3->M15, 4->H1, 5->H4
-            (max 6 positions); an add fires only when the tide/score is not against the
-            position. Fibo lot sizing. Else HOLD.
+              - profit-book (score, variant A): once profit > times * PROFIT_PROTECT_USD_PER_UNIT,
+                book when the score reverses - BUY score <= -BOOK_S, SELL score >= +BOOK_S
+                (reason 'book'). Checked before the force-close.
+              - force-close (score): close when the score is far enough against the basket -
+                BUY score <= -FORCE_CLOSE_S, SELL score >= +FORCE_CLOSE_S (reason 'force_close').
+            RSI DCA ladder (if no exit; score-gated): BUY_MORE/SELL_MORE at RSI 35/65, one tier
+            per open count - count 1->M1, 2->M5, 3->M15, 4->H1, 5->H4 (max 6 positions); an add
+            fires only when the score is not strongly against the position. Fibo lot sizing. Else HOLD.
 
         Args:
             source_df: Raw OHLC DataFrame (capitalized: Open, High, Low, Close)
@@ -195,8 +154,8 @@ class Strategy:
             close_threshold: legacy param, unused in this variant.
             rsi_value: current RSI (dashboard/logs).
             rsi_mtf: {timeframe_name: rsi_value} - drives the DCA ladder tiers.
-            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for 15M/H1/H4 (entry +
-                    exits) + D1 (exit-regime only) - drives entry direction and the slope exits.
+            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for 15M/H1/H4 + D1 -
+                    all four TFs feed the weighted score that drives every decision.
             entry_allowed: False during the post-close re-entry cooldown.
 
         Returns:
@@ -223,7 +182,7 @@ class Strategy:
         rsi_1h = rsi_mtf.get('TIMEFRAME_H1', 50.0) if rsi_mtf else 50.0
         rsi_4h = rsi_mtf.get('TIMEFRAME_H4', 50.0) if rsi_mtf else 50.0
 
-        # Slope signs (15M/H1/H4 entry+exit; D1 exit-regime) + fresh-entry direction
+        # Slope signs for all four TFs (D1/H4/H1/15M -> the weighted score) + fresh-entry direction
         h4r = self._slope_sign(slopes, 'H4', 'rsi')
         h4m = self._slope_sign(slopes, 'H4', 'macd')
         h1r = self._slope_sign(slopes, 'H1', 'rsi')
@@ -232,92 +191,49 @@ class Strategy:
         m15m = self._slope_sign(slopes, 'M15', 'macd')
         d1r = self._slope_sign(slopes, 'D1', 'rsi')
         d1m = self._slope_sign(slopes, 'D1', 'macd')
-        slope_direction = self._slope_direction(slopes)   # structural 4H/1H/15M read (dashboard/compare only; entry uses score+regime)
+        slope_direction = self._slope_direction(slopes)   # structural 4H/1H/15M read (dashboard/compare only; entry uses the score)
 
-        # Weighted MTF slope score. S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each TF = its RSI + MACD
-        # slope signs; range -20..+20 (negative = bearish). Weighted-score + regime redesign;
-        # read LIVE by the ladder gate (Step 3), force-close (Step 4) and entry (Step 5). Higher
-        # TF dominates; one noisy sign moves S by <=1. See docs/weighted-regime-redesign.md.
+        # Weighted MTF slope score -- THE single engine. S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each TF =
+        # its RSI + MACD slope signs; range -20..+20 (negative = bearish). Drives entry, the DCA
+        # ladder gate, the force-close and (variant A) the profit-book -- all on score thresholds,
+        # no regime (the level-based regime was fully removed 2026-10-27). Higher TF dominates; one
+        # noisy sign moves S by <=1.
         slope_score = (4 * (d1r + d1m) + 3 * (h4r + h4m)
                        + 2 * (h1r + h1m) + 1 * (m15r + m15m))
 
-        # Regime "tide". From the big-TF LEVEL (not the pivot slope): per-TF BULL/BEAR/NEUTRAL
-        # (RSI vs REGIME_RSI_BULL/BEAR + MACD line vs 0), combined D1-leads-H4. Weighted-score +
-        # regime redesign (doc §4). Pairs with slope_score: the tide = slow bias/direction, the
-        # score ("waves") = fast timing. Read LIVE by the force-close (4) + variant-A profit-book;
-        # OPENING (fresh entry + the DCA ladder adds) no longer reads the regime (removed 2026-10-27).
-        rsi_d1 = rsi_mtf.get('TIMEFRAME_D1', 50.0) if rsi_mtf else 50.0
-        d1_regime = self._regime_tf(rsi_d1, self._macd_line(slopes, 'D1'))
-        h4_regime = self._regime_tf(rsi_4h, self._macd_line(slopes, 'H4'))
-        regime = self._regime_combine(d1_regime, h4_regime)
-
-        # Fresh-entry direction from the weighted slope SCORE alone (regime removed from entry
-        # 2026-10-27: the lagging level-regime vetoed valid slope entries). Opens on score >= +ENTRY_S
-        # (BUY) / <= -ENTRY_S (SELL); the regime now governs only the EXITS (force-close + book), NOT opening.
-        # (slope_direction is kept above only as the dashboard's structural read.)
+        # Fresh-entry direction from the weighted slope score (regime fully removed 2026-10-27 - a
+        # lagging level-regime that vetoed valid slope-based opens). Opens on score >= +ENTRY_S (BUY)
+        # / <= -ENTRY_S (SELL). (slope_direction is kept above only as the dashboard's structural read.)
         entry_direction = self._entry_direction(slope_score)
 
-        # DCA ladder gate (score-only; regime removed from ladder adds 2026-10-27, like entry — an
-        # RSI-ladder add is an OPENING, and the lagging level-regime shouldn't veto it). Average into
-        # a position only while the weighted score is not strongly adverse: a BUY may add unless
-        # score <= -LADDER_S; a SELL unless score >= +LADDER_S. This still blocks the "average down
-        # into a trend" half of the 2026-10 loss (that case scored -14, well past -LADDER_S); the
-        # regime no longer gates it, but the regime-aware force-close still protects the basket.
+        # DCA ladder gate (score-only). Average into a position only while the weighted score is not
+        # strongly adverse: a BUY may add unless score <= -LADDER_S; a SELL unless score >= +LADDER_S.
+        # Blocks the "average down into a trend" half of the 2026-10 loss (that case scored -14, well
+        # past -LADDER_S).
         buy_add_ok = slope_score > -LADDER_S
         sell_add_ok = slope_score < LADDER_S
 
-        # Force-close (EXIT) via the weighted score + regime (Step 4, LIVE). Replaces the v2.x
-        # D1 cascade (sensitive / normal / split paths). Close a basket when the score has moved
-        # far enough AGAINST it; the distance scales with the tide -- WITH the tide give a winner
-        # room (deep reversal needed), AGAINST the tide cut fast. BUY shown; SELL mirrors (flip
-        # the score, swap BULL<->BEAR). Thresholds tunable in constants.py; see doc §6.
-        #   BUY : BULL -> S <= -WITH ; NEUTRAL -> S <= -NEUTRAL ; BEAR -> S <= -AGAINST
-        if regime == 'BULL':                                   # tide with the long -> give it room
-            buy_close_at = -FORCE_CLOSE_S_WITH
-        elif regime == 'BEAR':                                 # tide against the long -> cut fast
-            buy_close_at = -FORCE_CLOSE_S_AGAINST
-        else:                                                  # NEUTRAL
-            buy_close_at = -FORCE_CLOSE_S_NEUTRAL
-        buy_fc = slope_score <= buy_close_at
-        buy_fc_reason = 'fc_' + regime.lower()                 # fc_bull / fc_neutral / fc_bear
+        # Force-close (EXIT): close a basket when the weighted score has moved far enough AGAINST it
+        # -- a BUY at score <= -FORCE_CLOSE_S, a SELL at score >= +FORCE_CLOSE_S. A single score
+        # threshold, no regime (removed 2026-10-27). Tunable in constants.py.
+        buy_fc = slope_score <= -FORCE_CLOSE_S
+        buy_fc_reason = 'force_close'
+        sell_fc = slope_score >= FORCE_CLOSE_S
+        sell_fc_reason = 'force_close'
 
-        if regime == 'BEAR':                                   # tide with the short -> give it room
-            sell_close_at = FORCE_CLOSE_S_WITH
-        elif regime == 'BULL':                                 # tide against the short -> cut fast
-            sell_close_at = FORCE_CLOSE_S_AGAINST
-        else:                                                  # NEUTRAL
-            sell_close_at = FORCE_CLOSE_S_NEUTRAL
-        sell_fc = slope_score >= sell_close_at
-        sell_fc_reason = 'fc_' + regime.lower()
-
-        # Profit-book (score + regime, Step 6 - variant A's ONLY profit exit; no +$unit target).
-        # Once the basket is in profit by at least times * PROFIT_PROTECT_USD_PER_UNIT (buffer
-        # scales with the unit / entry lot), book when the score has reversed enough against it;
-        # how far scales with the tide -- let a with-trend winner run (deeper reversal needed),
-        # grab a counter-trend winner fast. BUY shown; SELL mirrors. Checked BEFORE the force-close
-        # (in profit a book beats a capitulation). Thresholds tunable; see doc §6.
-        #   BUY : BULL -> S <= -BOOK_S_WITH ; NEUTRAL -> -BOOK_S_NEUTRAL ; BEAR -> -BOOK_S_AGAINST
+        # Profit-book (variant A's ONLY profit exit; no +$unit target). Once the basket is in profit
+        # by at least times * PROFIT_PROTECT_USD_PER_UNIT (buffer scales with the unit / entry lot),
+        # book when the weighted score has reversed far enough against it -- a BUY at score <= -BOOK_S,
+        # a SELL at score >= +BOOK_S. Checked BEFORE the force-close (in profit a book beats a
+        # capitulation). A single score threshold, no regime (removed 2026-10-27). Tunable.
         profit_protect_min = times * PROFIT_PROTECT_USD_PER_UNIT
-        if regime == 'BULL':                                   # tide with the long -> let it run
-            buy_book_at = -BOOK_S_WITH
-        elif regime == 'BEAR':                                 # tide against the long -> grab it
-            buy_book_at = -BOOK_S_AGAINST
-        else:                                                  # NEUTRAL
-            buy_book_at = -BOOK_S_NEUTRAL
-        buy_pp = (buy_profit > profit_protect_min) and (slope_score <= buy_book_at)
-        buy_pp_reason = 'book_' + regime.lower()               # book_bull / book_neutral / book_bear
-
-        if regime == 'BEAR':                                   # tide with the short -> let it run
-            sell_book_at = BOOK_S_WITH
-        elif regime == 'BULL':                                 # tide against the short -> grab it
-            sell_book_at = BOOK_S_AGAINST
-        else:                                                  # NEUTRAL
-            sell_book_at = BOOK_S_NEUTRAL
-        sell_pp = (sell_profit > profit_protect_min) and (slope_score >= sell_book_at)
-        sell_pp_reason = 'book_' + regime.lower()
+        buy_pp = (buy_profit > profit_protect_min) and (slope_score <= -BOOK_S)
+        buy_pp_reason = 'book'
+        sell_pp = (sell_profit > profit_protect_min) and (slope_score >= BOOK_S)
+        sell_pp_reason = 'book'
 
         if buy_count == 0 and sell_count == 0:
-            # Fresh entry (single position; score + regime, Step 5), cooldown-gated.
+            # Fresh entry (single position; opens on the weighted score), cooldown-gated.
             if entry_allowed and entry_direction == 'BUY':
                 buy_status = Signal.BUY
             elif entry_allowed and entry_direction == 'SELL':
@@ -332,7 +248,7 @@ class Strategy:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = buy_fc_reason
             elif buy_add_ok:
-                # DCA add - gated: averages into the long only when the tide/score is not against it.
+                # DCA add - gated: averages into the long only when the score is not against it.
                 if rsi_1m <= RSI_OVERSOLD and buy_count == 1:
                     buy_status = Signal.BUY_MORE
                 elif rsi_5m <= RSI_OVERSOLD and buy_count == 2:
@@ -353,7 +269,7 @@ class Strategy:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = sell_fc_reason
             elif sell_add_ok:
-                # DCA add - gated: averages into the short only when the tide/score is not against it.
+                # DCA add - gated: averages into the short only when the score is not against it.
                 if rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
                     sell_status = Signal.SELL_MORE
                 elif rsi_5m >= RSI_OVERBOUGHT and sell_count == 2:
@@ -372,9 +288,6 @@ class Strategy:
             'slope_direction': slope_direction or 'WAIT',
             'entry_direction': entry_direction or 'WAIT',
             'score': slope_score,
-            'regime': regime,
-            'regime_d1': d1_regime,
-            'regime_h4': h4_regime,
             'buy_add_ok': bool(buy_add_ok),
             'sell_add_ok': bool(sell_add_ok),
             'entry_allowed': bool(entry_allowed),
