@@ -17,6 +17,31 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.4.2] — 2026-10-27 — DCA ladder: remove the regime gate too (adds open on the score alone) [_exp_h]
+
+**Branches:** all 4 `_h`. **Files touched:** `constants.py`, `strategy.py` (+ this `CHANGELOG.md`).
+
+**Why.** Follow-through on v3.4.0. The DCA ladder add (the RSI-ladder's *next* position) was still
+gated by the regime — `buy_add_ok = (regime != BEAR) and (score > -REGIME_LADDER_S)` — so a BEAR tide
+blocked averaging in regardless of RSI/score, the same lagging-regime veto we removed from fresh
+entry. An RSI-ladder add is an OPENING, so it now opens on the weighted score alone.
+
+### Behaviour change — ladder adds only
+- `buy_add_ok = score > -LADDER_S` ; `sell_add_ok = score < LADDER_S` (the `regime !=` conjunct
+  dropped). `REGIME_LADDER_S` renamed to **`LADDER_S`** (= 6; no regime involved now).
+- A BEAR tide no longer blocks a BUY add; a BULL tide no longer blocks a SELL add. **The score guard
+  stays:** an add is still blocked when the score is strongly adverse (`≤ -LADDER_S`), which still
+  catches the 2026-10 "average down into a trend" case (it scored −14). And the **force-close stays
+  regime-aware**, so a counter-tide basket is still protected / cut.
+- **Net:** the regime now governs ONLY the exits (force-close + variant-A profit-book); all OPENING
+  (fresh entry + ladder adds) is score-only.
+
+### Rollback
+Restore `buy_add_ok`/`sell_add_ok` to `(regime != 'BEAR'/'BULL') and (...)` and rename `LADDER_S`
+back to `REGIME_LADDER_S`.
+
+---
+
 ## [v3.4.1] — 2026-10-27 — Dashboard: score threshold-meter (BUY/SELL lines + no-open band) [_exp_h]
 
 **Branches:** all 4 `_h` (dashboard.py only — a display change, no trading-behaviour change).
