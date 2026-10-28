@@ -57,22 +57,26 @@ MACD_FAST = 12                      # fast EMA length (TradingView ta.macd defau
 MACD_SLOW = 26                      # slow EMA length
 MACD_SIGNAL = 9                     # signal EMA length
 
-# ─── Weighted-score gates (the single engine; NO regime) ───
-# One number drives every decision -- the weighted MTF slope score:
-#   S = 4*D1 + 3*H4 + 2*H1 + 1*M15   (each TF = its RSI + MACD slope sign; range -20..+20).
-# The level-based regime ("tide") was fully REMOVED 2026-10-27 -- it lagged and vetoed valid
-# slope-based decisions. Every gate below is a single score magnitude (all tunable on demo).
-# (No BOOK_S on this h6/variant-B pair -- it books with the +$unit target, not a profit-book.)
-ENTRY_S = 6                         # |score| to OPEN (BUY score >= +6 / SELL score <= -6)
-LADDER_S = 6                        # DCA ladder add blocked once score is this far adverse
-                                    # (BUY add needs score > -6; SELL add needs score < +6)
-FORCE_CLOSE_S = 8                   # force-close when score is this far AGAINST the basket
-                                    # (BUY close score <= -8; SELL close score >= +8)
+# ─── Weighted-score gates (TWO asymmetric scores; NO regime) ───
+# "Enter slow, exit fast" (2026-10-28). Two weighted MTF slope scores, each the same four TFs
+# (RSI + MACD slope signs) but weighted opposite ways; both range -20..+20:
+#   slope_score (SLOW/trend) = 4*D1 + 3*H4 + 2*H1 + 1*M15   -> entry + DCA ladder gate
+#   exit_score  (FAST/react) = 4*M15 + 3*H1 + 2*H4 + 1*D1   -> force-close
+# Entry/adds follow the slow trend (higher TF dominant); the force-close reacts on the fast score
+# (M15 now +/-8 vs +/-2) so a loss is cut on the short-term turn instead of lagging until H1/H4
+# confirm. The level-based regime ("tide") was fully REMOVED 2026-10-27. Each gate is a single score
+# magnitude on the -20..+20 scale (all tunable on demo); the weights supply the sensitivity.
+# (No BOOK_S on this h6/variant-B pair -- it books profit with the +$unit target, not a score-book.)
+ENTRY_S = 6                         # |slope_score| to OPEN (BUY >= +6 / SELL <= -6)
+LADDER_S = 6                        # DCA ladder add blocked once slope_score is this far adverse
+                                    # (BUY add needs slope_score > -6; SELL add needs < +6)
+FORCE_CLOSE_S = 8                   # force-close when EXIT_SCORE is this far AGAINST the basket
+                                    # (BUY close exit_score <= -8; SELL close exit_score >= +8)
 
-# ─── Slope Engine (D1 + 4H + 1H + 15M pivot slopes -> the weighted score) ───
-# The latest-pivot slope SIGN on each of these timeframes (RSI + MACD) feeds the weighted MTF
-# score  S = 4*D1 + 3*H4 + 2*H1 + 1*M15,  which is the single engine for every decision (entry,
-# ladder, force-close, profit-book). No level-based regime (removed 2026-10-27).
+# ─── Slope Engine (D1 + 4H + 1H + 15M pivot slopes -> both weighted scores) ───
+# The latest-pivot slope SIGN on each of these timeframes (RSI + MACD) feeds BOTH the slow
+# slope_score (4*D1 + 3*H4 + 2*H1 + 1*M15 -> entry/ladder) and the fast exit_score (4*M15 + 3*H1 +
+# 2*H4 + 1*D1 -> force-close). Same signs, opposite weights. No regime (removed 2026-10-27).
 # NOTE: unlike 15M, D1 is not fetched elsewhere, so including it = +1 MT5 rates call per loop.
 SLOPE_TIMEFRAMES = ['TIMEFRAME_M15', 'TIMEFRAME_H1', 'TIMEFRAME_H4', 'TIMEFRAME_D1']  # all four feed the score
 PEAK_LOOKBACK = 20                  # candles scanned for the latest pivot (configurable)

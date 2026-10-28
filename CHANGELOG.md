@@ -17,6 +17,53 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.6.0] — 2026-10-28 — Asymmetric scoring: fast exit score for force-close ("enter slow, exit fast") [_exp_h]
+
+**Branches:** h6 / variant-B `_h` pair ONLY — `rsimacd_h6_btcusd1_wd_exp_h` + `rsimacd_h6_xauusd1_wd_exp_h`.
+(The variant-A pair got the matching v3.6.0 the same day, but there the fast score also drives a
+profit-book; this pair books profit on the +$unit target, so the fast score drives **force-close only**.)
+NOT the 20 live-money fleet. **Files touched:** `strategy.py`, `constants.py`, `dashboard.py`
+(+ this `CHANGELOG.md`). **Baseline commit:** v3.5.0 head of each h6 branch.
+
+**Why.** Same root cause as the variant-A change: the force-close ran on the SLOW trend score
+`4·D1+3·H4+2·H1+1·M15`, where M15 maxes at ±2, so a fast reversal couldn't cross `FORCE_CLOSE_S=8`
+until H1/H4 confirmed hours later — a loss ran on. Owner asked to bring the same change here but to
+**leave the profit booking alone** (this pair books with the +$unit / per-balance USD target, not a
+score). So the reversed-weight fast score is applied to the force-close only.
+
+### Behaviour change — fast exit_score drives the force-close (profit target unchanged)
+- **New `exit_score` (FAST):** `4·M15 + 3·H1 + 2·H4 + 1·D1` (−20..+20). M15 now ±8 (was ±2).
+- **`slope_score` (SLOW) unchanged:** `4·D1 + 3·H4 + 2·H1 + 1·M15` — still drives **entry + the DCA
+  ladder gate** (no change).
+- **Force-close** now tests `exit_score`: `buy_fc = exit_score <= -FORCE_CLOSE_S` / `sell_fc = … >=
+  +FORCE_CLOSE_S`. Reason `force_close` (unchanged).
+- **+$unit profit target UNTOUCHED:** `buy_profit > close_threshold → CLOSE (reason 'target')` is
+  checked first, exactly as before. No score profit-book on this pair.
+- **Threshold unchanged** (`FORCE_CLOSE_S=8`). Added sensitivity is from the weighting. Verified: a
+  losing long on a lone M15 bear turn (fast −8) now force-closes where the slow score (−2) held; the
+  +$unit target still books in profit; entry on that same M15-only signal still does nothing.
+
+### Files
+- `strategy.py`: added `exit_score` beside `slope_score`; `buy_fc/sell_fc` now read `exit_score`
+  (entry + ladder still read `slope_score`); the `buy_profit/sell_profit > close_threshold` target
+  close is unchanged; `'exit_score'` added to `analysis_data`; docstrings/comments updated.
+- `constants.py`: "Weighted-score gates" section rewritten from one score to the two asymmetric
+  scores; `FORCE_CLOSE_S` comment now says EXIT_SCORE; still no `BOOK_S` (target books profit). No
+  constant values changed.
+- `dashboard.py`: imported `FORCE_CLOSE_S`; relabelled the meter `MTF SCORE` → `ENTRY SCORE`; added
+  `_exit_gauge(exit_score)` — a second −20..+20 meter marking the FORCE-CLOSE threshold (±`FORCE_CLOSE_S`,
+  red) only, with a note that profit books on the +$unit target; severity bands, current-value
+  marker, zone chip and "− side closes LONG / + side closes SHORT"; rendered under the entry meter.
+- `app.py`: untouched — passes the whole `analysis_data` through, so `exit_score` reaches the log and
+  dashboard automatically.
+
+### Rollback
+`git revert <this commit>` on each branch, or restore the three files from the v3.5.0 head. Removing
+`exit_score` and pointing `*_fc` back at `slope_score` returns the pair to v3.5.0 (single-score
+force-close + unchanged +$unit target).
+
+---
+
 ## [v3.5.0] — 2026-10-27 — Remove the regime ENTIRELY — strategy is now score-only [_exp_h]
 
 **Branches:** all 4 `_h`. **Files touched:** `constants.py`, `strategy.py`, `app.py`, `dashboard.py`,

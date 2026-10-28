@@ -18,7 +18,7 @@ class Signal(Enum):
 
 
 class Strategy:
-    """RSI+MACD slope entry + RSI Fibo DCA ladder; +$unit target or slope force-close (variant B)."""
+    """RSI+MACD slope entry + RSI Fibo DCA ladder; +$unit target or fast-score force-close (variant B)."""
 
     def __init__(self):
         self.hedge = STRATEGY_HEDGE
@@ -130,19 +130,24 @@ class Strategy:
                          rsi_value=None, rsi_mtf=None, slopes=None,
                          entry_allowed=True):
         """
-        RSI+MACD slope entry + RSI Fibo ladder; exits are the +$unit target or the
-        slope force-close (variant B; the old H6 forced close was replaced).
+        RSI+MACD slope entry + RSI Fibo ladder; exits are the +$unit target or the fast-score
+        force-close (variant B). TWO weighted scores -- "enter slow, exit fast" (asymmetric
+        weighting added 2026-10-28):
+          - slope_score (SLOW, trend): 4*D1 + 3*H4 + 2*H1 + 1*M15  -> entry + ladder.
+          - exit_score  (FAST, react): 4*M15 + 3*H1 + 2*H4 + 1*D1  -> force-close.
+        Both range -20..+20; same FORCE_CLOSE_S threshold -- the force-close's extra sensitivity is
+        from the weighting. The +$unit profit target is a USD level, unaffected by either score.
 
-          Flat: open from the weighted slope score (NO regime - fully removed 2026-10-27) -
-                BUY when score >= ENTRY_S, SELL when score <= -ENTRY_S, else WAIT. Single position,
+          Flat: open from the SLOW slope_score (NO regime - removed 2026-10-27) - BUY when
+                slope_score >= ENTRY_S, SELL when <= -ENTRY_S, else WAIT. Single position,
                 cooldown-gated. (slope_direction is the dashboard's structural read only.)
           Open (checked in order; closing has priority over adding):
-            - +$unit target: basket profit > close_threshold (= unit) -> CLOSE.
-            - force-close (score): close when the score is far enough against the basket -
-              BUY score <= -FORCE_CLOSE_S, SELL score >= +FORCE_CLOSE_S (reason 'force_close').
-            - RSI DCA ladder (score-gated): BUY_MORE/SELL_MORE at RSI 35/65, one tier per count
-              (1->M1, 2->M5, 3->M15, 4->H1, 5->H4), Fibo lot sizing; an add fires only when the
-              score is not strongly against the position.
+            - +$unit target: basket profit > close_threshold (= unit) -> CLOSE (reason 'target').
+            - force-close (FAST exit_score): close when it is far enough against the basket -
+              BUY exit_score <= -FORCE_CLOSE_S, SELL >= +FORCE_CLOSE_S (reason 'force_close').
+            - RSI DCA ladder (gated on the SLOW slope_score): BUY_MORE/SELL_MORE at RSI 35/65, one
+              tier per count (1->M1, 2->M5, 3->M15, 4->H1, 5->H4), Fibo lot sizing; an add fires only
+              when slope_score is not strongly against the position.
             - else HOLD.
 
         Args:
@@ -152,8 +157,8 @@ class Strategy:
             close_threshold: USD basket profit target (= unit) for the +$unit close.
             rsi_value: current RSI (dashboard/logs).
             rsi_mtf: {timeframe_name: rsi_value} - drives the DCA ladder tiers.
-            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for 15M/H1/H4 + D1 -
-                    all four TFs feed the weighted score that drives every decision.
+            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for 15M/H1/H4 + D1 - all four
+                    TFs feed both the slow slope_score (entry/ladder) and the fast exit_score (force-close).
             entry_allowed: False during the post-close re-entry cooldown.
 
         Returns:
@@ -191,13 +196,23 @@ class Strategy:
         d1m = self._slope_sign(slopes, 'D1', 'macd')
         slope_direction = self._slope_direction(slopes)   # structural 4H/1H/15M read (dashboard/compare only; entry uses the score)
 
-        # Weighted MTF slope score -- THE single engine. S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each TF =
-        # its RSI + MACD slope signs; range -20..+20 (negative = bearish). Drives entry, the DCA
-        # ladder gate, the force-close and (variant A) the profit-book -- all on score thresholds,
-        # no regime (the level-based regime was fully removed 2026-10-27). Higher TF dominates; one
-        # noisy sign moves S by <=1.
+        # ENTRY/LADDER score (the SLOW, trend-weighted read). S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each
+        # TF = its RSI + MACD slope signs; range -20..+20 (negative = bearish). Higher (slower) TF
+        # dominates so fresh entries + DCA adds follow the trend, not 15-min noise. Drives entry and
+        # the ladder gate ONLY (the force-close uses the fast exit_score below). No regime (removed
+        # 2026-10-27). (Profit books on the +$unit target, which is a USD level, not a score.)
         slope_score = (4 * (d1r + d1m) + 3 * (h4r + h4m)
                        + 2 * (h1r + h1m) + 1 * (m15r + m15m))
+
+        # EXIT score (the FAST, reaction-weighted read) -- the SAME four TFs with the weights REVERSED:
+        # S_exit = 4*M15 + 3*H1 + 2*H4 + 1*D1; range -20..+20. Here the fastest TF dominates, so a
+        # short-term reversal moves S_exit ~4x more than it moves slope_score (M15 now +/-8 vs +/-2).
+        # Added 2026-10-28 (h6/variant-B pair): the force-close on slope_score lagged -- the slow
+        # weights couldn't cross FORCE_CLOSE_S until H1/H4 confirmed, so a loss ran on. Drives the
+        # force-close ONLY; entry/ladder keep the slow slope_score ("enter slow, exit fast"). The +$unit
+        # profit target is untouched. Same threshold, same -20..+20 scale -- sensitivity is the weighting.
+        exit_score = (4 * (m15r + m15m) + 3 * (h1r + h1m)
+                      + 2 * (h4r + h4m) + 1 * (d1r + d1m))
 
         # Fresh-entry direction from the weighted slope score (regime fully removed 2026-10-27 - a
         # lagging level-regime that vetoed valid slope-based opens). Opens on score >= +ENTRY_S (BUY)
@@ -211,13 +226,14 @@ class Strategy:
         buy_add_ok = slope_score > -LADDER_S
         sell_add_ok = slope_score < LADDER_S
 
-        # Force-close (EXIT): close a basket when the weighted score has moved far enough AGAINST it
-        # -- a BUY at score <= -FORCE_CLOSE_S, a SELL at score >= +FORCE_CLOSE_S. A single score
-        # threshold, no regime (removed 2026-10-27). Tunable in constants.py.
-        # (No profit-book on this h6/variant-B pair -- it books with the +$unit target below.)
-        buy_fc = slope_score <= -FORCE_CLOSE_S
+        # Force-close (EXIT): close a basket when the FAST exit_score has moved far enough AGAINST it
+        # -- a BUY at exit_score <= -FORCE_CLOSE_S, a SELL at exit_score >= +FORCE_CLOSE_S. Uses the
+        # fast (M15-dominant) score so a loss is cut on the short-term reversal instead of waiting for
+        # the slow TFs to confirm. Single threshold, no regime. Tunable in constants.py.
+        # (No score profit-book on this h6/variant-B pair -- it books with the +$unit target below.)
+        buy_fc = exit_score <= -FORCE_CLOSE_S
         buy_fc_reason = 'force_close'
-        sell_fc = slope_score >= FORCE_CLOSE_S
+        sell_fc = exit_score >= FORCE_CLOSE_S
         sell_fc_reason = 'force_close'
 
         if buy_count == 0 and sell_count == 0:
@@ -278,6 +294,7 @@ class Strategy:
             'slope_direction': slope_direction or 'WAIT',
             'entry_direction': entry_direction or 'WAIT',
             'score': slope_score,
+            'exit_score': exit_score,
             'buy_add_ok': bool(buy_add_ok),
             'sell_add_ok': bool(sell_add_ok),
             'entry_allowed': bool(entry_allowed),
