@@ -131,21 +131,25 @@ class Strategy:
                          rsi_value=None, rsi_mtf=None, slopes=None,
                          entry_allowed=True):
         """
-        RSI+MACD slope strategy (slope-exit variant).
+        RSI+MACD slope strategy (slope-exit variant). TWO weighted scores -- "enter slow, exit fast"
+        (asymmetric weighting added 2026-10-28, variant-A `_h` only):
+          - slope_score (SLOW, trend): 4*D1 + 3*H4 + 2*H1 + 1*M15  -> entry + ladder.
+          - exit_score  (FAST, react): 4*M15 + 3*H1 + 2*H4 + 1*D1  -> profit-book + force-close.
+        Both range -20..+20; same thresholds -- the exit's extra sensitivity is from the weighting.
 
-          Flat: open from the weighted slope score (NO regime - fully removed 2026-10-27) -
-                BUY when score >= ENTRY_S, SELL when score <= -ENTRY_S, else WAIT. Single position,
+          Flat: open from the SLOW slope_score (NO regime - removed 2026-10-27) - BUY when
+                slope_score >= ENTRY_S, SELL when <= -ENTRY_S, else WAIT. Single position,
                 cooldown-gated. (slope_direction is the dashboard's structural read only.)
           Open:
-            Exits (checked first):
-              - profit-book (score, variant A): once profit > times * PROFIT_PROTECT_USD_PER_UNIT,
-                book when the score reverses - BUY score <= -BOOK_S, SELL score >= +BOOK_S
-                (reason 'book'). Checked before the force-close.
-              - force-close (score): close when the score is far enough against the basket -
-                BUY score <= -FORCE_CLOSE_S, SELL score >= +FORCE_CLOSE_S (reason 'force_close').
-            RSI DCA ladder (if no exit; score-gated): BUY_MORE/SELL_MORE at RSI 35/65, one tier
-            per open count - count 1->M1, 2->M5, 3->M15, 4->H1, 5->H4 (max 6 positions); an add
-            fires only when the score is not strongly against the position. Fibo lot sizing. Else HOLD.
+            Exits (checked first; both on the FAST exit_score):
+              - profit-book (variant A): once profit > times * PROFIT_PROTECT_USD_PER_UNIT, book when
+                exit_score reverses - BUY exit_score <= -BOOK_S, SELL >= +BOOK_S (reason 'book').
+                Checked before the force-close.
+              - force-close: close when exit_score is far enough against the basket - BUY exit_score
+                <= -FORCE_CLOSE_S, SELL >= +FORCE_CLOSE_S (reason 'force_close').
+            RSI DCA ladder (if no exit; gated on the SLOW slope_score): BUY_MORE/SELL_MORE at RSI
+            35/65, one tier per open count - count 1->M1, 2->M5, 3->M15, 4->H1, 5->H4 (max 6
+            positions); an add fires only when slope_score is not strongly against it. Fibo. Else HOLD.
 
         Args:
             source_df: Raw OHLC DataFrame (capitalized: Open, High, Low, Close)
@@ -154,8 +158,8 @@ class Strategy:
             close_threshold: legacy param, unused in this variant.
             rsi_value: current RSI (dashboard/logs).
             rsi_mtf: {timeframe_name: rsi_value} - drives the DCA ladder tiers.
-            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for 15M/H1/H4 + D1 -
-                    all four TFs feed the weighted score that drives every decision.
+            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for 15M/H1/H4 + D1 - all four
+                    TFs feed both the slow slope_score (entry/ladder) and the fast exit_score (exits).
             entry_allowed: False during the post-close re-entry cooldown.
 
         Returns:
@@ -193,13 +197,23 @@ class Strategy:
         d1m = self._slope_sign(slopes, 'D1', 'macd')
         slope_direction = self._slope_direction(slopes)   # structural 4H/1H/15M read (dashboard/compare only; entry uses the score)
 
-        # Weighted MTF slope score -- THE single engine. S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each TF =
-        # its RSI + MACD slope signs; range -20..+20 (negative = bearish). Drives entry, the DCA
-        # ladder gate, the force-close and (variant A) the profit-book -- all on score thresholds,
-        # no regime (the level-based regime was fully removed 2026-10-27). Higher TF dominates; one
-        # noisy sign moves S by <=1.
+        # ENTRY/LADDER score (the SLOW, trend-weighted read). S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each
+        # TF = its RSI + MACD slope signs; range -20..+20 (negative = bearish). Higher (slower) TF
+        # dominates so fresh entries + DCA adds follow the trend, not 15-min noise. Drives entry and
+        # the ladder gate ONLY (exits use the fast exit_score below). No regime (removed 2026-10-27).
         slope_score = (4 * (d1r + d1m) + 3 * (h4r + h4m)
                        + 2 * (h1r + h1m) + 1 * (m15r + m15m))
+
+        # EXIT score (the FAST, reaction-weighted read) -- the SAME four TFs with the weights REVERSED:
+        # S_exit = 4*M15 + 3*H1 + 2*H4 + 1*D1; range -20..+20. Here the fastest TF dominates, so a
+        # short-term reversal moves S_exit ~4x more than it moves slope_score (M15 now +/-8 vs +/-2).
+        # Added 2026-10-28 (variant-A `_h` only): booking/force-close on slope_score lagged -- the
+        # slow weights couldn't cross BOOK_S/FORCE_CLOSE_S until H1/H4 confirmed, giving back profit.
+        # Drives the profit-book + force-close ONLY; entry/ladder keep the slow slope_score ("enter
+        # slow, exit fast"). Same thresholds, same -20..+20 scale -- the sensitivity comes from the
+        # weighting, not the thresholds.
+        exit_score = (4 * (m15r + m15m) + 3 * (h1r + h1m)
+                      + 2 * (h4r + h4m) + 1 * (d1r + d1m))
 
         # Fresh-entry direction from the weighted slope score (regime fully removed 2026-10-27 - a
         # lagging level-regime that vetoed valid slope-based opens). Opens on score >= +ENTRY_S (BUY)
@@ -213,23 +227,25 @@ class Strategy:
         buy_add_ok = slope_score > -LADDER_S
         sell_add_ok = slope_score < LADDER_S
 
-        # Force-close (EXIT): close a basket when the weighted score has moved far enough AGAINST it
-        # -- a BUY at score <= -FORCE_CLOSE_S, a SELL at score >= +FORCE_CLOSE_S. A single score
-        # threshold, no regime (removed 2026-10-27). Tunable in constants.py.
-        buy_fc = slope_score <= -FORCE_CLOSE_S
+        # Force-close (EXIT): close a basket when the FAST exit_score has moved far enough AGAINST it
+        # -- a BUY at exit_score <= -FORCE_CLOSE_S, a SELL at exit_score >= +FORCE_CLOSE_S. Uses the
+        # fast (M15-dominant) score so a loss is cut on the short-term reversal instead of waiting for
+        # the slow TFs to confirm. Single threshold, no regime. Tunable in constants.py.
+        buy_fc = exit_score <= -FORCE_CLOSE_S
         buy_fc_reason = 'force_close'
-        sell_fc = slope_score >= FORCE_CLOSE_S
+        sell_fc = exit_score >= FORCE_CLOSE_S
         sell_fc_reason = 'force_close'
 
         # Profit-book (variant A's ONLY profit exit; no +$unit target). Once the basket is in profit
         # by at least times * PROFIT_PROTECT_USD_PER_UNIT (buffer scales with the unit / entry lot),
-        # book when the weighted score has reversed far enough against it -- a BUY at score <= -BOOK_S,
-        # a SELL at score >= +BOOK_S. Checked BEFORE the force-close (in profit a book beats a
-        # capitulation). A single score threshold, no regime (removed 2026-10-27). Tunable.
+        # book when the FAST exit_score has reversed far enough against it -- a BUY at exit_score <=
+        # -BOOK_S, a SELL at exit_score >= +BOOK_S. Uses the fast (M15-dominant) score so profit is
+        # taken on the short-term turn instead of bleeding back while the slow TFs catch up. Checked
+        # BEFORE the force-close (in profit a book beats a capitulation). Single threshold. Tunable.
         profit_protect_min = times * PROFIT_PROTECT_USD_PER_UNIT
-        buy_pp = (buy_profit > profit_protect_min) and (slope_score <= -BOOK_S)
+        buy_pp = (buy_profit > profit_protect_min) and (exit_score <= -BOOK_S)
         buy_pp_reason = 'book'
-        sell_pp = (sell_profit > profit_protect_min) and (slope_score >= BOOK_S)
+        sell_pp = (sell_profit > profit_protect_min) and (exit_score >= BOOK_S)
         sell_pp_reason = 'book'
 
         if buy_count == 0 and sell_count == 0:
@@ -288,6 +304,7 @@ class Strategy:
             'slope_direction': slope_direction or 'WAIT',
             'entry_direction': entry_direction or 'WAIT',
             'score': slope_score,
+            'exit_score': exit_score,
             'buy_add_ok': bool(buy_add_ok),
             'sell_add_ok': bool(sell_add_ok),
             'entry_allowed': bool(entry_allowed),

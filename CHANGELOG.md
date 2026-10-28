@@ -17,6 +17,58 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.6.0] — 2026-10-28 — Asymmetric scoring: fast exit score for book + force-close ("enter slow, exit fast") [_exp_h]
+
+**Branches:** variant-A `_h` pair ONLY — `rsimacd_btcusd1_wd_exp_h` + `rsimacd_xauusd1_wd_exp_h`.
+NOT the h6 pair (`rsimacd_h6_*_wd_exp_h`, stay at v3.5.0) and NOT the 20 live-money fleet. This is a
+deliberate divergence of the variant-A pair from the h6 pair; the owner scoped it to these two demo
+branches. **Files touched:** `strategy.py`, `constants.py`, `dashboard.py` (+ this `CHANGELOG.md`).
+**Baseline commit:** `3dd7e9b` (btc) / `82b7db9` (xau) — v3.5.0.
+
+**Why.** Owner observed on demo that the profit-book gave back a lot of unrealised profit before it
+fired, and suspected the force-close lagged too. Diagnosis: both exits ran off the SLOW trend score
+`4·D1+3·H4+2·H1+1·M15`, where M15 maxes at only ±2 — below `BOOK_S=4`. So a fast (M15) reversal could
+not book on its own; the score only crossed the threshold once H1/H4 confirmed, hours later, after the
+retrace. Owner's idea was to reverse the weights; reversing them *globally* would also make entry fire
+on 15-min noise, so this ships the reversal **scoped to exits only** — "enter slow, exit fast".
+
+### Behaviour change — two asymmetric scores (same four TFs, opposite weights; both −20..+20)
+- **New `exit_score` (FAST):** `4·M15 + 3·H1 + 2·H4 + 1·D1`. M15 now contributes ±8 (was ±2), so a
+  short-term reversal moves it ~4× more than it moves `slope_score`.
+- **`slope_score` (SLOW) unchanged:** `4·D1 + 3·H4 + 2·H1 + 1·M15` — still drives **entry + the DCA
+  ladder gate** (trend-led opens, no change to entry/ladder behaviour).
+- **Profit-book (variant A)** now tests `exit_score`: `buy_pp = in-profit AND exit_score <= -BOOK_S`
+  / `sell_pp = … >= +BOOK_S`. Reason `book` (unchanged). Still checked before force-close.
+- **Force-close** now tests `exit_score`: `buy_fc = exit_score <= -FORCE_CLOSE_S` / `sell_fc = … >=
+  +FORCE_CLOSE_S`. Reason `force_close` (unchanged).
+- **Thresholds unchanged** (`ENTRY_S=6`, `LADDER_S=6`, `FORCE_CLOSE_S=8`, `BOOK_S=4`). The added
+  sensitivity comes entirely from the weighting, not the thresholds — so the −20..+20 scale and the
+  tunable knobs keep their meaning. Verified: a lone M15 bear turn now books an in-profit long (fast
+  −8) that the slow score (−2) would have held; entry on that same M15-only signal still does nothing.
+
+### Files
+- `strategy.py`: added the `exit_score` computation beside `slope_score`; `buy_fc/sell_fc` and
+  `buy_pp/sell_pp` now read `exit_score` (entry + ladder still read `slope_score`); `'exit_score'`
+  added to `analysis_data`; `calculate_signal` docstring + inline comments rewritten for the two-score
+  design.
+- `constants.py`: "Weighted-score gates" section rewritten from one score to the two asymmetric scores;
+  the `FORCE_CLOSE_S` / `BOOK_S` comments now say EXIT_SCORE; Slope-Engine note updated (both scores).
+  No constant values changed; no new constants.
+- `dashboard.py`: imported `BOOK_S`, `FORCE_CLOSE_S`; relabelled the existing meter `MTF SCORE` →
+  `ENTRY SCORE` (slow formula); added `_exit_gauge(exit_score)` — a second −20..+20 meter marking
+  BOOK (±`BOOK_S`, amber) and FORCE-CLOSE (±`FORCE_CLOSE_S`, red) thresholds, severity bands, a
+  current-value marker and a zone chip, with "− side closes LONG / + side closes SHORT"; rendered it
+  under the entry meter in `build_slope_panel` (reads `analysis['exit_score']`).
+- `app.py`: untouched — it passes the whole `analysis_data` through, so `exit_score` reaches the log
+  and dashboard automatically.
+
+### Rollback
+`git revert <this commit>` on each branch, or restore `strategy.py`/`constants.py`/`dashboard.py` from
+`3dd7e9b` (btc) / `82b7db9` (xau). Removing `exit_score` and pointing `*_fc`/`*_pp` back at
+`slope_score` returns the pair to v3.5.0 single-score exits.
+
+---
+
 ## [v3.5.0] — 2026-10-27 — Remove the regime ENTIRELY — strategy is now score-only [_exp_h]
 
 **Branches:** all 4 `_h`. **Files touched:** `constants.py`, `strategy.py`, `app.py`, `dashboard.py`,
