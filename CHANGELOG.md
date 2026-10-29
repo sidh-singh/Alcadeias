@@ -17,6 +17,50 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.6.1] — 2026-10-29 — Entry agreement gate: stop the open-then-instant-close vibration [_exp_h]
+
+**Branches:** all 4 `_h` (h6 `rsimacd_h6_{btc,xau}usd1_wd_exp_h` + variant-A `rsimacd_{btc,xau}usd1_wd_exp_h`).
+NOT the 20 fleet. **Files touched:** `strategy.py`, `constants.py`, `dashboard.py` (+ this `CHANGELOG.md`).
+**Baseline:** v3.6.0 head of each branch.
+
+**Why.** Owner saw positions open and close almost simultaneously on all 4 branches — "vibration", lots
+of false trades. Root cause is a side-effect of the v3.6.0 asymmetric split: entry runs on the SLOW
+`slope_score` (open BUY at ≥ +ENTRY_S) but the force-close runs on the FAST `exit_score` (close at ≤
+−FORCE_CLOSE_S). In chop — slow TFs (D1/H4) bullish, fast TFs (M15/H1) bearish — the bot opened on the
+slow score and force-closed ~1–2 s later on the fast score (the loop ticks every ~1–2 s; slope signs
+only change on bar closes, so a slow/fast disagreement at the instant of entry persists into the next
+tick → instant round-trip). The existing 300 s re-entry cooldown fires *after* the round-trip, so it
+only limited frequency, not the false trade. (Pre-v3.6.0 this couldn't happen — entry + force-close
+shared one score with mutually-exclusive thresholds.)
+
+### Behaviour change — require the fast score to agree before opening
+- **New gate:** a fresh entry now needs BOTH scores — BUY: `slope_score >= ENTRY_S AND exit_score >=
+  ENTRY_AGREE_S`; SELL: `slope_score <= -ENTRY_S AND exit_score <= -ENTRY_AGREE_S`. New const
+  `ENTRY_AGREE_S = 0` ("the fast score must merely not oppose the open").
+- **Effect:** during slow/fast disagreement (chop) the bot WAITS — it no longer opens a position it
+  would force-close on the next tick. When the two scores line up again, entry proceeds as before.
+  This is the owner's "let the bot wait until things cool down", expressed as a condition (it waits
+  exactly while the disagreement lasts — no arbitrary timer).
+- **Unchanged:** `ENTRY_S`/`LADDER_S`/`FORCE_CLOSE_S`, the ladder gate, both exits (h6 +$unit target +
+  force-close), the 300 s re-entry cooldown. The gate only adds a condition to OPENING. Verified: slow
+  +6 / fast −6 now WAITs (was open→instant force-close); slow +8 / fast +2 still opens; weak slope still
+  just WAITs (not flagged as chop); SELL mirror holds.
+
+### Files
+- `strategy.py`: `_entry_direction(score)` → `_entry_direction(score, exit_score)` with the agreement
+  gate; call site passes `exit_score`; new `entry_chop_block` telemetry (slow wanted in but fast vetoed)
+  added to `analysis_data`; imports `ENTRY_AGREE_S`; docstrings updated.
+- `constants.py`: new `ENTRY_AGREE_S = 0` in the weighted-score gates block, with rationale.
+- `dashboard.py`: slope panel status now shows "🌀 waiting: fast/slow disagree" when `entry_chop_block`
+  (so the gate is visible on the dashboard).
+- `app.py`: untouched.
+
+### Rollback
+`git revert <this commit>`, or restore the three files from the v3.6.0 head. Reverting `_entry_direction`
+to take only `score` (drop the `exit_score` conjunct) returns entry to the v3.6.0 slow-score-only open.
+
+---
+
 ## [v3.6.0] — 2026-10-28 — Asymmetric scoring: fast exit score for force-close ("enter slow, exit fast") [_exp_h]
 
 **Branches:** h6 / variant-B `_h` pair ONLY — `rsimacd_h6_btcusd1_wd_exp_h` + `rsimacd_h6_xauusd1_wd_exp_h`.
