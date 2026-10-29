@@ -1143,6 +1143,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
     decision = analysis.get('entry_direction', analysis.get('slope_direction', 'WAIT')) or 'WAIT'
     structural = analysis.get('slope_direction', 'WAIT') or 'WAIT'
     entry_allowed = analysis.get('entry_allowed', True)
+    entry_chop_block = analysis.get('entry_chop_block', False)
     exit_reason = analysis.get('exit_reason')
     rsi_value = analysis.get('rsi_value', 50.0)
     rsi_mtf = analysis.get('rsi_mtf', {})
@@ -1165,6 +1166,8 @@ def build_slope_panel(symbol, analysis, last_updated=''):
     status_bits = []
     if not entry_allowed:
         status_bits.append('⏳ entry cooldown')
+    if entry_chop_block:
+        status_bits.append('🌀 waiting: fast/slow disagree')
     if exit_reason:
         status_bits.append(f'exit: {exit_reason}')
     # Structural 4H/1H/15M slope read, shown for comparison (the live entry uses the weighted score).

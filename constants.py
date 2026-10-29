@@ -67,6 +67,12 @@ MACD_SIGNAL = 9                     # signal EMA length
 # H1/H4 confirm. The level-based regime ("tide") was fully REMOVED 2026-10-27. Each gate is a single
 # score magnitude on the -20..+20 scale (all tunable on demo); the weights supply the sensitivity.
 ENTRY_S = 6                         # |slope_score| to OPEN (BUY >= +6 / SELL <= -6)
+ENTRY_AGREE_S = 0                    # agreement gate (2026-10-29): the FAST exit_score must not oppose
+                                    # the open -- BUY also needs exit_score >= +ENTRY_AGREE_S, SELL
+                                    # needs exit_score <= -ENTRY_AGREE_S. 0 = "fast score must merely
+                                    # not be against it"; raise to demand stronger fast agreement.
+                                    # Stops the open-then-instant-force-close vibration in chop (slow
+                                    # bullish / fast bearish) -- the bot WAITS until the two agree.
 LADDER_S = 6                        # DCA ladder add blocked once slope_score is this far adverse
                                     # (BUY add needs slope_score > -6; SELL add needs < +6)
 FORCE_CLOSE_S = 8                   # force-close when EXIT_SCORE is this far AGAINST the basket

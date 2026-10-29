@@ -4,7 +4,7 @@ from constants import (
     FIBO_SEQUENCE_LENGTH,
     RSI_OVERSOLD, RSI_OVERBOUGHT,
     PROFIT_PROTECT_USD_PER_UNIT,
-    ENTRY_S, LADDER_S, FORCE_CLOSE_S, BOOK_S,
+    ENTRY_S, ENTRY_AGREE_S, LADDER_S, FORCE_CLOSE_S, BOOK_S,
 )
 
 
@@ -74,16 +74,22 @@ class Strategy:
         return s if s in (-1, 0, 1) else 0
 
     @staticmethod
-    def _entry_direction(score):
-        """Fresh-entry direction from the weighted slope SCORE. The level-based regime was fully
-        removed 2026-10-27 (it lagged and vetoed valid slope opens, e.g. score +12 with D1/H4/H1 all
-        rising but a BEAR tide blocking the long). Open when the score is clearly directional:
-          score >= ENTRY_S  -> BUY ; score <= -ENTRY_S -> SELL ; else WAIT.
-        Score is now the single engine for every decision (entry, ladder, exits); no regime anywhere.
-        Returns 'BUY' / 'SELL' / None."""
-        if score >= ENTRY_S:
+    def _entry_direction(score, exit_score):
+        """Fresh-entry direction. Opens only when the SLOW trend score is clearly directional AND the
+        FAST exit_score is NOT opposing it (agreement gate added 2026-10-29):
+          score >= ENTRY_S  and exit_score >= ENTRY_AGREE_S   -> BUY
+          score <= -ENTRY_S and exit_score <= -ENTRY_AGREE_S  -> SELL
+          else                                                -> WAIT
+        Why the gate: since v3.6.0 entry runs on the slow score but the force-close runs on the fast
+        exit_score, so in chop (slow bullish / fast bearish) the bot would open on the slow score and
+        force-close ~1-2s later on the fast score -- an open-and-instantly-close "vibration". Requiring
+        the fast score to agree means that during slow/fast disagreement the bot simply WAITS until the
+        chop settles (both scores point the same way), instead of churning out false trades. The
+        level-based regime was fully removed 2026-10-27; this is a score-only gate. ENTRY_AGREE_S is
+        tunable (0 = fast score must merely not oppose). Returns 'BUY' / 'SELL' / None."""
+        if score >= ENTRY_S and exit_score >= ENTRY_AGREE_S:
             return 'BUY'
-        if score <= -ENTRY_S:
+        if score <= -ENTRY_S and exit_score <= -ENTRY_AGREE_S:
             return 'SELL'
         return None
 
@@ -137,9 +143,11 @@ class Strategy:
           - exit_score  (FAST, react): 4*M15 + 3*H1 + 2*H4 + 1*D1  -> profit-book + force-close.
         Both range -20..+20; same thresholds -- the exit's extra sensitivity is from the weighting.
 
-          Flat: open from the SLOW slope_score (NO regime - removed 2026-10-27) - BUY when
-                slope_score >= ENTRY_S, SELL when <= -ENTRY_S, else WAIT. Single position,
-                cooldown-gated. (slope_direction is the dashboard's structural read only.)
+          Flat: open when the SLOW slope_score is directional AND the FAST exit_score agrees
+                (agreement gate, 2026-10-29) - BUY: slope_score >= ENTRY_S and exit_score >=
+                ENTRY_AGREE_S; SELL mirror; else WAIT. When the two scores disagree (chop) the bot
+                WAITS rather than open-and-instantly-force-close. Single position, cooldown-gated.
+                (slope_direction is the dashboard's structural read only.)
           Open:
             Exits (checked first; both on the FAST exit_score):
               - profit-book (variant A): once profit > times * PROFIT_PROTECT_USD_PER_UNIT, book when
@@ -215,10 +223,15 @@ class Strategy:
         exit_score = (4 * (m15r + m15m) + 3 * (h1r + h1m)
                       + 2 * (h4r + h4m) + 1 * (d1r + d1m))
 
-        # Fresh-entry direction from the weighted slope score (regime fully removed 2026-10-27 - a
-        # lagging level-regime that vetoed valid slope-based opens). Opens on score >= +ENTRY_S (BUY)
-        # / <= -ENTRY_S (SELL). (slope_direction is kept above only as the dashboard's structural read.)
-        entry_direction = self._entry_direction(slope_score)
+        # Fresh-entry direction: the SLOW slope_score must be directional AND the FAST exit_score must
+        # not oppose it (agreement gate, 2026-10-29). Opens BUY on slope_score >= +ENTRY_S & exit_score
+        # >= +ENTRY_AGREE_S; SELL mirror. Stops the open-then-instant-force-close "vibration": when the
+        # two scores disagree (chop) the bot WAITS instead of opening a false position. (slope_direction
+        # stays above only as the dashboard's structural read.)
+        entry_direction = self._entry_direction(slope_score, exit_score)
+        # Telemetry: the slow score alone WANTED in but the fast score vetoed it (chop) -> we're waiting.
+        slow_wants = 'BUY' if slope_score >= ENTRY_S else ('SELL' if slope_score <= -ENTRY_S else None)
+        entry_chop_block = bool(slow_wants and entry_direction is None)
 
         # DCA ladder gate (score-only). Average into a position only while the weighted score is not
         # strongly adverse: a BUY may add unless score <= -LADDER_S; a SELL unless score >= +LADDER_S.
@@ -308,6 +321,7 @@ class Strategy:
             'buy_add_ok': bool(buy_add_ok),
             'sell_add_ok': bool(sell_add_ok),
             'entry_allowed': bool(entry_allowed),
+            'entry_chop_block': bool(entry_chop_block),
             'exit_reason': exit_reason,
         }
 
