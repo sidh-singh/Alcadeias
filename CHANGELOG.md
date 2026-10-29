@@ -17,6 +17,34 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.6.2] — 2026-10-30 — Force-close one level less sensitive: FORCE_CLOSE_S 8 → 12 [_exp_h]
+
+**Branches:** all 4 `_h`. NOT the fleet. **Files touched:** `constants.py` (+ this `CHANGELOG.md`).
+**Baseline:** v3.6.1 head of each branch.
+
+**Why.** Owner wants the force-close to lag a bit more (hold the basket longer before capitulating).
+Bumped the threshold up "one level". On this weighted score one level = 4 (the strategy's historical
+force-close spacing, the old regime trio 12/8/4), so `FORCE_CLOSE_S` goes 8 → 12.
+
+### Behaviour change — threshold only (both scores, weights, and every other gate unchanged)
+- **Force-close:** BUY now `exit_score <= -12` (was −8); SELL `exit_score >= +12` (was +8). Still on
+  the FAST `exit_score = 4·M15 + 3·H1 + 2·H4 + 1·D1` (v3.6.0). Same for h6 and variant-A.
+- **Effect:** a full M15 reversal alone (−8) no longer force-closes — it now needs M15 **plus** ~another
+  full TF (e.g. H4 both) against, i.e. `exit_score ≤ −12`. More confirmation, later/laggier exit.
+  (Trade-off: a losing basket is held longer → larger worst-case adverse excursion before the cut.)
+- **Unchanged:** `ENTRY_S`/`ENTRY_AGREE_S`/`LADDER_S`, the agreement gate, the fast/slow score formulas,
+  the ladder, the h6 +$unit target, the 300 s cooldown.
+
+### Files
+- `constants.py`: `FORCE_CLOSE_S = 8` → `12` (+ comment). Nothing else — `strategy.py` reads the
+  constant, and `dashboard.py`'s exit meter draws the force-close line at ±`FORCE_CLOSE_S`, so both
+  pick up ±12 automatically.
+
+### Rollback
+Set `FORCE_CLOSE_S` back to `8`, or `git revert <this commit>`.
+
+---
+
 ## [v3.6.1] — 2026-10-29 — Entry agreement gate: stop the open-then-instant-close vibration [_exp_h]
 
 **Branches:** all 4 `_h` (h6 `rsimacd_h6_{btc,xau}usd1_wd_exp_h` + variant-A `rsimacd_{btc,xau}usd1_wd_exp_h`).
