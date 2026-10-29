@@ -75,8 +75,12 @@ ENTRY_AGREE_S = 0                    # agreement gate (2026-10-29): the FAST exi
                                     # bullish / fast bearish) -- the bot WAITS until the two agree.
 LADDER_S = 6                        # DCA ladder add blocked once slope_score is this far adverse
                                     # (BUY add needs slope_score > -6; SELL add needs < +6)
-FORCE_CLOSE_S = 8                   # force-close when EXIT_SCORE is this far AGAINST the basket
-                                    # (BUY close exit_score <= -8; SELL close exit_score >= +8)
+FORCE_CLOSE_S = 12                  # force-close when EXIT_SCORE is this far AGAINST the basket
+                                    # (BUY close exit_score <= -12; SELL close exit_score >= +12).
+                                    # Raised 8 -> 12 on 2026-10-30 (one "level" = 4, the strategy's
+                                    # historical force-close spacing 12/8/4) so the force-close LAGS
+                                    # more: a full M15 reversal alone (-8) no longer closes -- it now
+                                    # needs M15 + roughly another full TF (e.g. H4) against.
 BOOK_S = 4                          # profit-book (variant A): in profit, book when EXIT_SCORE
                                     # reverses this far against (BUY <= -4; SELL >= +4)
 
