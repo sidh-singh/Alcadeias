@@ -76,22 +76,17 @@ class Strategy:
 
     @staticmethod
     def _weighted_score(slopes, weights):
-        """Normalised -20..+20 weighted slope score for one section's {TF: weight} map (config-driven;
+        """RAW weighted slope score for one section's {TF: weight} map (config-driven; raw rescale
         2026-10-30). Each section (open / book / force-close) has its OWN timeframe set + weights in
         constants.py; add/remove a timeframe there.
-            raw   = Σ weight * (rsi_sign + macd_sign)   over the map  (each sign ∈ {-1,0,+1})
-            score = raw / (2 * Σ|weight|) * 20
-        Normalising to -20..+20 keeps the scale -- and therefore the thresholds (ENTRY_S/BOOK_S/
-        FORCE_CLOSE_S) -- INVARIANT as timeframes are added/removed from a section (a 1-TF section is
-        coarse, steps of 10, but still reaches its threshold). A missing/zero slope contributes 0; an
-        empty map -> 0.0. (FORCE_CLOSE keeps its original 4/3/2/1 set, Σ|w|=10, so its normalised score
-        equals the old raw exit_score exactly -- force-close behaviour is unchanged.)"""
-        total = sum(abs(w) for w in weights.values())
-        if not total:
-            return 0.0
-        raw = sum(w * (Strategy._slope_sign(slopes, tf, 'rsi') + Strategy._slope_sign(slopes, tf, 'macd'))
-                  for tf, w in weights.items())
-        return raw / (2.0 * total) * 20.0
+            score = Σ weight * (rsi_sign + macd_sign)   over the map  (each sign ∈ {-1,0,+1})
+        So the section's range is ±(2 * Σ|weight|): e.g. {'H4':1,'M5':1} -> -4..+4 ; {'M15':1} ->
+        -2..+2 ; the 4/3/2/1 force-close set -> -20..+20. Thresholds in constants.py are in these RAW
+        units, so change a section's timeframes and its range (and its threshold) move together -- the
+        dashboard gauge is scaled to ±(2*Σ|w|) per section to match. A missing/zero slope contributes
+        0; an empty map -> 0."""
+        return sum(w * (Strategy._slope_sign(slopes, tf, 'rsi') + Strategy._slope_sign(slopes, tf, 'macd'))
+                   for tf, w in weights.items())
 
     @staticmethod
     def _entry_direction(open_score, fc_score):

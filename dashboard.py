@@ -888,23 +888,31 @@ def _fmt_weights(weights):
     return ' + '.join(f'{w:g}·{tf}' for tf, w in weights.items()) if weights else '—'
 
 
-def _score_gauge(score):
-    """Horizontal −20…+20 threshold-meter for the OPEN score (config-driven timeframes; see
-    OPEN_SCORE_WEIGHTS) that drives fresh entry + the DCA ladder-add gate. (Exits run off the book /
-    force-close scores — see _exit_gauge.)
+def _score_axis(weights):
+    """Raw-score range for a section = ±(2·Σ|weight|) (e.g. {'H4':1,'M5':1} -> 4). The gauge axis is
+    scaled to this so the marker uses the full bar. Min 1 to avoid a zero-width gauge."""
+    return max(1.0, 2.0 * sum(abs(w) for w in (weights or {}).values()))
+
+
+def _score_gauge(score, axis):
+    """Horizontal −axis…+axis threshold-meter for the OPEN score (RAW weighted sum of config-driven
+    timeframes; see OPEN_SCORE_WEIGHTS) that drives fresh entry + the DCA ladder-add gate. `axis` =
+    ±(2·Σ|weight|) so the bar spans the section's real range. (Exits run off the book / force-close
+    scores — see _exit_gauge.)
     Diverging meter: a grey 'no-open' band spans −ENTRY_S…+ENTRY_S, BUY (+ENTRY_S) and SELL
     (−ENTRY_S) threshold lines mark where a position opens, the fill is coloured by zone
     (green BUY / grey within / red SELL) with the current-score marker on top, and the scale
-    is labelled −20 … 0 … +20. Colour is reinforced by position, the signed value and the zone
+    is labelled −axis … 0 … +axis. Colour is reinforced by position, the signed value and the zone
     chip (never colour-alone)."""
     try:
         s = float(score)
     except (TypeError, ValueError):
         s = 0.0
     thr = float(ENTRY_S)
+    ax = float(axis) if axis else 1.0
 
-    def pos(x):   # score -> % along the -20..+20 track (clamped)
-        return max(0.0, min(100.0, (x + 20.0) / 40.0 * 100.0))
+    def pos(x):   # score -> % along the -ax..+ax track (clamped)
+        return max(0.0, min(100.0, (x + ax) / (2.0 * ax) * 100.0))
 
     sell_pct, buy_pct, zero_pct, p = pos(-thr), pos(thr), pos(0), pos(s)
     if s >= 0:                                   # diverging fill, anchored at the 0 centre
@@ -919,7 +927,7 @@ def _score_gauge(score):
     else:
         col, zone_txt, zone_icon = COLORS['neutral'], f'WAIT · within ±{thr:.0f}', '⚪'
 
-    tip = f'score {s:+.0f}   ·   BUY ≥ +{thr:.0f}   ·   SELL ≤ −{thr:.0f}   ·   range −20…+20'
+    tip = f'score {s:+.0f}   ·   BUY ≥ +{thr:.0f}   ·   SELL ≤ −{thr:.0f}   ·   range −{ax:.0f}…+{ax:.0f}'
 
     def _tick(x_pct, label, edge=None):          # axis data-label at a % position
         st = {'position': 'absolute', 'fontSize': '0.5rem',
@@ -992,11 +1000,11 @@ def _score_gauge(score):
                     ]),
                     # axis data-labels (below the track)
                     html.Div(style={'position': 'relative', 'height': '12px', 'marginTop': '3px'}, children=[
-                        _tick(0, '−20', edge='left'),
+                        _tick(0, f'−{ax:.0f}', edge='left'),
                         _tick(sell_pct, f'−{thr:.0f}'),
                         _tick(zero_pct, '0'),
                         _tick(buy_pct, f'+{thr:.0f}'),
-                        _tick(0, '+20', edge='right'),
+                        _tick(0, f'+{ax:.0f}', edge='right'),
                     ]),
                 ]),
                 # zone chip (icon + label -> meaning is never colour-alone)
@@ -1009,22 +1017,24 @@ def _score_gauge(score):
     )
 
 
-def _exit_gauge(value, title, formula, thr, col, icon):
-    """Horizontal −20…+20 meter for ONE exit section's score (book or force-close; config-driven
-    timeframes). One threshold pair is marked at ±thr in `col`: beyond it the section ACTS (closes),
-    within it is HOLD (grey). The negative side closes a LONG, the positive side a SHORT; the fill +
-    marker show the live score. `title` (e.g. 'FORCE-CLOSE SCORE') and `formula` label the section;
-    `col`/`icon` give it its colour. Colour is always paired with the signed value, the threshold
-    number and the zone chip (never colour-alone)."""
+def _exit_gauge(value, title, formula, thr, col, icon, axis):
+    """Horizontal −axis…+axis meter for ONE exit section's score (book or force-close; RAW weighted sum
+    of config-driven timeframes). `axis` = ±(2·Σ|weight|) so the bar spans the section's real range.
+    One threshold pair is marked at ±thr in `col`: beyond it the section ACTS (closes), within it is
+    HOLD (grey). The negative side closes a LONG, the positive side a SHORT; the fill + marker show the
+    live score. `title` (e.g. 'FORCE-CLOSE SCORE') and `formula` label the section; `col`/`icon` give it
+    its colour. Colour is always paired with the signed value, the threshold number and the zone chip
+    (never colour-alone)."""
     try:
         s = float(value)
     except (TypeError, ValueError):
         s = 0.0
     t = float(thr)
+    ax = float(axis) if axis else 1.0
     name = title.split()[0]   # 'FORCE-CLOSE' / 'BOOK' for the chip
 
-    def pos(x):   # score -> % along the -20..+20 track (clamped)
-        return max(0.0, min(100.0, (x + 20.0) / 40.0 * 100.0))
+    def pos(x):   # score -> % along the -ax..+ax track (clamped)
+        return max(0.0, min(100.0, (x + ax) / (2.0 * ax) * 100.0))
 
     t_neg, t_pos = pos(-t), pos(t)
     zero_pct, p = pos(0), pos(s)
@@ -1041,7 +1051,7 @@ def _exit_gauge(value, title, formula, thr, col, icon):
         zcol, zone_txt, zone_icon = COLORS['neutral'], 'HOLD · within ±%.0f' % t, '⚪'
 
     tip = (f'{title.lower()} {s:+.0f}   ·   acts at ±{t:.0f}   ·   '
-           f'{("closes " + side) if side else "neutral"}   ·   range −20…+20')
+           f'{("closes " + side) if side else "neutral"}   ·   range −{ax:.0f}…+{ax:.0f}')
 
     def _tick(x_pct, label, edge=None):          # axis data-label at a % position
         st = {'position': 'absolute', 'fontSize': '0.5rem',
@@ -1121,9 +1131,9 @@ def _exit_gauge(value, title, formula, thr, col, icon):
                     ]),
                     # axis data-labels + side meaning (below the track)
                     html.Div(style={'position': 'relative', 'height': '12px', 'marginTop': '3px'}, children=[
-                        _tick(0, '◀ −20 LONG', edge='left'),
+                        _tick(0, f'◀ −{ax:.0f} LONG', edge='left'),
                         _tick(zero_pct, '0'),
-                        _tick(0, 'SHORT +20 ▶', edge='right'),
+                        _tick(0, f'SHORT +{ax:.0f} ▶', edge='right'),
                     ]),
                 ]),
                 # zone chip (icon + label -> meaning is never colour-alone)
@@ -1205,13 +1215,13 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                 ],
             ),
             # OPEN score meter (config-driven timeframes -> fresh entry + DCA ladder-add gate)
-            _score_gauge(open_score),
+            _score_gauge(open_score, _score_axis(OPEN_SCORE_WEIGHTS)),
             # BOOK score meter (variant A; config-driven -> profit-book)
             _exit_gauge(book_score, 'BOOK SCORE', _fmt_weights(BOOK_SCORE_WEIGHTS),
-                        BOOK_S, COLORS['warning'], '🟠'),
+                        BOOK_S, COLORS['warning'], '🟠', _score_axis(BOOK_SCORE_WEIGHTS)),
             # FORCE-CLOSE score meter (config-driven -> force-close)
             _exit_gauge(fc_score, 'FORCE-CLOSE SCORE', _fmt_weights(FORCE_CLOSE_SCORE_WEIGHTS),
-                        FORCE_CLOSE_S, COLORS['sell'], '🔴'),
+                        FORCE_CLOSE_S, COLORS['sell'], '🔴', _score_axis(FORCE_CLOSE_SCORE_WEIGHTS)),
             # slope grid (one row per fetched timeframe, slowest -> fastest; feeds the section scores)
             html.Div(style=grid_style, children=[
                 html.Span(''), html.Span('RSI', style=col_hdr), html.Span('MACD', style=col_hdr),
