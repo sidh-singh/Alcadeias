@@ -17,6 +17,64 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.7.0] — 2026-10-30 — Per-section configurable timeframes (OPEN / BOOK / FORCE-CLOSE) + M5 slope [_exp_h]
+
+**Branches:** all 4 `_h`. NOT the fleet. **Files touched:** `strategy.py`, `constants.py`, `dashboard.py`
+(+ this `CHANGELOG.md`). `app.py` untouched. **Baseline:** v3.6.2 head of each branch.
+
+**Why.** Owner wants to tune, on demo, WHICH timeframes drive each decision — independently per section —
+and to add/remove a timeframe easily. Experiment config: **open = H4 + M5** (M5 = a NEW 5-minute slope),
+**book = M15** (variant A only), **force-close = unchanged** (M15,H1,H4,D1). Replaces the two fixed
+formulas (slow `slope_score` / fast `exit_score`) with one score per section, each from its own
+config-driven timeframe set.
+
+### New model — three per-section scores, config-driven, normalised
+- `constants.py` gains three `{TF: weight}` dicts — **`OPEN_SCORE_WEIGHTS`** `{'H4':1,'M5':1}`,
+  **`BOOK_SCORE_WEIGHTS`** `{'M15':1}` (variant A only), **`FORCE_CLOSE_SCORE_WEIGHTS`**
+  `{'M15':4,'H1':3,'H4':2,'D1':1}`. **Add/remove a timeframe = edit the dict.**
+- `SLOPE_TIMEFRAMES` is now **auto-derived** from the union of those dicts, so a TF added to any section
+  is fetched (and dashboarded) automatically. Union here = D1,H4,H1,M15,M5. **M5 costs 0 extra MT5
+  calls** (already fetched for the RSI ladder).
+- New `Strategy._weighted_score(slopes, weights)` → **normalised −20..+20**:
+  `raw = Σ weight·(rsi_sign+macd_sign)`, `score = raw / (2·Σ|weight|) · 20`. Normalisation keeps the
+  −20..+20 scale (and the thresholds) **invariant when TFs are added/removed**. FORCE_CLOSE keeps its
+  4/3/2/1 set (Σ|w|=10) so its score == the old raw `exit_score` — **force-close behaviour unchanged**.
+
+### Per-decision wiring (thresholds unchanged: ENTRY_S 6 / ENTRY_AGREE_S 0 / LADDER_S 6 / FORCE_CLOSE_S 12 / BOOK_S 4)
+- **Entry:** `_entry_direction(open_score, fc_score)` — BUY: `open_score ≥ ENTRY_S` AND `fc_score ≥
+  ENTRY_AGREE_S` (agreement gate kept, now referencing the FORCE-CLOSE score — the thing that would
+  immediately close the new position); SELL mirror. `entry_chop_block` telemetry retained.
+- **DCA ladder-add gate:** now on `open_score` (`buy_add_ok = open_score > -LADDER_S`).
+- **Force-close:** on `fc_score` (`buy_fc = fc_score <= -FORCE_CLOSE_S`).
+- **Profit-book (variant A):** on `book_score` (`buy_pp = in-profit AND book_score <= -BOOK_S`).
+
+### Files
+- `strategy.py`: added `_weighted_score`; `_entry_direction(open_score, fc_score)`; replaced the two
+  fixed scores with `open_score`/`book_score`/`fc_score` from the section dicts; rewired entry / ladder
+  gate / force-close / book; `analysis_data` now carries `open_score`/`book_score`/`fc_score` (replacing
+  `score`/`exit_score`); imports the three weight dicts; docstrings rewritten.
+- `constants.py`: three `*_SCORE_WEIGHTS` dicts; `SLOPE_TIMEFRAMES` auto-derived from their union; gate
+  comments updated to the per-section model. Thresholds unchanged.
+- `dashboard.py`: `_score_gauge` → OPEN meter (dynamic formula from `OPEN_SCORE_WEIGHTS`); `_exit_gauge`
+  generalised to one `(value,title,formula,thr,col,icon)` single-threshold meter, rendered twice on
+  variant A (BOOK amber + FORCE-CLOSE red) and once on h6 (FORCE-CLOSE); new `_fmt_weights` helper; the
+  slope grid + pivot mini-charts now iterate the fetched timeframes (so **M5 shows automatically**).
+
+### Verified (both variants, inline)
+Scores normalise right (open H4+M5 both-up = +20; book M15 one-down = −10; fc M15+H1 down = −14, i.e.
+unchanged). Clean BUY opens; open-BUY while the force-close score opposes → WAIT + chop_block (agreement
+gate holds); force-close fires at fc ≤ −12; variant-A book fires at book ≤ −4 in profit.
+
+### How to tune (owner)
+Edit the dicts in `constants.py` — e.g. `OPEN_SCORE_WEIGHTS = {'H4':1,'H1':1,'M5':1}` to add H1 to the
+open. The TF is auto-fetched and dashboarded; the normalised thresholds keep working. ⚠ On **h6** the
+BOOK section does nothing (h6 books via the `+$unit` target); it has no `BOOK_SCORE_WEIGHTS`.
+
+### Rollback
+`git revert <this commit>`, or restore the three files from the v3.6.2 head.
+
+---
+
 ## [v3.6.2] — 2026-10-30 — Force-close one level less sensitive: FORCE_CLOSE_S 8 → 12 [_exp_h]
 
 **Branches:** all 4 `_h`. NOT the fleet. **Files touched:** `constants.py` (+ this `CHANGELOG.md`).
