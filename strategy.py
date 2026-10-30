@@ -75,7 +75,7 @@ class Strategy:
         return s if s in (-1, 0, 1) else 0
 
     @staticmethod
-    def _weighted_score(slopes, weights):
+    def _weighted_score(slopes, weights, grey_fill=False):
         """RAW weighted slope score for one section's {TF: weight} map (config-driven; raw rescale
         2026-10-30). Each section (open / book / force-close) has its OWN timeframe set + weights in
         constants.py; add/remove a timeframe there.
@@ -84,9 +84,26 @@ class Strategy:
         -2..+2 ; the 4/3/2/1 force-close set -> -20..+20. Thresholds in constants.py are in these RAW
         units, so change a section's timeframes and its range (and its threshold) move together -- the
         dashboard gauge is scaled to ±(2*Σ|w|) per section to match. A missing/zero slope contributes
-        0; an empty map -> 0."""
-        return sum(w * (Strategy._slope_sign(slopes, tf, 'rsi') + Strategy._slope_sign(slopes, tf, 'macd'))
-                   for tf, w in weights.items())
+        0; an empty map -> 0.
+
+        grey_fill (OPEN + BOOK; 2026-10-31): when EXACTLY ONE of a timeframe's two signs is 0 (grey --
+        its RSI or MACD is at a peak/plateau so the pivot slope is undefined), substitute the OTHER
+        sign for the grey one, so a timeframe that is clear on one indicator and grey on the other
+        counts as a FULL aligned vote (±2·w) instead of half. Both grey -> the timeframe stays 0, so a
+        fully-grey timeframe defers to the section's OTHER timeframes via the threshold (open fires only
+        if another timeframe is aligned, else WAIT). The FORCE-CLOSE score keeps RAW signs (grey_fill
+        off). grey_fill never changes the per-TF max (±2·w), so the section's range is unchanged."""
+        total = 0
+        for tf, w in weights.items():
+            r = Strategy._slope_sign(slopes, tf, 'rsi')
+            m = Strategy._slope_sign(slopes, tf, 'macd')
+            if grey_fill:
+                if r == 0 and m != 0:      # RSI grey -> borrow MACD's direction
+                    r = m
+                elif m == 0 and r != 0:    # MACD grey -> borrow RSI's direction
+                    m = r
+            total += w * (r + m)
+        return total
 
     @staticmethod
     def _entry_direction(open_score, fc_score):
@@ -211,13 +228,14 @@ class Strategy:
 
         slope_direction = self._slope_direction(slopes)   # structural 4H/1H/15M read (dashboard/compare only; entry uses the score)
 
-        # ── Per-section weighted slope scores (config-driven; 2026-10-30) ──
-        # Each decision section computes its OWN normalised -20..+20 score from its OWN timeframe set
-        # (constants.py: OPEN / BOOK / FORCE_CLOSE _SCORE_WEIGHTS). Add/remove a timeframe there; the
-        # normalisation keeps these thresholds meaningful regardless of how many TFs a section uses.
-        open_score = self._weighted_score(slopes, OPEN_SCORE_WEIGHTS)         # fresh entry + DCA ladder gate
-        book_score = self._weighted_score(slopes, BOOK_SCORE_WEIGHTS)         # profit-book (variant A)
-        fc_score = self._weighted_score(slopes, FORCE_CLOSE_SCORE_WEIGHTS)    # force-close
+        # ── Per-section RAW weighted slope scores (config-driven; 2026-10-30) ──
+        # Each decision section computes its OWN raw score, range ±(2*Σ|w|), from its OWN timeframe set
+        # (constants.py: OPEN / BOOK / FORCE_CLOSE _SCORE_WEIGHTS). Add/remove a timeframe there.
+        # OPEN + BOOK use grey_fill (a timeframe grey on one indicator borrows its other indicator's
+        # direction -> counts as a full vote); FORCE-CLOSE uses raw signs. See _weighted_score.
+        open_score = self._weighted_score(slopes, OPEN_SCORE_WEIGHTS, grey_fill=True)   # entry + ladder gate
+        book_score = self._weighted_score(slopes, BOOK_SCORE_WEIGHTS, grey_fill=True)   # profit-book (variant A)
+        fc_score = self._weighted_score(slopes, FORCE_CLOSE_SCORE_WEIGHTS)              # force-close (raw signs)
 
         # Fresh-entry direction: the OPEN score must be directional AND the FORCE-CLOSE score must not
         # oppose it (agreement gate). BUY: open_score >= +ENTRY_S & fc_score >= +ENTRY_AGREE_S; SELL

@@ -954,7 +954,7 @@ def _score_gauge(score, axis):
                 html.Span('OPEN SCORE', style={
                     'fontSize': '0.62rem', 'fontWeight': '700',
                     'color': COLORS['text_dim'], 'letterSpacing': '0.5px'}),
-                html.Span(f'opens at ±{thr:.0f} · {_fmt_weights(OPEN_SCORE_WEIGHTS)}', style={
+                html.Span(f'opens at ±{thr:.0f} · {_fmt_weights(OPEN_SCORE_WEIGHTS)} · grey-filled', style={
                     'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
             ]),
             # value + meter column + zone chip
@@ -1217,7 +1217,7 @@ def build_slope_panel(symbol, analysis, last_updated=''):
             # OPEN score meter (config-driven timeframes -> fresh entry + DCA ladder-add gate)
             _score_gauge(open_score, _score_axis(OPEN_SCORE_WEIGHTS)),
             # BOOK score meter (variant A; config-driven -> profit-book)
-            _exit_gauge(book_score, 'BOOK SCORE', _fmt_weights(BOOK_SCORE_WEIGHTS),
+            _exit_gauge(book_score, 'BOOK SCORE', _fmt_weights(BOOK_SCORE_WEIGHTS) + ' · grey-filled',
                         BOOK_S, COLORS['warning'], '🟠', _score_axis(BOOK_SCORE_WEIGHTS)),
             # FORCE-CLOSE score meter (config-driven -> force-close)
             _exit_gauge(fc_score, 'FORCE-CLOSE SCORE', _fmt_weights(FORCE_CLOSE_SCORE_WEIGHTS),
