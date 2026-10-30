@@ -17,6 +17,42 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.7.1] — 2026-10-30 — Raw per-section scores + per-section gauge rescale (behaviour-equivalent) [_exp_h]
+
+**Branches:** all 4 `_h`. NOT the fleet. **Files touched:** `strategy.py`, `constants.py`, `dashboard.py`
+(+ this `CHANGELOG.md`). `app.py` untouched. **Baseline:** v3.7.0 head of each branch.
+
+**Why.** With v3.7.0's −20..+20 normalisation, a 2-timeframe open produced a coarse score (jumped
+±5/±10/…) so the dashboard threshold lines sat between reachable marker positions and read oddly. Owner:
+keep the even 1/1 (open) weights and the weight system, but **make the score raw and rescale the gauges**
+so each section reads on its own real range.
+
+### Behaviour — UNCHANGED (this is a representation + dashboard change)
+`_weighted_score` now returns the **RAW** weighted sum (drops the `/(2·Σ|w|)·20` normalisation), so a
+section's range is ±(2·Σ|weight|): **OPEN ±4** (H4+M5), **FORCE-CLOSE ±20** (4/3/2/1). Thresholds were
+moved to the raw equivalents of the old normalised values **for the current config**, so every decision
+is identical:
+- `ENTRY_S` 6 → **2** (normalised ≥6 ⟺ raw ≥2), `LADDER_S` 6 → **2**, `FORCE_CLOSE_S` **12** (unchanged),
+  `ENTRY_AGREE_S` **0** (unchanged). (No `BOOK_S` on this pair — it books via the `+$unit` target.)
+- Verified: open H4+M5 both-up = +4 → BUY; fc M15+H1 down = −14 → close; chop (open +4 / fc −4) → WAIT;
+  the `+$unit` target still books. Same signals as v3.7.0.
+- ⚠ Trade-off (the reason v3.7.0 normalised): raw thresholds are in each section's own units, so when you
+  add/remove a timeframe the range changes and that section's threshold should be re-checked.
+
+### Files
+- `strategy.py`: `_weighted_score` returns the raw sum (no normalisation); docstring updated.
+- `constants.py`: `ENTRY_S`/`LADDER_S` → `2`/`2`; `FORCE_CLOSE_S`/`ENTRY_AGREE_S` unchanged; threshold +
+  weight-block comments rewritten for raw units.
+- `dashboard.py`: new `_score_axis(weights)` = ±(2·Σ|w|); `_score_gauge(score, axis)` and
+  `_exit_gauge(…, axis)` take a per-section axis (replaces the hard-coded −20..+20 track, tick labels,
+  tooltip range); `build_slope_panel` passes each section's axis (OPEN 4 / FC 20). Each gauge spans its
+  section's real range with the threshold lines at the right spots.
+
+### Rollback
+`git revert <this commit>` (returns to v3.7.0 normalised scores + −20..+20 gauges).
+
+---
+
 ## [v3.7.0] — 2026-10-30 — Per-section configurable timeframes (OPEN / FORCE-CLOSE) + M5 slope [_exp_h]
 
 **Branches:** all 4 `_h`. NOT the fleet. **Files touched:** `strategy.py`, `constants.py`, `dashboard.py`
