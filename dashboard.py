@@ -20,6 +20,7 @@ from constants import (
     STRATEGY_LOG_FILENAME,
     ACTIVE_CONFIG_FILENAME,
     ENTRY_S, BOOK_S, FORCE_CLOSE_S,
+    OPEN_SCORE_WEIGHTS, BOOK_SCORE_WEIGHTS, FORCE_CLOSE_SCORE_WEIGHTS,
 )
 
 # ─── Configuration ───
@@ -882,9 +883,15 @@ def _pivot_mini_graph(tf_label, g):
             'fontSize': '0.6rem', 'color': COLORS['text_muted'], 'padding': '6px 4px'})
 
 
+def _fmt_weights(weights):
+    """Render a section's {TF: weight} map as a compact formula, e.g. {'H4':1,'M5':1} -> '1·H4 + 1·M5'."""
+    return ' + '.join(f'{w:g}·{tf}' for tf, w in weights.items()) if weights else '—'
+
+
 def _score_gauge(score):
-    """Horizontal −20…+20 threshold-meter for the SLOW entry score (4·D1+3·H4+2·H1+1·M15) that
-    drives entry + the DCA ladder. (Exits run off the fast exit_score — see _exit_gauge.)
+    """Horizontal −20…+20 threshold-meter for the OPEN score (config-driven timeframes; see
+    OPEN_SCORE_WEIGHTS) that drives fresh entry + the DCA ladder-add gate. (Exits run off the book /
+    force-close scores — see _exit_gauge.)
     Diverging meter: a grey 'no-open' band spans −ENTRY_S…+ENTRY_S, BUY (+ENTRY_S) and SELL
     (−ENTRY_S) threshold lines mark where a position opens, the fill is coloured by zone
     (green BUY / grey within / red SELL) with the current-score marker on top, and the scale
@@ -936,10 +943,10 @@ def _score_gauge(score):
             # header: label + open-threshold note + formula
             html.Div(style={'display': 'flex', 'justifyContent': 'space-between',
                             'alignItems': 'baseline', 'marginBottom': '7px'}, children=[
-                html.Span('ENTRY SCORE', style={
+                html.Span('OPEN SCORE', style={
                     'fontSize': '0.62rem', 'fontWeight': '700',
                     'color': COLORS['text_dim'], 'letterSpacing': '0.5px'}),
-                html.Span(f'opens at ±{thr:.0f} · slow 4·D1 + 3·H4 + 2·H1 + 1·M15', style={
+                html.Span(f'opens at ±{thr:.0f} · {_fmt_weights(OPEN_SCORE_WEIGHTS)}', style={
                     'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
             ]),
             # value + meter column + zone chip
@@ -1002,24 +1009,24 @@ def _score_gauge(score):
     )
 
 
-def _exit_gauge(exit_score):
-    """Horizontal −20…+20 meter for the FAST exit score (4·M15+3·H1+2·H4+1·D1) that drives the two
-    exits. Two threshold pairs are marked: BOOK at ±BOOK_S (amber, books an in-profit basket) and
-    FORCE-CLOSE at ±FORCE_CLOSE_S (red, cuts the basket). The negative side closes a LONG, the
-    positive side closes a SHORT; the band fill deepens outward (grey hold → amber book → red
-    force-close) with the current-score marker on top. Colour is always paired with the signed
-    value, the threshold numbers and the zone chip (never colour-alone)."""
+def _exit_gauge(value, title, formula, thr, col, icon):
+    """Horizontal −20…+20 meter for ONE exit section's score (book or force-close; config-driven
+    timeframes). One threshold pair is marked at ±thr in `col`: beyond it the section ACTS (closes),
+    within it is HOLD (grey). The negative side closes a LONG, the positive side a SHORT; the fill +
+    marker show the live score. `title` (e.g. 'FORCE-CLOSE SCORE') and `formula` label the section;
+    `col`/`icon` give it its colour. Colour is always paired with the signed value, the threshold
+    number and the zone chip (never colour-alone)."""
     try:
-        s = float(exit_score)
+        s = float(value)
     except (TypeError, ValueError):
         s = 0.0
-    bk, fc = float(BOOK_S), float(FORCE_CLOSE_S)
+    t = float(thr)
+    name = title.split()[0]   # 'FORCE-CLOSE' / 'BOOK' for the chip
 
     def pos(x):   # score -> % along the -20..+20 track (clamped)
         return max(0.0, min(100.0, (x + 20.0) / 40.0 * 100.0))
 
-    fc_neg, bk_neg = pos(-fc), pos(-bk)
-    bk_pos, fc_pos = pos(bk), pos(fc)
+    t_neg, t_pos = pos(-t), pos(t)
     zero_pct, p = pos(0), pos(s)
     if s >= 0:                                   # diverging fill, anchored at the 0 centre
         fill_left, fill_width = zero_pct, p - zero_pct
@@ -1028,14 +1035,12 @@ def _exit_gauge(exit_score):
 
     mag = abs(s)
     side = 'LONG' if s < 0 else ('SHORT' if s > 0 else '')
-    if mag >= fc:                                # zone -> colour + label (severity grows outward)
-        col, zone_txt, zone_icon = COLORS['sell'], f'FORCE-CLOSE · closes {side}', '🔴'
-    elif mag >= bk:
-        col, zone_txt, zone_icon = COLORS['warning'], f'BOOK (if in profit) · {side}', '🟠'
+    if mag >= t:                                 # zone -> colour + label
+        zcol, zone_txt, zone_icon = col, f'{name} · closes {side}', icon
     else:
-        col, zone_txt, zone_icon = COLORS['neutral'], 'HOLD · within ±%.0f' % bk, '⚪'
+        zcol, zone_txt, zone_icon = COLORS['neutral'], 'HOLD · within ±%.0f' % t, '⚪'
 
-    tip = (f'exit {s:+.0f}   ·   book at ±{bk:.0f}   ·   force-close at ±{fc:.0f}   ·   '
+    tip = (f'{title.lower()} {s:+.0f}   ·   acts at ±{t:.0f}   ·   '
            f'{("closes " + side) if side else "neutral"}   ·   range −20…+20')
 
     def _tick(x_pct, label, edge=None):          # axis data-label at a % position
@@ -1069,25 +1074,23 @@ def _exit_gauge(exit_score):
             # header: label + threshold note + formula
             html.Div(style={'display': 'flex', 'justifyContent': 'space-between',
                             'alignItems': 'baseline', 'marginBottom': '7px'}, children=[
-                html.Span('EXIT SCORE', style={
+                html.Span(title, style={
                     'fontSize': '0.62rem', 'fontWeight': '700',
                     'color': COLORS['text_dim'], 'letterSpacing': '0.5px'}),
-                html.Span(f'book ±{bk:.0f} · close ±{fc:.0f} · fast 4·M15 + 3·H1 + 2·H4 + 1·D1',
+                html.Span(f'closes at ±{t:.0f} · {formula}',
                           style={'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
             ]),
             # value + meter column + zone chip
             html.Div(style={'display': 'flex', 'alignItems': 'center', 'gap': '10px'},
                      title=tip, children=[
                 html.Span(f'{s:+.0f}', style={
-                    'fontWeight': '800', 'fontSize': '1.25rem', 'color': col,
+                    'fontWeight': '800', 'fontSize': '1.25rem', 'color': zcol,
                     'minWidth': '42px', 'textAlign': 'right'}),
                 html.Div(style={'flex': '1'}, children=[
-                    # threshold labels (above the track): FC (red) + BOOK (amber), both sides
+                    # threshold labels (above the track), both sides
                     html.Div(style={'position': 'relative', 'height': '11px'}, children=[
-                        _thr_label(fc_neg, f'FC −{fc:.0f}', COLORS['sell']),
-                        _thr_label(bk_neg, f'BK −{bk:.0f}', COLORS['warning']),
-                        _thr_label(bk_pos, f'BK +{bk:.0f}', COLORS['warning']),
-                        _thr_label(fc_pos, f'FC +{fc:.0f}', COLORS['sell']),
+                        _thr_label(t_neg, f'−{t:.0f}', col),
+                        _thr_label(t_pos, f'+{t:.0f}', col),
                     ]),
                     # the track
                     html.Div(style={
@@ -1095,30 +1098,26 @@ def _exit_gauge(exit_score):
                         'background': COLORS['bg'], 'borderRadius': '6px',
                         'border': f'1px solid {COLORS["card_border"]}',
                     }, children=[
-                        # severity bands: grey hold (centre) · amber book · red force-close (edges)
-                        _band(bk_neg, bk_pos - bk_neg, COLORS['neutral'], '0.12'),
-                        _band(fc_neg, bk_neg - fc_neg, COLORS['warning'], '0.16'),
-                        _band(bk_pos, fc_pos - bk_pos, COLORS['warning'], '0.16'),
-                        _band(0, fc_neg, COLORS['sell'], '0.14'),
-                        _band(fc_pos, 100 - fc_pos, COLORS['sell'], '0.14'),
+                        # bands: grey hold (centre) · col = act zone (edges)
+                        _band(t_neg, t_pos - t_neg, COLORS['neutral'], '0.12'),
+                        _band(0, t_neg, col, '0.15'),
+                        _band(t_pos, 100 - t_pos, col, '0.15'),
                         # zone fill (rounded end, anchored at the 0 centre)
                         html.Div(style={'position': 'absolute', 'top': '1px', 'bottom': '1px',
                                         'left': f'{fill_left}%', 'width': f'{fill_width}%',
-                                        'background': col, 'borderRadius': '3px', 'opacity': '0.9'}),
+                                        'background': zcol, 'borderRadius': '3px', 'opacity': '0.9'}),
                         # 0 centre line (recessive)
                         html.Div(style={'position': 'absolute', 'left': f'{zero_pct}%', 'top': '-2px',
                                         'bottom': '-2px', 'width': '1px', 'background': COLORS['text_muted']}),
-                        # BOOK (amber) + FORCE-CLOSE (red) threshold lines (2px)
-                        _line(bk_neg, COLORS['warning'], '2px'),
-                        _line(bk_pos, COLORS['warning'], '2px'),
-                        _line(fc_neg, COLORS['sell'], '2px'),
-                        _line(fc_pos, COLORS['sell'], '2px'),
+                        # threshold lines (2px)
+                        _line(t_neg, col, '2px'),
+                        _line(t_pos, col, '2px'),
                         # current-score marker (2px surface ring so it reads over the fill)
                         html.Div(style={'position': 'absolute', 'left': f'{p}%', 'top': '50%',
                                         'transform': 'translate(-50%, -50%)', 'width': '11px',
-                                        'height': '11px', 'borderRadius': '50%', 'background': col,
+                                        'height': '11px', 'borderRadius': '50%', 'background': zcol,
                                         'border': f'2px solid {COLORS["card_solid"]}',
-                                        'boxShadow': f'0 0 0 1px {col}'}),
+                                        'boxShadow': f'0 0 0 1px {zcol}'}),
                     ]),
                     # axis data-labels + side meaning (below the track)
                     html.Div(style={'position': 'relative', 'height': '12px', 'marginTop': '3px'}, children=[
@@ -1129,9 +1128,9 @@ def _exit_gauge(exit_score):
                 ]),
                 # zone chip (icon + label -> meaning is never colour-alone)
                 html.Span(f'{zone_icon} {zone_txt}', style={
-                    'fontSize': '0.55rem', 'fontWeight': '700', 'color': col,
+                    'fontSize': '0.55rem', 'fontWeight': '700', 'color': zcol,
                     'background': COLORS['bg'], 'padding': '2px 8px', 'borderRadius': '9px',
-                    'border': f'1px solid {col}', 'whiteSpace': 'nowrap'}),
+                    'border': f'1px solid {zcol}', 'whiteSpace': 'nowrap'}),
             ]),
         ],
     )
@@ -1149,16 +1148,16 @@ def build_slope_panel(symbol, analysis, last_updated=''):
     rsi_mtf = analysis.get('rsi_mtf', {})
     rsi_graphs = analysis.get('rsi_graphs', {}) or {}
     macd_graphs = analysis.get('macd_graphs', {}) or {}
-    score = analysis.get('score', 0)
-    exit_score = analysis.get('exit_score', 0)
+    open_score = analysis.get('open_score', 0)
+    book_score = analysis.get('book_score', 0)
+    fc_score = analysis.get('fc_score', 0)
     iteration_ms = analysis.get('iteration_ms')
     src_count = analysis.get('source_candle_count', 0)
     src_last_time = analysis.get('last_source_candle_time', '-')
 
-    h1 = slopes.get('H1', {}) or {}
-    h4 = slopes.get('H4', {}) or {}
-    m15 = slopes.get('M15', {}) or {}
-    d1 = slopes.get('D1', {}) or {}   # part of the weighted score (weight 4)
+    # slope rows shown slowest -> fastest, limited to the timeframes actually fetched (= the union of
+    # the section timeframe sets); adding a TF to a section auto-adds its row + pivot charts here.
+    _tf_order = [tf for tf in ('D1', 'H4', 'H1', 'M30', 'M15', 'M5', 'M1') if tf in (slopes or {})]
 
     dec_color = {'BUY': COLORS['buy'], 'SELL': COLORS['sell']}.get(decision, COLORS['text_dim'])
     dec_icon = {'BUY': '🟢', 'SELL': '🔴'}.get(decision, '⚪')
@@ -1205,23 +1204,22 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                         'borderRadius': '10px'}),
                 ],
             ),
-            # Entry score meter (SLOW 4·D1+3·H4+2·H1+1·M15 -> entry + DCA ladder)
-            _score_gauge(score),
-            # Exit score meter (FAST 4·M15+3·H1+2·H4+1·D1 -> profit-book + force-close; thresholds marked)
-            _exit_gauge(exit_score),
-            # slope grid (rows D1 / H4 / H1 / M15; latest-pivot slopes feeding both scores)
+            # OPEN score meter (config-driven timeframes -> fresh entry + DCA ladder-add gate)
+            _score_gauge(open_score),
+            # BOOK score meter (variant A; config-driven -> profit-book)
+            _exit_gauge(book_score, 'BOOK SCORE', _fmt_weights(BOOK_SCORE_WEIGHTS),
+                        BOOK_S, COLORS['warning'], '🟠'),
+            # FORCE-CLOSE score meter (config-driven -> force-close)
+            _exit_gauge(fc_score, 'FORCE-CLOSE SCORE', _fmt_weights(FORCE_CLOSE_SCORE_WEIGHTS),
+                        FORCE_CLOSE_S, COLORS['sell'], '🔴'),
+            # slope grid (one row per fetched timeframe, slowest -> fastest; feeds the section scores)
             html.Div(style=grid_style, children=[
-                html.Span(''),
-                html.Span('RSI', style=col_hdr),
-                html.Span('MACD', style=col_hdr),
-                html.Span('D1', style=row_lbl),
-                _slope_cell(d1.get('rsi')), _slope_cell(d1.get('macd')),
-                html.Span('H4', style=row_lbl),
-                _slope_cell(h4.get('rsi')), _slope_cell(h4.get('macd')),
-                html.Span('H1', style=row_lbl),
-                _slope_cell(h1.get('rsi')), _slope_cell(h1.get('macd')),
-                html.Span('M15', style=row_lbl),
-                _slope_cell(m15.get('rsi')), _slope_cell(m15.get('macd')),
+                html.Span(''), html.Span('RSI', style=col_hdr), html.Span('MACD', style=col_hdr),
+                *[cell for tf in _tf_order for cell in (
+                    html.Span(tf, style=row_lbl),
+                    _slope_cell((slopes.get(tf, {}) or {}).get('rsi')),
+                    _slope_cell((slopes.get(tf, {}) or {}).get('macd')),
+                )],
             ]),
             # Pivot mini-charts — RSI (left) + MACD-hist (right) per timeframe:
             # series line + latest-pivot marker + dotted peak->current slope line
@@ -1234,14 +1232,10 @@ def build_slope_panel(symbol, analysis, last_updated=''):
                     'display': 'grid', 'gridTemplateColumns': '1fr 1fr',
                     'columnGap': '10px', 'rowGap': '2px',
                 }, children=[
-                    _pivot_mini_graph('D1', rsi_graphs.get('D1')),
-                    _pivot_mini_graph('D1', macd_graphs.get('D1')),
-                    _pivot_mini_graph('H4', rsi_graphs.get('H4')),
-                    _pivot_mini_graph('H4', macd_graphs.get('H4')),
-                    _pivot_mini_graph('H1', rsi_graphs.get('H1')),
-                    _pivot_mini_graph('H1', macd_graphs.get('H1')),
-                    _pivot_mini_graph('M15', rsi_graphs.get('M15')),
-                    _pivot_mini_graph('M15', macd_graphs.get('M15')),
+                    *[g for tf in _tf_order for g in (
+                        _pivot_mini_graph(tf, rsi_graphs.get(tf)),
+                        _pivot_mini_graph(tf, macd_graphs.get(tf)),
+                    )],
                 ]),
             ]),
             # Status (cooldown / exit reason)

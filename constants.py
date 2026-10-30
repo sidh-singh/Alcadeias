@@ -57,39 +57,48 @@ MACD_FAST = 12                      # fast EMA length (TradingView ta.macd defau
 MACD_SLOW = 26                      # slow EMA length
 MACD_SIGNAL = 9                     # signal EMA length
 
-# ─── Weighted-score gates (TWO asymmetric scores; NO regime) ───
-# "Enter slow, exit fast" (2026-10-28, variant-A `_h` only). Two weighted MTF slope scores, each
-# the same four TFs (RSI + MACD slope signs) but weighted opposite ways; both range -20..+20:
-#   slope_score (SLOW/trend) = 4*D1 + 3*H4 + 2*H1 + 1*M15   -> entry + DCA ladder gate
-#   exit_score  (FAST/react) = 4*M15 + 3*H1 + 2*H4 + 1*D1   -> profit-book + force-close
-# Entry/adds follow the slow trend (higher TF dominant); exits react on the fast score (M15 now
-# +/-8 vs +/-2) so profit is booked / a loss is cut on the short-term turn instead of lagging until
-# H1/H4 confirm. The level-based regime ("tide") was fully REMOVED 2026-10-27. Each gate is a single
-# score magnitude on the -20..+20 scale (all tunable on demo); the weights supply the sensitivity.
-ENTRY_S = 6                         # |slope_score| to OPEN (BUY >= +6 / SELL <= -6)
-ENTRY_AGREE_S = 0                    # agreement gate (2026-10-29): the FAST exit_score must not oppose
-                                    # the open -- BUY also needs exit_score >= +ENTRY_AGREE_S, SELL
-                                    # needs exit_score <= -ENTRY_AGREE_S. 0 = "fast score must merely
-                                    # not be against it"; raise to demand stronger fast agreement.
-                                    # Stops the open-then-instant-force-close vibration in chop (slow
-                                    # bullish / fast bearish) -- the bot WAITS until the two agree.
-LADDER_S = 6                        # DCA ladder add blocked once slope_score is this far adverse
-                                    # (BUY add needs slope_score > -6; SELL add needs < +6)
-FORCE_CLOSE_S = 12                  # force-close when EXIT_SCORE is this far AGAINST the basket
-                                    # (BUY close exit_score <= -12; SELL close exit_score >= +12).
-                                    # Raised 8 -> 12 on 2026-10-30 (one "level" = 4, the strategy's
-                                    # historical force-close spacing 12/8/4) so the force-close LAGS
-                                    # more: a full M15 reversal alone (-8) no longer closes -- it now
-                                    # needs M15 + roughly another full TF (e.g. H4) against.
-BOOK_S = 4                          # profit-book (variant A): in profit, book when EXIT_SCORE
-                                    # reverses this far against (BUY <= -4; SELL >= +4)
+# ─── Per-section score thresholds (NO regime) ───
+# Each decision SECTION has its OWN timeframe set (see *_SCORE_WEIGHTS below) whose score is
+# normalised to -20..+20, and ONE magnitude threshold here. Normalisation keeps these thresholds
+# meaningful no matter how many timeframes a section uses (so you can add/remove TFs freely).
+# All tunable on demo. (The regime/tide was fully REMOVED 2026-10-27.)
+ENTRY_S = 6                         # |open_score| to OPEN (BUY open_score >= +6 / SELL <= -6)
+ENTRY_AGREE_S = 0                    # agreement gate (2026-10-29): the FORCE-CLOSE score must not oppose
+                                    # the open -- BUY also needs fc_score >= +ENTRY_AGREE_S, SELL needs
+                                    # fc_score <= -ENTRY_AGREE_S. 0 = "force-close score must merely not
+                                    # be against it"; raise to demand stronger agreement. Stops the
+                                    # open-then-instant-force-close vibration -- the bot WAITS until the
+                                    # OPEN and FORCE-CLOSE scores agree.
+LADDER_S = 6                        # DCA ladder add blocked once OPEN score is this far adverse
+                                    # (BUY add needs open_score > -6; SELL add needs < +6)
+FORCE_CLOSE_S = 12                  # force-close when the FORCE-CLOSE score is this far AGAINST the
+                                    # basket (BUY close fc_score <= -12; SELL fc_score >= +12). Raised
+                                    # 8 -> 12 on 2026-10-30 so the force-close lags more.
+BOOK_S = 4                          # profit-book (variant A): in profit, book when the BOOK score
+                                    # reverses this far against (BUY book_score <= -4; SELL >= +4)
 
-# ─── Slope Engine (D1 + 4H + 1H + 15M pivot slopes -> both weighted scores) ───
-# The latest-pivot slope SIGN on each of these timeframes (RSI + MACD) feeds BOTH the slow
-# slope_score (4*D1 + 3*H4 + 2*H1 + 1*M15 -> entry/ladder) and the fast exit_score (4*M15 + 3*H1 +
-# 2*H4 + 1*D1 -> book/force-close). Same signs, opposite weights. No regime (removed 2026-10-27).
-# NOTE: unlike 15M, D1 is not fetched elsewhere, so including it = +1 MT5 rates call per loop.
-SLOPE_TIMEFRAMES = ['TIMEFRAME_M15', 'TIMEFRAME_H1', 'TIMEFRAME_H4', 'TIMEFRAME_D1']  # all four feed the score
+# ─── Per-section timeframe weights (config-driven; 2026-10-30) ───
+# Each decision SECTION builds its own weighted slope score from its OWN timeframes. TO TUNE:
+# add/remove a timeframe by editing its dict below -- 'TF': weight  (TF is the short key
+# M5 / M15 / H1 / H4 / D1; weight is any number). The score is the latest-pivot RSI + MACD slope
+# signs, weighted and NORMALISED to -20..+20 (see Strategy._weighted_score), so the thresholds above
+# (ENTRY_S / BOOK_S / FORCE_CLOSE_S) keep their meaning whatever timeframes a section uses.
+#   OPEN        -> fresh entry + the DCA ladder-add gate.
+#   BOOK        -> profit-book (variant A only; the h6 pair books via the +$unit target instead).
+#   FORCE_CLOSE -> force-close (kept at the original 4/3/2/1 set, so its score == the old exit_score).
+OPEN_SCORE_WEIGHTS        = {'H4': 1, 'M5': 1}                       # experiment 2026-10-30: H4 + M5 only
+BOOK_SCORE_WEIGHTS        = {'M15': 1}                              # experiment 2026-10-30: M15 only
+FORCE_CLOSE_SCORE_WEIGHTS = {'M15': 4, 'H1': 3, 'H4': 2, 'D1': 1}  # unchanged
+
+# ─── Slope fetch list (auto-derived) ───
+# Every timeframe named in ANY section above is fetched for slopes (app.py reads SLOPE_TIMEFRAMES),
+# so adding a TF to a section dict is enough -- it is fetched + shown on the dashboard automatically.
+# Order-preserving union, mapped short-key -> 'TIMEFRAME_<key>'.
+# NOTE: D1 is not fetched elsewhere, so including it costs +1 MT5 rates call per loop; M5/M15/H1/H4
+# are already fetched for the RSI ladder, so they are free.
+SLOPE_TIMEFRAMES = ['TIMEFRAME_' + _tf for _tf in dict.fromkeys(
+    _k for _d in (OPEN_SCORE_WEIGHTS, BOOK_SCORE_WEIGHTS, FORCE_CLOSE_SCORE_WEIGHTS) for _k in _d
+)]
 PEAK_LOOKBACK = 20                  # candles scanned for the latest pivot (configurable)
 PIVOT_WIDTH = 2                     # bars required on each side to confirm a pivot (k)
 # RSI pivots only count as real OB/OS turns inside these bands (MACD stays unbounded):
