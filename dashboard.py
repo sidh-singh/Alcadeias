@@ -954,7 +954,7 @@ def _score_gauge(score, axis):
                 html.Span('OPEN SCORE', style={
                     'fontSize': '0.62rem', 'fontWeight': '700',
                     'color': COLORS['text_dim'], 'letterSpacing': '0.5px'}),
-                html.Span(f'opens at ±{thr:.0f} · {_fmt_weights(OPEN_SCORE_WEIGHTS)}', style={
+                html.Span(f'opens at ±{thr:.0f} · {_fmt_weights(OPEN_SCORE_WEIGHTS)} · grey-filled', style={
                     'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
             ]),
             # value + meter column + zone chip
