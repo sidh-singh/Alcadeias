@@ -4,6 +4,7 @@ from constants import (
     FIBO_SEQUENCE_LENGTH,
     RSI_OVERSOLD, RSI_OVERBOUGHT,
     ENTRY_S, ENTRY_AGREE_S, LADDER_S, FORCE_CLOSE_S,
+    OPEN_SCORE_WEIGHTS, FORCE_CLOSE_SCORE_WEIGHTS,
 )
 
 
@@ -73,22 +74,40 @@ class Strategy:
         return s if s in (-1, 0, 1) else 0
 
     @staticmethod
-    def _entry_direction(score, exit_score):
-        """Fresh-entry direction. Opens only when the SLOW trend score is clearly directional AND the
-        FAST exit_score is NOT opposing it (agreement gate added 2026-10-29):
-          score >= ENTRY_S  and exit_score >= ENTRY_AGREE_S   -> BUY
-          score <= -ENTRY_S and exit_score <= -ENTRY_AGREE_S  -> SELL
-          else                                                -> WAIT
-        Why the gate: since v3.6.0 entry runs on the slow score but the force-close runs on the fast
-        exit_score, so in chop (slow bullish / fast bearish) the bot would open on the slow score and
-        force-close ~1-2s later on the fast score -- an open-and-instantly-close "vibration". Requiring
-        the fast score to agree means that during slow/fast disagreement the bot simply WAITS until the
-        chop settles (both scores point the same way), instead of churning out false trades. The
-        level-based regime was fully removed 2026-10-27; this is a score-only gate. ENTRY_AGREE_S is
-        tunable (0 = fast score must merely not oppose). Returns 'BUY' / 'SELL' / None."""
-        if score >= ENTRY_S and exit_score >= ENTRY_AGREE_S:
+    def _weighted_score(slopes, weights):
+        """Normalised -20..+20 weighted slope score for one section's {TF: weight} map (config-driven;
+        2026-10-30). Each section (open / force-close) has its OWN timeframe set + weights in
+        constants.py; add/remove a timeframe there.
+            raw   = Σ weight * (rsi_sign + macd_sign)   over the map  (each sign ∈ {-1,0,+1})
+            score = raw / (2 * Σ|weight|) * 20
+        Normalising to -20..+20 keeps the scale -- and therefore the thresholds (ENTRY_S/FORCE_CLOSE_S)
+        -- INVARIANT as timeframes are added/removed from a section (a 1-TF section is coarse, steps of
+        10, but still reaches its threshold). A missing/zero slope contributes 0; an empty map -> 0.0.
+        (FORCE_CLOSE keeps its original 4/3/2/1 set, Σ|w|=10, so its normalised score equals the old raw
+        exit_score exactly -- force-close behaviour is unchanged.)"""
+        total = sum(abs(w) for w in weights.values())
+        if not total:
+            return 0.0
+        raw = sum(w * (Strategy._slope_sign(slopes, tf, 'rsi') + Strategy._slope_sign(slopes, tf, 'macd'))
+                  for tf, w in weights.items())
+        return raw / (2.0 * total) * 20.0
+
+    @staticmethod
+    def _entry_direction(open_score, fc_score):
+        """Fresh-entry direction. Opens only when the OPEN score is clearly directional AND the
+        FORCE-CLOSE score is NOT opposing it (agreement gate, 2026-10-29, kept through the per-section
+        refactor 2026-10-30):
+          open_score >= ENTRY_S  and fc_score >= ENTRY_AGREE_S   -> BUY
+          open_score <= -ENTRY_S and fc_score <= -ENTRY_AGREE_S  -> SELL
+          else                                                   -> WAIT
+        Why the gate: entry runs on the OPEN score but the force-close runs on the FORCE-CLOSE score
+        (different timeframe sets), so when they disagree (chop) the bot would open and force-close
+        ~1-2s later -- an open-and-instantly-close "vibration". Requiring the force-close score not to
+        oppose means that during disagreement the bot simply WAITS. ENTRY_AGREE_S is tunable
+        (0 = force-close score must merely not oppose). Returns 'BUY' / 'SELL' / None."""
+        if open_score >= ENTRY_S and fc_score >= ENTRY_AGREE_S:
             return 'BUY'
-        if score <= -ENTRY_S and exit_score <= -ENTRY_AGREE_S:
+        if open_score <= -ENTRY_S and fc_score <= -ENTRY_AGREE_S:
             return 'SELL'
         return None
 
@@ -136,26 +155,26 @@ class Strategy:
                          rsi_value=None, rsi_mtf=None, slopes=None,
                          entry_allowed=True):
         """
-        RSI+MACD slope entry + RSI Fibo ladder; exits are the +$unit target or the fast-score
-        force-close (variant B). TWO weighted scores -- "enter slow, exit fast" (asymmetric
-        weighting added 2026-10-28):
-          - slope_score (SLOW, trend): 4*D1 + 3*H4 + 2*H1 + 1*M15  -> entry + ladder.
-          - exit_score  (FAST, react): 4*M15 + 3*H1 + 2*H4 + 1*D1  -> force-close.
-        Both range -20..+20; same FORCE_CLOSE_S threshold -- the force-close's extra sensitivity is
-        from the weighting. The +$unit profit target is a USD level, unaffected by either score.
+        RSI+MACD slope entry + RSI Fibo ladder; exits are the +$unit target or the force-close
+        (variant B). Per-section weighted scores, each from its OWN configurable timeframe set
+        (constants.py OPEN/FORCE_CLOSE_SCORE_WEIGHTS; 2026-10-30), each normalised to -20..+20 so its
+        threshold survives adding/removing a TF:
+          - open_score -> fresh entry + the DCA ladder-add gate   (default TFs: H4, M5)
+          - fc_score   -> force-close                             (default TFs: M15,H1,H4,D1 w4/3/2/1)
+        (No BOOK score on this pair -- profit books via the +$unit target, a USD level, not a score.)
 
-          Flat: open when the SLOW slope_score is directional AND the FAST exit_score agrees
-                (agreement gate, 2026-10-29) - BUY: slope_score >= ENTRY_S and exit_score >=
-                ENTRY_AGREE_S; SELL mirror; else WAIT. When the two scores disagree (chop) the bot
-                WAITS rather than open-and-instantly-force-close. Single position, cooldown-gated.
-                (slope_direction is the dashboard's structural read only.)
+          Flat: open when the OPEN score is directional AND the FORCE-CLOSE score agrees (agreement
+                gate) - BUY: open_score >= ENTRY_S and fc_score >= ENTRY_AGREE_S; SELL mirror; else
+                WAIT. When OPEN and FORCE-CLOSE disagree (chop) the bot WAITS rather than
+                open-and-instantly-force-close. Single position, cooldown-gated. (slope_direction is
+                the dashboard's structural read only.)
           Open (checked in order; closing has priority over adding):
             - +$unit target: basket profit > close_threshold (= unit) -> CLOSE (reason 'target').
-            - force-close (FAST exit_score): close when it is far enough against the basket -
-              BUY exit_score <= -FORCE_CLOSE_S, SELL >= +FORCE_CLOSE_S (reason 'force_close').
-            - RSI DCA ladder (gated on the SLOW slope_score): BUY_MORE/SELL_MORE at RSI 35/65, one
-              tier per count (1->M1, 2->M5, 3->M15, 4->H1, 5->H4), Fibo lot sizing; an add fires only
-              when slope_score is not strongly against the position.
+            - force-close (on fc_score): close when it is far enough against the basket -
+              BUY fc_score <= -FORCE_CLOSE_S, SELL >= +FORCE_CLOSE_S (reason 'force_close').
+            - RSI DCA ladder (gated on the OPEN score): BUY_MORE/SELL_MORE at RSI 35/65, one tier per
+              count (1->M1, 2->M5, 3->M15, 4->H1, 5->H4), Fibo lot sizing; an add fires only when
+              open_score is not strongly against the position.
             - else HOLD.
 
         Args:
@@ -165,8 +184,8 @@ class Strategy:
             close_threshold: USD basket profit target (= unit) for the +$unit close.
             rsi_value: current RSI (dashboard/logs).
             rsi_mtf: {timeframe_name: rsi_value} - drives the DCA ladder tiers.
-            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} for 15M/H1/H4 + D1 - all four
-                    TFs feed both the slow slope_score (entry/ladder) and the fast exit_score (force-close).
+            slopes: {tf: {'rsi': <pivot-slope>, 'macd': <pivot-slope>}} per fetched timeframe (the union
+                    of the section TF sets) - fed to _weighted_score for each section.
             entry_allowed: False during the post-close re-entry cooldown.
 
         Returns:
@@ -193,60 +212,39 @@ class Strategy:
         rsi_1h = rsi_mtf.get('TIMEFRAME_H1', 50.0) if rsi_mtf else 50.0
         rsi_4h = rsi_mtf.get('TIMEFRAME_H4', 50.0) if rsi_mtf else 50.0
 
-        # Slope signs for all four TFs (D1/H4/H1/15M -> the weighted score) + fresh-entry direction
-        h4r = self._slope_sign(slopes, 'H4', 'rsi')
-        h4m = self._slope_sign(slopes, 'H4', 'macd')
-        h1r = self._slope_sign(slopes, 'H1', 'rsi')
-        h1m = self._slope_sign(slopes, 'H1', 'macd')
-        m15r = self._slope_sign(slopes, 'M15', 'rsi')
-        m15m = self._slope_sign(slopes, 'M15', 'macd')
-        d1r = self._slope_sign(slopes, 'D1', 'rsi')
-        d1m = self._slope_sign(slopes, 'D1', 'macd')
         slope_direction = self._slope_direction(slopes)   # structural 4H/1H/15M read (dashboard/compare only; entry uses the score)
 
-        # ENTRY/LADDER score (the SLOW, trend-weighted read). S = 4*D1 + 3*H4 + 2*H1 + 1*M15, each
-        # TF = its RSI + MACD slope signs; range -20..+20 (negative = bearish). Higher (slower) TF
-        # dominates so fresh entries + DCA adds follow the trend, not 15-min noise. Drives entry and
-        # the ladder gate ONLY (the force-close uses the fast exit_score below). No regime (removed
-        # 2026-10-27). (Profit books on the +$unit target, which is a USD level, not a score.)
-        slope_score = (4 * (d1r + d1m) + 3 * (h4r + h4m)
-                       + 2 * (h1r + h1m) + 1 * (m15r + m15m))
+        # ── Per-section weighted slope scores (config-driven; 2026-10-30) ──
+        # Each decision section computes its OWN normalised -20..+20 score from its OWN timeframe set
+        # (constants.py: OPEN / FORCE_CLOSE _SCORE_WEIGHTS). Add/remove a timeframe there; the
+        # normalisation keeps these thresholds meaningful regardless of how many TFs a section uses.
+        # (This h6/variant-B pair books profit via the +$unit target -- a USD level, not a score -- so
+        # there is NO book score here.)
+        open_score = self._weighted_score(slopes, OPEN_SCORE_WEIGHTS)         # fresh entry + DCA ladder gate
+        fc_score = self._weighted_score(slopes, FORCE_CLOSE_SCORE_WEIGHTS)    # force-close
 
-        # EXIT score (the FAST, reaction-weighted read) -- the SAME four TFs with the weights REVERSED:
-        # S_exit = 4*M15 + 3*H1 + 2*H4 + 1*D1; range -20..+20. Here the fastest TF dominates, so a
-        # short-term reversal moves S_exit ~4x more than it moves slope_score (M15 now +/-8 vs +/-2).
-        # Added 2026-10-28 (h6/variant-B pair): the force-close on slope_score lagged -- the slow
-        # weights couldn't cross FORCE_CLOSE_S until H1/H4 confirmed, so a loss ran on. Drives the
-        # force-close ONLY; entry/ladder keep the slow slope_score ("enter slow, exit fast"). The +$unit
-        # profit target is untouched. Same threshold, same -20..+20 scale -- sensitivity is the weighting.
-        exit_score = (4 * (m15r + m15m) + 3 * (h1r + h1m)
-                      + 2 * (h4r + h4m) + 1 * (d1r + d1m))
+        # Fresh-entry direction: the OPEN score must be directional AND the FORCE-CLOSE score must not
+        # oppose it (agreement gate). BUY: open_score >= +ENTRY_S & fc_score >= +ENTRY_AGREE_S; SELL
+        # mirror. Stops the open-then-instant-force-close "vibration": when the OPEN and FORCE-CLOSE
+        # scores disagree (chop) the bot WAITS. (slope_direction stays as the dashboard structural read.)
+        entry_direction = self._entry_direction(open_score, fc_score)
+        # Telemetry: the OPEN score alone WANTED in but the force-close score vetoed it (chop) -> waiting.
+        open_wants = 'BUY' if open_score >= ENTRY_S else ('SELL' if open_score <= -ENTRY_S else None)
+        entry_chop_block = bool(open_wants and entry_direction is None)
 
-        # Fresh-entry direction: the SLOW slope_score must be directional AND the FAST exit_score must
-        # not oppose it (agreement gate, 2026-10-29). Opens BUY on slope_score >= +ENTRY_S & exit_score
-        # >= +ENTRY_AGREE_S; SELL mirror. Stops the open-then-instant-force-close "vibration": when the
-        # two scores disagree (chop) the bot WAITS instead of opening a false position. (slope_direction
-        # stays above only as the dashboard's structural read.)
-        entry_direction = self._entry_direction(slope_score, exit_score)
-        # Telemetry: the slow score alone WANTED in but the fast score vetoed it (chop) -> we're waiting.
-        slow_wants = 'BUY' if slope_score >= ENTRY_S else ('SELL' if slope_score <= -ENTRY_S else None)
-        entry_chop_block = bool(slow_wants and entry_direction is None)
+        # DCA ladder-add gate: average into a position only while the OPEN score is not strongly adverse
+        # -- a BUY may add unless open_score <= -LADDER_S; a SELL unless open_score >= +LADDER_S. An
+        # "add" is "opening more", so it follows the OPEN section. Blocks averaging down into a trend.
+        buy_add_ok = open_score > -LADDER_S
+        sell_add_ok = open_score < LADDER_S
 
-        # DCA ladder gate (score-only). Average into a position only while the weighted score is not
-        # strongly adverse: a BUY may add unless score <= -LADDER_S; a SELL unless score >= +LADDER_S.
-        # Blocks the "average down into a trend" half of the 2026-10 loss (that case scored -14, well
-        # past -LADDER_S).
-        buy_add_ok = slope_score > -LADDER_S
-        sell_add_ok = slope_score < LADDER_S
-
-        # Force-close (EXIT): close a basket when the FAST exit_score has moved far enough AGAINST it
-        # -- a BUY at exit_score <= -FORCE_CLOSE_S, a SELL at exit_score >= +FORCE_CLOSE_S. Uses the
-        # fast (M15-dominant) score so a loss is cut on the short-term reversal instead of waiting for
-        # the slow TFs to confirm. Single threshold, no regime. Tunable in constants.py.
-        # (No score profit-book on this h6/variant-B pair -- it books with the +$unit target below.)
-        buy_fc = exit_score <= -FORCE_CLOSE_S
+        # Force-close (EXIT): close a basket when the FORCE-CLOSE score has moved far enough AGAINST it
+        # -- a BUY at fc_score <= -FORCE_CLOSE_S, a SELL at fc_score >= +FORCE_CLOSE_S. Tunable in
+        # constants.py (threshold + the FORCE_CLOSE_SCORE_WEIGHTS timeframe set). Profit books via the
+        # +$unit target below -- no score profit-book on this h6/variant-B pair.
+        buy_fc = fc_score <= -FORCE_CLOSE_S
         buy_fc_reason = 'force_close'
-        sell_fc = exit_score >= FORCE_CLOSE_S
+        sell_fc = fc_score >= FORCE_CLOSE_S
         sell_fc_reason = 'force_close'
 
         if buy_count == 0 and sell_count == 0:
@@ -306,8 +304,8 @@ class Strategy:
             'slopes': slopes or {},
             'slope_direction': slope_direction or 'WAIT',
             'entry_direction': entry_direction or 'WAIT',
-            'score': slope_score,
-            'exit_score': exit_score,
+            'open_score': round(open_score, 1),
+            'fc_score': round(fc_score, 1),
             'buy_add_ok': bool(buy_add_ok),
             'sell_add_ok': bool(sell_add_ok),
             'entry_allowed': bool(entry_allowed),

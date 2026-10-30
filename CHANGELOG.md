@@ -17,6 +17,61 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.7.0] — 2026-10-30 — Per-section configurable timeframes (OPEN / FORCE-CLOSE) + M5 slope [_exp_h]
+
+**Branches:** all 4 `_h`. NOT the fleet. **Files touched:** `strategy.py`, `constants.py`, `dashboard.py`
+(+ this `CHANGELOG.md`). `app.py` untouched. **Baseline:** v3.6.2 head of each branch.
+
+**Why.** Owner wants to tune, on demo, WHICH timeframes drive each decision — independently per section —
+and to add/remove a timeframe easily. Experiment config: **open = H4 + M5** (M5 = a NEW 5-minute slope),
+**force-close = unchanged** (M15,H1,H4,D1). (The BOOK section is variant-A only; **this h6/variant-B pair
+books profit via the `+$unit` target**, a USD level, so it has no book score — unchanged.) Replaces the
+two fixed formulas (slow `slope_score` / fast `exit_score`) with one score per section.
+
+### New model — per-section scores, config-driven, normalised
+- `constants.py` gains `{TF: weight}` dicts — **`OPEN_SCORE_WEIGHTS`** `{'H4':1,'M5':1}` and
+  **`FORCE_CLOSE_SCORE_WEIGHTS`** `{'M15':4,'H1':3,'H4':2,'D1':1}`. **Add/remove a timeframe = edit the
+  dict.** (No `BOOK_SCORE_WEIGHTS` on this pair.)
+- `SLOPE_TIMEFRAMES` is now **auto-derived** from the union of those dicts, so a TF added to any section
+  is fetched (and dashboarded) automatically. Union here = D1,H4,H1,M15,M5. **M5 costs 0 extra MT5
+  calls** (already fetched for the RSI ladder).
+- New `Strategy._weighted_score(slopes, weights)` → **normalised −20..+20**:
+  `raw = Σ weight·(rsi_sign+macd_sign)`, `score = raw / (2·Σ|weight|) · 20`. Normalisation keeps the
+  −20..+20 scale (and the thresholds) **invariant when TFs are added/removed**. FORCE_CLOSE keeps its
+  4/3/2/1 set (Σ|w|=10) so its score == the old raw `exit_score` — **force-close behaviour unchanged**.
+
+### Per-decision wiring (thresholds unchanged: ENTRY_S 6 / ENTRY_AGREE_S 0 / LADDER_S 6 / FORCE_CLOSE_S 12)
+- **Entry:** `_entry_direction(open_score, fc_score)` — BUY: `open_score ≥ ENTRY_S` AND `fc_score ≥
+  ENTRY_AGREE_S` (agreement gate kept, now referencing the FORCE-CLOSE score); SELL mirror.
+- **DCA ladder-add gate:** now on `open_score`. **Force-close:** on `fc_score`.
+- **Profit exit:** the `+$unit` target (`basket profit > close_threshold`) — **unchanged**, checked first.
+
+### Files
+- `strategy.py`: added `_weighted_score`; `_entry_direction(open_score, fc_score)`; replaced the two
+  fixed scores with `open_score`/`fc_score`; rewired entry / ladder gate / force-close; the `+$unit`
+  target is untouched; `analysis_data` now carries `open_score`/`fc_score` (replacing `score`/
+  `exit_score`); imports the two weight dicts; docstrings rewritten.
+- `constants.py`: `OPEN_SCORE_WEIGHTS` + `FORCE_CLOSE_SCORE_WEIGHTS`; `SLOPE_TIMEFRAMES` auto-derived
+  from their union; gate comments updated to the per-section model. Thresholds unchanged.
+- `dashboard.py`: `_score_gauge` → OPEN meter (dynamic formula); `_exit_gauge` generalised to one
+  `(value,title,formula,thr,col,icon)` single-threshold meter, used for the FORCE-CLOSE meter; new
+  `_fmt_weights` helper; the slope grid + pivot mini-charts now iterate the fetched timeframes (so
+  **M5 shows automatically**). No BOOK meter on this pair.
+
+### Verified (inline)
+Scores normalise right (open H4+M5 both-up = +20; fc M15+H1 down = −14, unchanged). Clean BUY opens;
+open-BUY while the force-close score opposes → WAIT (agreement gate holds); force-close fires at
+fc ≤ −12; the `+$unit` target still books in profit.
+
+### How to tune (owner)
+Edit the dicts in `constants.py` — e.g. `OPEN_SCORE_WEIGHTS = {'H4':1,'H1':1,'M5':1}` to add H1 to the
+open. The TF is auto-fetched + dashboarded; the normalised thresholds keep working.
+
+### Rollback
+`git revert <this commit>`, or restore the three files from the v3.6.2 head.
+
+---
+
 ## [v3.6.2] — 2026-10-30 — Force-close one level less sensitive: FORCE_CLOSE_S 8 → 12 [_exp_h]
 
 **Branches:** all 4 `_h`. NOT the fleet. **Files touched:** `constants.py` (+ this `CHANGELOG.md`).
