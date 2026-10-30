@@ -17,6 +17,51 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.8.0] — 2026-10-31 — Grey-fill: a grey indicator borrows the other's direction (OPEN + BOOK) [_exp_h]
+
+**Branches:** all 4 `_h`. NOT the fleet. **Files touched:** `strategy.py`, `dashboard.py` (+ this
+`CHANGELOG.md`). `constants.py` + `app.py` untouched. **Baseline:** v3.7.1 head of each branch.
+
+**Why.** A timeframe's RSI or MACD slope reads 0 ("grey") when that indicator is at a peak/plateau (no
+defined pivot slope). With only 2 open-timeframes / 1 book-timeframe, a grey sign wasted half the
+timeframe's vote. Owner: when one of a timeframe's two signs is grey, treat it as agreeing with the
+other.
+
+### New rule — grey-fill (OPEN + BOOK scores only; FORCE-CLOSE unchanged, raw)
+`Strategy._weighted_score(slopes, weights, grey_fill=False)` gains `grey_fill`. Per timeframe, when
+EXACTLY ONE of (rsi_sign, macd_sign) is 0:
+- RSI grey → borrow the MACD sign for RSI; MACD grey → borrow the RSI sign for MACD. So a timeframe
+  clear on one indicator + grey on the other counts as a **full aligned vote (±2·w)** instead of half.
+- **Both** grey → the timeframe stays 0 (contributes nothing), so a fully-grey timeframe defers to the
+  section's OTHER timeframes via the threshold: the open fires only if another timeframe is aligned,
+  else it WAITs. (For BOOK there is only M15, so both-grey → score 0 → no book.)
+- A split (one +, one −; neither grey) is unchanged → 0.
+`open_score` and `book_score` are now computed with `grey_fill=True`; `fc_score` stays raw (force-close
+keeps the literal slope signs, as before). grey_fill never changes a timeframe's max (±2·w), so the
+section ranges/axes are unchanged (OPEN ±4 / BOOK ±2 / FC ±20).
+
+### Behaviour
+- More decisive in grey conditions: e.g. OPEN with H4 (+1,0) + M5 (+1,+1) now scores +4 (was +3); a
+  single half-grey-but-aligned timeframe with the other fully grey now reaches ENTRY_S and opens where
+  before it stalled. This is the intended change (don't waste a grey vote). Entry still needs the
+  force-close score not to oppose (agreement gate, on the raw fc_score — unchanged).
+- Thresholds unchanged (ENTRY_S 2 / LADDER_S 2 / BOOK_S 1 / FORCE_CLOSE_S 12 / ENTRY_AGREE_S 0); weights
+  unchanged. Verified inline: H4(+1,0)+M5(+1,+1)→+4 BUY; H4(0,+1)+M5 both-grey→+2 BUY; H4 both-grey +
+  M5 split→0 WAIT; BOOK M15(−1,0)→−2; FC M15(−1,0) stays raw −4 (not grey-filled).
+
+### Files
+- `strategy.py`: `_weighted_score` grows the `grey_fill` branch; `open_score`/`book_score` call it with
+  `grey_fill=True`, `fc_score` without; docstrings/comments updated (also fixed a stale "normalised"
+  comment left from v3.7.1).
+- `dashboard.py`: OPEN + BOOK gauge formula labels now end with "· grey-filled" so the rule is visible;
+  no logic/axis change (the gauges already read the computed scores).
+
+### Rollback
+`git revert <this commit>`, or drop `grey_fill=True` from the `open_score`/`book_score` calls (returns
+to v3.7.1 raw signs).
+
+---
+
 ## [v3.7.1] — 2026-10-30 — Raw per-section scores + per-section gauge rescale (behaviour-equivalent) [_exp_h]
 
 **Branches:** all 4 `_h`. NOT the fleet. **Files touched:** `strategy.py`, `constants.py`, `dashboard.py`
