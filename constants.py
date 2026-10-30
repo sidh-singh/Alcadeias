@@ -57,32 +57,36 @@ MACD_FAST = 12                      # fast EMA length (TradingView ta.macd defau
 MACD_SLOW = 26                      # slow EMA length
 MACD_SIGNAL = 9                     # signal EMA length
 
-# ─── Per-section score thresholds (NO regime) ───
-# Each decision SECTION has its OWN timeframe set (see *_SCORE_WEIGHTS below) whose score is
-# normalised to -20..+20, and ONE magnitude threshold here. Normalisation keeps these thresholds
-# meaningful no matter how many timeframes a section uses (so you can add/remove TFs freely).
-# All tunable on demo. (The regime/tide was fully REMOVED 2026-10-27.)
-ENTRY_S = 6                         # |open_score| to OPEN (BUY open_score >= +6 / SELL <= -6)
+# ─── Per-section score thresholds (RAW units; NO regime) ───
+# Each decision SECTION has its OWN timeframe set (see *_SCORE_WEIGHTS below); its score is the RAW
+# weighted sum, range ±(2*Σ|weight|). These thresholds are in those RAW units, so they move WITH the
+# section's timeframes -- change a section's TFs and re-check its threshold. (Raw rescale 2026-10-30;
+# values below are the raw equivalents of the previous normalised 6/6/12/4 for the current config, so
+# behaviour is unchanged.) All tunable on demo. (The regime/tide was fully REMOVED 2026-10-27.)
+ENTRY_S = 2                         # |open_score| to OPEN. OPEN range is ±4 (H4+M5, w1+w1); +2 = one
+                                    # timeframe fully aligned (or both half). BUY open_score >= +2 / SELL <= -2.
 ENTRY_AGREE_S = 0                    # agreement gate (2026-10-29): the FORCE-CLOSE score must not oppose
                                     # the open -- BUY also needs fc_score >= +ENTRY_AGREE_S, SELL needs
                                     # fc_score <= -ENTRY_AGREE_S. 0 = "force-close score must merely not
                                     # be against it"; raise to demand stronger agreement. Stops the
                                     # open-then-instant-force-close vibration -- the bot WAITS until the
                                     # OPEN and FORCE-CLOSE scores agree.
-LADDER_S = 6                        # DCA ladder add blocked once OPEN score is this far adverse
-                                    # (BUY add needs open_score > -6; SELL add needs < +6)
+LADDER_S = 2                        # DCA ladder add blocked once OPEN score is this far adverse
+                                    # (BUY add needs open_score > -2; SELL add needs < +2)
 FORCE_CLOSE_S = 12                  # force-close when the FORCE-CLOSE score is this far AGAINST the
-                                    # basket (BUY close fc_score <= -12; SELL fc_score >= +12). Raised
-                                    # 8 -> 12 on 2026-10-30 so the force-close lags more.
-BOOK_S = 4                          # profit-book (variant A): in profit, book when the BOOK score
-                                    # reverses this far against (BUY book_score <= -4; SELL >= +4)
+                                    # basket. FORCE-CLOSE range is ±20 (4/3/2/1). BUY close fc_score
+                                    # <= -12; SELL fc_score >= +12. (Unchanged by the raw rescale.)
+BOOK_S = 1                          # profit-book (variant A): in profit, book when the BOOK score
+                                    # reverses this far against. BOOK range is ±2 (M15, w1); +-1 = one
+                                    # M15 sign. BUY book_score <= -1; SELL >= +1.
 
 # ─── Per-section timeframe weights (config-driven; 2026-10-30) ───
 # Each decision SECTION builds its own weighted slope score from its OWN timeframes. TO TUNE:
 # add/remove a timeframe by editing its dict below -- 'TF': weight  (TF is the short key
-# M5 / M15 / H1 / H4 / D1; weight is any number). The score is the latest-pivot RSI + MACD slope
-# signs, weighted and NORMALISED to -20..+20 (see Strategy._weighted_score), so the thresholds above
-# (ENTRY_S / BOOK_S / FORCE_CLOSE_S) keep their meaning whatever timeframes a section uses.
+# M5 / M15 / H1 / H4 / D1; weight is any number). The score is the RAW weighted sum of the latest-pivot
+# RSI + MACD slope signs (see Strategy._weighted_score), range ±(2*Σ|weight|); the thresholds above are
+# in those raw units + the dashboard gauge is scaled to ±(2*Σ|weight|) per section, so both move with
+# the timeframes -- change a section's TFs and re-check its threshold.
 #   OPEN        -> fresh entry + the DCA ladder-add gate.
 #   BOOK        -> profit-book (variant A only; the h6 pair books via the +$unit target instead).
 #   FORCE_CLOSE -> force-close (kept at the original 4/3/2/1 set, so its score == the old exit_score).
