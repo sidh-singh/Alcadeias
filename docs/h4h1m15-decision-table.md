@@ -1,5 +1,14 @@
 # RSI+MACD Slope Entry — 4H × 1H × 15M Decision Table  (`_wd` / without-daily branch)
 
+> **⚠ CURRENT STATE (2026-11-13) — the structural `_slope_direction` table below is HISTORICAL; it is
+> now the dashboard "structural" read only, NOT the live decision.** On these `netting_`/`hedging_`
+> deployment branches the LIVE entry/exit is score-based (per-section weighted slope scores — see
+> `weighted-regime-redesign.md` + `CHANGELOG.md` v3.9.x): **open** on H1+M15 (`open_score >= ENTRY_S=2`
+> AND the M15 force-close score fully agrees, `ENTRY_AGREE_S=2` — anti-vibration); **force-close** on an
+> M15-only reversal (`fc_score <= -FORCE_CLOSE_S`, `FORCE_CLOSE_S=1`); [netting] in-profit **book** on
+> M15 (`BOOK_S=1`) / [hedging] **book** via the `+$unit` target; the DCA RSI Fibo ladder is unchanged.
+> Timeframes/weights live in `constants.py` (`OPEN/BOOK/FORCE_CLOSE_SCORE_WEIGHTS`).
+
 Entry **direction** (fresh entry only) is decided by `strategy._slope_direction()` from
 **three** timeframes. **D1 does NOT enter the entry decision** — entry is purely the 4H/1H/15M
 cascade (**4H primary / 1H confirm / 15M trigger**): 4H sets the bias, 1H confirms it, and 15M
