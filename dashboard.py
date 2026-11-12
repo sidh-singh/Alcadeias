@@ -19,7 +19,7 @@ from constants import (
     GRAPH_TEXT_LABEL_THRESHOLD, GRAPH_CUM_LABEL_THRESHOLD,
     STRATEGY_LOG_FILENAME,
     ACTIVE_CONFIG_FILENAME,
-    ENTRY_S, FORCE_CLOSE_S,
+    ENTRY_S, ENTRY_AGREE_S, FORCE_CLOSE_S,
     OPEN_SCORE_WEIGHTS, FORCE_CLOSE_SCORE_WEIGHTS,
 )
 
@@ -1017,7 +1017,7 @@ def _score_gauge(score, axis):
     )
 
 
-def _exit_gauge(value, title, formula, thr, col, icon, axis):
+def _exit_gauge(value, title, formula, thr, col, icon, axis, entry_agree=None):
     """Horizontal −axis…+axis meter for ONE exit section's score (book or force-close; RAW weighted sum
     of config-driven timeframes). `axis` = ±(2·Σ|weight|) so the bar spans the section's real range.
     One threshold pair is marked at ±thr in `col`: beyond it the section ACTS (closes), within it is
@@ -1037,6 +1037,13 @@ def _exit_gauge(value, title, formula, thr, col, icon, axis):
         return max(0.0, min(100.0, (x + ax) / (2.0 * ax) * 100.0))
 
     t_neg, t_pos = pos(-t), pos(t)
+    # entry-agreement marks (force-close meter only): a NEW trade may OPEN only where the force-close
+    # score FULLY agrees (|fc_score| >= ENTRY_AGREE_S) -- drawn in green at ±entry_agree, outside the
+    # red ±thr close lines.
+    _ea = float(entry_agree) if entry_agree is not None else None
+    ea_neg = pos(-_ea) if _ea is not None else None
+    ea_pos = pos(_ea) if _ea is not None else None
+    _buycol = COLORS['buy']
     zero_pct, p = pos(0), pos(s)
     if s >= 0:                                   # diverging fill, anchored at the 0 centre
         fill_left, fill_width = zero_pct, p - zero_pct
@@ -1087,8 +1094,12 @@ def _exit_gauge(value, title, formula, thr, col, icon, axis):
                 html.Span(title, style={
                     'fontSize': '0.62rem', 'fontWeight': '700',
                     'color': COLORS['text_dim'], 'letterSpacing': '0.5px'}),
-                html.Span(f'closes at ±{t:.0f} · {formula}',
-                          style={'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
+                html.Span([
+                    f'closes at ±{t:.0f}',
+                    html.Span(f' · opens at ±{_ea:.0f}',
+                              style={'color': _buycol, 'fontWeight': '700'}) if _ea is not None else '',
+                    f' · {formula}',
+                ], style={'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
             ]),
             # value + meter column + zone chip
             html.Div(style={'display': 'flex', 'alignItems': 'center', 'gap': '10px'},
@@ -1119,9 +1130,12 @@ def _exit_gauge(value, title, formula, thr, col, icon, axis):
                         # 0 centre line (recessive)
                         html.Div(style={'position': 'absolute', 'left': f'{zero_pct}%', 'top': '-2px',
                                         'bottom': '-2px', 'width': '1px', 'background': COLORS['text_muted']}),
-                        # threshold lines (2px)
+                        # threshold lines (2px): red = close (±thr); green = entry-agree (±ENTRY_AGREE_S,
+                        # where a new trade may OPEN) -- force-close meter only
                         _line(t_neg, col, '2px'),
                         _line(t_pos, col, '2px'),
+                        *([_line(ea_neg, _buycol, '2px'), _line(ea_pos, _buycol, '2px')]
+                          if _ea is not None else []),
                         # current-score marker (2px surface ring so it reads over the fill)
                         html.Div(style={'position': 'absolute', 'left': f'{p}%', 'top': '50%',
                                         'transform': 'translate(-50%, -50%)', 'width': '11px',
@@ -1217,7 +1231,8 @@ def build_slope_panel(symbol, analysis, last_updated=''):
             _score_gauge(open_score, _score_axis(OPEN_SCORE_WEIGHTS)),
             # FORCE-CLOSE score meter (config-driven -> force-close; +$unit target books profit)
             _exit_gauge(fc_score, 'FORCE-CLOSE SCORE', _fmt_weights(FORCE_CLOSE_SCORE_WEIGHTS),
-                        FORCE_CLOSE_S, COLORS['sell'], '🔴', _score_axis(FORCE_CLOSE_SCORE_WEIGHTS)),
+                        FORCE_CLOSE_S, COLORS['sell'], '🔴', _score_axis(FORCE_CLOSE_SCORE_WEIGHTS),
+                        entry_agree=ENTRY_AGREE_S),
             # slope grid (one row per fetched timeframe, slowest -> fastest; feeds the section scores)
             html.Div(style=grid_style, children=[
                 html.Span(''), html.Span('RSI', style=col_hdr), html.Span('MACD', style=col_hdr),
