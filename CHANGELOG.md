@@ -17,6 +17,72 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.1] — 2026-11-13 — Anti-vibration: entry requires full M15 agreement (ENTRY_AGREE_S 0 -> 2) [netting/hedging deploy]
+
+**Branches:** all 40 `netting_`/`hedging_` deployment branches (btc+xau × slot 1-10). NOT the fleet,
+NOT the rsimacd `_h` sources. **Files touched:** `constants.py` (+ this `CHANGELOG.md` +
+`docs/weighted-regime-redesign.md` + `docs/h4h1m15-decision-table.md` current-state notes).
+`strategy.py` untouched. **Baseline:** v3.9.0 head of each branch.
+
+**Why.** After v3.9.0 the baskets "vibrated" — opened a small position and force-closed it ~1-2s later,
+repeatedly. Root cause: v3.9.0's M15-only force-close at `FORCE_CLOSE_S=1` fires on a single M15
+half-reversal, and M15 slopes move intrabar with live price; the entry agreement gate (v3.6.1) only
+required the force-close score to NOT oppose (`ENTRY_AGREE_S=0`), so a fresh entry opened at
+`fc_score = 0`/+1 was force-closed by the very next adverse tick. `ENTRY_AGREE_S=0` had been calibrated
+for the pre-v3.9.0 multi-timeframe force-close (threshold 12), which one M15 tick couldn't trip.
+
+### Changed (one constant)
+- `ENTRY_AGREE_S`: `0` -> **`2`**. A new trade opens only when the M15 force-close score FULLY agrees
+  with it (both M15 slopes on-side): BUY needs `fc_score >= +2`, SELL `fc_score <= -2`. A fresh entry
+  then sits 3 levels from the close trigger (`FORCE_CLOSE_S=1`), so an ordinary single-indicator M15
+  tick can no longer round-trip it; during disagreement the bot WAITS (telemetry `entry_chop_block`).
+  `ENTRY_S` / `LADDER_S` / `FORCE_CLOSE_S` / `BOOK_S` / weights / ladder / exits / 300s cooldown all
+  unchanged — the gate only adds a condition to OPENING. Identical on netting (variant A) and hedging (h6).
+- Residual: a single tick flipping BOTH M15 slopes at once (a sharp bar) can still close a fresh entry;
+  full elimination would need a min-hold-after-open timer (offered, not taken).
+
+### Files
+- `constants.py`: `ENTRY_AGREE_S` 0 -> 2 + comment.
+- `docs/weighted-regime-redesign.md`, `docs/h4h1m15-decision-table.md`: current-state header refreshed.
+
+### Rollback
+Restore `ENTRY_AGREE_S = 0` in `constants.py`.
+
+---
+
+## [v3.9.0] — 2026-11-12 — Open on H1+M15; force-close on M15-only reversal [netting/hedging deploy]
+
+**Branches:** all 40 `netting_`/`hedging_` deployment branches. **Files touched:** `constants.py` only
+(logged here 2026-11-13). `strategy.py` untouched (generic over the per-section weight dicts).
+**Baseline:** v3.8.0 head of each branch.
+
+**Why.** Owner retuning the per-section timeframes for the deployment branches: open on the lower H1+M15
+pair, and force-close on a pure M15 reversal of the open position.
+
+### Changed (timeframe dicts + force-close threshold)
+- `OPEN_SCORE_WEIGHTS`: `{'H4':1,'M5':1}` -> **`{'H1':1,'M15':1}`**. Fresh entry + the DCA ladder-add
+  gate now read H1+M15. `ENTRY_S` kept 2 (same "both-agree" logic, new timeframes); range still ±4.
+- `FORCE_CLOSE_SCORE_WEIGHTS`: `{'M15':4,'H1':3,'H4':2,'D1':1}` -> **`{'M15':1}`**. Force-close is a
+  pure M15 reversal of the open position; range ±2.
+- `FORCE_CLOSE_S`: `12` -> **`1`** (the M15-only range is ±2, so 12 was unreachable). Fires the moment
+  M15 half-reverses against the position.
+- [netting] BOOK unchanged (`BOOK_SCORE_WEIGHTS={'M15':1}`, `BOOK_S=1` — already M15; with grey-fill it
+  triggers on the same M15 condition as the raw force-close, so book takes in-profit exits and
+  force-close takes the rest). [hedging] the `+$unit` target is unchanged (h6 has no score book).
+- Side-effect: `SLOPE_TIMEFRAMES` auto-derives to `[H1, M15]`; H4/M5/D1 slopes no longer computed. The
+  RSI/DCA ladder is UNAFFECTED (reads its own `RSI_MTF_TIMEFRAMES` + `RSI_DCA_LADDER_TIMEFRAMES`,
+  M1/M5/M15/H1/H4); only the legacy dashboard structural read (`_slope_direction`, needs H4) goes blank
+  — not a trading input.
+
+### Files
+- `constants.py`: `OPEN_SCORE_WEIGHTS`, `FORCE_CLOSE_SCORE_WEIGHTS`, `FORCE_CLOSE_S` + their comments.
+
+### Rollback
+Restore `OPEN_SCORE_WEIGHTS={'H4':1,'M5':1}`, `FORCE_CLOSE_SCORE_WEIGHTS={'M15':4,'H1':3,'H4':2,'D1':1}`,
+`FORCE_CLOSE_S=12` in `constants.py`.
+
+---
+
 ## [v3.8.0] — 2026-10-31 — Grey-fill: a grey indicator borrows the other's direction (OPEN + BOOK) [_exp_h]
 
 **Branches:** all 4 `_h`. NOT the fleet. **Files touched:** `strategy.py`, `dashboard.py` (+ this
