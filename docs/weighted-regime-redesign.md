@@ -1,5 +1,13 @@
 # Exit/Entry Redesign — Weighted Score (regime removed)
 
+> **⚠ DEPLOYMENT CONFIG (`netting_`/`hedging_` branches, 2026-11-13):** these 40 branches were forked
+> from the 4 `_h` sources this doc describes and now run a TUNED config: **open** = H1+M15 (`ENTRY_S=2`)
+> with a full-M15 agreement gate **`ENTRY_AGREE_S=2`** (anti-vibration, v3.9.1); **force-close** =
+> M15-only, **`FORCE_CLOSE_S=1`** (v3.9.0); [netting] M15 score-book (`BOOK_S=1`) / [hedging] `+$unit`
+> target. Weights: `OPEN_SCORE_WEIGHTS={'H1':1,'M15':1}`, `FORCE_CLOSE_SCORE_WEIGHTS={'M15':1}`,
+> `BOOK_SCORE_WEIGHTS={'M15':1}` (netting). See `CHANGELOG.md` v3.9.0/v3.9.1. The `_h` sources keep
+> their own knobs; §3 below (the weighted-score engine) still describes the shared machinery.
+
 > **STATUS: the strategy is now SCORE-ONLY — the regime/tide was fully REMOVED 2026-10-27.** Living
 > design doc for the 4 `_h` branches (`rsimacd_btcusd1_wd_exp_h`, `rsimacd_xauusd1_wd_exp_h`,
 > `rsimacd_h6_btcusd1_wd_exp_h`, `rsimacd_h6_xauusd1_wd_exp_h`). Started 2026-10-24 after a ~$1000
