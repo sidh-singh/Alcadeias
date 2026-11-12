@@ -17,6 +17,32 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2] — 2026-11-13 — Dashboard: show the entry-agreement threshold on the FORCE-CLOSE meter [netting/hedging deploy]
+
+**Branches:** all 40 `netting_`/`hedging_` deployment branches. **Files touched:** `dashboard.py` (+ this
+`CHANGELOG.md`). `constants.py` / `strategy.py` untouched. **Baseline:** v3.9.1 head of each branch.
+
+**Why.** v3.9.1 raised `ENTRY_AGREE_S` to 2, but that gate was only visible via the `🌀 waiting` status —
+the threshold itself wasn't drawn, so the dashboard didn't show why the bot can sit in the BUY zone
+without opening. Display-only.
+
+### Changed (display only)
+- `_exit_gauge()` gains an optional `entry_agree` param. On the FORCE-CLOSE meter it now draws **green
+  lines at ±`ENTRY_AGREE_S`** (where a NEW trade may OPEN — the M15 force-close score must FULLY agree),
+  outside the red ±`FORCE_CLOSE_S` close lines, and the header reads `closes at ±1 · opens at ±2` (the
+  "opens" note in green). The BOOK meter passes no `entry_agree` (no agreement gate there). The meter
+  reads the live constant, so the lines move if `ENTRY_AGREE_S` changes.
+
+### Files
+- `dashboard.py`: `_exit_gauge` signature (+`entry_agree=None`) + the green entry-agree lines + the
+  header "opens at ±N" note; imports `ENTRY_AGREE_S`; the FORCE-CLOSE `_exit_gauge(...)` call passes
+  `entry_agree=ENTRY_AGREE_S`.
+
+### Rollback
+Revert the `dashboard.py` hunk (drop the `entry_agree` param, its lines, the import, and the call arg).
+
+---
+
 ## [v3.9.1] — 2026-11-13 — Anti-vibration: entry requires full M15 agreement (ENTRY_AGREE_S 0 -> 2) [netting/hedging deploy]
 
 **Branches:** all 40 `netting_`/`hedging_` deployment branches (btc+xau × slot 1-10). NOT the fleet,
