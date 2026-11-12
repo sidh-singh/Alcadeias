@@ -63,7 +63,7 @@ MACD_SIGNAL = 9                     # signal EMA length
 # section's timeframes -- change a section's TFs and re-check its threshold. (Raw rescale 2026-10-30;
 # values below are the raw equivalents of the previous normalised 6/6/12/4 for the current config, so
 # behaviour is unchanged.) All tunable on demo. (The regime/tide was fully REMOVED 2026-10-27.)
-ENTRY_S = 2                         # |open_score| to OPEN. OPEN range is ±4 (H4+M5, w1+w1); +2 = one
+ENTRY_S = 2                         # |open_score| to OPEN. OPEN range is ±4 (H1+M15, w1+w1); +2 = one
                                     # timeframe fully aligned (or both half). BUY open_score >= +2 / SELL <= -2.
 ENTRY_AGREE_S = 0                    # agreement gate (2026-10-29): the FORCE-CLOSE score must not oppose
                                     # the open -- BUY also needs fc_score >= +ENTRY_AGREE_S, SELL needs
@@ -73,9 +73,9 @@ ENTRY_AGREE_S = 0                    # agreement gate (2026-10-29): the FORCE-CL
                                     # OPEN and FORCE-CLOSE scores agree.
 LADDER_S = 2                        # DCA ladder add blocked once OPEN score is this far adverse
                                     # (BUY add needs open_score > -2; SELL add needs < +2)
-FORCE_CLOSE_S = 12                  # force-close when the FORCE-CLOSE score is this far AGAINST the
-                                    # basket. FORCE-CLOSE range is ±20 (4/3/2/1). BUY close fc_score
-                                    # <= -12; SELL fc_score >= +12. (Unchanged by the raw rescale.)
+FORCE_CLOSE_S = 1                  # force-close when the FORCE-CLOSE score is this far AGAINST the
+                                    # basket. FORCE-CLOSE range is ±2 (M15 only). BUY close fc_score
+                                    # <= -1; SELL fc_score >= +1. (Unchanged by the raw rescale.)
 BOOK_S = 1                          # profit-book (variant A): in profit, book when the BOOK score
                                     # reverses this far against. BOOK range is ±2 (M15, w1); +-1 = one
                                     # M15 sign. BUY book_score <= -1; SELL >= +1.
@@ -90,9 +90,9 @@ BOOK_S = 1                          # profit-book (variant A): in profit, book w
 #   OPEN        -> fresh entry + the DCA ladder-add gate.
 #   BOOK        -> profit-book (variant A only; the h6 pair books via the +$unit target instead).
 #   FORCE_CLOSE -> force-close (kept at the original 4/3/2/1 set, so its score == the old exit_score).
-OPEN_SCORE_WEIGHTS        = {'H4': 1, 'M5': 1}                       # experiment 2026-10-30: H4 + M5 only
+OPEN_SCORE_WEIGHTS        = {'H1': 1, 'M15': 1}                       # 2026-11-12: H1 + M15 (was H4 + M5)
 BOOK_SCORE_WEIGHTS        = {'M15': 1}                              # experiment 2026-10-30: M15 only
-FORCE_CLOSE_SCORE_WEIGHTS = {'M15': 4, 'H1': 3, 'H4': 2, 'D1': 1}  # unchanged
+FORCE_CLOSE_SCORE_WEIGHTS = {'M15': 1}  # 2026-11-12: M15-only reversal (was M15/H1/H4/D1)
 
 # ─── Slope fetch list (auto-derived) ───
 # Every timeframe named in ANY section above is fetched for slopes (app.py reads SLOPE_TIMEFRAMES),
