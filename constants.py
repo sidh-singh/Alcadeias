@@ -65,9 +65,9 @@ MACD_SIGNAL = 9                     # signal EMA length
 # behaviour is unchanged.) All tunable on demo. (The regime/tide was fully REMOVED 2026-10-27.)
 ENTRY_S = 2                         # |open_score| to OPEN. OPEN range is ±4 (H1+M15, w1+w1); +2 = one
                                     # timeframe fully aligned (or both half). BUY open_score >= +2 / SELL <= -2.
-ENTRY_AGREE_S = 0                    # agreement gate (2026-10-29): the FORCE-CLOSE score must not oppose
+ENTRY_AGREE_S = 2                    # agreement gate (2026-10-29; raised 0->2 2026-11-13 anti-vibration): FORCE-CLOSE must FIRMLY agree
                                     # the open -- BUY also needs fc_score >= +ENTRY_AGREE_S, SELL needs
-                                    # fc_score <= -ENTRY_AGREE_S. 0 = "force-close score must merely not
+                                    # fc_score <= -ENTRY_AGREE_S. now 2 = the M15 force-close score must FULLY agree (both slopes on-side) so a fresh entry sits clear of the close trigger; 0 was "merely not
                                     # be against it"; raise to demand stronger agreement. Stops the
                                     # open-then-instant-force-close vibration -- the bot WAITS until the
                                     # OPEN and FORCE-CLOSE scores agree.
