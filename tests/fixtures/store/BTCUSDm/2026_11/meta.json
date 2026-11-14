@@ -1,0 +1,18 @@
+{
+  "symbol": "BTCUSDm",
+  "year": 2026,
+  "month": 11,
+  "store_version": 3,
+  "fixture": true,
+  "has_ticks": true,
+  "ticks": 6940,
+  "seconds": 3369,
+  "m1_bars": 11936,
+  "first": "2026-11-01T00:00:00+00:00",
+  "last": "2026-11-09T06:59:59.546000+00:00",
+  "window": [
+    "2026-11-09 06:00",
+    "2026-11-09 07:00"
+  ],
+  "warm_days": 12
+}

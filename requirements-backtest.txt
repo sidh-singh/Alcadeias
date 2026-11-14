@@ -1,0 +1,9 @@
+# Backtesting suite (the live bot's own requirements.txt is untouched).
+# Developed and verified on Python 3.10 with the versions noted; newer ones should work.
+numpy>=1.24        # 1.26.3
+pandas>=2.0        # 2.1.4
+numba>=0.57        # 0.66.0  - the fast engine
+plotly>=5.18       # 5.18.0  - reports
+dash>=2.14         # 2.14.2  - replay studio (python -m backtesting studio)
+pytest>=7.4        # 8.3.5   - test-suite
+# MetaTrader5 is NOT needed: the reference engine swaps it for a simulated terminal.

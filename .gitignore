@@ -1,0 +1,12 @@
+# ── backtesting ──
+# Tick data is large and fully reproducible:  python -m backtesting data
+data/raw/
+data/store/
+data/*.log
+
+# Python / tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
