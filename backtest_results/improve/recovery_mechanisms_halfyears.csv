@@ -1,0 +1,1513 @@
+symbol,period,list,order,mechanism,half,n,exp,se,win_pct,worst,total
+BTCUSDm,DEV,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H2,584,0.0450261,0.243141,50.3425,-15.3023,26.2952
+BTCUSDm,DEV,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H1,789,0.124582,0.163795,51.5843,-17.2904,98.2955
+BTCUSDm,DEV,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H2,597,-0.222347,0.223355,47.5712,-9.42536,-132.741
+BTCUSDm,DEV,trend,1,"Fixed stop 2 ATR, target 2 ATR",2025 H2,584,0.368169,0.732984,52.911,-37.9685,215.011
+BTCUSDm,DEV,trend,1,"Fixed stop 2 ATR, target 2 ATR",2026 H1,789,0.66979,0.364632,53.7389,-34.5807,528.464
+BTCUSDm,DEV,trend,1,"Fixed stop 2 ATR, target 2 ATR",2026 H2,597,0.166912,0.462075,51.4238,-18.8507,99.6467
+BTCUSDm,DEV,trend,2,"Fixed stop 1 ATR, target 2 ATR",2025 H2,584,0.302397,0.368333,35.6164,-18.9842,176.6
+BTCUSDm,DEV,trend,2,"Fixed stop 1 ATR, target 2 ATR",2026 H1,789,0.115765,0.216258,35.2345,-17.2904,91.3382
+BTCUSDm,DEV,trend,2,"Fixed stop 1 ATR, target 2 ATR",2026 H2,597,-0.0465659,0.338956,33.6683,-9.42536,-27.7998
+BTCUSDm,DEV,trend,3,"Fixed stop 2 ATR, target 1 ATR",2025 H2,584,0.262644,0.388939,68.4932,-30.6046,153.384
+BTCUSDm,DEV,trend,3,"Fixed stop 2 ATR, target 1 ATR",2026 H1,789,0.382664,0.276305,69.2015,-34.5807,301.922
+BTCUSDm,DEV,trend,3,"Fixed stop 2 ATR, target 1 ATR",2026 H2,597,-0.10686,0.309534,65.6616,-18.8507,-63.7955
+BTCUSDm,DEV,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H2,584,2.837,1.35051,56.8493,-20,1656.81
+BTCUSDm,DEV,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H1,789,1.26619,1.02497,53.6122,-20.0584,999.021
+BTCUSDm,DEV,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H2,597,-2.42999,1.86582,44.0536,-20,-1450.7
+BTCUSDm,DEV,trend,5,"Live ladder, no stop",2025 H2,584,1.00016,9.16129e-05,100,1,584.092
+BTCUSDm,DEV,trend,5,"Live ladder, no stop",2026 H1,789,1.00154,0.00126759,100,1,790.218
+BTCUSDm,DEV,trend,5,"Live ladder, no stop",2026 H2,597,0.996187,0.00392985,99.8325,-1.2878,594.723
+BTCUSDm,DEV,trend,6,"Live ladder, basket stop $60",2025 H2,584,-0.253267,0.32993,97.9452,-60,-147.908
+BTCUSDm,DEV,trend,6,"Live ladder, basket stop $60",2026 H1,789,-0.699343,0.38311,97.2117,-60,-551.782
+BTCUSDm,DEV,trend,6,"Live ladder, basket stop $60",2026 H2,597,-0.229944,0.445102,97.8224,-60,-137.277
+BTCUSDm,DEV,trend,7,"Live ladder, basket stop $200",2025 H2,584,-0.0323769,0.55746,99.4863,-200,-18.9081
+BTCUSDm,DEV,trend,7,"Live ladder, basket stop $200",2026 H1,789,-0.27222,0.629411,99.3663,-200,-214.782
+BTCUSDm,DEV,trend,7,"Live ladder, basket stop $200",2026 H2,597,-0.0138637,0.55209,99.33,-200,-8.2766
+BTCUSDm,DEV,trend,8,"Budget 1 R, no add",2025 H2,584,-0.0468767,0.189095,66.6096,-15.3023,-27.376
+BTCUSDm,DEV,trend,8,"Budget 1 R, no add",2026 H1,789,0.0182353,0.13269,67.8074,-15.1454,14.3877
+BTCUSDm,DEV,trend,8,"Budget 1 R, no add",2026 H2,597,-0.120254,0.154946,64.8241,-9.42536,-71.7918
+BTCUSDm,DEV,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H2,584,-0.293696,0.235601,50.6849,-18.9842,-171.518
+BTCUSDm,DEV,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H1,789,-0.00207533,0.176944,53.3587,-15.1454,-1.63744
+BTCUSDm,DEV,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H2,597,-0.0796486,0.20401,50.4188,-9.42536,-47.5502
+BTCUSDm,DEV,trend,10,"Budget 2 R, no add",2025 H2,584,-0.133223,0.3067,80.137,-30.6046,-77.802
+BTCUSDm,DEV,trend,10,"Budget 2 R, no add",2026 H1,789,0.175998,0.177535,81.749,-29.2101,138.862
+BTCUSDm,DEV,trend,10,"Budget 2 R, no add",2026 H2,597,-0.137204,0.2597,78.727,-18.8507,-81.9109
+BTCUSDm,DEV,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H2,584,-0.0432691,0.379308,70.5479,-24.6997,-25.2691
+BTCUSDm,DEV,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H1,789,-0.00975447,0.255686,72.1166,-30.2908,-7.69628
+BTCUSDm,DEV,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H2,597,0.0629056,0.20458,71.0218,-18.8507,37.5547
+BTCUSDm,DEV,trend,12,"Budget 3 R, no add",2025 H2,584,-0.0267688,0.383893,85.9589,-45.907,-15.633
+BTCUSDm,DEV,trend,12,"Budget 3 R, no add",2026 H1,789,0.180057,0.237731,86.8188,-42.4869,142.065
+BTCUSDm,DEV,trend,12,"Budget 3 R, no add",2026 H2,597,-0.182368,0.254965,84.2546,-28.2761,-108.874
+BTCUSDm,DEV,trend,13,"Budget 3 R, 1 add 1 ATR apart",2025 H2,584,-0.150268,0.356481,83.3904,-37.0496,-87.7566
+BTCUSDm,DEV,trend,13,"Budget 3 R, 1 add 1 ATR apart",2026 H1,789,0.0694165,0.273877,84.1572,-43.8151,54.7696
+BTCUSDm,DEV,trend,13,"Budget 3 R, 1 add 1 ATR apart",2026 H2,597,-0.111935,0.316096,82.4121,-28.2761,-66.8254
+BTCUSDm,DEV,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H2,584,0.0456741,0.525944,80.137,-37.0496,26.6737
+BTCUSDm,DEV,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H1,789,-0.0217907,0.266134,80.2281,-43.8151,-17.1928
+BTCUSDm,DEV,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H2,597,-0.24933,0.359525,78.727,-28.2761,-148.85
+BTCUSDm,DEV,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H2,584,-0.283307,0.553207,74.8288,-37.0496,-165.451
+BTCUSDm,DEV,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H1,789,-0.0793905,0.320103,76.5526,-43.8151,-62.6391
+BTCUSDm,DEV,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H2,597,-0.261703,0.215919,74.5394,-28.2761,-156.237
+BTCUSDm,DEV,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H2,584,-0.142815,0.529091,72.089,-37.0496,-83.4037
+BTCUSDm,DEV,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H1,789,0.0718738,0.344839,73.384,-45.4363,56.7084
+BTCUSDm,DEV,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H2,597,0.0688915,0.286653,72.1943,-28.2761,41.1282
+BTCUSDm,DEV,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H2,584,0.0456741,0.525944,80.137,-37.0496,26.6737
+BTCUSDm,DEV,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H1,789,-0.0217907,0.266134,80.2281,-43.8151,-17.1928
+BTCUSDm,DEV,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H2,597,-0.24933,0.359525,78.727,-28.2761,-148.85
+BTCUSDm,DEV,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H2,584,0.0456741,0.525944,80.137,-37.0496,26.6737
+BTCUSDm,DEV,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H1,789,-0.0217907,0.266134,80.2281,-43.8151,-17.1928
+BTCUSDm,DEV,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H2,597,-0.24933,0.359525,78.727,-28.2761,-148.85
+BTCUSDm,DEV,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H2,584,0.0456741,0.525944,80.137,-37.0496,26.6737
+BTCUSDm,DEV,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H1,789,-0.0217907,0.266134,80.2281,-43.8151,-17.1928
+BTCUSDm,DEV,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H2,597,-0.24933,0.359525,78.727,-28.2761,-148.85
+BTCUSDm,DEV,trend,20,Add when the M5 MACD histogram turns,2025 H2,584,-0.357014,0.372048,82.0205,-37.0496,-208.496
+BTCUSDm,DEV,trend,20,Add when the M5 MACD histogram turns,2026 H1,789,0.221878,0.222317,84.4106,-43.8151,175.062
+BTCUSDm,DEV,trend,20,Add when the M5 MACD histogram turns,2026 H2,597,-0.0618629,0.249349,82.0771,-28.2761,-36.9321
+BTCUSDm,DEV,trend,21,Add when the M15 MACD histogram turns,2025 H2,584,-0.293087,0.387821,83.0479,-37.0496,-171.163
+BTCUSDm,DEV,trend,21,Add when the M15 MACD histogram turns,2026 H1,789,0.189754,0.249539,85.1711,-43.8151,149.716
+BTCUSDm,DEV,trend,21,Add when the M15 MACD histogram turns,2026 H2,597,-0.207169,0.301395,82.0771,-28.2761,-123.68
+BTCUSDm,DEV,trend,22,Add when the M5 RSI comes back through 35 / 65,2025 H2,584,0.183513,0.359275,84.2466,-37.0496,107.172
+BTCUSDm,DEV,trend,22,Add when the M5 RSI comes back through 35 / 65,2026 H1,789,0.0647964,0.261272,85.0444,-43.8151,51.1243
+BTCUSDm,DEV,trend,22,Add when the M5 RSI comes back through 35 / 65,2026 H2,597,-0.211478,0.31128,82.0771,-28.2761,-126.253
+BTCUSDm,DEV,trend,23,Add when the M15 RSI comes back through 35 / 65,2025 H2,584,-0.230193,0.364486,84.2466,-45.907,-134.433
+BTCUSDm,DEV,trend,23,Add when the M15 RSI comes back through 35 / 65,2026 H1,789,0.00441449,0.247467,85.4246,-43.8151,3.48304
+BTCUSDm,DEV,trend,23,Add when the M15 RSI comes back through 35 / 65,2026 H2,597,-0.343969,0.352668,82.4121,-28.2761,-205.349
+BTCUSDm,DEV,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H2,584,-0.0383063,0.219363,33.3904,-15.3023,-22.3709
+BTCUSDm,DEV,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H1,789,-0.0135144,0.15262,33.967,-15.1454,-10.6629
+BTCUSDm,DEV,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H2,597,-0.242378,0.184872,29.6482,-9.42536,-144.7
+BTCUSDm,DEV,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H2,584,-0.0340894,0.300728,24.8288,-15.3023,-19.9082
+BTCUSDm,DEV,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H1,789,0.245056,0.151501,28.0101,-17.2904,193.349
+BTCUSDm,DEV,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H2,597,-0.164286,0.302037,24.6231,-9.42536,-98.0786
+BTCUSDm,DEV,trend,26,"Trailing stop 1 ATR, no target",2025 H2,584,0.0287777,0.337428,36.6438,-11.7157,16.8062
+BTCUSDm,DEV,trend,26,"Trailing stop 1 ATR, no target",2026 H1,789,-0.101436,0.208661,38.2763,-13.765,-80.0331
+BTCUSDm,DEV,trend,26,"Trailing stop 1 ATR, no target",2026 H2,597,0.0540455,0.320974,34.3384,-8.47276,32.2652
+BTCUSDm,DEV,trend,27,"Trailing stop 2 ATR, no target",2025 H2,584,0.547473,0.533779,39.726,-24.7392,319.724
+BTCUSDm,DEV,trend,27,"Trailing stop 2 ATR, no target",2026 H1,789,0.174718,0.409425,39.5437,-28.0787,137.852
+BTCUSDm,DEV,trend,27,"Trailing stop 2 ATR, no target",2026 H2,597,-0.0439044,0.606806,37.6884,-17.8981,-26.2109
+BTCUSDm,DEV,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H2,584,-0.00465434,0.29014,50.3425,-15.3023,-2.71813
+BTCUSDm,DEV,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H1,789,0.061316,0.181755,51.5843,-17.2904,48.3783
+BTCUSDm,DEV,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H2,597,-0.120784,0.303932,47.5712,-9.42536,-72.1079
+BTCUSDm,DEV,trend,29,"Pyramid, 2 adds",2025 H2,584,0.178513,0.617651,21.5753,-14.8212,104.252
+BTCUSDm,DEV,trend,29,"Pyramid, 2 adds",2026 H1,789,-0.373446,0.336326,22.8137,-13.765,-294.649
+BTCUSDm,DEV,trend,29,"Pyramid, 2 adds",2026 H2,597,0.359312,0.608331,21.4405,-8.47276,214.51
+BTCUSDm,DEV,trend,30,"Pyramid, 4 adds",2025 H2,584,0.14642,0.649345,21.5753,-14.8212,85.5091
+BTCUSDm,DEV,trend,30,"Pyramid, 4 adds",2026 H1,789,-0.481785,0.339248,22.8137,-13.765,-380.128
+BTCUSDm,DEV,trend,30,"Pyramid, 4 adds",2026 H2,597,0.441641,0.701064,21.4405,-8.47276,263.66
+BTCUSDm,DEV,trend,31,"Hedge lock, unlocked by the next vote signal",2025 H2,584,0.217111,0.273201,61.8151,-29.9448,126.793
+BTCUSDm,DEV,trend,31,"Hedge lock, unlocked by the next vote signal",2026 H1,789,0.0585156,0.199774,61.3435,-29.1467,46.1688
+BTCUSDm,DEV,trend,31,"Hedge lock, unlocked by the next vote signal",2026 H2,597,-0.181403,0.307307,59.464,-15.1148,-108.298
+BTCUSDm,DEV,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H2,584,0.217111,0.273201,61.8151,-29.9448,126.793
+BTCUSDm,DEV,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H1,789,0.0585156,0.199774,61.3435,-29.1467,46.1688
+BTCUSDm,DEV,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H2,597,-0.181403,0.307307,59.464,-15.1148,-108.298
+BTCUSDm,DEV,trend,33,"Hedge lock, both legs closed 4 h later",2025 H2,584,-0.0491426,0.246813,50.3425,-15.4823,-28.6993
+BTCUSDm,DEV,trend,33,"Hedge lock, both legs closed 4 h later",2026 H1,789,0.0511649,0.165823,51.5843,-17.4704,40.3691
+BTCUSDm,DEV,trend,33,"Hedge lock, both legs closed 4 h later",2026 H2,597,-0.269422,0.225316,47.5712,-9.52536,-160.845
+BTCUSDm,DEV,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H2,584,0.315006,1.15167,94.1781,-214.821,183.964
+BTCUSDm,DEV,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H1,789,-0.0204269,0.647569,94.0431,-228.441,-16.1168
+BTCUSDm,DEV,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H2,597,-0.738493,0.762979,92.2948,-111.755,-440.881
+BTCUSDm,DEV,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H2,584,-1.86821,0.383258,75.5137,-78.4059,-1091.03
+BTCUSDm,DEV,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H1,789,-1.11106,0.522696,78.327,-62.3833,-876.625
+BTCUSDm,DEV,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H2,597,-0.808327,0.335301,76.7169,-37.5679,-482.571
+BTCUSDm,DEV,trend,36,"Stop and reverse, same size",2025 H2,584,-0.0508422,0.273637,50.5137,-30.6046,-29.6919
+BTCUSDm,DEV,trend,36,"Stop and reverse, same size",2026 H1,789,-0.0223948,0.173557,51.8378,-30.2908,-17.6695
+BTCUSDm,DEV,trend,36,"Stop and reverse, same size",2026 H2,597,-0.262361,0.219067,47.7387,-18.2611,-156.63
+BTCUSDm,DEV,trend,37,"Stop and reverse, double size",2025 H2,584,-0.146711,0.406379,73.9726,-45.907,-85.679
+BTCUSDm,DEV,trend,37,"Stop and reverse, double size",2026 H1,789,-0.169372,0.246825,73.891,-45.4363,-133.634
+BTCUSDm,DEV,trend,37,"Stop and reverse, double size",2026 H2,597,-0.302376,0.271896,73.3668,-27.3917,-180.519
+BTCUSDm,DEV,trend,38,"Martingale: double after a loss, up to x8",2025 H2,584,0.703034,0.655933,50.3425,-81.3629,410.572
+BTCUSDm,DEV,trend,38,"Martingale: double after a loss, up to x8",2026 H1,789,0.1027,0.544387,51.5843,-121.163,81.03
+BTCUSDm,DEV,trend,38,"Martingale: double after a loss, up to x8",2026 H2,597,-0.817094,0.991244,47.5712,-60.7058,-487.805
+BTCUSDm,DEV,trend,39,"Anti-martingale: double after a win, up to x8",2025 H2,584,0.909064,1.14072,50.3425,-113.899,530.893
+BTCUSDm,DEV,trend,39,"Anti-martingale: double after a win, up to x8",2026 H1,789,-0.550288,0.546773,51.5843,-70.43,-434.177
+BTCUSDm,DEV,trend,39,"Anti-martingale: double after a win, up to x8",2026 H2,597,-0.154475,0.561523,47.5712,-75.4029,-92.2216
+BTCUSDm,DEV,trend,40,Daily loss limit 1 R,2025 H2,316,0.177037,0.307981,50.3165,-15.3023,55.9436
+BTCUSDm,DEV,trend,40,Daily loss limit 1 R,2026 H1,467,0.211174,0.186695,52.4625,-17.2904,98.6184
+BTCUSDm,DEV,trend,40,Daily loss limit 1 R,2026 H2,303,0.0177324,0.255692,50.165,-9.42536,5.37291
+BTCUSDm,DEV,trend,41,Daily loss limit 2 R,2025 H2,469,-0.0404359,0.253406,49.467,-15.3023,-18.9644
+BTCUSDm,DEV,trend,41,Daily loss limit 2 R,2026 H1,647,0.192971,0.180541,52.2411,-17.2904,124.852
+BTCUSDm,DEV,trend,41,Daily loss limit 2 R,2026 H2,458,-0.082564,0.229497,49.1266,-9.42536,-37.8143
+BTCUSDm,DEV,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H2,1082,0.12609,0.162002,50.7394,-19.2456,136.43
+BTCUSDm,DEV,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H1,1364,-0.17736,0.134637,48.6804,-17.2904,-241.919
+BTCUSDm,DEV,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H2,1093,-0.0665871,0.115462,49.4968,-9.99083,-72.7797
+BTCUSDm,DEV,votes,1,"Fixed stop 2 ATR, target 2 ATR",2025 H2,1082,-0.215279,0.34104,49.0758,-38.4912,-232.932
+BTCUSDm,DEV,votes,1,"Fixed stop 2 ATR, target 2 ATR",2026 H1,1364,-0.379887,0.340494,49.1202,-34.5807,-518.166
+BTCUSDm,DEV,votes,1,"Fixed stop 2 ATR, target 2 ATR",2026 H2,1093,0.25333,0.266509,52.15,-19.9817,276.889
+BTCUSDm,DEV,votes,2,"Fixed stop 1 ATR, target 2 ATR",2025 H2,1082,0.159963,0.237468,34.2884,-19.2456,173.08
+BTCUSDm,DEV,votes,2,"Fixed stop 1 ATR, target 2 ATR",2026 H1,1364,-0.208188,0.203547,32.5513,-17.2904,-283.968
+BTCUSDm,DEV,votes,2,"Fixed stop 1 ATR, target 2 ATR",2026 H2,1093,-0.134402,0.198297,32.8454,-9.99083,-146.902
+BTCUSDm,DEV,votes,3,"Fixed stop 2 ATR, target 1 ATR",2025 H2,1082,0.099236,0.224566,66.7283,-37.2398,107.373
+BTCUSDm,DEV,votes,3,"Fixed stop 2 ATR, target 1 ATR",2026 H1,1364,-0.151445,0.19401,66.2023,-34.5807,-206.571
+BTCUSDm,DEV,votes,3,"Fixed stop 2 ATR, target 1 ATR",2026 H2,1093,-0.00323896,0.159031,66.8801,-19.9817,-3.54019
+BTCUSDm,DEV,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H2,1082,0.0384262,0.496882,50.0924,-20.0212,41.5772
+BTCUSDm,DEV,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H1,1364,-0.332195,0.625642,49.1935,-20.0584,-453.114
+BTCUSDm,DEV,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H2,1093,0.756014,0.715397,51.9671,-20,826.323
+BTCUSDm,DEV,votes,5,"Live ladder, no stop",2025 H2,1082,1.00091,0.000752107,100,1,1082.98
+BTCUSDm,DEV,votes,5,"Live ladder, no stop",2026 H1,1364,1.00108,0.000744402,100,1,1365.47
+BTCUSDm,DEV,votes,5,"Live ladder, no stop",2026 H2,1093,1.00003,2.58161e-05,100,1,1093.03
+BTCUSDm,DEV,votes,6,"Live ladder, basket stop $60",2025 H2,1082,-0.634029,0.286412,97.3198,-60,-686.019
+BTCUSDm,DEV,votes,6,"Live ladder, basket stop $60",2026 H1,1364,-0.743054,0.265224,97.1408,-60,-1013.53
+BTCUSDm,DEV,votes,6,"Live ladder, basket stop $60",2026 H2,1093,0.0512611,0.205249,98.4446,-60,56.0284
+BTCUSDm,DEV,votes,7,"Live ladder, basket stop $200",2025 H2,1082,0.257838,0.423269,99.6303,-200,278.981
+BTCUSDm,DEV,votes,7,"Live ladder, basket stop $200",2026 H1,1364,0.264277,0.309736,99.6334,-200,360.474
+BTCUSDm,DEV,votes,7,"Live ladder, basket stop $200",2026 H2,1093,0.0805383,0.366106,99.5425,-200,88.0284
+BTCUSDm,DEV,votes,8,"Budget 1 R, no add",2025 H2,1082,-0.0508026,0.0979691,65.8041,-19.2456,-54.9685
+BTCUSDm,DEV,votes,8,"Budget 1 R, no add",2026 H1,1364,-0.0165551,0.0908285,66.349,-15.1454,-22.5812
+BTCUSDm,DEV,votes,8,"Budget 1 R, no add",2026 H2,1093,0.0306994,0.0798429,67.3376,-9.42536,33.5545
+BTCUSDm,DEV,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H2,1082,-0.313158,0.153658,50.3697,-19.2456,-338.836
+BTCUSDm,DEV,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H1,1364,-0.314842,0.115906,50.2933,-15.1454,-429.445
+BTCUSDm,DEV,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H2,1093,0.0653895,0.119803,53.7969,-9.99083,71.4707
+BTCUSDm,DEV,votes,10,"Budget 2 R, no add",2025 H2,1082,-0.0670197,0.16903,79.2052,-37.2398,-72.5153
+BTCUSDm,DEV,votes,10,"Budget 2 R, no add",2026 H1,1364,-0.0525812,0.124507,79.8387,-29.6706,-71.7207
+BTCUSDm,DEV,votes,10,"Budget 2 R, no add",2026 H2,1093,0.00178239,0.137684,80.4209,-18.8507,1.94815
+BTCUSDm,DEV,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H2,1082,-0.0863581,0.285209,70.0555,-37.2398,-93.4394
+BTCUSDm,DEV,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H1,1364,-0.129451,0.212396,70.3812,-30.2908,-176.572
+BTCUSDm,DEV,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H2,1093,0.202893,0.148287,73.0101,-18.8507,221.762
+BTCUSDm,DEV,votes,12,"Budget 3 R, no add",2025 H2,1082,0.0206433,0.216947,85.2126,-45.907,22.336
+BTCUSDm,DEV,votes,12,"Budget 3 R, no add",2026 H1,1364,-0.21977,0.150202,84.5308,-39.2245,-299.766
+BTCUSDm,DEV,votes,12,"Budget 3 R, no add",2026 H2,1093,-0.00878311,0.172318,85.9103,-28.2761,-9.59994
+BTCUSDm,DEV,votes,13,"Budget 3 R, 1 add 1 ATR apart",2025 H2,1082,-0.26279,0.233436,82.1627,-55.8597,-284.338
+BTCUSDm,DEV,votes,13,"Budget 3 R, 1 add 1 ATR apart",2026 H1,1364,-0.17812,0.183807,82.6246,-43.7533,-242.956
+BTCUSDm,DEV,votes,13,"Budget 3 R, 1 add 1 ATR apart",2026 H2,1093,0.0394886,0.182633,83.806,-28.2761,43.161
+BTCUSDm,DEV,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H2,1082,0.0465033,0.315393,79.39,-41.4907,50.3166
+BTCUSDm,DEV,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H1,1364,-0.133299,0.16963,79.1056,-43.7533,-181.82
+BTCUSDm,DEV,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H2,1093,0.146385,0.190555,81.5188,-28.2761,159.998
+BTCUSDm,DEV,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H2,1082,0.0841479,0.440331,75.1386,-37.0496,91.048
+BTCUSDm,DEV,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H1,1364,-0.16965,0.251887,75.4399,-45.4363,-231.402
+BTCUSDm,DEV,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H2,1093,0.0400755,0.169894,76.7612,-28.2761,43.8025
+BTCUSDm,DEV,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H2,1082,-0.048943,0.455012,71.4418,-55.8597,-52.9563
+BTCUSDm,DEV,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H1,1364,-0.0741657,0.287522,72.0674,-45.4363,-101.162
+BTCUSDm,DEV,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H2,1093,0.232755,0.234286,74.2909,-28.2761,254.402
+BTCUSDm,DEV,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H2,1082,0.0465033,0.315393,79.39,-41.4907,50.3166
+BTCUSDm,DEV,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H1,1364,-0.133299,0.16963,79.1056,-43.7533,-181.82
+BTCUSDm,DEV,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H2,1093,0.146385,0.190555,81.5188,-28.2761,159.998
+BTCUSDm,DEV,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H2,1082,0.0465033,0.315393,79.39,-41.4907,50.3166
+BTCUSDm,DEV,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H1,1364,-0.133299,0.16963,79.1056,-43.7533,-181.82
+BTCUSDm,DEV,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H2,1093,0.146385,0.190555,81.5188,-28.2761,159.998
+BTCUSDm,DEV,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H2,1082,0.0465033,0.315393,79.39,-41.4907,50.3166
+BTCUSDm,DEV,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H1,1364,-0.133299,0.16963,79.1056,-43.7533,-181.82
+BTCUSDm,DEV,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H2,1093,0.146385,0.190555,81.5188,-28.2761,159.998
+BTCUSDm,DEV,votes,20,Add when the M5 MACD histogram turns,2025 H2,1082,-0.342825,0.236262,81.5157,-55.8597,-370.937
+BTCUSDm,DEV,votes,20,Add when the M5 MACD histogram turns,2026 H1,1364,-0.103824,0.183299,82.3314,-43.7533,-141.616
+BTCUSDm,DEV,votes,20,Add when the M5 MACD histogram turns,2026 H2,1093,0.158007,0.168459,84.2635,-28.2761,172.701
+BTCUSDm,DEV,votes,21,Add when the M15 MACD histogram turns,2025 H2,1082,-0.207339,0.236668,83.0869,-55.8597,-224.341
+BTCUSDm,DEV,votes,21,Add when the M15 MACD histogram turns,2026 H1,1364,-0.175364,0.197894,83.2111,-39.2245,-239.196
+BTCUSDm,DEV,votes,21,Add when the M15 MACD histogram turns,2026 H2,1093,0.00355485,0.188373,84.172,-28.2761,3.88545
+BTCUSDm,DEV,votes,22,Add when the M5 RSI comes back through 35 / 65,2025 H2,1082,-0.154938,0.210014,82.7172,-55.8597,-167.643
+BTCUSDm,DEV,votes,22,Add when the M5 RSI comes back through 35 / 65,2026 H1,1364,-0.145672,0.17657,83.2845,-39.2245,-198.696
+BTCUSDm,DEV,votes,22,Add when the M5 RSI comes back through 35 / 65,2026 H2,1093,0.0512166,0.191537,84.355,-28.2761,55.9797
+BTCUSDm,DEV,votes,23,Add when the M15 RSI comes back through 35 / 65,2025 H2,1082,-0.0362312,0.192664,84.3808,-55.8597,-39.2022
+BTCUSDm,DEV,votes,23,Add when the M15 RSI comes back through 35 / 65,2026 H1,1364,-0.339709,0.186415,83.4311,-44.5059,-463.363
+BTCUSDm,DEV,votes,23,Add when the M15 RSI comes back through 35 / 65,2026 H2,1093,-0.0663903,0.161697,84.538,-28.2761,-72.5646
+BTCUSDm,DEV,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H2,1082,0.0545559,0.121162,34.5656,-19.2456,59.0295
+BTCUSDm,DEV,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H1,1364,-0.0945127,0.102448,32.4047,-15.1454,-128.915
+BTCUSDm,DEV,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H2,1093,-0.0790202,0.110597,31.473,-9.42536,-86.3691
+BTCUSDm,DEV,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H2,1082,0.00707115,0.232987,24.9538,-19.2456,7.65099
+BTCUSDm,DEV,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H1,1364,-0.163729,0.146555,24.7801,-17.2904,-223.326
+BTCUSDm,DEV,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H2,1093,-0.0252118,0.17289,25.3431,-9.99083,-27.5565
+BTCUSDm,DEV,votes,26,"Trailing stop 1 ATR, no target",2025 H2,1082,0.2463,0.165364,38.7246,-15.7844,266.497
+BTCUSDm,DEV,votes,26,"Trailing stop 1 ATR, no target",2026 H1,1364,-0.251153,0.118967,35.7771,-13.8725,-342.573
+BTCUSDm,DEV,votes,26,"Trailing stop 1 ATR, no target",2026 H2,1093,0.148558,0.199555,36.7795,-8.47276,162.374
+BTCUSDm,DEV,votes,27,"Trailing stop 2 ATR, no target",2025 H2,1082,0.134914,0.376983,37.8928,-29.7724,145.977
+BTCUSDm,DEV,votes,27,"Trailing stop 2 ATR, no target",2026 H1,1364,-0.282307,0.382217,36.437,-27.1618,-385.066
+BTCUSDm,DEV,votes,27,"Trailing stop 2 ATR, no target",2026 H2,1093,-0.108322,0.321074,37.1455,-17.8981,-118.396
+BTCUSDm,DEV,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H2,1082,0.101105,0.162229,50.7394,-19.2456,109.395
+BTCUSDm,DEV,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H1,1364,-0.244595,0.147802,48.6804,-17.2904,-333.627
+BTCUSDm,DEV,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H2,1093,0.0119836,0.158987,49.4968,-9.99083,13.0981
+BTCUSDm,DEV,votes,29,"Pyramid, 2 adds",2025 H2,1082,0.403515,0.327024,22.366,-15.7844,436.604
+BTCUSDm,DEV,votes,29,"Pyramid, 2 adds",2026 H1,1364,-0.534738,0.209295,21.261,-13.8725,-729.383
+BTCUSDm,DEV,votes,29,"Pyramid, 2 adds",2026 H2,1093,0.337415,0.387448,22.7813,-8.47276,368.795
+BTCUSDm,DEV,votes,30,"Pyramid, 4 adds",2025 H2,1082,0.369061,0.358492,22.366,-15.7844,399.324
+BTCUSDm,DEV,votes,30,"Pyramid, 4 adds",2026 H1,1364,-0.58198,0.226164,21.261,-13.8725,-793.821
+BTCUSDm,DEV,votes,30,"Pyramid, 4 adds",2026 H2,1093,0.426784,0.438186,22.7813,-8.47276,466.475
+BTCUSDm,DEV,votes,31,"Hedge lock, unlocked by the next vote signal",2025 H2,1082,0.115064,0.239784,63.2163,-37.8655,124.499
+BTCUSDm,DEV,votes,31,"Hedge lock, unlocked by the next vote signal",2026 H1,1364,-0.333601,0.266842,61.6569,-29.9807,-455.031
+BTCUSDm,DEV,votes,31,"Hedge lock, unlocked by the next vote signal",2026 H2,1093,-0.152384,0.198603,62.3971,-15.1148,-166.556
+BTCUSDm,DEV,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H2,1082,0.115064,0.239784,63.0314,-37.8655,124.499
+BTCUSDm,DEV,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H1,1364,-0.333601,0.266842,61.5836,-29.9807,-455.031
+BTCUSDm,DEV,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H2,1093,-0.152384,0.198603,62.3971,-15.1148,-166.556
+BTCUSDm,DEV,votes,33,"Hedge lock, both legs closed 4 h later",2025 H2,1082,0.0330294,0.16435,50.7394,-19.4256,35.7378
+BTCUSDm,DEV,votes,33,"Hedge lock, both legs closed 4 h later",2026 H1,1364,-0.255798,0.136685,48.6804,-17.4704,-348.909
+BTCUSDm,DEV,votes,33,"Hedge lock, both legs closed 4 h later",2026 H2,1093,-0.111919,0.116699,49.4968,-10.0908,-122.328
+BTCUSDm,DEV,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H2,1082,-0.443156,0.823022,93.5305,-236.87,-479.495
+BTCUSDm,DEV,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H1,1364,-0.803394,0.443006,93.1818,-167.605,-1095.83
+BTCUSDm,DEV,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H2,1093,-0.729104,0.750034,92.7722,-111.755,-796.911
+BTCUSDm,DEV,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H2,1082,-1.28367,0.41725,77.9113,-79.4677,-1388.93
+BTCUSDm,DEV,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H1,1364,-1.29734,0.348797,76.6129,-61.1234,-1769.58
+BTCUSDm,DEV,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H2,1093,-1.06176,0.282481,75.9378,-41.0628,-1160.51
+BTCUSDm,DEV,votes,36,"Stop and reverse, same size",2025 H2,1082,0.145843,0.214484,50.9242,-38.4912,157.803
+BTCUSDm,DEV,votes,36,"Stop and reverse, same size",2026 H1,1364,-0.25238,0.143855,48.9003,-30.2908,-344.246
+BTCUSDm,DEV,votes,36,"Stop and reverse, same size",2026 H2,1093,-0.155846,0.130932,49.4968,-19.9817,-170.34
+BTCUSDm,DEV,votes,37,"Stop and reverse, double size",2025 H2,1082,0.165596,0.309032,75.5083,-57.7368,179.175
+BTCUSDm,DEV,votes,37,"Stop and reverse, double size",2026 H1,1364,-0.3274,0.203373,73.5337,-45.4363,-446.574
+BTCUSDm,DEV,votes,37,"Stop and reverse, double size",2026 H2,1093,-0.245105,0.195065,73.6505,-29.9725,-267.9
+BTCUSDm,DEV,votes,38,"Martingale: double after a loss, up to x8",2025 H2,1082,-0.0777161,0.538442,50.7394,-153.965,-84.0888
+BTCUSDm,DEV,votes,38,"Martingale: double after a loss, up to x8",2026 H1,1364,-0.847967,0.714333,48.6804,-111.156,-1156.63
+BTCUSDm,DEV,votes,38,"Martingale: double after a loss, up to x8",2026 H2,1093,-0.20143,0.476144,49.4968,-56.7204,-220.163
+BTCUSDm,DEV,votes,39,"Anti-martingale: double after a win, up to x8",2025 H2,1082,0.726885,0.930052,50.7394,-110.642,786.49
+BTCUSDm,DEV,votes,39,"Anti-martingale: double after a win, up to x8",2026 H1,1364,-0.561205,0.283727,48.6804,-138.323,-765.483
+BTCUSDm,DEV,votes,39,"Anti-martingale: double after a win, up to x8",2026 H2,1093,0.340615,0.3557,49.4968,-60.2253,372.293
+BTCUSDm,DEV,votes,40,Daily loss limit 1 R,2025 H2,466,-0.197902,0.332173,49.3562,-19.2456,-92.2225
+BTCUSDm,DEV,votes,40,Daily loss limit 1 R,2026 H1,570,-0.537003,0.188802,45.4386,-17.2904,-306.092
+BTCUSDm,DEV,votes,40,Daily loss limit 1 R,2026 H2,439,-0.13388,0.167422,49.4305,-7.58658,-58.7734
+BTCUSDm,DEV,votes,41,Daily loss limit 2 R,2025 H2,773,0.0235476,0.230863,50.4528,-19.2456,18.2023
+BTCUSDm,DEV,votes,41,Daily loss limit 2 R,2026 H1,969,-0.215599,0.133986,48.5036,-17.2904,-208.915
+BTCUSDm,DEV,votes,41,Daily loss limit 2 R,2026 H2,735,-0.18584,0.141832,48.8435,-9.99083,-136.592
+BTCUSDm,DEV,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H2,1046,-0.339284,0.178767,47.6099,-19.2456,-354.891
+BTCUSDm,DEV,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H1,1311,-0.289745,0.13153,47.521,-16.8344,-379.855
+BTCUSDm,DEV,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H2,1039,0.0755116,0.10629,49.9519,-10.5032,78.4566
+BTCUSDm,DEV,random,1,"Fixed stop 2 ATR, target 2 ATR",2025 H2,1046,-0.159422,0.455139,49.6176,-38.4912,-166.755
+BTCUSDm,DEV,random,1,"Fixed stop 2 ATR, target 2 ATR",2026 H1,1311,-0.12409,0.305743,50.1144,-34.5807,-162.682
+BTCUSDm,DEV,random,1,"Fixed stop 2 ATR, target 2 ATR",2026 H2,1039,-0.112963,0.24954,48.7969,-21.0065,-117.369
+BTCUSDm,DEV,random,2,"Fixed stop 1 ATR, target 2 ATR",2025 H2,1046,-0.31507,0.242189,32.5048,-19.2456,-329.563
+BTCUSDm,DEV,random,2,"Fixed stop 1 ATR, target 2 ATR",2026 H1,1311,-0.221932,0.239881,32.418,-17.2904,-290.953
+BTCUSDm,DEV,random,2,"Fixed stop 1 ATR, target 2 ATR",2026 H2,1039,0.00699673,0.183585,32.7238,-10.5032,7.2696
+BTCUSDm,DEV,random,3,"Fixed stop 2 ATR, target 1 ATR",2025 H2,1046,-0.16575,0.296017,65.7744,-37.2398,-173.375
+BTCUSDm,DEV,random,3,"Fixed stop 2 ATR, target 1 ATR",2026 H1,1311,-0.0432774,0.184159,66.6667,-33.6688,-56.7367
+BTCUSDm,DEV,random,3,"Fixed stop 2 ATR, target 1 ATR",2026 H2,1039,0.0319241,0.145444,66.025,-19.9817,33.1692
+BTCUSDm,DEV,random,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H2,1046,0.27018,0.612389,50.7648,-20.0724,282.608
+BTCUSDm,DEV,random,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H1,1311,-0.14967,0.547203,49.6568,-20.0443,-196.217
+BTCUSDm,DEV,random,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H2,1039,-0.605436,0.635683,48.4119,-20,-629.048
+BTCUSDm,DEV,random,5,"Live ladder, no stop",2025 H2,1046,0.528026,0.473328,99.8088,-483.596,552.315
+BTCUSDm,DEV,random,5,"Live ladder, no stop",2026 H1,1311,-5.37998,6.35784,99.9237,-8364.94,-7053.16
+BTCUSDm,DEV,random,5,"Live ladder, no stop",2026 H2,1039,1.00013,6.33416e-05,100,1,1039.13
+BTCUSDm,DEV,random,6,"Live ladder, basket stop $60",2025 H2,1046,-1.98569,0.300455,95.0287,-62.1341,-2077.03
+BTCUSDm,DEV,random,6,"Live ladder, basket stop $60",2026 H1,1311,-0.906345,0.278945,96.8726,-60,-1188.22
+BTCUSDm,DEV,random,6,"Live ladder, basket stop $60",2026 H2,1039,-0.585256,0.286535,97.4013,-60.2109,-608.081
+BTCUSDm,DEV,random,7,"Live ladder, basket stop $200",2025 H2,1046,-2.08326,0.562743,98.3748,-200,-2179.09
+BTCUSDm,DEV,random,7,"Live ladder, basket stop $200",2026 H1,1311,-0.378504,0.531094,99.3135,-200,-496.218
+BTCUSDm,DEV,random,7,"Live ladder, basket stop $200",2026 H2,1039,-1.32134,0.674354,98.845,-200,-1372.87
+BTCUSDm,DEV,random,8,"Budget 1 R, no add",2025 H2,1046,-0.248381,0.132681,64.0535,-19.2456,-259.806
+BTCUSDm,DEV,random,8,"Budget 1 R, no add",2026 H1,1311,-0.216152,0.110895,64.6834,-16.8344,-283.376
+BTCUSDm,DEV,random,8,"Budget 1 R, no add",2026 H2,1039,-0.0238117,0.105276,64.9663,-9.55973,-24.7403
+BTCUSDm,DEV,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H2,1046,-0.106434,0.192321,52.1033,-19.2456,-111.33
+BTCUSDm,DEV,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H1,1311,-0.423533,0.179163,49.5042,-16.8344,-555.252
+BTCUSDm,DEV,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H2,1039,-0.246431,0.13844,49.6631,-9.99083,-256.041
+BTCUSDm,DEV,random,10,"Budget 2 R, no add",2025 H2,1046,-0.277454,0.173113,78.2983,-37.2398,-290.216
+BTCUSDm,DEV,random,10,"Budget 2 R, no add",2026 H1,1311,-0.0241688,0.174418,80.0915,-33.6688,-31.6854
+BTCUSDm,DEV,random,10,"Budget 2 R, no add",2026 H2,1039,-0.0751245,0.12321,77.9596,-19.1195,-78.0543
+BTCUSDm,DEV,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H2,1046,-0.315848,0.295972,69.4073,-31.4147,-330.377
+BTCUSDm,DEV,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H1,1311,-0.35403,0.156452,69.3364,-33.6688,-464.133
+BTCUSDm,DEV,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H2,1039,-0.000751739,0.206519,69.9711,-19.1195,-0.781057
+BTCUSDm,DEV,random,12,"Budget 3 R, no add",2025 H2,1046,-0.211667,0.159685,84.3212,-44.7285,-221.404
+BTCUSDm,DEV,random,12,"Budget 3 R, no add",2026 H1,1311,-0.113472,0.23926,85.6598,-50.5032,-148.762
+BTCUSDm,DEV,random,12,"Budget 3 R, no add",2026 H2,1039,-0.101468,0.123495,83.9269,-28.6792,-105.425
+BTCUSDm,DEV,random,13,"Budget 3 R, 1 add 1 ATR apart",2025 H2,1046,-0.512272,0.261123,81.1663,-55.8597,-535.837
+BTCUSDm,DEV,random,13,"Budget 3 R, 1 add 1 ATR apart",2026 H1,1311,-0.099774,0.26611,82.9901,-50.5032,-130.804
+BTCUSDm,DEV,random,13,"Budget 3 R, 1 add 1 ATR apart",2026 H2,1039,-0.137201,0.135444,81.5207,-22.8515,-142.552
+BTCUSDm,DEV,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H2,1046,-0.45981,0.361864,78.5851,-44.7285,-480.961
+BTCUSDm,DEV,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H1,1311,-0.311872,0.231082,78.032,-50.5032,-408.864
+BTCUSDm,DEV,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H2,1039,-0.0938272,0.212955,78.3446,-22.8515,-97.4864
+BTCUSDm,DEV,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H2,1046,-0.636023,0.368555,73.9006,-44.7285,-665.28
+BTCUSDm,DEV,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H1,1311,-0.501749,0.226502,74.2182,-50.5032,-657.793
+BTCUSDm,DEV,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H2,1039,-0.113367,0.26334,74.3985,-22.8515,-117.788
+BTCUSDm,DEV,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H2,1046,-0.674333,0.398385,70.2677,-44.7285,-705.352
+BTCUSDm,DEV,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H1,1311,-0.377927,0.245376,70.5568,-50.5032,-495.462
+BTCUSDm,DEV,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H2,1039,-0.0370068,0.289686,71.1261,-28.6792,-38.4501
+BTCUSDm,DEV,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H2,1046,-0.45981,0.361864,78.5851,-44.7285,-480.961
+BTCUSDm,DEV,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H1,1311,-0.311872,0.231082,78.032,-50.5032,-408.864
+BTCUSDm,DEV,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H2,1039,-0.0938272,0.212955,78.3446,-22.8515,-97.4864
+BTCUSDm,DEV,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H2,1046,-0.45981,0.361864,78.5851,-44.7285,-480.961
+BTCUSDm,DEV,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H1,1311,-0.311872,0.231082,78.032,-50.5032,-408.864
+BTCUSDm,DEV,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H2,1039,-0.0938272,0.212955,78.3446,-22.8515,-97.4864
+BTCUSDm,DEV,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H2,1046,-0.45981,0.361864,78.5851,-44.7285,-480.961
+BTCUSDm,DEV,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H1,1311,-0.311872,0.231082,78.032,-50.5032,-408.864
+BTCUSDm,DEV,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H2,1039,-0.0938272,0.212955,78.3446,-22.8515,-97.4864
+BTCUSDm,DEV,random,20,Add when the M5 MACD histogram turns,2025 H2,1046,-0.775899,0.281671,79.7323,-55.8597,-811.59
+BTCUSDm,DEV,random,20,Add when the M5 MACD histogram turns,2026 H1,1311,-0.0306499,0.22196,82.685,-50.5032,-40.182
+BTCUSDm,DEV,random,20,Add when the M5 MACD histogram turns,2026 H2,1039,-0.147923,0.177061,80.7507,-28.6792,-153.692
+BTCUSDm,DEV,random,21,Add when the M15 MACD histogram turns,2025 H2,1046,-0.785281,0.24364,80.6883,-55.8597,-821.404
+BTCUSDm,DEV,random,21,Add when the M15 MACD histogram turns,2026 H1,1311,-0.00932855,0.236681,83.9817,-50.5032,-12.2297
+BTCUSDm,DEV,random,21,Add when the M15 MACD histogram turns,2026 H2,1039,-0.174271,0.121291,81.9057,-28.6792,-181.068
+BTCUSDm,DEV,random,22,Add when the M5 RSI comes back through 35 / 65,2025 H2,1046,-0.686619,0.259107,80.5927,-55.8597,-718.203
+BTCUSDm,DEV,random,22,Add when the M5 RSI comes back through 35 / 65,2026 H1,1311,-0.0439234,0.257368,83.7529,-50.5032,-57.5836
+BTCUSDm,DEV,random,22,Add when the M5 RSI comes back through 35 / 65,2026 H2,1039,-0.177683,0.151475,81.5207,-28.6792,-184.613
+BTCUSDm,DEV,random,23,Add when the M15 RSI comes back through 35 / 65,2025 H2,1046,-0.335185,0.186495,83.0784,-55.8597,-350.604
+BTCUSDm,DEV,random,23,Add when the M15 RSI comes back through 35 / 65,2026 H1,1311,0.0267962,0.261767,85.2784,-50.5032,35.1299
+BTCUSDm,DEV,random,23,Add when the M15 RSI comes back through 35 / 65,2026 H2,1039,-0.180344,0.124265,82.4832,-28.6792,-187.378
+BTCUSDm,DEV,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H2,1046,-0.225933,0.151443,33.0784,-19.2456,-236.326
+BTCUSDm,DEV,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H1,1311,-0.247574,0.113518,31.4264,-16.8344,-324.57
+BTCUSDm,DEV,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H2,1039,-0.0339975,0.109632,32.6275,-9.55973,-35.3234
+BTCUSDm,DEV,random,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H2,1046,-0.341434,0.209618,24.0918,-19.2456,-357.14
+BTCUSDm,DEV,random,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H1,1311,-0.244675,0.185228,24.7902,-16.8344,-320.77
+BTCUSDm,DEV,random,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H2,1039,0.0137398,0.137971,24.0616,-10.5032,14.2757
+BTCUSDm,DEV,random,26,"Trailing stop 1 ATR, no target",2025 H2,1046,-0.134371,0.157365,35.6597,-13.8236,-140.552
+BTCUSDm,DEV,random,26,"Trailing stop 1 ATR, no target",2026 H1,1311,-0.348165,0.119417,34.0198,-13.7387,-456.444
+BTCUSDm,DEV,random,26,"Trailing stop 1 ATR, no target",2026 H2,1039,-0.0337409,0.107582,37.3436,-9.54603,-35.0568
+BTCUSDm,DEV,random,27,"Trailing stop 2 ATR, no target",2025 H2,1046,-0.417797,0.450507,37.0937,-29.7724,-437.016
+BTCUSDm,DEV,random,27,"Trailing stop 2 ATR, no target",2026 H1,1311,-0.0136928,0.324396,36.2319,-30.0801,-17.9513
+BTCUSDm,DEV,random,27,"Trailing stop 2 ATR, no target",2026 H2,1039,0.0655132,0.33423,37.4398,-18.1621,68.0682
+BTCUSDm,DEV,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H2,1046,-0.35339,0.172875,47.6099,-19.2456,-369.646
+BTCUSDm,DEV,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H1,1311,-0.347212,0.12988,47.521,-16.8344,-455.195
+BTCUSDm,DEV,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H2,1039,0.0574343,0.121678,49.9519,-10.5032,59.6742
+BTCUSDm,DEV,random,29,"Pyramid, 2 adds",2025 H2,1046,-0.0668899,0.296748,21.7017,-16.1276,-69.9669
+BTCUSDm,DEV,random,29,"Pyramid, 2 adds",2026 H1,1311,-0.613175,0.189965,19.3745,-13.8333,-803.872
+BTCUSDm,DEV,random,29,"Pyramid, 2 adds",2026 H2,1039,-0.128406,0.178695,23.6766,-9.54603,-133.414
+BTCUSDm,DEV,random,30,"Pyramid, 4 adds",2025 H2,1046,-0.161269,0.294043,21.7017,-16.1276,-168.687
+BTCUSDm,DEV,random,30,"Pyramid, 4 adds",2026 H1,1311,-0.679833,0.200011,19.3745,-13.8333,-891.262
+BTCUSDm,DEV,random,30,"Pyramid, 4 adds",2026 H2,1039,-0.139417,0.197945,23.6766,-9.54603,-144.855
+BTCUSDm,DEV,random,31,"Hedge lock, unlocked by the next vote signal",2025 H2,1046,-0.174635,0.236956,61.3767,-37.8655,-182.669
+BTCUSDm,DEV,random,31,"Hedge lock, unlocked by the next vote signal",2026 H1,1311,-0.410766,0.188775,59.9542,-29.4197,-538.514
+BTCUSDm,DEV,random,31,"Hedge lock, unlocked by the next vote signal",2026 H2,1039,0.0826071,0.122782,62.6564,-18.7024,85.8288
+BTCUSDm,DEV,random,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H2,1046,-0.174635,0.236956,61.1855,-37.8655,-182.669
+BTCUSDm,DEV,random,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H1,1311,-0.410766,0.188775,59.878,-29.4197,-538.514
+BTCUSDm,DEV,random,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H2,1039,0.0826071,0.122782,62.6564,-18.7024,85.8288
+BTCUSDm,DEV,random,33,"Hedge lock, both legs closed 4 h later",2025 H2,1046,-0.438164,0.181871,47.6099,-19.4256,-458.319
+BTCUSDm,DEV,random,33,"Hedge lock, both legs closed 4 h later",2026 H1,1311,-0.369482,0.133054,47.521,-17.0144,-484.39
+BTCUSDm,DEV,random,33,"Hedge lock, both legs closed 4 h later",2026 H2,1039,0.030272,0.107436,49.9519,-10.6032,31.4526
+BTCUSDm,DEV,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H2,1046,-1.06112,0.838161,92.543,-214.821,-1109.93
+BTCUSDm,DEV,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H1,1311,-0.680566,0.450243,93.2113,-220.027,-892.222
+BTCUSDm,DEV,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H2,1039,-0.0443378,0.424315,93.2628,-97.8144,-46.067
+BTCUSDm,DEV,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H2,1046,-1.78898,0.410098,76.0994,-79.4677,-1871.27
+BTCUSDm,DEV,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H1,1311,-1.77482,0.302657,75.1335,-60.2587,-2326.79
+BTCUSDm,DEV,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H2,1039,-0.735261,0.192572,76.8046,-41.0628,-763.936
+BTCUSDm,DEV,random,36,"Stop and reverse, same size",2025 H2,1046,-0.375453,0.226454,47.7055,-38.4912,-392.723
+BTCUSDm,DEV,random,36,"Stop and reverse, same size",2026 H1,1311,-0.429445,0.149445,47.9024,-29.1689,-563.002
+BTCUSDm,DEV,random,36,"Stop and reverse, same size",2026 H2,1039,0.0602926,0.126249,49.9519,-21.0065,62.644
+BTCUSDm,DEV,random,37,"Stop and reverse, double size",2025 H2,1046,-0.411621,0.353819,73.5182,-57.7368,-430.555
+BTCUSDm,DEV,random,37,"Stop and reverse, double size",2026 H1,1311,-0.569145,0.224547,71.9298,-43.7533,-746.15
+BTCUSDm,DEV,random,37,"Stop and reverse, double size",2026 H2,1039,0.0450735,0.165128,74.7834,-31.5097,46.8314
+BTCUSDm,DEV,random,38,"Martingale: double after a loss, up to x8",2025 H2,1046,-1.16263,0.684217,47.6099,-122.419,-1216.11
+BTCUSDm,DEV,random,38,"Martingale: double after a loss, up to x8",2026 H1,1311,-0.451732,0.449779,47.521,-71.6688,-592.221
+BTCUSDm,DEV,random,38,"Martingale: double after a loss, up to x8",2026 H2,1039,0.22377,0.33621,49.9519,-57.5635,232.497
+BTCUSDm,DEV,random,39,"Anti-martingale: double after a win, up to x8",2025 H2,1046,-0.77511,0.530954,47.6099,-103.035,-810.766
+BTCUSDm,DEV,random,39,"Anti-martingale: double after a win, up to x8",2026 H1,1311,-0.484316,0.505282,47.521,-134.675,-634.939
+BTCUSDm,DEV,random,39,"Anti-martingale: double after a win, up to x8",2026 H2,1039,0.344847,0.449456,49.9519,-57.0432,358.296
+BTCUSDm,DEV,random,40,Daily loss limit 1 R,2025 H2,475,-0.0221635,0.348985,50.5263,-19.2456,-10.5277
+BTCUSDm,DEV,random,40,Daily loss limit 1 R,2026 H1,540,-0.344828,0.247123,47.5926,-15.7279,-186.207
+BTCUSDm,DEV,random,40,Daily loss limit 1 R,2026 H2,478,0.0671486,0.160814,50.4184,-7.52817,32.097
+BTCUSDm,DEV,random,41,Daily loss limit 2 R,2025 H2,724,-0.18213,0.229345,48.4807,-19.2456,-131.862
+BTCUSDm,DEV,random,41,Daily loss limit 2 R,2026 H1,898,-0.290468,0.154681,47.4388,-16.8344,-260.84
+BTCUSDm,DEV,random,41,Daily loss limit 2 R,2026 H2,694,0.00945046,0.150752,49.1354,-7.87207,6.55862
+BTCUSDm,CONFIRM,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H1,515,-0.833095,0.181163,39.8058,-15.8611,-429.044
+BTCUSDm,CONFIRM,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H2,788,-0.121209,0.166887,48.0964,-15.7372,-95.5125
+BTCUSDm,CONFIRM,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H1,783,-0.357607,0.303628,48.659,-22.4921,-280.006
+BTCUSDm,CONFIRM,trend,1,"Fixed stop 2 ATR, target 2 ATR",2024 H1,515,-0.663177,0.479112,44.6602,-28.4935,-341.536
+BTCUSDm,CONFIRM,trend,1,"Fixed stop 2 ATR, target 2 ATR",2024 H2,788,1.09189,0.638676,53.5533,-31.8084,860.409
+BTCUSDm,CONFIRM,trend,1,"Fixed stop 2 ATR, target 2 ATR",2025 H1,783,-0.298856,0.762519,50.1916,-44.9842,-234.004
+BTCUSDm,CONFIRM,trend,2,"Fixed stop 1 ATR, target 2 ATR",2024 H1,515,-0.529709,0.270369,27.9612,-15.8611,-272.8
+BTCUSDm,CONFIRM,trend,2,"Fixed stop 1 ATR, target 2 ATR",2024 H2,788,0.22506,0.31289,34.1371,-15.9042,177.347
+BTCUSDm,CONFIRM,trend,2,"Fixed stop 1 ATR, target 2 ATR",2025 H1,783,-0.482429,0.54435,32.567,-22.4921,-377.742
+BTCUSDm,CONFIRM,trend,3,"Fixed stop 2 ATR, target 1 ATR",2024 H1,515,-0.864698,0.275175,58.6408,-28.4935,-445.319
+BTCUSDm,CONFIRM,trend,3,"Fixed stop 2 ATR, target 1 ATR",2024 H2,788,0.100001,0.39968,66.3706,-31.4743,78.8012
+BTCUSDm,CONFIRM,trend,3,"Fixed stop 2 ATR, target 1 ATR",2025 H1,783,-0.167234,0.440994,66.539,-38.7565,-130.944
+BTCUSDm,CONFIRM,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H1,515,1.92786,1.52086,54.9515,-20.4607,992.849
+BTCUSDm,CONFIRM,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H2,788,1.01391,1.13338,52.665,-20.5153,798.959
+BTCUSDm,CONFIRM,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H1,783,0.399751,1.06338,50.5747,-20.0128,313.005
+BTCUSDm,CONFIRM,trend,5,"Live ladder, no stop",2024 H1,515,-0.12234,1.16996,99.8058,-577.832,-63.0051
+BTCUSDm,CONFIRM,trend,5,"Live ladder, no stop",2024 H2,788,1.00004,2.25881e-05,100,1,788.03
+BTCUSDm,CONFIRM,trend,5,"Live ladder, no stop",2025 H1,783,1.00001,1.12299e-05,100,1,783.009
+BTCUSDm,CONFIRM,trend,6,"Live ladder, basket stop $60",2024 H1,515,-2.07801,0.587693,94.9515,-60,-1070.17
+BTCUSDm,CONFIRM,trend,6,"Live ladder, basket stop $60",2024 H2,788,-1.55453,0.376988,95.8122,-60,-1224.97
+BTCUSDm,CONFIRM,trend,6,"Live ladder, basket stop $60",2025 H1,783,-1.18134,0.373186,96.424,-60,-924.991
+BTCUSDm,CONFIRM,trend,7,"Live ladder, basket stop $200",2024 H1,515,-2.51102,1.30327,98.2524,-200,-1293.17
+BTCUSDm,CONFIRM,trend,7,"Live ladder, basket stop $200",2024 H2,788,-2.06088,0.751619,98.4772,-200,-1623.97
+BTCUSDm,CONFIRM,trend,7,"Live ladder, basket stop $200",2025 H1,783,-2.08045,1.06049,98.4674,-200,-1628.99
+BTCUSDm,CONFIRM,trend,8,"Budget 1 R, no add",2024 H1,515,-0.888532,0.167916,54.1748,-15.8611,-457.594
+BTCUSDm,CONFIRM,trend,8,"Budget 1 R, no add",2024 H2,788,-0.173497,0.140602,63.5787,-15.7372,-136.715
+BTCUSDm,CONFIRM,trend,8,"Budget 1 R, no add",2025 H1,783,-0.486596,0.201381,62.3244,-22.4921,-381.005
+BTCUSDm,CONFIRM,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H1,515,-1.22614,0.31317,40.1942,-15.8611,-631.463
+BTCUSDm,CONFIRM,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H2,788,-0.463547,0.192155,47.5888,-17.3424,-365.275
+BTCUSDm,CONFIRM,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H1,783,-0.819596,0.225835,46.871,-22.4921,-641.744
+BTCUSDm,CONFIRM,trend,10,"Budget 2 R, no add",2024 H1,515,-0.847373,0.176397,71.2621,-28.1822,-436.397
+BTCUSDm,CONFIRM,trend,10,"Budget 2 R, no add",2024 H2,788,0.0290598,0.291094,79.4416,-31.4743,22.8991
+BTCUSDm,CONFIRM,trend,10,"Budget 2 R, no add",2025 H1,783,-0.157071,0.279957,78.9272,-36.5493,-122.986
+BTCUSDm,CONFIRM,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H1,515,-1.488,0.363729,60,-31.7222,-766.318
+BTCUSDm,CONFIRM,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H2,788,-0.470711,0.256936,67.7665,-31.4743,-370.92
+BTCUSDm,CONFIRM,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H1,783,-1.0864,0.400927,65.9004,-44.9842,-850.655
+BTCUSDm,CONFIRM,trend,12,"Budget 3 R, no add",2024 H1,515,-0.946145,0.3136,79.2233,-42.2732,-487.265
+BTCUSDm,CONFIRM,trend,12,"Budget 3 R, no add",2024 H2,788,-0.0350923,0.314121,85.0254,-47.2115,-27.6527
+BTCUSDm,CONFIRM,trend,12,"Budget 3 R, no add",2025 H1,783,-0.0727921,0.336511,84.6743,-54.8239,-56.9962
+BTCUSDm,CONFIRM,trend,13,"Budget 3 R, 1 add 1 ATR apart",2024 H1,515,-1.1457,0.29136,74.3689,-39.6096,-590.035
+BTCUSDm,CONFIRM,trend,13,"Budget 3 R, 1 add 1 ATR apart",2024 H2,788,-0.127055,0.367312,81.9797,-47.2115,-100.119
+BTCUSDm,CONFIRM,trend,13,"Budget 3 R, 1 add 1 ATR apart",2025 H1,783,-0.0740527,0.315291,82.2478,-54.8239,-57.9833
+BTCUSDm,CONFIRM,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H1,515,-1.40018,0.400335,70.0971,-39.6096,-721.09
+BTCUSDm,CONFIRM,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H2,788,-0.592468,0.312775,77.0305,-47.2115,-466.865
+BTCUSDm,CONFIRM,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H1,783,-0.20319,0.425454,77.9055,-67.4764,-159.098
+BTCUSDm,CONFIRM,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H1,515,-1.73885,0.403134,65.8252,-42.7402,-895.506
+BTCUSDm,CONFIRM,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H2,788,-0.592186,0.341464,72.7157,-47.2115,-466.642
+BTCUSDm,CONFIRM,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H1,783,-1.36233,0.437653,71.0089,-67.4764,-1066.7
+BTCUSDm,CONFIRM,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H1,515,-2.06596,0.494123,61.9417,-47.5833,-1063.97
+BTCUSDm,CONFIRM,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H2,788,-0.61504,0.393336,69.5431,-47.2115,-484.651
+BTCUSDm,CONFIRM,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H1,783,-1.48744,0.62305,67.3052,-67.4764,-1164.67
+BTCUSDm,CONFIRM,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H1,515,-1.40018,0.400335,70.0971,-39.6096,-721.09
+BTCUSDm,CONFIRM,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H2,788,-0.592468,0.312775,77.0305,-47.2115,-466.865
+BTCUSDm,CONFIRM,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H1,783,-0.193642,0.427013,77.9055,-60,-151.622
+BTCUSDm,CONFIRM,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H1,515,-1.40018,0.400335,70.0971,-39.6096,-721.09
+BTCUSDm,CONFIRM,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H2,788,-0.592468,0.312775,77.0305,-47.2115,-466.865
+BTCUSDm,CONFIRM,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H1,783,-0.193642,0.427013,77.9055,-60,-151.622
+BTCUSDm,CONFIRM,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H1,515,-1.40018,0.400335,70.0971,-39.6096,-721.09
+BTCUSDm,CONFIRM,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H2,788,-0.592468,0.312775,77.0305,-47.2115,-466.865
+BTCUSDm,CONFIRM,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H1,783,-0.193642,0.427013,77.9055,-60,-151.622
+BTCUSDm,CONFIRM,trend,20,Add when the M5 MACD histogram turns,2024 H1,515,-1.49604,0.308786,73.0097,-39.6096,-770.46
+BTCUSDm,CONFIRM,trend,20,Add when the M5 MACD histogram turns,2024 H2,788,-0.22511,0.356266,81.0914,-47.2115,-177.386
+BTCUSDm,CONFIRM,trend,20,Add when the M5 MACD histogram turns,2025 H1,783,-0.35095,0.425217,80.9706,-54.8239,-274.794
+BTCUSDm,CONFIRM,trend,21,Add when the M15 MACD histogram turns,2024 H1,515,-1.04595,0.264721,75.534,-39.6096,-538.666
+BTCUSDm,CONFIRM,trend,21,Add when the M15 MACD histogram turns,2024 H2,788,-0.167875,0.353161,82.1066,-47.2115,-132.285
+BTCUSDm,CONFIRM,trend,21,Add when the M15 MACD histogram turns,2025 H1,783,-0.0197486,0.355094,83.1418,-54.8239,-15.4631
+BTCUSDm,CONFIRM,trend,22,Add when the M5 RSI comes back through 35 / 65,2024 H1,515,-1.09357,0.262919,75.534,-39.6096,-563.187
+BTCUSDm,CONFIRM,trend,22,Add when the M5 RSI comes back through 35 / 65,2024 H2,788,-0.0841625,0.315147,82.6142,-47.2115,-66.3201
+BTCUSDm,CONFIRM,trend,22,Add when the M5 RSI comes back through 35 / 65,2025 H1,783,-0.065533,0.393067,82.8863,-54.8239,-51.3124
+BTCUSDm,CONFIRM,trend,23,Add when the M15 RSI comes back through 35 / 65,2024 H1,515,-1.25296,0.338858,76.1165,-42.2732,-645.275
+BTCUSDm,CONFIRM,trend,23,Add when the M15 RSI comes back through 35 / 65,2024 H2,788,-0.173159,0.332224,82.9949,-47.2115,-136.449
+BTCUSDm,CONFIRM,trend,23,Add when the M15 RSI comes back through 35 / 65,2025 H1,783,0.0655608,0.321029,84.0358,-54.8239,51.3341
+BTCUSDm,CONFIRM,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H1,515,-0.885144,0.18121,26.0194,-15.8611,-455.849
+BTCUSDm,CONFIRM,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H2,788,-0.212232,0.139284,30.9645,-15.7372,-167.239
+BTCUSDm,CONFIRM,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H1,783,-0.58346,0.272512,30.5236,-22.4921,-456.849
+BTCUSDm,CONFIRM,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H1,515,-0.713342,0.242113,21.165,-15.8611,-367.371
+BTCUSDm,CONFIRM,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H2,788,0.115591,0.262406,25.8883,-15.7372,91.0856
+BTCUSDm,CONFIRM,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H1,783,-0.409926,0.382691,24.5211,-22.4921,-320.972
+BTCUSDm,CONFIRM,trend,26,"Trailing stop 1 ATR, no target",2024 H1,515,-0.730974,0.210453,29.7087,-15.8611,-376.452
+BTCUSDm,CONFIRM,trend,26,"Trailing stop 1 ATR, no target",2024 H2,788,-0.0220948,0.25913,34.8985,-13.8789,-17.4107
+BTCUSDm,CONFIRM,trend,26,"Trailing stop 1 ATR, no target",2025 H1,783,-0.661164,0.316387,35.249,-18.1962,-517.691
+BTCUSDm,CONFIRM,trend,27,"Trailing stop 2 ATR, no target",2024 H1,515,0.0401135,0.640444,34.1748,-26.1221,20.6585
+BTCUSDm,CONFIRM,trend,27,"Trailing stop 2 ATR, no target",2024 H2,788,0.418135,0.684297,39.9746,-29.616,329.491
+BTCUSDm,CONFIRM,trend,27,"Trailing stop 2 ATR, no target",2025 H1,783,-0.213434,0.760147,37.4202,-33.039,-167.119
+BTCUSDm,CONFIRM,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H1,515,-0.799592,0.21229,39.8058,-15.8611,-411.79
+BTCUSDm,CONFIRM,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H2,788,-0.0318831,0.202794,48.0964,-15.7372,-25.1239
+BTCUSDm,CONFIRM,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H1,783,-0.452132,0.32471,48.659,-22.4921,-354.02
+BTCUSDm,CONFIRM,trend,29,"Pyramid, 2 adds",2024 H1,515,-0.931056,0.253554,16.699,-15.8611,-479.494
+BTCUSDm,CONFIRM,trend,29,"Pyramid, 2 adds",2024 H2,788,-0.123669,0.484134,21.066,-13.8789,-97.451
+BTCUSDm,CONFIRM,trend,29,"Pyramid, 2 adds",2025 H1,783,-0.967656,0.488982,21.5837,-18.1962,-757.675
+BTCUSDm,CONFIRM,trend,30,"Pyramid, 4 adds",2024 H1,515,-1.02504,0.262746,16.699,-15.8611,-527.894
+BTCUSDm,CONFIRM,trend,30,"Pyramid, 4 adds",2024 H2,788,-0.285993,0.469951,21.066,-13.8789,-225.363
+BTCUSDm,CONFIRM,trend,30,"Pyramid, 4 adds",2025 H1,783,-0.9502,0.513662,21.5837,-18.1962,-744.007
+BTCUSDm,CONFIRM,trend,31,"Hedge lock, unlocked by the next vote signal",2024 H1,515,-1.09329,0.331492,54.1748,-29.0643,-563.043
+BTCUSDm,CONFIRM,trend,31,"Hedge lock, unlocked by the next vote signal",2024 H2,788,-0.122047,0.197078,61.5482,-30.2991,-96.1732
+BTCUSDm,CONFIRM,trend,31,"Hedge lock, unlocked by the next vote signal",2025 H1,783,-0.215954,0.313936,62.069,-42.6597,-169.092
+BTCUSDm,CONFIRM,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H1,515,-1.09329,0.331492,53.9806,-29.0643,-563.043
+BTCUSDm,CONFIRM,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H2,788,-0.121683,0.197015,61.4213,-30.2991,-95.8864
+BTCUSDm,CONFIRM,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H1,783,-0.215954,0.313936,61.6858,-42.6597,-169.092
+BTCUSDm,CONFIRM,trend,33,"Hedge lock, both legs closed 4 h later",2024 H1,515,-1.12896,0.195788,39.8058,-16.54,-581.414
+BTCUSDm,CONFIRM,trend,33,"Hedge lock, both legs closed 4 h later",2024 H2,788,-0.26521,0.171076,48.0964,-15.9529,-208.985
+BTCUSDm,CONFIRM,trend,33,"Hedge lock, both legs closed 4 h later",2025 H1,783,-0.500041,0.309827,48.659,-22.7822,-391.532
+BTCUSDm,CONFIRM,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H1,515,-6.62703,1.66481,83.4951,-218.906,-3412.92
+BTCUSDm,CONFIRM,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H2,788,-1.21929,0.815504,92.2589,-218.603,-960.803
+BTCUSDm,CONFIRM,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H1,783,-1.49954,0.782485,92.848,-213.192,-1174.14
+BTCUSDm,CONFIRM,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H1,515,-4.53945,0.738174,65.4369,-61.4095,-2337.82
+BTCUSDm,CONFIRM,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H2,788,-2.01209,0.49631,74.4924,-62.9784,-1585.53
+BTCUSDm,CONFIRM,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H1,783,-2.28785,0.593199,76.6284,-83.3083,-1791.39
+BTCUSDm,CONFIRM,trend,36,"Stop and reverse, same size",2024 H1,515,-1.28004,0.235835,40.1942,-31.7222,-659.222
+BTCUSDm,CONFIRM,trend,36,"Stop and reverse, same size",2024 H2,788,-0.248883,0.185314,48.2234,-28.9434,-196.12
+BTCUSDm,CONFIRM,trend,36,"Stop and reverse, same size",2025 H1,783,-0.722144,0.335842,48.659,-44.9842,-565.439
+BTCUSDm,CONFIRM,trend,37,"Stop and reverse, double size",2024 H1,515,-1.72699,0.348284,66.0194,-47.5833,-889.4
+BTCUSDm,CONFIRM,trend,37,"Stop and reverse, double size",2024 H2,788,-0.376557,0.300956,72.8426,-43.4151,-296.727
+BTCUSDm,CONFIRM,trend,37,"Stop and reverse, double size",2025 H1,783,-1.08668,0.427492,71.6475,-67.4764,-850.871
+BTCUSDm,CONFIRM,trend,38,"Martingale: double after a loss, up to x8",2024 H1,515,-2.64661,0.684471,39.8058,-126.889,-1363
+BTCUSDm,CONFIRM,trend,38,"Martingale: double after a loss, up to x8",2024 H2,788,-0.42455,0.663275,48.0964,-102.537,-334.546
+BTCUSDm,CONFIRM,trend,38,"Martingale: double after a loss, up to x8",2025 H1,783,0.195303,0.920618,48.659,-161.34,152.922
+BTCUSDm,CONFIRM,trend,39,"Anti-martingale: double after a win, up to x8",2024 H1,515,-1.58578,0.586829,39.8058,-91.9246,-816.678
+BTCUSDm,CONFIRM,trend,39,"Anti-martingale: double after a win, up to x8",2024 H2,788,-0.214522,0.706573,48.0964,-106.768,-169.043
+BTCUSDm,CONFIRM,trend,39,"Anti-martingale: double after a win, up to x8",2025 H1,783,-1.44423,0.650563,48.659,-103.91,-1130.83
+BTCUSDm,CONFIRM,trend,40,Daily loss limit 1 R,2024 H1,256,-0.835298,0.271331,40.2344,-14.2467,-213.836
+BTCUSDm,CONFIRM,trend,40,Daily loss limit 1 R,2024 H2,399,-0.192741,0.303965,48.1203,-15.7372,-76.9038
+BTCUSDm,CONFIRM,trend,40,Daily loss limit 1 R,2025 H1,380,-0.726277,0.350308,45.2632,-20.1676,-275.985
+BTCUSDm,CONFIRM,trend,41,Daily loss limit 2 R,2024 H1,413,-0.802648,0.218202,40.1937,-14.2467,-331.494
+BTCUSDm,CONFIRM,trend,41,Daily loss limit 2 R,2024 H2,606,-0.319365,0.213296,46.8647,-15.7372,-193.535
+BTCUSDm,CONFIRM,trend,41,Daily loss limit 2 R,2025 H1,652,-0.317936,0.317002,49.3865,-20.1676,-207.294
+BTCUSDm,CONFIRM,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H1,1028,-0.880428,0.17012,40.4669,-15.8611,-905.08
+BTCUSDm,CONFIRM,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H2,1444,-0.263219,0.146757,47.3684,-15.9042,-380.088
+BTCUSDm,CONFIRM,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H1,1437,-0.175515,0.144664,48.8518,-22.4921,-252.215
+BTCUSDm,CONFIRM,votes,1,"Fixed stop 2 ATR, target 2 ATR",2024 H1,1028,-0.42707,0.406183,47.6654,-28.4935,-439.028
+BTCUSDm,CONFIRM,votes,1,"Fixed stop 2 ATR, target 2 ATR",2024 H2,1444,0.234151,0.355596,49.6537,-31.4743,338.114
+BTCUSDm,CONFIRM,votes,1,"Fixed stop 2 ATR, target 2 ATR",2025 H1,1437,-0.0404896,0.34692,49.4781,-44.9842,-58.1835
+BTCUSDm,CONFIRM,votes,2,"Fixed stop 1 ATR, target 2 ATR",2024 H1,1028,-0.812384,0.201719,27.821,-15.8611,-835.131
+BTCUSDm,CONFIRM,votes,2,"Fixed stop 1 ATR, target 2 ATR",2024 H2,1444,-0.0755265,0.200859,32.3407,-15.9042,-109.06
+BTCUSDm,CONFIRM,votes,2,"Fixed stop 1 ATR, target 2 ATR",2025 H1,1437,-0.189941,0.225826,32.3591,-22.4921,-272.946
+BTCUSDm,CONFIRM,votes,3,"Fixed stop 2 ATR, target 1 ATR",2024 H1,1028,-0.765558,0.310176,61.0895,-28.4935,-786.993
+BTCUSDm,CONFIRM,votes,3,"Fixed stop 2 ATR, target 1 ATR",2024 H2,1444,-0.251272,0.203554,64.3352,-31.4743,-362.837
+BTCUSDm,CONFIRM,votes,3,"Fixed stop 2 ATR, target 1 ATR",2025 H1,1437,-0.0150492,0.25122,66.11,-38.7565,-21.6256
+BTCUSDm,CONFIRM,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H1,1028,-0.411711,0.954642,49.0272,-20.2558,-423.239
+BTCUSDm,CONFIRM,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H2,1444,-0.205171,0.508153,49.5845,-20.5153,-296.266
+BTCUSDm,CONFIRM,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H1,1437,-0.592089,0.367979,48.5734,-20.0128,-850.832
+BTCUSDm,CONFIRM,votes,5,"Live ladder, no stop",2024 H1,1028,-11.6278,8.14967,99.6109,-7091.17,-11953.4
+BTCUSDm,CONFIRM,votes,5,"Live ladder, no stop",2024 H2,1444,1.00047,0.000466294,100,1,1444.68
+BTCUSDm,CONFIRM,votes,5,"Live ladder, no stop",2025 H1,1437,-1.04342,2.04451,99.9304,-2937.66,-1499.4
+BTCUSDm,CONFIRM,votes,6,"Live ladder, basket stop $60",2024 H1,1028,-2.74293,0.50204,93.8716,-62.9426,-2819.74
+BTCUSDm,CONFIRM,votes,6,"Live ladder, basket stop $60",2024 H2,1444,-2.08333,0.342871,94.9446,-60,-3008.32
+BTCUSDm,CONFIRM,votes,6,"Live ladder, basket stop $60",2025 H1,1437,-0.696403,0.227181,97.2164,-60,-1000.73
+BTCUSDm,CONFIRM,votes,7,"Live ladder, basket stop $200",2024 H1,1028,-3.10592,0.989165,97.9572,-200,-3192.88
+BTCUSDm,CONFIRM,votes,7,"Live ladder, basket stop $200",2024 H2,1444,-1.92266,0.477093,98.5457,-200,-2776.32
+BTCUSDm,CONFIRM,votes,7,"Live ladder, basket stop $200",2025 H1,1437,-1.23642,0.541462,98.8866,-200,-1776.73
+BTCUSDm,CONFIRM,votes,8,"Budget 1 R, no add",2024 H1,1028,-0.929212,0.137914,53.8911,-15.8611,-955.23
+BTCUSDm,CONFIRM,votes,8,"Budget 1 R, no add",2024 H2,1444,-0.230519,0.0960411,63.1579,-15.7372,-332.87
+BTCUSDm,CONFIRM,votes,8,"Budget 1 R, no add",2025 H1,1437,-0.187695,0.114714,64.5094,-22.4921,-269.717
+BTCUSDm,CONFIRM,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H1,1028,-1.40879,0.221153,38.5214,-16.0663,-1448.24
+BTCUSDm,CONFIRM,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H2,1444,-0.618674,0.124895,47.0222,-17.3424,-893.365
+BTCUSDm,CONFIRM,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H1,1437,-0.534432,0.202184,48.643,-22.4921,-767.979
+BTCUSDm,CONFIRM,votes,10,"Budget 2 R, no add",2024 H1,1028,-0.910462,0.20669,72.3735,-28.1822,-935.955
+BTCUSDm,CONFIRM,votes,10,"Budget 2 R, no add",2024 H2,1444,-0.167066,0.175302,77.9086,-31.4743,-241.244
+BTCUSDm,CONFIRM,votes,10,"Budget 2 R, no add",2025 H1,1437,0.0772302,0.195828,79.6103,-38.7565,110.98
+BTCUSDm,CONFIRM,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H1,1028,-1.69797,0.278835,58.6576,-31.7222,-1745.51
+BTCUSDm,CONFIRM,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H2,1444,-0.495825,0.201968,67.59,-31.4743,-715.971
+BTCUSDm,CONFIRM,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H1,1437,-0.476388,0.236992,68.476,-44.9842,-684.57
+BTCUSDm,CONFIRM,votes,12,"Budget 3 R, no add",2024 H1,1028,-0.837954,0.282596,80.5447,-42.2732,-861.417
+BTCUSDm,CONFIRM,votes,12,"Budget 3 R, no add",2024 H2,1444,-0.234963,0.233572,83.8643,-47.2115,-339.287
+BTCUSDm,CONFIRM,votes,12,"Budget 3 R, no add",2025 H1,1437,-0.131959,0.203632,84.4816,-58.1347,-189.626
+BTCUSDm,CONFIRM,votes,13,"Budget 3 R, 1 add 1 ATR apart",2024 H1,1028,-1.12586,0.275787,75.8755,-39.6096,-1157.39
+BTCUSDm,CONFIRM,votes,13,"Budget 3 R, 1 add 1 ATR apart",2024 H2,1444,-0.200119,0.244759,81.1634,-47.2115,-288.972
+BTCUSDm,CONFIRM,votes,13,"Budget 3 R, 1 add 1 ATR apart",2025 H1,1437,0.0790893,0.257305,82.8114,-58.1347,113.651
+BTCUSDm,CONFIRM,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H1,1028,-1.4738,0.324158,70.8171,-39.6096,-1515.07
+BTCUSDm,CONFIRM,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H2,1444,-0.451601,0.270613,76.4543,-47.2115,-652.113
+BTCUSDm,CONFIRM,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H1,1437,-0.225343,0.270131,78.2881,-67.4764,-323.818
+BTCUSDm,CONFIRM,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H1,1028,-1.81744,0.354874,65.6615,-42.7402,-1868.33
+BTCUSDm,CONFIRM,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H2,1444,-0.594354,0.325159,72.3684,-47.2115,-858.247
+BTCUSDm,CONFIRM,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H1,1437,-0.619483,0.291143,73.6256,-67.4764,-890.196
+BTCUSDm,CONFIRM,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H1,1028,-2.51793,0.382798,59.9222,-47.5833,-2588.43
+BTCUSDm,CONFIRM,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H2,1444,-0.63145,0.293154,69.1136,-47.2115,-911.813
+BTCUSDm,CONFIRM,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H1,1437,-0.668854,0.357628,70.007,-67.4764,-961.143
+BTCUSDm,CONFIRM,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H1,1028,-1.4738,0.324158,70.8171,-39.6096,-1515.07
+BTCUSDm,CONFIRM,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H2,1444,-0.451601,0.270613,76.4543,-47.2115,-652.113
+BTCUSDm,CONFIRM,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H1,1437,-0.22014,0.271317,78.2881,-60,-316.341
+BTCUSDm,CONFIRM,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H1,1028,-1.4738,0.324158,70.8171,-39.6096,-1515.07
+BTCUSDm,CONFIRM,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H2,1444,-0.451601,0.270613,76.4543,-47.2115,-652.113
+BTCUSDm,CONFIRM,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H1,1437,-0.22014,0.271317,78.2881,-60,-316.341
+BTCUSDm,CONFIRM,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H1,1028,-1.4738,0.324158,70.8171,-39.6096,-1515.07
+BTCUSDm,CONFIRM,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H2,1444,-0.451601,0.270613,76.4543,-47.2115,-652.113
+BTCUSDm,CONFIRM,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H1,1437,-0.22014,0.271317,78.2881,-60,-316.341
+BTCUSDm,CONFIRM,votes,20,Add when the M5 MACD histogram turns,2024 H1,1028,-1.48705,0.303548,74.1245,-39.6096,-1528.69
+BTCUSDm,CONFIRM,votes,20,Add when the M5 MACD histogram turns,2024 H2,1444,-0.294999,0.252449,80.6787,-47.2115,-425.979
+BTCUSDm,CONFIRM,votes,20,Add when the M5 MACD histogram turns,2025 H1,1437,-0.063815,0.258645,82.0459,-54.8239,-91.7021
+BTCUSDm,CONFIRM,votes,21,Add when the M15 MACD histogram turns,2024 H1,1028,-1.02459,0.23144,77.0428,-39.6096,-1053.28
+BTCUSDm,CONFIRM,votes,21,Add when the M15 MACD histogram turns,2024 H2,1444,-0.331828,0.227308,81.3712,-47.2115,-479.16
+BTCUSDm,CONFIRM,votes,21,Add when the M15 MACD histogram turns,2025 H1,1437,0.206956,0.245519,83.6465,-54.8239,297.396
+BTCUSDm,CONFIRM,votes,22,Add when the M5 RSI comes back through 35 / 65,2024 H1,1028,-1.30265,0.283912,76.2646,-39.6096,-1339.12
+BTCUSDm,CONFIRM,votes,22,Add when the M5 RSI comes back through 35 / 65,2024 H2,1444,-0.251524,0.259823,81.6482,-47.2115,-363.201
+BTCUSDm,CONFIRM,votes,22,Add when the M5 RSI comes back through 35 / 65,2025 H1,1437,0.00149116,0.251396,83.2289,-58.1347,2.14279
+BTCUSDm,CONFIRM,votes,23,Add when the M15 RSI comes back through 35 / 65,2024 H1,1028,-1.04406,0.260025,78.5019,-42.2732,-1073.3
+BTCUSDm,CONFIRM,votes,23,Add when the M15 RSI comes back through 35 / 65,2024 H2,1444,-0.236286,0.255514,82.687,-47.2115,-341.196
+BTCUSDm,CONFIRM,votes,23,Add when the M15 RSI comes back through 35 / 65,2025 H1,1437,-0.0702247,0.208239,83.5769,-58.1347,-100.913
+BTCUSDm,CONFIRM,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H1,1028,-0.94062,0.140976,26.751,-15.8611,-966.957
+BTCUSDm,CONFIRM,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H2,1444,-0.220487,0.119914,31.7175,-15.7372,-318.383
+BTCUSDm,CONFIRM,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H1,1437,-0.195858,0.131576,32.4983,-22.4921,-281.448
+BTCUSDm,CONFIRM,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H1,1028,-0.819965,0.174704,21.3035,-15.8611,-842.924
+BTCUSDm,CONFIRM,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H2,1444,-0.268693,0.187577,23.5457,-15.9042,-387.993
+BTCUSDm,CONFIRM,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H1,1437,-0.312039,0.172356,23.382,-22.4921,-448.4
+BTCUSDm,CONFIRM,votes,26,"Trailing stop 1 ATR, no target",2024 H1,1028,-0.836356,0.179188,30.1556,-15.8611,-859.774
+BTCUSDm,CONFIRM,votes,26,"Trailing stop 1 ATR, no target",2024 H2,1444,-0.310466,0.130861,34.626,-13.8789,-448.313
+BTCUSDm,CONFIRM,votes,26,"Trailing stop 1 ATR, no target",2025 H1,1437,-0.401815,0.172129,35.9777,-18.358,-577.408
+BTCUSDm,CONFIRM,votes,27,"Trailing stop 2 ATR, no target",2024 H1,1028,-0.748483,0.409209,34.2412,-26.1221,-769.441
+BTCUSDm,CONFIRM,votes,27,"Trailing stop 2 ATR, no target",2024 H2,1444,-0.241141,0.3927,36.9114,-29.616,-348.207
+BTCUSDm,CONFIRM,votes,27,"Trailing stop 2 ATR, no target",2025 H1,1437,-0.163834,0.393631,37.0912,-37.7362,-235.429
+BTCUSDm,CONFIRM,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H1,1028,-0.873327,0.18146,40.4669,-15.8611,-897.78
+BTCUSDm,CONFIRM,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H2,1444,-0.226634,0.152127,47.3684,-15.9042,-327.26
+BTCUSDm,CONFIRM,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H1,1437,-0.260498,0.141066,48.8518,-22.4921,-374.336
+BTCUSDm,CONFIRM,votes,29,"Pyramid, 2 adds",2024 H1,1028,-1.1112,0.245419,17.1206,-15.8611,-1142.32
+BTCUSDm,CONFIRM,votes,29,"Pyramid, 2 adds",2024 H2,1444,-0.494435,0.307797,20.0831,-13.8789,-713.964
+BTCUSDm,CONFIRM,votes,29,"Pyramid, 2 adds",2025 H1,1437,-0.803215,0.323114,21.0856,-18.358,-1154.22
+BTCUSDm,CONFIRM,votes,30,"Pyramid, 4 adds",2024 H1,1028,-1.21054,0.259395,17.1206,-15.8611,-1244.43
+BTCUSDm,CONFIRM,votes,30,"Pyramid, 4 adds",2024 H2,1444,-0.49467,0.35761,20.0831,-13.8789,-714.304
+BTCUSDm,CONFIRM,votes,30,"Pyramid, 4 adds",2025 H1,1437,-0.850738,0.355607,21.0856,-18.358,-1222.51
+BTCUSDm,CONFIRM,votes,31,"Hedge lock, unlocked by the next vote signal",2024 H1,1028,-1.46329,0.302576,55.1556,-29.0643,-1504.27
+BTCUSDm,CONFIRM,votes,31,"Hedge lock, unlocked by the next vote signal",2024 H2,1444,-0.372645,0.215542,61.7729,-31.6414,-538.1
+BTCUSDm,CONFIRM,votes,31,"Hedge lock, unlocked by the next vote signal",2025 H1,1437,-0.212538,0.216202,64.3006,-42.6597,-305.417
+BTCUSDm,CONFIRM,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H1,1028,-1.46329,0.302576,54.7665,-29.0643,-1504.27
+BTCUSDm,CONFIRM,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H2,1444,-0.372447,0.215483,61.3573,-31.6414,-537.813
+BTCUSDm,CONFIRM,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H1,1437,-0.212538,0.216202,63.6743,-42.6597,-305.417
+BTCUSDm,CONFIRM,votes,33,"Hedge lock, both legs closed 4 h later",2024 H1,1028,-1.17231,0.18476,40.4669,-16.54,-1205.13
+BTCUSDm,CONFIRM,votes,33,"Hedge lock, both legs closed 4 h later",2024 H2,1444,-0.406038,0.148733,47.3684,-16.1201,-586.319
+BTCUSDm,CONFIRM,votes,33,"Hedge lock, both legs closed 4 h later",2025 H1,1437,-0.317345,0.148311,48.8518,-22.7822,-456.025
+BTCUSDm,CONFIRM,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H1,1028,-5.48655,0.995337,85.0195,-218.906,-5640.17
+BTCUSDm,CONFIRM,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H2,1444,-0.204655,0.568028,93.7673,-200.223,-295.522
+BTCUSDm,CONFIRM,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H1,1437,-2.19684,0.768262,92.0668,-246.663,-3156.85
+BTCUSDm,CONFIRM,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H1,1028,-4.26469,0.505429,65.2724,-68.6423,-4384.11
+BTCUSDm,CONFIRM,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H2,1444,-1.4898,0.397756,76.8006,-62.9784,-2151.28
+BTCUSDm,CONFIRM,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H1,1437,-2.24779,0.607951,76.1308,-83.3083,-3230.08
+BTCUSDm,CONFIRM,votes,36,"Stop and reverse, same size",2024 H1,1028,-1.27634,0.199463,41.0506,-31.7222,-1312.08
+BTCUSDm,CONFIRM,votes,36,"Stop and reverse, same size",2024 H2,1444,-0.390566,0.154144,47.5762,-31.8084,-563.977
+BTCUSDm,CONFIRM,votes,36,"Stop and reverse, same size",2025 H1,1437,-0.502115,0.197884,48.9214,-44.9842,-721.539
+BTCUSDm,CONFIRM,votes,37,"Stop and reverse, double size",2024 H1,1028,-1.67225,0.282254,66.1479,-47.5833,-1719.08
+BTCUSDm,CONFIRM,votes,37,"Stop and reverse, double size",2024 H2,1444,-0.517913,0.206194,72.7839,-47.7126,-747.866
+BTCUSDm,CONFIRM,votes,37,"Stop and reverse, double size",2025 H1,1437,-0.828715,0.287105,72.1642,-67.4764,-1190.86
+BTCUSDm,CONFIRM,votes,38,"Martingale: double after a loss, up to x8",2024 H1,1028,-3.02071,0.792145,40.4669,-126.889,-3105.29
+BTCUSDm,CONFIRM,votes,38,"Martingale: double after a loss, up to x8",2024 H2,1444,-0.4789,0.39275,47.3684,-115.774,-691.531
+BTCUSDm,CONFIRM,votes,38,"Martingale: double after a loss, up to x8",2025 H1,1437,-0.769864,0.537826,48.8518,-179.937,-1106.29
+BTCUSDm,CONFIRM,votes,39,"Anti-martingale: double after a win, up to x8",2024 H1,1028,-1.71524,0.36766,40.4669,-95.7405,-1763.27
+BTCUSDm,CONFIRM,votes,39,"Anti-martingale: double after a win, up to x8",2024 H2,1444,-0.501338,0.533246,47.3684,-118.842,-723.933
+BTCUSDm,CONFIRM,votes,39,"Anti-martingale: double after a win, up to x8",2025 H1,1437,-0.541793,0.639774,48.8518,-121.762,-778.557
+BTCUSDm,CONFIRM,votes,40,Daily loss limit 1 R,2024 H1,332,-0.817806,0.368315,40.3614,-15.8611,-271.512
+BTCUSDm,CONFIRM,votes,40,Daily loss limit 1 R,2024 H2,565,-0.204055,0.299013,47.9646,-14.8553,-115.291
+BTCUSDm,CONFIRM,votes,40,Daily loss limit 1 R,2025 H1,536,-0.433111,0.327727,48.5075,-20.1676,-232.147
+BTCUSDm,CONFIRM,votes,41,Daily loss limit 2 R,2024 H1,598,-0.994955,0.244984,39.6321,-15.8611,-594.983
+BTCUSDm,CONFIRM,votes,41,Daily loss limit 2 R,2024 H2,919,-0.253397,0.201039,47.3341,-14.8553,-232.872
+BTCUSDm,CONFIRM,votes,41,Daily loss limit 2 R,2025 H1,978,-0.191588,0.176424,49.4888,-20.1676,-187.373
+BTCUSDm,CONFIRM,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H1,968,-0.143623,0.18535,47.2107,-15.8611,-139.027
+BTCUSDm,CONFIRM,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H2,1402,-0.293693,0.177041,46.5763,-15.1463,-411.758
+BTCUSDm,CONFIRM,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H1,1346,0.131588,0.251768,49.2571,-22.4921,177.118
+BTCUSDm,CONFIRM,random,1,"Fixed stop 2 ATR, target 2 ATR",2024 H1,968,-0.520169,0.349401,47.0041,-28.1822,-503.524
+BTCUSDm,CONFIRM,random,1,"Fixed stop 2 ATR, target 2 ATR",2024 H2,1402,-0.434815,0.444045,48.8588,-30.2926,-609.611
+BTCUSDm,CONFIRM,random,1,"Fixed stop 2 ATR, target 2 ATR",2025 H1,1346,0.537308,0.408209,50.7429,-44.9842,723.217
+BTCUSDm,CONFIRM,random,2,"Fixed stop 1 ATR, target 2 ATR",2024 H1,968,-0.432834,0.222828,30.062,-15.8611,-418.983
+BTCUSDm,CONFIRM,random,2,"Fixed stop 1 ATR, target 2 ATR",2024 H2,1402,-0.278955,0.218902,31.5264,-15.1463,-391.095
+BTCUSDm,CONFIRM,random,2,"Fixed stop 1 ATR, target 2 ATR",2025 H1,1346,0.53321,0.333038,34.5468,-22.4921,717.7
+BTCUSDm,CONFIRM,random,3,"Fixed stop 2 ATR, target 1 ATR",2024 H1,968,-0.159656,0.253735,64.2562,-28.1822,-154.547
+BTCUSDm,CONFIRM,random,3,"Fixed stop 2 ATR, target 1 ATR",2024 H2,1402,-0.266489,0.216437,65.0499,-30.2926,-373.617
+BTCUSDm,CONFIRM,random,3,"Fixed stop 2 ATR, target 1 ATR",2025 H1,1346,0.372987,0.277825,66.7162,-39.698,502.041
+BTCUSDm,CONFIRM,random,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H1,968,0.167521,0.632181,50.5165,-20.1318,162.16
+BTCUSDm,CONFIRM,random,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H2,1402,0.133631,0.594239,50.2853,-20,187.351
+BTCUSDm,CONFIRM,random,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H1,1346,0.25739,0.549187,50.6686,-20.0084,346.447
+BTCUSDm,CONFIRM,random,5,"Live ladder, no stop",2024 H1,968,-14.9615,10.2424,99.4835,-5045.77,-14482.7
+BTCUSDm,CONFIRM,random,5,"Live ladder, no stop",2024 H2,1402,-4.17042,5.16392,99.8573,-7247.25,-5846.93
+BTCUSDm,CONFIRM,random,5,"Live ladder, no stop",2025 H1,1346,0.499993,0.504224,99.9257,-673.01,672.99
+BTCUSDm,CONFIRM,random,6,"Live ladder, basket stop $60",2024 H1,968,-2.46836,0.554862,94.3182,-62.427,-2389.37
+BTCUSDm,CONFIRM,random,6,"Live ladder, basket stop $60",2024 H2,1402,-1.91561,0.407047,95.1498,-60,-2685.68
+BTCUSDm,CONFIRM,random,6,"Live ladder, basket stop $60",2025 H1,1346,-1.76374,0.293635,95.4681,-60,-2374
+BTCUSDm,CONFIRM,random,7,"Live ladder, basket stop $200",2024 H1,968,-3.15284,1.07654,97.9339,-200,-3051.95
+BTCUSDm,CONFIRM,random,7,"Live ladder, basket stop $200",2024 H2,1402,-2.15455,0.684421,98.3595,-200,-3020.68
+BTCUSDm,CONFIRM,random,7,"Live ladder, basket stop $200",2025 H1,1346,-0.940564,0.512332,99.0342,-200,-1266
+BTCUSDm,CONFIRM,random,8,"Budget 1 R, no add",2024 H1,968,-0.429876,0.142447,59.9174,-15.8611,-416.12
+BTCUSDm,CONFIRM,random,8,"Budget 1 R, no add",2024 H2,1402,-0.319751,0.0986256,62.1255,-15.1463,-448.29
+BTCUSDm,CONFIRM,random,8,"Budget 1 R, no add",2025 H1,1346,0.0437574,0.174084,65.0817,-22.4921,58.8974
+BTCUSDm,CONFIRM,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H1,968,-0.982666,0.173464,42.7686,-16.0663,-951.22
+BTCUSDm,CONFIRM,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H2,1402,-0.783526,0.190381,45.0785,-15.1463,-1098.5
+BTCUSDm,CONFIRM,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H1,1346,-0.585003,0.244614,48.4398,-22.4921,-787.414
+BTCUSDm,CONFIRM,random,10,"Budget 2 R, no add",2024 H1,968,-0.480824,0.209157,75.3099,-28.1822,-465.438
+BTCUSDm,CONFIRM,random,10,"Budget 2 R, no add",2024 H2,1402,-0.395869,0.145742,77.2468,-30.2926,-555.008
+BTCUSDm,CONFIRM,random,10,"Budget 2 R, no add",2025 H1,1346,0.249072,0.228058,79.4948,-38.7565,335.251
+BTCUSDm,CONFIRM,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H1,968,-1.06766,0.282066,63.2231,-31.7222,-1033.5
+BTCUSDm,CONFIRM,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H2,1402,-0.523484,0.187094,66.3338,-30.2926,-733.925
+BTCUSDm,CONFIRM,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H1,1346,-0.0401472,0.239664,69.4651,-44.9842,-54.0382
+BTCUSDm,CONFIRM,random,12,"Budget 3 R, no add",2024 H1,968,-0.433507,0.254629,82.1281,-42.2732,-419.634
+BTCUSDm,CONFIRM,random,12,"Budget 3 R, no add",2024 H2,1402,-0.236514,0.221242,84.1655,-45.4389,-331.593
+BTCUSDm,CONFIRM,random,12,"Budget 3 R, no add",2025 H1,1346,0.333196,0.26495,85.5126,-58.1347,448.482
+BTCUSDm,CONFIRM,random,13,"Budget 3 R, 1 add 1 ATR apart",2024 H1,968,-0.566024,0.280718,78.9256,-39.6096,-547.911
+BTCUSDm,CONFIRM,random,13,"Budget 3 R, 1 add 1 ATR apart",2024 H2,1402,-0.534453,0.146845,80.4565,-44.5658,-749.304
+BTCUSDm,CONFIRM,random,13,"Budget 3 R, 1 add 1 ATR apart",2025 H1,1346,0.195853,0.307254,82.6895,-58.1347,263.618
+BTCUSDm,CONFIRM,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H1,968,-0.876235,0.248556,73.8636,-39.6096,-848.196
+BTCUSDm,CONFIRM,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H2,1402,-0.665117,0.204832,76.1056,-45.4389,-932.494
+BTCUSDm,CONFIRM,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H1,1346,0.175923,0.266136,79.2719,-67.4764,236.792
+BTCUSDm,CONFIRM,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H1,968,-1.09185,0.311497,68.905,-39.6096,-1056.91
+BTCUSDm,CONFIRM,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H2,1402,-0.634711,0.20095,72.0399,-45.4389,-889.865
+BTCUSDm,CONFIRM,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H1,1346,0.037352,0.296437,74.8886,-67.4764,50.2757
+BTCUSDm,CONFIRM,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H1,968,-1.70676,0.393383,64.0496,-47.5833,-1652.14
+BTCUSDm,CONFIRM,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H2,1402,-0.816745,0.276165,67.5464,-45.4389,-1145.08
+BTCUSDm,CONFIRM,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H1,1346,0.173006,0.401045,71.2481,-67.4764,232.867
+BTCUSDm,CONFIRM,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H1,968,-0.876235,0.248556,73.8636,-39.6096,-848.196
+BTCUSDm,CONFIRM,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H2,1402,-0.665117,0.204832,76.1056,-45.4389,-932.494
+BTCUSDm,CONFIRM,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H1,1346,0.181477,0.267664,79.2719,-60,244.269
+BTCUSDm,CONFIRM,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H1,968,-0.876235,0.248556,73.8636,-39.6096,-848.196
+BTCUSDm,CONFIRM,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H2,1402,-0.665117,0.204832,76.1056,-45.4389,-932.494
+BTCUSDm,CONFIRM,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H1,1346,0.181477,0.267664,79.2719,-60,244.269
+BTCUSDm,CONFIRM,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H1,968,-0.876235,0.248556,73.8636,-39.6096,-848.196
+BTCUSDm,CONFIRM,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H2,1402,-0.665117,0.204832,76.1056,-45.4389,-932.494
+BTCUSDm,CONFIRM,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H1,1346,0.181477,0.267664,79.2719,-60,244.269
+BTCUSDm,CONFIRM,random,20,Add when the M5 MACD histogram turns,2024 H1,968,-0.6668,0.314721,77.4793,-39.6096,-645.463
+BTCUSDm,CONFIRM,random,20,Add when the M5 MACD histogram turns,2024 H2,1402,-0.416913,0.153948,80.3852,-44.8503,-584.512
+BTCUSDm,CONFIRM,random,20,Add when the M5 MACD histogram turns,2025 H1,1346,0.193604,0.318757,82.1694,-46.1217,260.591
+BTCUSDm,CONFIRM,random,21,Add when the M15 MACD histogram turns,2024 H1,968,-0.791818,0.257546,77.8926,-39.6096,-766.48
+BTCUSDm,CONFIRM,random,21,Add when the M15 MACD histogram turns,2024 H2,1402,-0.554964,0.248656,80.9558,-44.5658,-778.059
+BTCUSDm,CONFIRM,random,21,Add when the M15 MACD histogram turns,2025 H1,1346,0.248855,0.325081,82.9123,-46.1217,334.959
+BTCUSDm,CONFIRM,random,22,Add when the M5 RSI comes back through 35 / 65,2024 H1,968,-0.692185,0.298838,78.3058,-39.6096,-670.035
+BTCUSDm,CONFIRM,random,22,Add when the M5 RSI comes back through 35 / 65,2024 H2,1402,-0.56228,0.196474,80.7418,-45.4389,-788.316
+BTCUSDm,CONFIRM,random,22,Add when the M5 RSI comes back through 35 / 65,2025 H1,1346,0.222907,0.270531,82.838,-58.1347,300.032
+BTCUSDm,CONFIRM,random,23,Add when the M15 RSI comes back through 35 / 65,2024 H1,968,-0.735192,0.281024,79.8554,-42.2732,-711.666
+BTCUSDm,CONFIRM,random,23,Add when the M15 RSI comes back through 35 / 65,2024 H2,1402,-0.496416,0.256712,82.1683,-44.8503,-695.975
+BTCUSDm,CONFIRM,random,23,Add when the M15 RSI comes back through 35 / 65,2025 H1,1346,0.148849,0.248106,83.7296,-58.1347,200.35
+BTCUSDm,CONFIRM,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H1,968,-0.41497,0.157689,30.062,-15.8611,-401.691
+BTCUSDm,CONFIRM,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H2,1402,-0.293675,0.139374,31.2411,-15.1463,-411.733
+BTCUSDm,CONFIRM,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H1,1346,0.0449977,0.227233,32.1694,-22.4921,60.5669
+BTCUSDm,CONFIRM,random,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H1,968,-0.26334,0.181394,23.1405,-15.8611,-254.913
+BTCUSDm,CONFIRM,random,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H2,1402,-0.373708,0.19057,22.6106,-15.1463,-523.938
+BTCUSDm,CONFIRM,random,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H1,1346,0.256012,0.31927,25.4086,-22.4921,344.592
+BTCUSDm,CONFIRM,random,26,"Trailing stop 1 ATR, no target",2024 H1,968,-0.363132,0.168871,34.9174,-15.8611,-351.512
+BTCUSDm,CONFIRM,random,26,"Trailing stop 1 ATR, no target",2024 H2,1402,-0.539216,0.150899,33.4522,-12.8756,-755.98
+BTCUSDm,CONFIRM,random,26,"Trailing stop 1 ATR, no target",2025 H1,1346,0.0504399,0.256638,35.2897,-18.358,67.8921
+BTCUSDm,CONFIRM,random,27,"Trailing stop 2 ATR, no target",2024 H1,968,-0.413275,0.502704,35.3306,-26.3047,-400.05
+BTCUSDm,CONFIRM,random,27,"Trailing stop 2 ATR, no target",2024 H2,1402,-0.0338893,0.487962,36.8759,-26.0838,-47.5128
+BTCUSDm,CONFIRM,random,27,"Trailing stop 2 ATR, no target",2025 H1,1346,0.723617,0.640165,36.9985,-37.7362,973.989
+BTCUSDm,CONFIRM,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H1,968,-0.250721,0.18686,47.2107,-15.8611,-242.698
+BTCUSDm,CONFIRM,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H2,1402,-0.335842,0.174921,46.5763,-15.1463,-470.851
+BTCUSDm,CONFIRM,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H1,1346,0.197975,0.278264,49.2571,-22.4921,266.475
+BTCUSDm,CONFIRM,random,29,"Pyramid, 2 adds",2024 H1,968,-0.814188,0.219673,18.8017,-15.8611,-788.134
+BTCUSDm,CONFIRM,random,29,"Pyramid, 2 adds",2024 H2,1402,-0.773529,0.283335,19.9001,-13.2742,-1084.49
+BTCUSDm,CONFIRM,random,29,"Pyramid, 2 adds",2025 H1,1346,0.157711,0.425041,21.6939,-20.0669,212.279
+BTCUSDm,CONFIRM,random,30,"Pyramid, 4 adds",2024 H1,968,-0.894781,0.224702,18.8017,-15.8611,-866.148
+BTCUSDm,CONFIRM,random,30,"Pyramid, 4 adds",2024 H2,1402,-0.721409,0.329459,19.9001,-13.2742,-1011.41
+BTCUSDm,CONFIRM,random,30,"Pyramid, 4 adds",2025 H1,1346,0.168932,0.453451,21.6939,-20.0669,227.383
+BTCUSDm,CONFIRM,random,31,"Hedge lock, unlocked by the next vote signal",2024 H1,968,-0.609377,0.279294,60.2273,-29.0643,-589.877
+BTCUSDm,CONFIRM,random,31,"Hedge lock, unlocked by the next vote signal",2024 H2,1402,-0.352228,0.201916,62.3395,-30.2926,-493.824
+BTCUSDm,CONFIRM,random,31,"Hedge lock, unlocked by the next vote signal",2025 H1,1346,0.0434856,0.312689,62.5557,-42.3411,58.5317
+BTCUSDm,CONFIRM,random,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H1,968,-0.609377,0.279294,59.9174,-29.0643,-589.877
+BTCUSDm,CONFIRM,random,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H2,1402,-0.352024,0.201985,61.9829,-30.2926,-493.537
+BTCUSDm,CONFIRM,random,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H1,1346,0.0434856,0.312689,62.2585,-42.3411,58.5317
+BTCUSDm,CONFIRM,random,33,"Hedge lock, both legs closed 4 h later",2024 H1,968,-0.408017,0.198395,47.2107,-16.54,-394.961
+BTCUSDm,CONFIRM,random,33,"Hedge lock, both legs closed 4 h later",2024 H2,1402,-0.44035,0.180883,46.5763,-15.3555,-617.371
+BTCUSDm,CONFIRM,random,33,"Hedge lock, both legs closed 4 h later",2025 H1,1346,-0.00769124,0.255559,49.2571,-22.7822,-10.3524
+BTCUSDm,CONFIRM,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H1,968,-2.52144,0.731862,88.7397,-216.077,-2440.76
+BTCUSDm,CONFIRM,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H2,1402,0.198188,0.611408,93.5806,-197.808,277.86
+BTCUSDm,CONFIRM,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H1,1346,-2.00279,1.00276,92.0505,-242.485,-2695.75
+BTCUSDm,CONFIRM,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H1,968,-3.49141,0.591545,68.2851,-68.6423,-3379.68
+BTCUSDm,CONFIRM,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H2,1402,-2.04212,0.297675,74.2511,-62.9784,-2863.05
+BTCUSDm,CONFIRM,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H1,1346,-2.03935,0.447381,75.6315,-82.014,-2744.97
+BTCUSDm,CONFIRM,random,36,"Stop and reverse, same size",2024 H1,968,-0.449443,0.240382,47.7273,-31.7222,-435.06
+BTCUSDm,CONFIRM,random,36,"Stop and reverse, same size",2024 H2,1402,-0.383705,0.206812,46.933,-30.2926,-537.954
+BTCUSDm,CONFIRM,random,36,"Stop and reverse, same size",2025 H1,1346,-0.11555,0.325152,49.4056,-44.9842,-155.53
+BTCUSDm,CONFIRM,random,37,"Stop and reverse, double size",2024 H1,968,-0.755263,0.321569,70.5579,-47.5833,-731.094
+BTCUSDm,CONFIRM,random,37,"Stop and reverse, double size",2024 H2,1402,-0.473716,0.24963,71.826,-45.4389,-664.15
+BTCUSDm,CONFIRM,random,37,"Stop and reverse, double size",2025 H1,1346,-0.362688,0.44869,73.1798,-67.4764,-488.178
+BTCUSDm,CONFIRM,random,38,"Martingale: double after a loss, up to x8",2024 H1,968,-0.945247,0.646238,47.2107,-91.6924,-915
+BTCUSDm,CONFIRM,random,38,"Martingale: double after a loss, up to x8",2024 H2,1402,-0.314112,0.585481,46.5763,-114.954,-440.385
+BTCUSDm,CONFIRM,random,38,"Martingale: double after a loss, up to x8",2025 H1,1346,0.360289,0.635135,49.2571,-157.975,484.95
+BTCUSDm,CONFIRM,random,39,"Anti-martingale: double after a win, up to x8",2024 H1,968,0.732897,0.793176,47.2107,-83.6335,709.444
+BTCUSDm,CONFIRM,random,39,"Anti-martingale: double after a win, up to x8",2024 H2,1402,-1.04886,0.465403,46.5763,-118.842,-1470.5
+BTCUSDm,CONFIRM,random,39,"Anti-martingale: double after a win, up to x8",2025 H1,1346,1.09326,1.1727,49.2571,-155.026,1471.52
+BTCUSDm,CONFIRM,random,40,Daily loss limit 1 R,2024 H1,352,-0.21019,0.320933,47.1591,-14.2467,-73.9867
+BTCUSDm,CONFIRM,random,40,Daily loss limit 1 R,2024 H2,583,-0.472113,0.223426,45.283,-15.1463,-275.242
+BTCUSDm,CONFIRM,random,40,Daily loss limit 1 R,2025 H1,620,0.399761,0.36909,51.4516,-19.849,247.852
+BTCUSDm,CONFIRM,random,41,Daily loss limit 2 R,2024 H1,602,-0.33276,0.246299,46.5116,-14.2467,-200.322
+BTCUSDm,CONFIRM,random,41,Daily loss limit 2 R,2024 H2,956,-0.203778,0.21439,47.0711,-15.1463,-194.812
+BTCUSDm,CONFIRM,random,41,Daily loss limit 2 R,2025 H1,964,0.438262,0.299924,51.4523,-22.4921,422.485
+XAUUSDm,DEV,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H2,493,0.227352,0.767307,50.7099,-34.9803,112.085
+XAUUSDm,DEV,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H1,526,0.426043,1.34639,50.1901,-121.429,224.099
+XAUUSDm,DEV,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H2,418,0.790091,0.579747,51.9139,-37.113,330.258
+XAUUSDm,DEV,trend,1,"Fixed stop 2 ATR, target 2 ATR",2025 H2,493,1.75721,1.88618,54.1582,-69.9606,866.304
+XAUUSDm,DEV,trend,1,"Fixed stop 2 ATR, target 2 ATR",2026 H1,526,-3.87551,6.39684,47.9087,-242.859,-2038.52
+XAUUSDm,DEV,trend,1,"Fixed stop 2 ATR, target 2 ATR",2026 H2,418,-0.615006,1.29817,48.5646,-49.8081,-257.072
+XAUUSDm,DEV,trend,2,"Fixed stop 1 ATR, target 2 ATR",2025 H2,493,1.05444,1.20644,36.5112,-38.0616,519.84
+XAUUSDm,DEV,trend,2,"Fixed stop 1 ATR, target 2 ATR",2026 H1,526,-0.588354,3.81875,33.6502,-121.429,-309.474
+XAUUSDm,DEV,trend,2,"Fixed stop 1 ATR, target 2 ATR",2026 H2,418,0.581371,0.944591,33.9713,-37.113,243.013
+XAUUSDm,DEV,trend,3,"Fixed stop 2 ATR, target 1 ATR",2025 H2,493,0.187611,1.27844,68.1542,-69.9606,92.4921
+XAUUSDm,DEV,trend,3,"Fixed stop 2 ATR, target 1 ATR",2026 H1,526,0.23949,2.5416,66.5399,-242.859,125.972
+XAUUSDm,DEV,trend,3,"Fixed stop 2 ATR, target 1 ATR",2026 H2,418,0.913328,0.793713,67.9426,-49.8081,381.771
+XAUUSDm,DEV,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H2,493,3.12425,1.43157,57.8093,-20.473,1540.25
+XAUUSDm,DEV,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H1,526,0.294624,1.02197,50.5703,-23.3143,154.972
+XAUUSDm,DEV,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H2,418,0.0546335,0.646891,50.2392,-37.113,22.8368
+XAUUSDm,DEV,trend,5,"Live ladder, no stop",2025 H2,493,1.00423,0.00298898,100,1,495.086
+XAUUSDm,DEV,trend,5,"Live ladder, no stop",2026 H1,526,1.0009,0.000829207,100,1,526.473
+XAUUSDm,DEV,trend,5,"Live ladder, no stop",2026 H2,418,1.00219,0.00216751,100,1,418.915
+XAUUSDm,DEV,trend,6,"Live ladder, basket stop $60",2025 H2,493,-0.233091,0.426338,97.9716,-60,-114.914
+XAUUSDm,DEV,trend,6,"Live ladder, basket stop $60",2026 H1,526,-0.506705,0.396816,97.5285,-60,-266.527
+XAUUSDm,DEV,trend,6,"Live ladder, basket stop $60",2026 H2,418,-0.603074,0.463082,97.3684,-60,-252.085
+XAUUSDm,DEV,trend,7,"Live ladder, basket stop $200",2025 H2,493,0.596523,0.407076,99.7972,-200,294.086
+XAUUSDm,DEV,trend,7,"Live ladder, basket stop $200",2026 H1,526,-0.606027,0.76524,99.2395,-241.243,-318.77
+XAUUSDm,DEV,trend,7,"Live ladder, basket stop $200",2026 H2,418,-0.440395,0.799865,99.2823,-200,-184.085
+XAUUSDm,DEV,trend,8,"Budget 1 R, no add",2025 H2,493,0.33142,0.502926,67.9513,-34.9803,163.39
+XAUUSDm,DEV,trend,8,"Budget 1 R, no add",2026 H1,526,0.0382966,1.11214,66.73,-121.429,20.144
+XAUUSDm,DEV,trend,8,"Budget 1 R, no add",2026 H2,418,0.281897,0.422067,67.2249,-37.113,117.833
+XAUUSDm,DEV,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H2,493,0.880504,0.639247,54.9696,-34.9803,434.088
+XAUUSDm,DEV,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H1,526,-0.427085,1.35107,52.2814,-121.429,-224.647
+XAUUSDm,DEV,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H2,418,0.464895,0.705196,54.067,-72.0398,194.326
+XAUUSDm,DEV,trend,10,"Budget 2 R, no add",2025 H2,493,0.471644,1.04217,81.9473,-69.9606,232.52
+XAUUSDm,DEV,trend,10,"Budget 2 R, no add",2026 H1,526,0.452199,2.14773,80.2281,-242.859,237.856
+XAUUSDm,DEV,trend,10,"Budget 2 R, no add",2026 H2,418,0.37469,0.601421,80.3828,-49.8081,156.62
+XAUUSDm,DEV,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H2,493,0.084408,1.19574,72.6166,-69.9606,41.6131
+XAUUSDm,DEV,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H1,526,-0.666002,2.05336,71.673,-242.859,-350.317
+XAUUSDm,DEV,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H2,418,0.434105,0.851785,71.7703,-49.8081,181.456
+XAUUSDm,DEV,trend,12,"Budget 3 R, no add",2025 H2,493,0.64562,1.23521,88.2353,-96.6837,318.291
+XAUUSDm,DEV,trend,12,"Budget 3 R, no add",2026 H1,526,0.742791,2.71023,86.3118,-364.288,390.708
+XAUUSDm,DEV,trend,12,"Budget 3 R, no add",2026 H2,418,0.00269538,0.763404,84.9282,-74.7121,1.12667
+XAUUSDm,DEV,trend,13,"Budget 3 R, 1 add 1 ATR apart",2025 H2,493,0.033894,1.34661,84.5842,-104.941,16.7097
+XAUUSDm,DEV,trend,13,"Budget 3 R, 1 add 1 ATR apart",2026 H1,526,0.666789,2.74061,83.8403,-364.288,350.731
+XAUUSDm,DEV,trend,13,"Budget 3 R, 1 add 1 ATR apart",2026 H2,418,0.713293,1.02051,84.2105,-79.8552,298.157
+XAUUSDm,DEV,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H2,493,-0.867875,1.49923,79.9189,-104.941,-427.862
+XAUUSDm,DEV,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H1,526,1.87418,2.90717,80.9886,-364.288,985.817
+XAUUSDm,DEV,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H2,418,0.313352,1.2663,80.622,-74.7121,130.981
+XAUUSDm,DEV,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H2,493,-0.284344,1.84215,76.6734,-104.941,-140.181
+XAUUSDm,DEV,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H1,526,-2.90205,2.75991,74.7148,-364.288,-1526.48
+XAUUSDm,DEV,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H2,418,0.849712,1.47149,77.0335,-74.7121,355.18
+XAUUSDm,DEV,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H2,493,-0.00796691,1.78475,73.428,-104.941,-3.92769
+XAUUSDm,DEV,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H1,526,-0.944732,2.81909,72.6236,-364.288,-496.929
+XAUUSDm,DEV,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H2,418,1.74324,1.40821,74.1627,-74.7121,728.676
+XAUUSDm,DEV,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H2,493,-0.268503,1.24935,79.716,-60,-132.372
+XAUUSDm,DEV,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H1,526,0.630216,1.55253,76.616,-60,331.494
+XAUUSDm,DEV,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H2,418,0.468357,1.24153,80.622,-60,195.773
+XAUUSDm,DEV,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H2,481,0.155406,1.22932,79.8337,-60,74.7501
+XAUUSDm,DEV,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H1,514,0.215443,1.60946,75.6809,-60,110.738
+XAUUSDm,DEV,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H2,409,0.916909,1.20449,81.1736,-60,375.016
+XAUUSDm,DEV,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H2,469,-0.165034,1.26262,77.6119,-60,-77.4011
+XAUUSDm,DEV,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H1,488,-0.0446796,1.53956,74.3852,-60,-21.8037
+XAUUSDm,DEV,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H2,396,1.01019,1.10266,80.303,-60,400.035
+XAUUSDm,DEV,trend,20,Add when the M5 MACD histogram turns,2025 H2,493,-0.0815522,1.35887,83.7728,-104.941,-40.2052
+XAUUSDm,DEV,trend,20,Add when the M5 MACD histogram turns,2026 H1,526,1.10696,2.79662,83.6502,-364.288,582.261
+XAUUSDm,DEV,trend,20,Add when the M5 MACD histogram turns,2026 H2,418,0.47027,0.916079,83.2536,-76.428,196.573
+XAUUSDm,DEV,trend,21,Add when the M15 MACD histogram turns,2025 H2,493,0.786156,1.16871,85.3955,-104.941,387.575
+XAUUSDm,DEV,trend,21,Add when the M15 MACD histogram turns,2026 H1,526,2.06105,2.7638,85.7414,-364.288,1084.11
+XAUUSDm,DEV,trend,21,Add when the M15 MACD histogram turns,2026 H2,418,0.345184,0.994726,83.9713,-102.499,144.287
+XAUUSDm,DEV,trend,22,Add when the M5 RSI comes back through 35 / 65,2025 H2,493,0.342917,1.57056,85.5984,-104.941,169.058
+XAUUSDm,DEV,trend,22,Add when the M5 RSI comes back through 35 / 65,2026 H1,526,2.04974,2.65633,85.5513,-364.288,1078.16
+XAUUSDm,DEV,trend,22,Add when the M5 RSI comes back through 35 / 65,2026 H2,418,0.278856,1.04968,83.4928,-74.7121,116.562
+XAUUSDm,DEV,trend,23,Add when the M15 RSI comes back through 35 / 65,2025 H2,493,0.386904,1.5825,86.6126,-104.941,190.744
+XAUUSDm,DEV,trend,23,Add when the M15 RSI comes back through 35 / 65,2026 H1,526,2.29538,2.67065,86.8821,-364.288,1207.37
+XAUUSDm,DEV,trend,23,Add when the M15 RSI comes back through 35 / 65,2026 H2,418,-0.0805169,1.02562,83.4928,-74.7121,-33.6561
+XAUUSDm,DEV,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H2,493,0.304899,0.620678,34.0771,-34.9803,150.315
+XAUUSDm,DEV,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H1,526,0.142139,1.40654,32.8897,-121.429,74.7651
+XAUUSDm,DEV,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H2,418,0.66489,0.488708,36.3636,-37.113,277.924
+XAUUSDm,DEV,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H2,493,0.364987,0.931378,26.1663,-34.9803,179.938
+XAUUSDm,DEV,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H1,526,-0.658244,2.32465,25.4753,-121.429,-346.236
+XAUUSDm,DEV,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H2,418,0.651994,0.802137,25.5981,-37.113,272.534
+XAUUSDm,DEV,trend,26,"Trailing stop 1 ATR, no target",2025 H2,493,0.916125,1.04353,38.3367,-30.8383,451.65
+XAUUSDm,DEV,trend,26,"Trailing stop 1 ATR, no target",2026 H1,526,-0.529194,2.19241,35.1711,-98.6554,-278.356
+XAUUSDm,DEV,trend,26,"Trailing stop 1 ATR, no target",2026 H2,418,1.87211,0.727134,40.9091,-37.113,782.543
+XAUUSDm,DEV,trend,27,"Trailing stop 2 ATR, no target",2025 H2,493,1.01913,1.88599,40.568,-65.8186,502.43
+XAUUSDm,DEV,trend,27,"Trailing stop 2 ATR, no target",2026 H1,526,0.61615,6.15737,35.3612,-220.085,324.095
+XAUUSDm,DEV,trend,27,"Trailing stop 2 ATR, no target",2026 H2,418,-1.62899,1.69362,35.4067,-43.2601,-680.916
+XAUUSDm,DEV,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H2,493,0.525398,0.97926,50.7099,-34.9803,259.021
+XAUUSDm,DEV,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H1,526,0.738468,1.94254,50.1901,-121.429,388.434
+XAUUSDm,DEV,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H2,418,1.25337,0.678659,51.6746,-37.113,523.909
+XAUUSDm,DEV,trend,29,"Pyramid, 2 adds",2025 H2,493,1.60742,1.70883,25.355,-37.0455,792.456
+XAUUSDm,DEV,trend,29,"Pyramid, 2 adds",2026 H1,526,-0.274598,3.59618,22.0532,-98.6554,-144.439
+XAUUSDm,DEV,trend,29,"Pyramid, 2 adds",2026 H2,418,2.59867,1.69214,24.1627,-50.5045,1086.24
+XAUUSDm,DEV,trend,30,"Pyramid, 4 adds",2025 H2,493,1.57102,1.83845,25.355,-37.0455,774.511
+XAUUSDm,DEV,trend,30,"Pyramid, 4 adds",2026 H1,526,0.115761,3.90059,22.0532,-98.6554,60.8904
+XAUUSDm,DEV,trend,30,"Pyramid, 4 adds",2026 H2,418,2.72945,2.01627,24.1627,-50.5045,1140.91
+XAUUSDm,DEV,trend,31,"Hedge lock, unlocked by the next vote signal",2025 H2,493,-0.337122,0.894166,60.6491,-66.5784,-166.201
+XAUUSDm,DEV,trend,31,"Hedge lock, unlocked by the next vote signal",2026 H1,526,1.15392,1.51634,59.5057,-217.737,606.962
+XAUUSDm,DEV,trend,31,"Hedge lock, unlocked by the next vote signal",2026 H2,418,1.32573,0.742024,62.9187,-49.0261,554.156
+XAUUSDm,DEV,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H2,493,-0.337122,0.894166,60.6491,-66.5784,-166.201
+XAUUSDm,DEV,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H1,526,1.15392,1.51634,59.8859,-217.737,606.962
+XAUUSDm,DEV,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H2,418,1.32573,0.742024,62.9187,-49.0261,554.156
+XAUUSDm,DEV,trend,33,"Hedge lock, both legs closed 4 h later",2025 H2,493,0.148468,0.77141,50.7099,-35.1403,73.1949
+XAUUSDm,DEV,trend,33,"Hedge lock, both legs closed 4 h later",2026 H1,526,0.292378,1.35279,50.1901,-121.589,153.791
+XAUUSDm,DEV,trend,33,"Hedge lock, both legs closed 4 h later",2026 H2,418,0.671348,0.584114,51.9139,-37.353,280.623
+XAUUSDm,DEV,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H2,493,-1.85888,2.3697,92.9006,-462.324,-916.43
+XAUUSDm,DEV,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H1,526,-4.26932,4.68507,92.2053,-1364.27,-2245.66
+XAUUSDm,DEV,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H2,418,0.357773,3.66168,93.7799,-363.65,149.549
+XAUUSDm,DEV,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H2,493,-0.342399,1.42975,78.499,-141.814,-168.803
+XAUUSDm,DEV,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H1,526,-3.31525,2.77622,76.8061,-369.946,-1743.82
+XAUUSDm,DEV,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H2,418,-1.62715,1.84033,78.4689,-106.244,-680.15
+XAUUSDm,DEV,trend,36,"Stop and reverse, same size",2025 H2,493,-0.0853623,0.59315,50.7099,-67.7216,-42.0836
+XAUUSDm,DEV,trend,36,"Stop and reverse, same size",2026 H1,526,0.342954,1.20306,50.9506,-211.458,180.394
+XAUUSDm,DEV,trend,36,"Stop and reverse, same size",2026 H2,418,0.414037,0.828118,52.8708,-48.2441,173.067
+XAUUSDm,DEV,trend,37,"Stop and reverse, double size",2025 H2,493,-0.398077,0.978403,73.428,-101.582,-196.252
+XAUUSDm,DEV,trend,37,"Stop and reverse, double size",2026 H1,526,0.259865,1.72759,74.1445,-317.187,136.689
+XAUUSDm,DEV,trend,37,"Stop and reverse, double size",2026 H2,418,0.0379824,1.30819,74.6411,-72.3661,15.8767
+XAUUSDm,DEV,trend,38,"Martingale: double after a loss, up to x8",2025 H2,493,1.09337,2.78714,50.7099,-270.887,539.03
+XAUUSDm,DEV,trend,38,"Martingale: double after a loss, up to x8",2026 H1,526,5.81361,2.49081,50.1901,-516.635,3057.96
+XAUUSDm,DEV,trend,38,"Martingale: double after a loss, up to x8",2026 H2,418,4.65526,1.42825,51.9139,-189.978,1945.9
+XAUUSDm,DEV,trend,39,"Anti-martingale: double after a win, up to x8",2025 H2,493,0.266027,2.00865,50.7099,-279.842,131.151
+XAUUSDm,DEV,trend,39,"Anti-martingale: double after a win, up to x8",2026 H1,526,0.957104,5.38314,50.1901,-800.344,503.437
+XAUUSDm,DEV,trend,39,"Anti-martingale: double after a win, up to x8",2026 H2,418,0.841324,2.04454,51.9139,-176.668,351.673
+XAUUSDm,DEV,trend,40,Daily loss limit 1 R,2025 H2,289,0.220241,0.988562,51.2111,-34.9803,63.6497
+XAUUSDm,DEV,trend,40,Daily loss limit 1 R,2026 H1,296,-0.298439,1.79497,48.6486,-121.429,-88.3379
+XAUUSDm,DEV,trend,40,Daily loss limit 1 R,2026 H2,229,-0.178542,1.071,49.345,-24.904,-40.886
+XAUUSDm,DEV,trend,41,Daily loss limit 2 R,2025 H2,407,-0.350522,0.773948,49.14,-34.9803,-142.662
+XAUUSDm,DEV,trend,41,Daily loss limit 2 R,2026 H1,423,-0.358323,1.68565,48.227,-121.429,-151.571
+XAUUSDm,DEV,trend,41,Daily loss limit 2 R,2026 H2,346,0.638044,0.648345,51.4451,-24.904,220.763
+XAUUSDm,DEV,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H2,852,-1.19684,0.525983,45.892,-38.5775,-1019.71
+XAUUSDm,DEV,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H1,928,0.145808,0.914787,48.9224,-121.429,135.31
+XAUUSDm,DEV,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H2,756,-0.0736666,0.632055,49.8677,-37.113,-55.692
+XAUUSDm,DEV,votes,1,"Fixed stop 2 ATR, target 2 ATR",2025 H2,852,0.296293,0.653678,50.7042,-76.273,252.442
+XAUUSDm,DEV,votes,1,"Fixed stop 2 ATR, target 2 ATR",2026 H1,928,-1.40687,2.3305,47.5216,-242.859,-1305.58
+XAUUSDm,DEV,votes,1,"Fixed stop 2 ATR, target 2 ATR",2026 H2,756,-1.72721,1.26951,47.4868,-57.262,-1305.77
+XAUUSDm,DEV,votes,2,"Fixed stop 1 ATR, target 2 ATR",2025 H2,852,-0.446196,0.61689,32.6291,-38.5775,-380.159
+XAUUSDm,DEV,votes,2,"Fixed stop 1 ATR, target 2 ATR",2026 H1,928,0.538964,1.50698,33.0819,-121.429,500.158
+XAUUSDm,DEV,votes,2,"Fixed stop 1 ATR, target 2 ATR",2026 H2,756,0.0970784,0.866446,33.5979,-37.113,73.3913
+XAUUSDm,DEV,votes,3,"Fixed stop 2 ATR, target 1 ATR",2025 H2,852,-0.532283,0.590903,65.6103,-72.0872,-453.505
+XAUUSDm,DEV,votes,3,"Fixed stop 2 ATR, target 1 ATR",2026 H1,928,-2.04013,1.23199,63.3621,-242.859,-1893.24
+XAUUSDm,DEV,votes,3,"Fixed stop 2 ATR, target 1 ATR",2026 H2,756,-0.280728,0.914458,66.0053,-57.262,-212.23
+XAUUSDm,DEV,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H2,852,0.316534,0.549309,50.8216,-28.1533,269.687
+XAUUSDm,DEV,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H1,928,0.0105229,0.537568,49.6767,-23.3143,9.76526
+XAUUSDm,DEV,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H2,756,-0.806243,0.671854,48.0159,-37.113,-609.52
+XAUUSDm,DEV,votes,5,"Live ladder, no stop",2025 H2,852,-15.0068,15.9244,99.8826,-13647.2,-12785.8
+XAUUSDm,DEV,votes,5,"Live ladder, no stop",2026 H1,928,1.00237,0.00171345,100,1,930.197
+XAUUSDm,DEV,votes,5,"Live ladder, no stop",2026 H2,756,1.00188,0.00128907,100,1,757.424
+XAUUSDm,DEV,votes,6,"Live ladder, basket stop $60",2025 H2,852,-0.634548,0.352144,97.3005,-60,-540.635
+XAUUSDm,DEV,votes,6,"Live ladder, basket stop $60",2026 H1,928,-1.36401,0.473869,96.1207,-60,-1265.8
+XAUUSDm,DEV,votes,6,"Live ladder, basket stop $60",2026 H2,756,-0.773248,0.424406,97.0899,-60,-584.576
+XAUUSDm,DEV,votes,7,"Live ladder, basket stop $200",2025 H2,852,-1.11107,0.627679,98.9437,-200,-946.635
+XAUUSDm,DEV,votes,7,"Live ladder, basket stop $200",2026 H1,928,-0.558239,0.593261,99.2457,-241.243,-518.046
+XAUUSDm,DEV,votes,7,"Live ladder, basket stop $200",2026 H2,756,-0.593354,0.548078,99.2063,-200,-448.576
+XAUUSDm,DEV,votes,8,"Budget 1 R, no add",2025 H2,852,-0.437685,0.375098,64.4366,-37.8158,-372.907
+XAUUSDm,DEV,votes,8,"Budget 1 R, no add",2026 H1,928,0.446741,0.521948,67.2414,-121.429,414.576
+XAUUSDm,DEV,votes,8,"Budget 1 R, no add",2026 H2,756,-0.333252,0.517812,65.3439,-37.113,-251.938
+XAUUSDm,DEV,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H2,852,0.259243,0.529674,52.3474,-37.8158,220.875
+XAUUSDm,DEV,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H1,928,0.279106,0.679565,53.556,-121.429,259.01
+XAUUSDm,DEV,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H2,756,-0.197461,0.54833,52.5132,-72.0398,-149.281
+XAUUSDm,DEV,votes,10,"Budget 2 R, no add",2025 H2,852,0.446255,0.396968,80.5164,-72.0872,380.209
+XAUUSDm,DEV,votes,10,"Budget 2 R, no add",2026 H1,928,-0.314353,1.1058,79.2026,-242.859,-291.719
+XAUUSDm,DEV,votes,10,"Budget 2 R, no add",2026 H2,756,-0.610871,0.708639,78.3069,-49.8081,-461.819
+XAUUSDm,DEV,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H2,852,-0.684354,0.670873,69.8357,-75.6317,-583.07
+XAUUSDm,DEV,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H1,928,0.429071,1.11292,72.0905,-242.859,398.178
+XAUUSDm,DEV,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H2,756,-0.373117,0.986809,70.5026,-49.8081,-282.076
+XAUUSDm,DEV,votes,12,"Budget 3 R, no add",2025 H2,852,0.355905,0.57349,86.2676,-108.131,303.231
+XAUUSDm,DEV,votes,12,"Budget 3 R, no add",2026 H1,928,-0.583848,1.40493,85.1293,-364.288,-541.811
+XAUUSDm,DEV,votes,12,"Budget 3 R, no add",2026 H2,756,-1.04496,0.923868,83.4656,-74.7121,-789.992
+XAUUSDm,DEV,votes,13,"Budget 3 R, 1 add 1 ATR apart",2025 H2,852,0.265383,0.591043,83.3333,-108.131,226.107
+XAUUSDm,DEV,votes,13,"Budget 3 R, 1 add 1 ATR apart",2026 H1,928,-1.77579,1.83531,82.0043,-364.288,-1647.93
+XAUUSDm,DEV,votes,13,"Budget 3 R, 1 add 1 ATR apart",2026 H2,756,-0.98402,0.94646,81.746,-79.8552,-743.919
+XAUUSDm,DEV,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H2,852,-0.57189,0.822545,78.8732,-108.131,-487.25
+XAUUSDm,DEV,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H1,928,-0.00637204,1.53822,79.5259,-364.288,-5.91325
+XAUUSDm,DEV,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H2,756,-1.6253,1.27318,77.5132,-74.7121,-1228.73
+XAUUSDm,DEV,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H2,852,-1.00181,1.2437,74.6479,-108.131,-853.539
+XAUUSDm,DEV,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H1,928,-0.877377,1.6585,75.9698,-364.288,-814.206
+XAUUSDm,DEV,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H2,756,-1.24264,1.11777,74.4709,-74.7121,-939.434
+XAUUSDm,DEV,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H2,852,-0.807469,0.924945,71.2441,-113.448,-687.964
+XAUUSDm,DEV,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H1,928,-0.13255,1.76845,72.8448,-364.288,-123.007
+XAUUSDm,DEV,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H2,756,-0.798275,1.70038,71.4286,-74.7121,-603.496
+XAUUSDm,DEV,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H2,852,-0.837773,0.83165,78.169,-60,-713.783
+XAUUSDm,DEV,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H1,928,-0.416088,1.07388,75.6466,-157.422,-386.13
+XAUUSDm,DEV,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H2,756,-1.465,1.26832,77.5132,-60,-1107.54
+XAUUSDm,DEV,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H2,842,-0.717089,0.765795,78.266,-60,-603.789
+XAUUSDm,DEV,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H1,903,-0.0980492,1.11717,75.4153,-118.694,-88.5385
+XAUUSDm,DEV,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H2,744,-1.31927,1.27942,77.8226,-60,-981.535
+XAUUSDm,DEV,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H2,812,-0.855971,0.630131,76.2315,-60,-695.048
+XAUUSDm,DEV,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H1,868,0.156184,1.07865,74.6544,-60,135.568
+XAUUSDm,DEV,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H2,726,-1.20849,1.29355,75.6198,-60,-877.364
+XAUUSDm,DEV,votes,20,Add when the M5 MACD histogram turns,2025 H2,852,0.0186348,0.524985,82.3944,-108.131,15.8769
+XAUUSDm,DEV,votes,20,Add when the M5 MACD histogram turns,2026 H1,928,-1.62373,1.89529,81.5733,-364.288,-1506.82
+XAUUSDm,DEV,votes,20,Add when the M5 MACD histogram turns,2026 H2,756,-1.15687,0.903893,80.9524,-76.428,-874.596
+XAUUSDm,DEV,votes,21,Add when the M15 MACD histogram turns,2025 H2,852,0.660378,0.701514,84.2723,-108.131,562.642
+XAUUSDm,DEV,votes,21,Add when the M15 MACD histogram turns,2026 H1,928,-0.465779,1.46236,83.4052,-364.288,-432.243
+XAUUSDm,DEV,votes,21,Add when the M15 MACD histogram turns,2026 H2,756,-0.723267,0.970654,82.4074,-102.499,-546.79
+XAUUSDm,DEV,votes,22,Add when the M5 RSI comes back through 35 / 65,2025 H2,852,0.0947754,0.599172,83.8028,-108.131,80.7487
+XAUUSDm,DEV,votes,22,Add when the M5 RSI comes back through 35 / 65,2026 H1,928,-0.282604,1.5549,83.7284,-364.288,-262.256
+XAUUSDm,DEV,votes,22,Add when the M5 RSI comes back through 35 / 65,2026 H2,756,-0.896702,0.990774,81.8783,-74.7121,-677.907
+XAUUSDm,DEV,votes,23,Add when the M15 RSI comes back through 35 / 65,2025 H2,852,0.456655,0.586403,85.446,-108.131,389.07
+XAUUSDm,DEV,votes,23,Add when the M15 RSI comes back through 35 / 65,2026 H1,928,0.751968,1.38812,85.5603,-364.288,697.826
+XAUUSDm,DEV,votes,23,Add when the M15 RSI comes back through 35 / 65,2026 H2,756,-0.955878,0.969796,82.5397,-74.7121,-722.644
+XAUUSDm,DEV,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H2,852,-0.684405,0.444046,31.1033,-37.8158,-583.113
+XAUUSDm,DEV,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H1,928,0.328907,0.582425,31.5733,-121.429,305.226
+XAUUSDm,DEV,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H2,756,0.0226486,0.595478,34.9206,-37.113,17.1223
+XAUUSDm,DEV,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H2,852,-1.09274,0.591482,23.4742,-38.5775,-931.019
+XAUUSDm,DEV,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H1,928,0.472129,1.32264,25.3233,-121.429,438.136
+XAUUSDm,DEV,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H2,756,-0.0390072,0.721227,25.2646,-37.113,-29.4894
+XAUUSDm,DEV,votes,26,"Trailing stop 1 ATR, no target",2025 H2,852,-0.992045,0.606747,33.9202,-32.239,-845.222
+XAUUSDm,DEV,votes,26,"Trailing stop 1 ATR, no target",2026 H1,928,-1.92886,0.77148,33.4052,-120.431,-1789.98
+XAUUSDm,DEV,votes,26,"Trailing stop 1 ATR, no target",2026 H2,756,0.931962,0.756023,39.6825,-37.113,704.563
+XAUUSDm,DEV,votes,27,"Trailing stop 2 ATR, no target",2025 H2,852,0.506791,1.36416,38.7324,-65.7242,431.786
+XAUUSDm,DEV,votes,27,"Trailing stop 2 ATR, no target",2026 H1,928,0.588054,2.7906,35.9914,-240.861,545.714
+XAUUSDm,DEV,votes,27,"Trailing stop 2 ATR, no target",2026 H2,756,-1.16563,2.01543,34.5238,-45.068,-881.213
+XAUUSDm,DEV,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H2,852,-1.31926,0.587069,45.892,-38.5775,-1124.01
+XAUUSDm,DEV,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H1,928,0.0621398,0.865533,48.9224,-121.429,57.6657
+XAUUSDm,DEV,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H2,756,0.211103,0.687911,49.7354,-37.113,159.594
+XAUUSDm,DEV,votes,29,"Pyramid, 2 adds",2025 H2,852,-1.56787,0.949049,21.0094,-32.239,-1335.82
+XAUUSDm,DEV,votes,29,"Pyramid, 2 adds",2026 H1,928,-3.61812,1.48765,20.0431,-120.431,-3357.61
+XAUUSDm,DEV,votes,29,"Pyramid, 2 adds",2026 H2,756,1.29761,1.20798,23.9418,-50.5045,980.993
+XAUUSDm,DEV,votes,30,"Pyramid, 4 adds",2025 H2,852,-1.70922,0.996149,21.0094,-32.239,-1456.26
+XAUUSDm,DEV,votes,30,"Pyramid, 4 adds",2026 H1,928,-3.59206,1.75537,19.9353,-120.431,-3333.43
+XAUUSDm,DEV,votes,30,"Pyramid, 4 adds",2026 H2,756,1.22444,1.26009,23.9418,-50.5045,925.68
+XAUUSDm,DEV,votes,31,"Hedge lock, unlocked by the next vote signal",2025 H2,852,-1.90756,0.863933,57.9812,-71.695,-1625.24
+XAUUSDm,DEV,votes,31,"Hedge lock, unlocked by the next vote signal",2026 H1,928,0.871028,1.71672,61.7457,-237.619,808.314
+XAUUSDm,DEV,votes,31,"Hedge lock, unlocked by the next vote signal",2026 H2,756,-0.0100405,0.995655,61.6402,-49.0261,-7.59062
+XAUUSDm,DEV,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H2,852,-1.90756,0.863933,57.9812,-71.695,-1625.24
+XAUUSDm,DEV,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H1,928,0.871028,1.71672,61.8534,-237.619,808.314
+XAUUSDm,DEV,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H2,756,-0.0100405,0.995655,61.6402,-49.0261,-7.59062
+XAUUSDm,DEV,votes,33,"Hedge lock, both legs closed 4 h later",2025 H2,852,-1.28343,0.528704,45.892,-38.7375,-1093.48
+XAUUSDm,DEV,votes,33,"Hedge lock, both legs closed 4 h later",2026 H1,928,0.00813035,0.917444,48.9224,-121.589,7.54497
+XAUUSDm,DEV,votes,33,"Hedge lock, both legs closed 4 h later",2026 H2,756,-0.197776,0.636432,49.8677,-37.353,-149.519
+XAUUSDm,DEV,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H2,852,-1.63901,2.19951,93.0751,-568.358,-1396.44
+XAUUSDm,DEV,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H1,928,-2.13746,4.37629,92.4569,-1364.27,-1983.57
+XAUUSDm,DEV,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H2,756,4.95116,2.77231,95.3704,-363.65,3743.08
+XAUUSDm,DEV,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H2,852,-1.26694,1.33962,77.8169,-154.387,-1079.43
+XAUUSDm,DEV,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H1,928,-2.97108,2.14362,77.2629,-501.323,-2757.16
+XAUUSDm,DEV,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H2,756,-1.4351,1.56985,79.2328,-125.575,-1084.94
+XAUUSDm,DEV,votes,36,"Stop and reverse, same size",2025 H2,852,-1.7039,0.765389,46.1268,-77.1551,-1451.72
+XAUUSDm,DEV,votes,36,"Stop and reverse, same size",2026 H1,928,1.37599,1.48812,49.7845,-216.067,1276.92
+XAUUSDm,DEV,votes,36,"Stop and reverse, same size",2026 H2,756,0.0908987,0.772068,50.3968,-48.7485,68.7194
+XAUUSDm,DEV,votes,37,"Stop and reverse, double size",2025 H2,852,-2.21096,1.05497,71.3615,-115.733,-1883.74
+XAUUSDm,DEV,votes,37,"Stop and reverse, double size",2026 H1,928,2.60616,2.27104,75.6466,-324.101,2418.52
+XAUUSDm,DEV,votes,37,"Stop and reverse, double size",2026 H2,756,0.255464,1.08073,75.1323,-73.1228,193.131
+XAUUSDm,DEV,votes,38,"Martingale: double after a loss, up to x8",2025 H2,852,-2.74099,1.81128,45.892,-270.887,-2335.32
+XAUUSDm,DEV,votes,38,"Martingale: double after a loss, up to x8",2026 H1,928,0.311163,2.50396,48.9224,-896.063,288.759
+XAUUSDm,DEV,votes,38,"Martingale: double after a loss, up to x8",2026 H2,756,-0.098302,2.08236,49.8677,-187.367,-74.3163
+XAUUSDm,DEV,votes,39,"Anti-martingale: double after a win, up to x8",2025 H2,852,-1.70706,2.10461,45.892,-302.527,-1454.41
+XAUUSDm,DEV,votes,39,"Anti-martingale: double after a win, up to x8",2026 H1,928,0.303516,3.04598,48.9224,-727.012,281.663
+XAUUSDm,DEV,votes,39,"Anti-martingale: double after a win, up to x8",2026 H2,756,-1.69353,1.17875,49.8677,-199.232,-1280.31
+XAUUSDm,DEV,votes,40,Daily loss limit 1 R,2025 H2,331,-1.10167,0.973895,47.7341,-33.5069,-364.652
+XAUUSDm,DEV,votes,40,Daily loss limit 1 R,2026 H1,449,-0.396066,0.978963,49.2205,-112.008,-177.834
+XAUUSDm,DEV,votes,40,Daily loss limit 1 R,2026 H2,354,-0.350717,0.875019,48.8701,-24.904,-124.154
+XAUUSDm,DEV,votes,41,Daily loss limit 2 R,2025 H2,580,-1.20534,0.526618,46.0345,-38.5775,-699.099
+XAUUSDm,DEV,votes,41,Daily loss limit 2 R,2026 H1,666,-0.419768,0.790626,49.0991,-120.431,-279.566
+XAUUSDm,DEV,votes,41,Daily loss limit 2 R,2026 H2,575,0.292022,0.675964,50.9565,-37.113,167.913
+XAUUSDm,DEV,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H2,843,0.0695755,0.506391,49.2289,-39.9171,58.6521
+XAUUSDm,DEV,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H1,936,0.404033,1.05712,50.2137,-121.429,378.175
+XAUUSDm,DEV,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2026 H2,745,0.00632826,0.422857,50.2013,-30.712,4.71455
+XAUUSDm,DEV,random,1,"Fixed stop 2 ATR, target 2 ATR",2025 H2,843,-0.413544,1.10898,48.28,-79.0519,-348.618
+XAUUSDm,DEV,random,1,"Fixed stop 2 ATR, target 2 ATR",2026 H1,936,1.30188,2.08685,50.7479,-242.859,1218.56
+XAUUSDm,DEV,random,1,"Fixed stop 2 ATR, target 2 ATR",2026 H2,745,-0.386115,1.00903,49.6644,-55.2396,-287.656
+XAUUSDm,DEV,random,2,"Fixed stop 1 ATR, target 2 ATR",2025 H2,843,0.0041483,0.784098,32.0285,-39.9171,3.49702
+XAUUSDm,DEV,random,2,"Fixed stop 1 ATR, target 2 ATR",2026 H1,936,1.13634,1.73361,34.2949,-121.429,1063.61
+XAUUSDm,DEV,random,2,"Fixed stop 1 ATR, target 2 ATR",2026 H2,745,0.165611,0.746794,34.094,-30.712,123.38
+XAUUSDm,DEV,random,3,"Fixed stop 2 ATR, target 1 ATR",2025 H2,843,-0.139245,0.856946,65.3618,-79.0519,-117.383
+XAUUSDm,DEV,random,3,"Fixed stop 2 ATR, target 1 ATR",2026 H1,936,0.478385,1.58727,66.8803,-242.859,447.768
+XAUUSDm,DEV,random,3,"Fixed stop 2 ATR, target 1 ATR",2026 H2,745,-0.375842,0.735545,66.1745,-51.9706,-280.002
+XAUUSDm,DEV,random,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H2,843,-0.770552,0.911598,48.0427,-22.551,-649.575
+XAUUSDm,DEV,random,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H1,936,-0.288169,0.5996,49.0385,-40.6638,-269.726
+XAUUSDm,DEV,random,4,"Fixed stop $20, target $20 (the V2 exit)",2026 H2,745,0.0502427,0.688143,50.2013,-30.712,37.4308
+XAUUSDm,DEV,random,5,"Live ladder, no stop",2025 H2,843,1.0029,0.00199175,100,1,845.448
+XAUUSDm,DEV,random,5,"Live ladder, no stop",2026 H1,936,1.00884,0.0086894,100,1,944.276
+XAUUSDm,DEV,random,5,"Live ladder, no stop",2026 H2,745,1.00248,0.00194498,100,1,746.85
+XAUUSDm,DEV,random,6,"Live ladder, basket stop $60",2025 H2,843,-2.03624,0.536349,95.0178,-60,-1716.55
+XAUUSDm,DEV,random,6,"Live ladder, basket stop $60",2026 H1,936,-3.61829,0.484605,92.4145,-60,-3386.72
+XAUUSDm,DEV,random,6,"Live ladder, basket stop $60",2026 H2,745,-1.78141,0.397646,95.4362,-60,-1327.15
+XAUUSDm,DEV,random,7,"Live ladder, basket stop $200",2025 H2,843,-1.143,0.655178,98.9324,-200,-963.552
+XAUUSDm,DEV,random,7,"Live ladder, basket stop $200",2026 H1,936,-2.85654,0.890536,98.0769,-200,-2673.72
+XAUUSDm,DEV,random,7,"Live ladder, basket stop $200",2026 H2,745,-1.9653,0.817695,98.5235,-200,-1464.15
+XAUUSDm,DEV,random,8,"Budget 1 R, no add",2025 H2,843,-0.230089,0.313187,64.7687,-39.9171,-193.965
+XAUUSDm,DEV,random,8,"Budget 1 R, no add",2026 H1,936,-0.340289,0.796245,66.2393,-121.429,-318.51
+XAUUSDm,DEV,random,8,"Budget 1 R, no add",2026 H2,745,-0.520214,0.437002,64.9664,-25.9853,-387.559
+XAUUSDm,DEV,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H2,843,-0.418182,0.313094,51.4828,-55.6479,-352.528
+XAUUSDm,DEV,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H1,936,-3.03942,0.869313,47.9701,-121.429,-2844.9
+XAUUSDm,DEV,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2026 H2,745,-0.825622,0.32245,51.1409,-25.9853,-615.088
+XAUUSDm,DEV,random,10,"Budget 2 R, no add",2025 H2,843,-0.322152,0.42179,78.6477,-79.0519,-271.574
+XAUUSDm,DEV,random,10,"Budget 2 R, no add",2026 H1,936,0.151543,1.13789,80.1282,-242.859,141.844
+XAUUSDm,DEV,random,10,"Budget 2 R, no add",2026 H2,745,-0.516495,0.737192,78.7919,-51.9706,-384.789
+XAUUSDm,DEV,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H2,843,-0.815756,0.729472,68.9205,-79.8343,-687.682
+XAUUSDm,DEV,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H1,936,0.762486,1.02538,71.3675,-242.859,713.687
+XAUUSDm,DEV,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2026 H2,745,-1.19825,0.678172,69.1275,-52.2441,-892.697
+XAUUSDm,DEV,random,12,"Budget 3 R, no add",2025 H2,843,-1.09177,0.651291,83.5113,-118.578,-920.358
+XAUUSDm,DEV,random,12,"Budget 3 R, no add",2026 H1,936,0.143418,1.35476,85.6838,-364.288,134.239
+XAUUSDm,DEV,random,12,"Budget 3 R, no add",2026 H2,745,-0.796163,0.851424,84.2953,-77.9559,-593.141
+XAUUSDm,DEV,random,13,"Budget 3 R, 1 add 1 ATR apart",2025 H2,843,-0.0397924,0.439644,83.0368,-118.578,-33.545
+XAUUSDm,DEV,random,13,"Budget 3 R, 1 add 1 ATR apart",2026 H1,936,-0.502656,1.77581,83.1197,-364.288,-470.486
+XAUUSDm,DEV,random,13,"Budget 3 R, 1 add 1 ATR apart",2026 H2,745,-0.45919,1.14556,82.4161,-77.9559,-342.096
+XAUUSDm,DEV,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H2,843,-0.105102,0.489838,79.8339,-118.578,-88.6011
+XAUUSDm,DEV,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H1,936,0.964677,1.2394,79.9145,-364.288,902.938
+XAUUSDm,DEV,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2026 H2,745,-0.7765,1.09453,78.7919,-88.0391,-578.493
+XAUUSDm,DEV,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H2,843,0.0257659,0.681431,75.8007,-118.578,21.7206
+XAUUSDm,DEV,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H1,936,2.36364,1.67702,76.4957,-364.288,2212.37
+XAUUSDm,DEV,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2026 H2,745,-2.07891,1.21839,73.557,-77.9559,-1548.79
+XAUUSDm,DEV,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H2,843,-0.934935,0.952871,70.344,-119.751,-788.15
+XAUUSDm,DEV,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H1,936,0.767589,1.36248,72.0085,-364.288,718.463
+XAUUSDm,DEV,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2026 H2,745,-2.52348,1.0529,69.6644,-77.9559,-1879.99
+XAUUSDm,DEV,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H2,843,-0.229943,0.566993,79.2408,-85.1057,-193.842
+XAUUSDm,DEV,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H1,936,0.180321,0.883358,76.1752,-222.234,168.78
+XAUUSDm,DEV,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2026 H2,745,-0.824661,1.05002,78.5235,-60,-614.372
+XAUUSDm,DEV,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H2,831,-0.343076,0.6465,78.4597,-85.1057,-285.096
+XAUUSDm,DEV,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H1,912,0.248698,0.871122,75.5482,-103.916,226.813
+XAUUSDm,DEV,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2026 H2,734,-1.04621,1.01704,78.0654,-60,-767.916
+XAUUSDm,DEV,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H2,806,-0.167361,0.657656,76.9231,-60,-134.893
+XAUUSDm,DEV,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H1,881,0.10312,0.907136,74.3473,-60,90.8487
+XAUUSDm,DEV,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2026 H2,723,-1.23452,1.06569,75.9336,-60,-892.561
+XAUUSDm,DEV,random,20,Add when the M5 MACD histogram turns,2025 H2,843,-0.033338,0.508771,81.8505,-118.578,-28.104
+XAUUSDm,DEV,random,20,Add when the M5 MACD histogram turns,2026 H1,936,0.810377,1.6662,82.6923,-364.288,758.513
+XAUUSDm,DEV,random,20,Add when the M5 MACD histogram turns,2026 H2,745,-0.842995,0.987354,81.2081,-77.9559,-628.031
+XAUUSDm,DEV,random,21,Add when the M15 MACD histogram turns,2025 H2,843,-1.09532,0.543205,81.376,-118.578,-923.359
+XAUUSDm,DEV,random,21,Add when the M15 MACD histogram turns,2026 H1,936,0.649779,1.32511,83.8675,-364.288,608.193
+XAUUSDm,DEV,random,21,Add when the M15 MACD histogram turns,2026 H2,745,-1.56763,1.03068,81.2081,-77.9559,-1167.88
+XAUUSDm,DEV,random,22,Add when the M5 RSI comes back through 35 / 65,2025 H2,843,-0.525169,0.673092,82.0878,-118.578,-442.718
+XAUUSDm,DEV,random,22,Add when the M5 RSI comes back through 35 / 65,2026 H1,936,0.820862,1.18552,83.9744,-364.288,768.327
+XAUUSDm,DEV,random,22,Add when the M5 RSI comes back through 35 / 65,2026 H2,745,-0.499986,0.983775,82.5503,-77.9559,-372.49
+XAUUSDm,DEV,random,23,Add when the M15 RSI comes back through 35 / 65,2025 H2,843,-1.22321,0.676214,82.325,-119.751,-1031.16
+XAUUSDm,DEV,random,23,Add when the M15 RSI comes back through 35 / 65,2026 H1,936,0.77573,1.11624,85.2564,-364.288,726.083
+XAUUSDm,DEV,random,23,Add when the M15 RSI comes back through 35 / 65,2026 H2,745,-1.03379,0.81309,82.953,-77.9559,-770.173
+XAUUSDm,DEV,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H2,843,-0.00512525,0.446141,33.9265,-39.9171,-4.32059
+XAUUSDm,DEV,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H1,936,-0.514935,0.833465,32.0513,-121.429,-481.98
+XAUUSDm,DEV,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2026 H2,745,-0.390406,0.500919,33.2886,-30.712,-290.853
+XAUUSDm,DEV,random,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H2,843,0.381753,0.661966,24.3179,-39.9171,321.818
+XAUUSDm,DEV,random,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H1,936,1.27515,1.3182,26.7094,-121.429,1193.54
+XAUUSDm,DEV,random,25,"Break-even at +1 ATR (stop 1, target 2)",2026 H2,745,-0.240165,0.588893,24.698,-30.712,-178.923
+XAUUSDm,DEV,random,26,"Trailing stop 1 ATR, no target",2025 H2,843,-0.755102,0.387945,34.5196,-38.2281,-636.551
+XAUUSDm,DEV,random,26,"Trailing stop 1 ATR, no target",2026 H1,936,-0.33044,1.04848,35.5769,-120.431,-309.291
+XAUUSDm,DEV,random,26,"Trailing stop 1 ATR, no target",2026 H2,745,0.240115,0.733981,37.047,-30.712,178.886
+XAUUSDm,DEV,random,27,"Trailing stop 2 ATR, no target",2025 H2,843,1.55272,1.60685,36.4176,-69.8736,1308.94
+XAUUSDm,DEV,random,27,"Trailing stop 2 ATR, no target",2026 H1,936,2.15156,2.75061,38.0342,-240.861,2013.86
+XAUUSDm,DEV,random,27,"Trailing stop 2 ATR, no target",2026 H2,745,-0.768094,1.82692,35.9732,-47.2975,-572.23
+XAUUSDm,DEV,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H2,843,0.0176916,0.502786,49.2289,-39.9171,14.914
+XAUUSDm,DEV,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H1,936,0.728815,1.28227,50.2137,-121.429,682.171
+XAUUSDm,DEV,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2026 H2,745,0.141189,0.471459,50.2013,-30.712,105.186
+XAUUSDm,DEV,random,29,"Pyramid, 2 adds",2025 H2,843,-1.0598,0.635638,20.5219,-38.2281,-893.407
+XAUUSDm,DEV,random,29,"Pyramid, 2 adds",2026 H1,936,-0.243176,1.84706,22.2222,-120.431,-227.612
+XAUUSDm,DEV,random,29,"Pyramid, 2 adds",2026 H2,745,0.637178,1.37962,23.3557,-30.712,474.698
+XAUUSDm,DEV,random,30,"Pyramid, 4 adds",2025 H2,843,-1.20625,0.709574,20.5219,-38.2281,-1016.87
+XAUUSDm,DEV,random,30,"Pyramid, 4 adds",2026 H1,936,-0.258888,2.1612,22.1154,-120.431,-242.319
+XAUUSDm,DEV,random,30,"Pyramid, 4 adds",2026 H2,745,0.962486,1.59052,23.3557,-30.712,717.052
+XAUUSDm,DEV,random,31,"Hedge lock, unlocked by the next vote signal",2025 H2,843,-0.937829,0.577898,59.0747,-77.7837,-790.59
+XAUUSDm,DEV,random,31,"Hedge lock, unlocked by the next vote signal",2026 H1,936,0.530164,1.22634,62.7137,-242.859,496.234
+XAUUSDm,DEV,random,31,"Hedge lock, unlocked by the next vote signal",2026 H2,745,-0.894631,0.635696,60.5369,-54.6163,-666.5
+XAUUSDm,DEV,random,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H2,843,-0.937829,0.577898,59.0747,-77.7837,-790.59
+XAUUSDm,DEV,random,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H1,936,0.530164,1.22634,62.6068,-242.859,496.234
+XAUUSDm,DEV,random,32,"Close at -1 ATR, re-enter on the next vote signal",2026 H2,745,-0.894631,0.635696,60.5369,-54.6163,-666.5
+XAUUSDm,DEV,random,33,"Hedge lock, both legs closed 4 h later",2025 H2,843,-0.012608,0.508585,49.2289,-40.0771,-10.6286
+XAUUSDm,DEV,random,33,"Hedge lock, both legs closed 4 h later",2026 H1,936,0.271482,1.06093,50.2137,-121.589,254.107
+XAUUSDm,DEV,random,33,"Hedge lock, both legs closed 4 h later",2026 H2,745,-0.117134,0.42575,50.2013,-30.952,-87.2648
+XAUUSDm,DEV,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H2,843,-1.39411,2.41025,93.2384,-599.877,-1175.23
+XAUUSDm,DEV,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H1,936,-0.626032,3.76542,92.735,-1501.77,-585.966
+XAUUSDm,DEV,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2026 H2,745,-1.91509,2.21484,92.6174,-339.824,-1426.74
+XAUUSDm,DEV,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H2,843,-1.00784,0.830376,78.7663,-160.035,-849.609
+XAUUSDm,DEV,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H1,936,-3.78099,1.86907,76.7094,-465.299,-3539.01
+XAUUSDm,DEV,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2026 H2,745,-1.08783,1.34848,78.6577,-93.4483,-810.435
+XAUUSDm,DEV,random,36,"Stop and reverse, same size",2025 H2,843,-0.104099,0.575804,49.4662,-79.8343,-87.7555
+XAUUSDm,DEV,random,36,"Stop and reverse, same size",2026 H1,936,0.513996,0.974004,50.9615,-242.859,481.1
+XAUUSDm,DEV,random,36,"Stop and reverse, same size",2026 H2,745,-0.0426496,0.674542,50.8725,-48.4222,-31.7739
+XAUUSDm,DEV,random,37,"Stop and reverse, double size",2025 H2,843,-0.277774,0.78654,74.14,-119.751,-234.163
+XAUUSDm,DEV,random,37,"Stop and reverse, double size",2026 H1,936,0.62396,1.45708,75.1068,-364.288,584.026
+XAUUSDm,DEV,random,37,"Stop and reverse, double size",2026 H2,745,-0.0916274,1.06657,74.6309,-74.0602,-68.2624
+XAUUSDm,DEV,random,38,"Martingale: double after a loss, up to x8",2025 H2,843,0.0714835,2.15906,49.2289,-319.337,60.2606
+XAUUSDm,DEV,random,38,"Martingale: double after a loss, up to x8",2026 H1,936,2.6242,3.66514,50.2137,-971.435,2456.25
+XAUUSDm,DEV,random,38,"Martingale: double after a loss, up to x8",2026 H2,745,-0.149411,2.2117,50.2013,-207.882,-111.311
+XAUUSDm,DEV,random,39,"Anti-martingale: double after a win, up to x8",2025 H2,843,-0.352782,1.55667,49.2289,-209.046,-297.396
+XAUUSDm,DEV,random,39,"Anti-martingale: double after a win, up to x8",2026 H1,936,-0.931402,3.29671,50.2137,-914.784,-871.792
+XAUUSDm,DEV,random,39,"Anti-martingale: double after a win, up to x8",2026 H2,745,0.467029,1.37532,50.2013,-176.668,347.937
+XAUUSDm,DEV,random,40,Daily loss limit 1 R,2025 H2,402,0.24949,0.65793,49.5025,-36.345,100.295
+XAUUSDm,DEV,random,40,Daily loss limit 1 R,2026 H1,398,0.829085,1.98794,51.2563,-120.431,329.976
+XAUUSDm,DEV,random,40,Daily loss limit 1 R,2026 H2,368,-0.594344,0.768541,48.3696,-30.712,-218.719
+XAUUSDm,DEV,random,41,Daily loss limit 2 R,2025 H2,632,0.374091,0.478729,49.8418,-39.2062,236.426
+XAUUSDm,DEV,random,41,Daily loss limit 2 R,2026 H1,642,0.242858,1.45683,50,-120.431,155.915
+XAUUSDm,DEV,random,41,Daily loss limit 2 R,2026 H2,548,-0.682569,0.561962,48.1752,-30.712,-374.048
+XAUUSDm,CONFIRM,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H1,480,-0.563234,0.295974,45.625,-14.7859,-270.352
+XAUUSDm,CONFIRM,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H2,597,0.474625,0.301664,53.4338,-14.4006,283.351
+XAUUSDm,CONFIRM,trend,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H1,566,-0.268258,0.530358,49.6466,-43.987,-151.834
+XAUUSDm,CONFIRM,trend,1,"Fixed stop 2 ATR, target 2 ATR",2024 H1,480,-1.55246,0.551625,43.75,-29.5719,-745.181
+XAUUSDm,CONFIRM,trend,1,"Fixed stop 2 ATR, target 2 ATR",2024 H2,597,0.448064,0.717565,51.4238,-28.8013,267.494
+XAUUSDm,CONFIRM,trend,1,"Fixed stop 2 ATR, target 2 ATR",2025 H1,566,0.502588,1.36727,50.8834,-59.184,284.465
+XAUUSDm,CONFIRM,trend,2,"Fixed stop 1 ATR, target 2 ATR",2024 H1,480,-0.807167,0.380198,28.5417,-14.7859,-387.44
+XAUUSDm,CONFIRM,trend,2,"Fixed stop 1 ATR, target 2 ATR",2024 H2,597,0.504228,0.48185,35.3434,-14.4006,301.024
+XAUUSDm,CONFIRM,trend,2,"Fixed stop 1 ATR, target 2 ATR",2025 H1,566,-0.235079,0.748244,33.0389,-43.987,-133.055
+XAUUSDm,CONFIRM,trend,3,"Fixed stop 2 ATR, target 1 ATR",2024 H1,480,-0.93106,0.438958,61.875,-28.3387,-446.909
+XAUUSDm,CONFIRM,trend,3,"Fixed stop 2 ATR, target 1 ATR",2024 H2,597,0.640619,0.4704,69.1792,-28.8013,382.45
+XAUUSDm,CONFIRM,trend,3,"Fixed stop 2 ATR, target 1 ATR",2025 H1,566,0.146341,1.10599,66.7845,-59.184,82.8288
+XAUUSDm,CONFIRM,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H1,480,-0.221054,1.76868,49.375,-21.649,-106.106
+XAUUSDm,CONFIRM,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H2,597,0.904523,1.51488,52.2613,-20,540
+XAUUSDm,CONFIRM,trend,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H1,566,1.23427,1.22356,53.0035,-43.987,698.599
+XAUUSDm,CONFIRM,trend,5,"Live ladder, no stop",2024 H1,480,1.00308,0.00307085,100,1,481.476
+XAUUSDm,CONFIRM,trend,5,"Live ladder, no stop",2024 H2,597,1.00004,3.90326e-05,100,1,597.026
+XAUUSDm,CONFIRM,trend,5,"Live ladder, no stop",2025 H1,566,1,4.65143e-14,100,1,566
+XAUUSDm,CONFIRM,trend,6,"Live ladder, basket stop $60",2024 H1,480,-0.649008,0.397659,97.2917,-60,-311.524
+XAUUSDm,CONFIRM,trend,6,"Live ladder, basket stop $60",2024 H2,597,-0.021732,0.404557,98.325,-60,-12.974
+XAUUSDm,CONFIRM,trend,6,"Live ladder, basket stop $60",2025 H1,566,-0.23989,0.398716,98.0565,-90.778,-135.778
+XAUUSDm,CONFIRM,trend,7,"Live ladder, basket stop $200",2024 H1,480,-0.253175,0.687092,99.375,-200,-121.524
+XAUUSDm,CONFIRM,trend,7,"Live ladder, basket stop $200",2024 H2,597,-0.34669,0.785344,99.33,-200,-206.974
+XAUUSDm,CONFIRM,trend,7,"Live ladder, basket stop $200",2025 H1,566,-0.775618,0.878154,99.1166,-200,-439
+XAUUSDm,CONFIRM,trend,8,"Budget 1 R, no add",2024 H1,480,-0.308352,0.199075,63.125,-14.7859,-148.009
+XAUUSDm,CONFIRM,trend,8,"Budget 1 R, no add",2024 H2,597,0.216619,0.20582,69.0117,-14.4006,129.322
+XAUUSDm,CONFIRM,trend,8,"Budget 1 R, no add",2025 H1,566,-0.682533,0.431629,63.7809,-43.987,-386.314
+XAUUSDm,CONFIRM,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H1,480,-0.632984,0.355619,48.5417,-14.7859,-303.832
+XAUUSDm,CONFIRM,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H2,597,-0.00342938,0.279639,53.7688,-14.4006,-2.04734
+XAUUSDm,CONFIRM,trend,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H1,566,-1.0195,0.491013,50.53,-28.4209,-577.036
+XAUUSDm,CONFIRM,trend,10,"Budget 2 R, no add",2024 H1,480,-0.383521,0.281414,76.875,-28.3387,-184.09
+XAUUSDm,CONFIRM,trend,10,"Budget 2 R, no add",2024 H2,597,0.440012,0.297945,82.4121,-28.8013,262.687
+XAUUSDm,CONFIRM,trend,10,"Budget 2 R, no add",2025 H1,566,-0.551398,0.825567,78.4452,-47.4352,-312.091
+XAUUSDm,CONFIRM,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H1,480,-0.712798,0.398161,68.3333,-29.5719,-342.143
+XAUUSDm,CONFIRM,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H2,597,0.358278,0.39594,73.3668,-28.8013,213.892
+XAUUSDm,CONFIRM,trend,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H1,566,-1.40503,0.816116,68.1979,-80.0681,-795.249
+XAUUSDm,CONFIRM,trend,12,"Budget 3 R, no add",2024 H1,480,-0.558368,0.376616,82.9167,-42.508,-268.016
+XAUUSDm,CONFIRM,trend,12,"Budget 3 R, no add",2024 H2,597,0.43144,0.299807,87.4372,-43.2019,257.57
+XAUUSDm,CONFIRM,trend,12,"Budget 3 R, no add",2025 H1,566,-0.638719,1.08848,84.8057,-91.637,-361.515
+XAUUSDm,CONFIRM,trend,13,"Budget 3 R, 1 add 1 ATR apart",2024 H1,480,-0.861247,0.456538,78.75,-42.508,-413.398
+XAUUSDm,CONFIRM,trend,13,"Budget 3 R, 1 add 1 ATR apart",2024 H2,597,0.216712,0.401321,84.4221,-43.2019,129.377
+XAUUSDm,CONFIRM,trend,13,"Budget 3 R, 1 add 1 ATR apart",2025 H1,566,-0.852289,1.27009,81.4488,-71.1528,-482.396
+XAUUSDm,CONFIRM,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H1,480,-0.624854,0.477714,76.6667,-42.508,-299.93
+XAUUSDm,CONFIRM,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H2,597,0.411113,0.436755,81.742,-43.2019,245.434
+XAUUSDm,CONFIRM,trend,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H1,566,-1.1662,1.42867,77.7385,-76.1152,-660.067
+XAUUSDm,CONFIRM,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H1,480,-1.18401,0.560038,72.0833,-44.3578,-568.327
+XAUUSDm,CONFIRM,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H2,597,0.612245,0.497582,78.8945,-43.2019,365.51
+XAUUSDm,CONFIRM,trend,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H1,566,-1.36486,1.43737,74.0283,-110.615,-772.508
+XAUUSDm,CONFIRM,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H1,480,-1.22949,0.548849,68.75,-44.3578,-590.154
+XAUUSDm,CONFIRM,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H2,597,0.30296,0.543163,74.8744,-43.2019,180.867
+XAUUSDm,CONFIRM,trend,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H1,566,-2.19838,1.3575,69.4346,-147.487,-1244.28
+XAUUSDm,CONFIRM,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H1,480,-0.624854,0.477714,76.6667,-42.508,-299.93
+XAUUSDm,CONFIRM,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H2,597,0.411113,0.436755,81.742,-43.2019,245.434
+XAUUSDm,CONFIRM,trend,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H1,566,-1.45572,1.48714,77.3852,-76.1152,-823.937
+XAUUSDm,CONFIRM,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H1,475,-0.588722,0.464971,76.8421,-38.201,-279.643
+XAUUSDm,CONFIRM,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H2,592,0.370105,0.418069,81.4189,-43.2019,219.102
+XAUUSDm,CONFIRM,trend,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H1,551,-1.56758,1.52668,76.951,-76.1152,-863.736
+XAUUSDm,CONFIRM,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H1,467,-0.671187,0.415489,74.7323,-38.201,-313.444
+XAUUSDm,CONFIRM,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H2,579,0.123901,0.426104,78.5838,-43.2019,71.7385
+XAUUSDm,CONFIRM,trend,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H1,534,-1.34735,1.27783,75.6554,-60,-719.486
+XAUUSDm,CONFIRM,trend,20,Add when the M5 MACD histogram turns,2024 H1,480,-0.448468,0.437823,80.4167,-42.508,-215.265
+XAUUSDm,CONFIRM,trend,20,Add when the M5 MACD histogram turns,2024 H2,597,0.225761,0.374734,84.4221,-43.2019,134.779
+XAUUSDm,CONFIRM,trend,20,Add when the M5 MACD histogram turns,2025 H1,566,-1.02142,1.05056,81.0954,-71.1528,-578.125
+XAUUSDm,CONFIRM,trend,21,Add when the M15 MACD histogram turns,2024 H1,480,-0.499604,0.424277,80.625,-42.508,-239.81
+XAUUSDm,CONFIRM,trend,21,Add when the M15 MACD histogram turns,2024 H2,597,0.297607,0.328832,85.4271,-43.2019,177.671
+XAUUSDm,CONFIRM,trend,21,Add when the M15 MACD histogram turns,2025 H1,566,-0.476724,0.958227,83.0389,-70.5133,-269.826
+XAUUSDm,CONFIRM,trend,22,Add when the M5 RSI comes back through 35 / 65,2024 H1,480,-0.422906,0.415911,80.8333,-42.508,-202.995
+XAUUSDm,CONFIRM,trend,22,Add when the M5 RSI comes back through 35 / 65,2024 H2,597,-0.0975968,0.378742,83.9196,-43.2019,-58.2653
+XAUUSDm,CONFIRM,trend,22,Add when the M5 RSI comes back through 35 / 65,2025 H1,566,-0.649557,1.02188,81.9788,-63.6596,-367.649
+XAUUSDm,CONFIRM,trend,23,Add when the M15 RSI comes back through 35 / 65,2024 H1,480,-0.593252,0.395966,81.6667,-42.508,-284.761
+XAUUSDm,CONFIRM,trend,23,Add when the M15 RSI comes back through 35 / 65,2024 H2,597,0.17949,0.345188,85.5946,-43.2019,107.156
+XAUUSDm,CONFIRM,trend,23,Add when the M15 RSI comes back through 35 / 65,2025 H1,566,-0.401562,0.838379,84.0989,-63.6596,-227.284
+XAUUSDm,CONFIRM,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H1,480,-0.456192,0.261662,29.375,-14.7859,-218.972
+XAUUSDm,CONFIRM,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H2,597,0.23568,0.239707,34.3384,-14.4006,140.701
+XAUUSDm,CONFIRM,trend,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H1,566,-0.486668,0.553176,33.0389,-43.987,-275.454
+XAUUSDm,CONFIRM,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H1,480,-0.585911,0.385309,22.7083,-14.7859,-281.237
+XAUUSDm,CONFIRM,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H2,597,0.445556,0.384101,25.7956,-14.4006,265.997
+XAUUSDm,CONFIRM,trend,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H1,566,-0.383284,0.634912,24.5583,-43.987,-216.939
+XAUUSDm,CONFIRM,trend,26,"Trailing stop 1 ATR, no target",2024 H1,480,-0.772715,0.342936,31.25,-14.7859,-370.903
+XAUUSDm,CONFIRM,trend,26,"Trailing stop 1 ATR, no target",2024 H2,597,0.157432,0.288332,39.531,-10.7856,93.9868
+XAUUSDm,CONFIRM,trend,26,"Trailing stop 1 ATR, no target",2025 H1,566,-0.111015,0.730449,39.3993,-43.987,-62.8344
+XAUUSDm,CONFIRM,trend,27,"Trailing stop 2 ATR, no target",2024 H1,480,-1.61177,0.749587,32.2917,-27.5927,-773.65
+XAUUSDm,CONFIRM,trend,27,"Trailing stop 2 ATR, no target",2024 H2,597,1.16141,0.846104,38.6935,-23.5533,693.361
+XAUUSDm,CONFIRM,trend,27,"Trailing stop 2 ATR, no target",2025 H1,566,1.1557,1.70984,37.6325,-59.184,654.124
+XAUUSDm,CONFIRM,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H1,480,-0.621119,0.329631,45.625,-14.7859,-298.137
+XAUUSDm,CONFIRM,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H2,597,0.292096,0.295741,53.4338,-14.4006,174.382
+XAUUSDm,CONFIRM,trend,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H1,566,-0.389229,0.620713,49.6466,-43.987,-220.304
+XAUUSDm,CONFIRM,trend,29,"Pyramid, 2 adds",2024 H1,480,-1.23899,0.452315,18.3333,-14.7859,-594.714
+XAUUSDm,CONFIRM,trend,29,"Pyramid, 2 adds",2024 H2,597,-0.494223,0.405481,24.4556,-10.7856,-295.051
+XAUUSDm,CONFIRM,trend,29,"Pyramid, 2 adds",2025 H1,566,-0.256119,1.17518,23.4982,-43.987,-144.963
+XAUUSDm,CONFIRM,trend,30,"Pyramid, 4 adds",2024 H1,480,-1.29262,0.444866,18.3333,-14.7859,-620.457
+XAUUSDm,CONFIRM,trend,30,"Pyramid, 4 adds",2024 H2,597,-0.63933,0.41055,24.4556,-10.7856,-381.68
+XAUUSDm,CONFIRM,trend,30,"Pyramid, 4 adds",2025 H1,566,-0.2278,1.25331,23.4982,-43.987,-128.935
+XAUUSDm,CONFIRM,trend,31,"Hedge lock, unlocked by the next vote signal",2024 H1,480,-0.454421,0.45623,61.25,-28.3387,-218.122
+XAUUSDm,CONFIRM,trend,31,"Hedge lock, unlocked by the next vote signal",2024 H2,597,0.666783,0.357933,66.3317,-26.8899,398.069
+XAUUSDm,CONFIRM,trend,31,"Hedge lock, unlocked by the next vote signal",2025 H1,566,-0.493276,0.942009,61.8375,-70.3547,-279.194
+XAUUSDm,CONFIRM,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H1,480,-0.454421,0.45623,60.625,-28.3387,-218.122
+XAUUSDm,CONFIRM,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H2,597,0.666783,0.357933,65.9966,-26.8899,398.069
+XAUUSDm,CONFIRM,trend,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H1,566,-0.493276,0.942009,61.6608,-70.3547,-279.194
+XAUUSDm,CONFIRM,trend,33,"Hedge lock, both legs closed 4 h later",2024 H1,480,-0.679482,0.300013,45.625,-15.3859,-326.151
+XAUUSDm,CONFIRM,trend,33,"Hedge lock, both legs closed 4 h later",2024 H2,597,0.396983,0.30529,53.4338,-14.5806,236.999
+XAUUSDm,CONFIRM,trend,33,"Hedge lock, both legs closed 4 h later",2025 H1,566,-0.349181,0.532763,49.6466,-44.147,-197.637
+XAUUSDm,CONFIRM,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H1,480,-1.07611,0.878457,92.9167,-158.308,-516.531
+XAUUSDm,CONFIRM,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H2,597,-0.271158,0.980221,93.1323,-187.54,-161.881
+XAUUSDm,CONFIRM,trend,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H1,566,0.523569,2.5757,92.7562,-258.576,296.34
+XAUUSDm,CONFIRM,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H1,480,-2.07192,0.563447,74.7917,-58.513,-994.524
+XAUUSDm,CONFIRM,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H2,597,-0.36428,0.491456,79.732,-51.3788,-217.475
+XAUUSDm,CONFIRM,trend,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H1,566,-0.197773,0.988122,79.682,-129.918,-111.939
+XAUUSDm,CONFIRM,trend,36,"Stop and reverse, same size",2024 H1,480,-0.533783,0.39079,45.625,-44.1449,-256.216
+XAUUSDm,CONFIRM,trend,36,"Stop and reverse, same size",2024 H2,597,0.428757,0.282061,53.4338,-25.7456,255.968
+XAUUSDm,CONFIRM,trend,36,"Stop and reverse, same size",2025 H1,566,-0.368759,0.428094,50,-73.5975,-208.718
+XAUUSDm,CONFIRM,trend,37,"Stop and reverse, double size",2024 H1,480,-0.504332,0.598086,72.9167,-73.5038,-242.079
+XAUUSDm,CONFIRM,trend,37,"Stop and reverse, double size",2024 H2,597,0.38289,0.358793,76.3819,-38.6184,228.585
+XAUUSDm,CONFIRM,trend,37,"Stop and reverse, double size",2025 H1,566,-0.469261,0.814916,74.2049,-128.872,-265.602
+XAUUSDm,CONFIRM,trend,38,"Martingale: double after a loss, up to x8",2024 H1,480,-1.6788,1.3829,45.625,-83.7217,-805.826
+XAUUSDm,CONFIRM,trend,38,"Martingale: double after a loss, up to x8",2024 H2,597,0.935309,1.03686,53.4338,-79.7286,558.38
+XAUUSDm,CONFIRM,trend,38,"Martingale: double after a loss, up to x8",2025 H1,566,-0.245614,2.42792,49.6466,-351.896,-139.018
+XAUUSDm,CONFIRM,trend,39,"Anti-martingale: double after a win, up to x8",2024 H1,480,-0.924667,0.843713,45.625,-59.5396,-443.84
+XAUUSDm,CONFIRM,trend,39,"Anti-martingale: double after a win, up to x8",2024 H2,597,2.37484,1.45871,53.4338,-115.205,1417.78
+XAUUSDm,CONFIRM,trend,39,"Anti-martingale: double after a win, up to x8",2025 H1,566,-1.75066,1.32578,49.6466,-214.997,-990.874
+XAUUSDm,CONFIRM,trend,40,Daily loss limit 1 R,2024 H1,266,-0.724473,0.378904,44.3609,-14.7859,-192.71
+XAUUSDm,CONFIRM,trend,40,Daily loss limit 1 R,2024 H2,340,0.595703,0.353035,55,-14.4006,202.539
+XAUUSDm,CONFIRM,trend,40,Daily loss limit 1 R,2025 H1,309,-0.351717,0.59901,49.1909,-26.8747,-108.681
+XAUUSDm,CONFIRM,trend,41,Daily loss limit 2 R,2024 H1,397,-0.469171,0.295146,46.0957,-14.7859,-186.261
+XAUUSDm,CONFIRM,trend,41,Daily loss limit 2 R,2024 H2,492,0.278601,0.363194,52.439,-14.4006,137.072
+XAUUSDm,CONFIRM,trend,41,Daily loss limit 2 R,2025 H1,458,-0.486671,0.437368,48.2533,-26.8747,-222.896
+XAUUSDm,CONFIRM,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H1,862,-0.380676,0.147666,46.9838,-14.7859,-328.143
+XAUUSDm,CONFIRM,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H2,1057,-0.0146155,0.143206,49.5743,-15.504,-15.4486
+XAUUSDm,CONFIRM,votes,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H1,1034,0.0156343,0.418198,49.6132,-44.979,16.1659
+XAUUSDm,CONFIRM,votes,1,"Fixed stop 2 ATR, target 2 ATR",2024 H1,862,-0.554222,0.472161,47.6798,-29.5719,-477.739
+XAUUSDm,CONFIRM,votes,1,"Fixed stop 2 ATR, target 2 ATR",2024 H2,1057,-0.244231,0.402112,48.3444,-28.8013,-258.152
+XAUUSDm,CONFIRM,votes,1,"Fixed stop 2 ATR, target 2 ATR",2025 H1,1034,-0.589917,0.724805,47.7756,-70.01,-609.974
+XAUUSDm,CONFIRM,votes,2,"Fixed stop 1 ATR, target 2 ATR",2024 H1,862,-0.251827,0.275172,31.6705,-14.7859,-217.075
+XAUUSDm,CONFIRM,votes,2,"Fixed stop 1 ATR, target 2 ATR",2024 H2,1057,-0.112379,0.233318,32.3557,-15.504,-118.785
+XAUUSDm,CONFIRM,votes,2,"Fixed stop 1 ATR, target 2 ATR",2025 H1,1034,-0.227771,0.53294,32.205,-44.979,-235.515
+XAUUSDm,CONFIRM,votes,3,"Fixed stop 2 ATR, target 1 ATR",2024 H1,862,-0.648712,0.270822,63.2251,-28.3387,-559.189
+XAUUSDm,CONFIRM,votes,3,"Fixed stop 2 ATR, target 1 ATR",2024 H2,1057,0.0568525,0.26857,66.2252,-28.8013,60.0931
+XAUUSDm,CONFIRM,votes,3,"Fixed stop 2 ATR, target 1 ATR",2025 H1,1034,-0.441955,0.641652,64.8936,-70.01,-456.982
+XAUUSDm,CONFIRM,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H1,862,-1.00689,0.822432,47.4478,-21.649,-867.938
+XAUUSDm,CONFIRM,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H2,1057,-0.0190076,0.521979,49.9527,-20.149,-20.091
+XAUUSDm,CONFIRM,votes,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H1,1034,-0.867671,0.835497,47.6789,-44.979,-897.172
+XAUUSDm,CONFIRM,votes,5,"Live ladder, no stop",2024 H1,862,-45.4957,46.1083,99.884,-40078.3,-39217.3
+XAUUSDm,CONFIRM,votes,5,"Live ladder, no stop",2024 H2,1057,1.00013,0.000105298,100,1,1057.14
+XAUUSDm,CONFIRM,votes,5,"Live ladder, no stop",2025 H1,1034,1,2.90617e-06,100,1,1034
+XAUUSDm,CONFIRM,votes,6,"Live ladder, basket stop $60",2024 H1,862,-0.488137,0.231483,97.5638,-61.774,-420.774
+XAUUSDm,CONFIRM,votes,6,"Live ladder, basket stop $60",2024 H2,1057,-0.731181,0.305217,97.1618,-60,-772.858
+XAUUSDm,CONFIRM,votes,6,"Live ladder, basket stop $60",2025 H1,1034,-0.835352,0.319433,97.0019,-66.757,-863.754
+XAUUSDm,CONFIRM,votes,7,"Live ladder, basket stop $200",2024 H1,862,-0.399072,0.503337,99.3039,-200,-344
+XAUUSDm,CONFIRM,votes,7,"Live ladder, basket stop $200",2024 H2,1057,-0.711313,0.553166,99.1485,-200,-751.858
+XAUUSDm,CONFIRM,votes,7,"Live ladder, basket stop $200",2025 H1,1034,0.22244,0.451572,99.6132,-200,230.003
+XAUUSDm,CONFIRM,votes,8,"Budget 1 R, no add",2024 H1,862,-0.111116,0.118908,64.7332,-14.7859,-95.7822
+XAUUSDm,CONFIRM,votes,8,"Budget 1 R, no add",2024 H2,1057,-0.00813154,0.135229,66.4144,-14.4299,-8.59504
+XAUUSDm,CONFIRM,votes,8,"Budget 1 R, no add",2025 H1,1034,-0.478912,0.360019,64.1199,-44.979,-495.195
+XAUUSDm,CONFIRM,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H1,862,-0.400539,0.237909,50.464,-14.7859,-345.265
+XAUUSDm,CONFIRM,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H2,1057,-0.588752,0.208764,50.0473,-15.504,-622.311
+XAUUSDm,CONFIRM,votes,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H1,1034,-0.673898,0.399591,50.8704,-26.8747,-696.81
+XAUUSDm,CONFIRM,votes,10,"Budget 2 R, no add",2024 H1,862,-0.33897,0.217196,77.2622,-28.3387,-292.192
+XAUUSDm,CONFIRM,votes,10,"Budget 2 R, no add",2024 H2,1057,-0.0877186,0.151079,79.1864,-28.8013,-92.7186
+XAUUSDm,CONFIRM,votes,10,"Budget 2 R, no add",2025 H1,1034,-0.77982,0.558634,77.3694,-70.01,-806.333
+XAUUSDm,CONFIRM,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H1,862,-0.536676,0.230979,68.6775,-29.5719,-462.615
+XAUUSDm,CONFIRM,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H2,1057,-0.0285819,0.235745,71.1447,-28.8597,-30.211
+XAUUSDm,CONFIRM,votes,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H1,1034,-0.925951,0.665061,69.0522,-111.656,-957.434
+XAUUSDm,CONFIRM,votes,12,"Budget 3 R, no add",2024 H1,862,-0.393791,0.307349,83.5267,-42.508,-339.448
+XAUUSDm,CONFIRM,votes,12,"Budget 3 R, no add",2024 H2,1057,-0.172964,0.1925,84.7682,-43.2019,-182.823
+XAUUSDm,CONFIRM,votes,12,"Budget 3 R, no add",2025 H1,1034,-1.34481,0.788997,82.5919,-91.637,-1390.53
+XAUUSDm,CONFIRM,votes,13,"Budget 3 R, 1 add 1 ATR apart",2024 H1,862,-0.664897,0.313173,79.9304,-42.508,-573.141
+XAUUSDm,CONFIRM,votes,13,"Budget 3 R, 1 add 1 ATR apart",2024 H2,1057,-0.356302,0.197944,81.7408,-43.2019,-376.611
+XAUUSDm,CONFIRM,votes,13,"Budget 3 R, 1 add 1 ATR apart",2025 H1,1034,-1.19475,0.830482,80.8511,-116.812,-1235.37
+XAUUSDm,CONFIRM,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H1,862,-0.403712,0.252937,77.2622,-42.508,-347.999
+XAUUSDm,CONFIRM,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H2,1057,-0.0317154,0.259526,79.5648,-43.2896,-33.5232
+XAUUSDm,CONFIRM,votes,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H1,1034,-1.18248,0.980716,77.3694,-79.7582,-1222.68
+XAUUSDm,CONFIRM,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H1,862,-0.507522,0.389223,73.8979,-44.3578,-437.484
+XAUUSDm,CONFIRM,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H2,1057,0.00502868,0.295611,76.1589,-43.2896,5.31531
+XAUUSDm,CONFIRM,votes,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H1,1034,-1.24059,0.972736,73.6944,-113.984,-1282.77
+XAUUSDm,CONFIRM,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H1,862,-0.808468,0.303378,70.1856,-44.3578,-696.899
+XAUUSDm,CONFIRM,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H2,1057,-0.360449,0.362018,71.9016,-43.2896,-380.994
+XAUUSDm,CONFIRM,votes,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H1,1034,-1.45865,1.02323,70.1161,-151.979,-1508.24
+XAUUSDm,CONFIRM,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H1,862,-0.403712,0.252937,77.2622,-42.508,-347.999
+XAUUSDm,CONFIRM,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H2,1057,-0.0317154,0.259526,79.5648,-43.2896,-33.5232
+XAUUSDm,CONFIRM,votes,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H1,1034,-1.16635,0.934959,77.2727,-78.3175,-1206
+XAUUSDm,CONFIRM,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H1,849,-0.343298,0.254348,77.5029,-31.7712,-291.46
+XAUUSDm,CONFIRM,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H2,1045,-0.0889313,0.256823,79.1388,-43.2896,-92.9332
+XAUUSDm,CONFIRM,votes,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H1,1017,-1.2021,0.915145,76.5978,-78.3175,-1222.54
+XAUUSDm,CONFIRM,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H1,838,-0.3754,0.219081,74.9403,-31.7712,-314.585
+XAUUSDm,CONFIRM,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H2,1031,-0.0594559,0.245687,77.4976,-43.2019,-61.2991
+XAUUSDm,CONFIRM,votes,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H1,986,-1.08227,0.795896,75.4564,-60,-1067.11
+XAUUSDm,CONFIRM,votes,20,Add when the M5 MACD histogram turns,2024 H1,862,-0.63727,0.295778,79.9304,-42.508,-549.327
+XAUUSDm,CONFIRM,votes,20,Add when the M5 MACD histogram turns,2024 H2,1057,-0.427598,0.229717,81.3623,-43.2896,-451.971
+XAUUSDm,CONFIRM,votes,20,Add when the M5 MACD histogram turns,2025 H1,1034,-1.16926,0.741325,80.2708,-113.997,-1209.01
+XAUUSDm,CONFIRM,votes,21,Add when the M15 MACD histogram turns,2024 H1,862,-0.664707,0.275774,80.6265,-42.508,-572.977
+XAUUSDm,CONFIRM,votes,21,Add when the M15 MACD histogram turns,2024 H2,1057,-0.163931,0.238188,83.3491,-43.2896,-173.275
+XAUUSDm,CONFIRM,votes,21,Add when the M15 MACD histogram turns,2025 H1,1034,-0.962062,0.684276,81.9149,-114.232,-994.772
+XAUUSDm,CONFIRM,votes,22,Add when the M5 RSI comes back through 35 / 65,2024 H1,862,-0.462102,0.277953,81.3225,-42.508,-398.332
+XAUUSDm,CONFIRM,votes,22,Add when the M5 RSI comes back through 35 / 65,2024 H2,1057,-0.34478,0.239893,82.4976,-43.2896,-364.432
+XAUUSDm,CONFIRM,votes,22,Add when the M5 RSI comes back through 35 / 65,2025 H1,1034,-1.2146,0.788723,81.0445,-113.997,-1255.89
+XAUUSDm,CONFIRM,votes,23,Add when the M15 RSI comes back through 35 / 65,2024 H1,862,-0.574192,0.272872,82.0186,-42.508,-494.954
+XAUUSDm,CONFIRM,votes,23,Add when the M15 RSI comes back through 35 / 65,2024 H2,1057,-0.3849,0.180572,83.1599,-43.2896,-406.84
+XAUUSDm,CONFIRM,votes,23,Add when the M15 RSI comes back through 35 / 65,2025 H1,1034,-0.777403,0.675235,82.882,-114.701,-803.834
+XAUUSDm,CONFIRM,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H1,862,-0.140552,0.136954,32.0186,-14.7859,-121.156
+XAUUSDm,CONFIRM,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H2,1057,-0.0875017,0.153963,31.9773,-14.4299,-92.4892
+XAUUSDm,CONFIRM,votes,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H1,1034,-0.278418,0.404246,32.9787,-44.979,-287.884
+XAUUSDm,CONFIRM,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H1,862,-0.311453,0.230091,23.8979,-14.7859,-268.473
+XAUUSDm,CONFIRM,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H2,1057,-0.113748,0.18164,23.7465,-15.504,-120.232
+XAUUSDm,CONFIRM,votes,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H1,1034,0.0430016,0.45398,24.9516,-44.979,44.4636
+XAUUSDm,CONFIRM,votes,26,"Trailing stop 1 ATR, no target",2024 H1,862,-0.354964,0.20613,34.5708,-14.7859,-305.979
+XAUUSDm,CONFIRM,votes,26,"Trailing stop 1 ATR, no target",2024 H2,1057,-0.181444,0.164696,36.7077,-12.5184,-191.786
+XAUUSDm,CONFIRM,votes,26,"Trailing stop 1 ATR, no target",2025 H1,1034,-0.197191,0.513521,37.7176,-44.979,-203.895
+XAUUSDm,CONFIRM,votes,27,"Trailing stop 2 ATR, no target",2024 H1,862,-0.797011,0.507213,34.5708,-27.5927,-687.023
+XAUUSDm,CONFIRM,votes,27,"Trailing stop 2 ATR, no target",2024 H2,1057,0.0468029,0.498327,35.0047,-26.2268,49.4706
+XAUUSDm,CONFIRM,votes,27,"Trailing stop 2 ATR, no target",2025 H1,1034,-0.312014,1.00727,36.7505,-70.01,-322.622
+XAUUSDm,CONFIRM,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H1,862,-0.458617,0.16335,46.9838,-14.7859,-395.328
+XAUUSDm,CONFIRM,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H2,1057,-0.148625,0.1445,49.5743,-15.504,-157.096
+XAUUSDm,CONFIRM,votes,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H1,1034,0.0190442,0.485219,49.6132,-44.979,19.6917
+XAUUSDm,CONFIRM,votes,29,"Pyramid, 2 adds",2024 H1,862,-0.752171,0.336473,20.5336,-41.7944,-648.371
+XAUUSDm,CONFIRM,votes,29,"Pyramid, 2 adds",2024 H2,1057,-0.679405,0.221867,21.8543,-12.5184,-718.131
+XAUUSDm,CONFIRM,votes,29,"Pyramid, 2 adds",2025 H1,1034,-0.567199,0.788067,22.147,-44.979,-586.483
+XAUUSDm,CONFIRM,votes,30,"Pyramid, 4 adds",2024 H1,862,-0.805086,0.337545,20.5336,-41.7944,-693.984
+XAUUSDm,CONFIRM,votes,30,"Pyramid, 4 adds",2024 H2,1057,-0.765454,0.238208,21.8543,-12.5184,-809.085
+XAUUSDm,CONFIRM,votes,30,"Pyramid, 4 adds",2025 H1,1034,-0.650867,0.820969,22.147,-44.979,-672.996
+XAUUSDm,CONFIRM,votes,31,"Hedge lock, unlocked by the next vote signal",2024 H1,862,-0.455728,0.261823,61.6009,-28.3387,-392.837
+XAUUSDm,CONFIRM,votes,31,"Hedge lock, unlocked by the next vote signal",2024 H2,1057,0.00759423,0.228854,64.1438,-26.8899,8.0271
+XAUUSDm,CONFIRM,votes,31,"Hedge lock, unlocked by the next vote signal",2025 H1,1034,0.100506,0.671311,63.7331,-68.1867,103.923
+XAUUSDm,CONFIRM,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H1,862,-0.455728,0.261823,60.9049,-28.3387,-392.837
+XAUUSDm,CONFIRM,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H2,1057,0.00759423,0.228854,63.9546,-26.8899,8.0271
+XAUUSDm,CONFIRM,votes,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H1,1034,0.100506,0.671311,63.7331,-68.1867,103.923
+XAUUSDm,CONFIRM,votes,33,"Hedge lock, both legs closed 4 h later",2024 H1,862,-0.494386,0.149907,46.9838,-15.3859,-426.16
+XAUUSDm,CONFIRM,votes,33,"Hedge lock, both legs closed 4 h later",2024 H2,1057,-0.0988224,0.145096,49.5743,-15.684,-104.455
+XAUUSDm,CONFIRM,votes,33,"Hedge lock, both legs closed 4 h later",2025 H1,1034,-0.0650982,0.420237,49.6132,-45.139,-67.3116
+XAUUSDm,CONFIRM,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H1,862,-0.489975,0.732294,93.5035,-163.41,-422.358
+XAUUSDm,CONFIRM,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H2,1057,-2.0321,1.09194,91.6746,-193.594,-2147.93
+XAUUSDm,CONFIRM,votes,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H1,1034,1.74906,1.75069,93.5203,-264.737,1808.53
+XAUUSDm,CONFIRM,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H1,862,-1.46332,0.498238,76.3341,-58.513,-1261.38
+XAUUSDm,CONFIRM,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H2,1057,-1.01031,0.493403,78.1457,-63.8401,-1067.9
+XAUUSDm,CONFIRM,votes,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H1,1034,-0.0206832,0.625779,79.6905,-131.604,-21.3864
+XAUUSDm,CONFIRM,votes,36,"Stop and reverse, same size",2024 H1,862,-0.39468,0.279408,47.3318,-44.1449,-340.214
+XAUUSDm,CONFIRM,votes,36,"Stop and reverse, same size",2024 H2,1057,0.110739,0.208462,49.5743,-31.0081,117.051
+XAUUSDm,CONFIRM,votes,36,"Stop and reverse, same size",2025 H1,1034,0.414622,0.336999,50,-68.26,428.719
+XAUUSDm,CONFIRM,votes,37,"Stop and reverse, double size",2024 H1,862,-0.408684,0.497313,73.2019,-73.5038,-352.286
+XAUUSDm,CONFIRM,votes,37,"Stop and reverse, double size",2024 H2,1057,0.236093,0.328411,75.9697,-46.5121,249.551
+XAUUSDm,CONFIRM,votes,37,"Stop and reverse, double size",2025 H1,1034,0.81361,0.44452,75.7253,-91.5411,841.272
+XAUUSDm,CONFIRM,votes,38,"Martingale: double after a loss, up to x8",2024 H1,862,-0.51948,0.568511,46.9838,-83.7217,-447.792
+XAUUSDm,CONFIRM,votes,38,"Martingale: double after a loss, up to x8",2024 H2,1057,0.370024,0.568598,49.5743,-87.6386,391.115
+XAUUSDm,CONFIRM,votes,38,"Martingale: double after a loss, up to x8",2025 H1,1034,-0.52535,1.4463,49.6132,-359.832,-543.212
+XAUUSDm,CONFIRM,votes,39,"Anti-martingale: double after a win, up to x8",2024 H1,862,-0.797169,0.549636,46.9838,-118.288,-687.16
+XAUUSDm,CONFIRM,votes,39,"Anti-martingale: double after a win, up to x8",2024 H2,1057,0.0863767,0.586237,49.5743,-115.205,91.3002
+XAUUSDm,CONFIRM,votes,39,"Anti-martingale: double after a win, up to x8",2025 H1,1034,-0.484101,1.31766,49.6132,-181.474,-500.56
+XAUUSDm,CONFIRM,votes,40,Daily loss limit 1 R,2024 H1,374,-0.2813,0.271128,47.5936,-14.1693,-105.206
+XAUUSDm,CONFIRM,votes,40,Daily loss limit 1 R,2024 H2,495,-0.108009,0.237474,48.8889,-15.504,-53.4647
+XAUUSDm,CONFIRM,votes,40,Daily loss limit 1 R,2025 H1,429,-0.69372,0.700752,45.9207,-26.8747,-297.606
+XAUUSDm,CONFIRM,votes,41,Daily loss limit 2 R,2024 H1,602,-0.262894,0.196163,47.6744,-14.1693,-158.262
+XAUUSDm,CONFIRM,votes,41,Daily loss limit 2 R,2024 H2,781,-0.000668989,0.200896,49.8079,-15.504,-0.52248
+XAUUSDm,CONFIRM,votes,41,Daily loss limit 2 R,2025 H1,743,0.105657,0.411432,49.2598,-26.8747,78.5033
+XAUUSDm,CONFIRM,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H1,779,-0.133396,0.23405,48.7805,-32.725,-103.916
+XAUUSDm,CONFIRM,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2024 H2,1018,-0.277918,0.205983,47.053,-15.504,-282.921
+XAUUSDm,CONFIRM,random,0,"Fixed stop 1 ATR, target 1 ATR (reference)",2025 H1,1047,-0.312297,0.355752,47.851,-50.884,-326.975
+XAUUSDm,CONFIRM,random,1,"Fixed stop 2 ATR, target 2 ATR",2024 H1,779,-0.449906,0.347252,47.3684,-32.725,-350.477
+XAUUSDm,CONFIRM,random,1,"Fixed stop 2 ATR, target 2 ATR",2024 H2,1018,-0.572177,0.371284,47.446,-29.4482,-582.476
+XAUUSDm,CONFIRM,random,1,"Fixed stop 2 ATR, target 2 ATR",2025 H1,1047,0.843283,0.758184,51.6714,-70.01,882.917
+XAUUSDm,CONFIRM,random,2,"Fixed stop 1 ATR, target 2 ATR",2024 H1,779,-0.145176,0.262512,31.9641,-32.725,-113.092
+XAUUSDm,CONFIRM,random,2,"Fixed stop 1 ATR, target 2 ATR",2024 H2,1018,-0.56982,0.221216,30.0589,-15.504,-580.077
+XAUUSDm,CONFIRM,random,2,"Fixed stop 1 ATR, target 2 ATR",2025 H1,1047,0.298553,0.507406,34.0019,-50.884,312.585
+XAUUSDm,CONFIRM,random,3,"Fixed stop 2 ATR, target 1 ATR",2024 H1,779,-0.256311,0.280565,64.6983,-32.725,-199.667
+XAUUSDm,CONFIRM,random,3,"Fixed stop 2 ATR, target 1 ATR",2024 H2,1018,-0.503957,0.272214,63.2613,-29.4482,-513.028
+XAUUSDm,CONFIRM,random,3,"Fixed stop 2 ATR, target 1 ATR",2025 H1,1047,0.0698211,0.451163,66.4756,-70.01,73.1027
+XAUUSDm,CONFIRM,random,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H1,779,0.422712,0.671528,51.0911,-32.725,329.293
+XAUUSDm,CONFIRM,random,4,"Fixed stop $20, target $20 (the V2 exit)",2024 H2,1018,-0.943057,0.539329,47.6424,-20.0956,-960.032
+XAUUSDm,CONFIRM,random,4,"Fixed stop $20, target $20 (the V2 exit)",2025 H1,1047,-0.357326,0.745124,49.0926,-50.884,-374.12
+XAUUSDm,CONFIRM,random,5,"Live ladder, no stop",2024 H1,779,-39.5062,40.6691,99.8716,-31553.5,-30775.4
+XAUUSDm,CONFIRM,random,5,"Live ladder, no stop",2024 H2,1018,1.00866,0.00853299,100,1,1026.82
+XAUUSDm,CONFIRM,random,5,"Live ladder, no stop",2025 H1,1047,1.00062,0.000786842,100,0.841,1047.65
+XAUUSDm,CONFIRM,random,6,"Live ladder, basket stop $60",2024 H1,779,-1.81887,0.508974,95.3787,-60,-1416.9
+XAUUSDm,CONFIRM,random,6,"Live ladder, basket stop $60",2024 H2,1018,-0.190006,0.273328,98.0354,-60.245,-193.426
+XAUUSDm,CONFIRM,random,6,"Live ladder, basket stop $60",2025 H1,1047,-1.70404,0.383641,95.702,-95.912,-1784.13
+XAUUSDm,CONFIRM,random,7,"Live ladder, basket stop $200",2024 H1,779,-1.58011,0.639508,98.7163,-200,-1230.9
+XAUUSDm,CONFIRM,random,7,"Live ladder, basket stop $200",2024 H2,1018,-0.373459,0.530763,99.3124,-200,-380.181
+XAUUSDm,CONFIRM,random,7,"Live ladder, basket stop $200",2025 H1,1047,-0.535197,0.519616,99.2359,-200,-560.351
+XAUUSDm,CONFIRM,random,8,"Budget 1 R, no add",2024 H1,779,-0.0612247,0.1376,65.3402,-32.725,-47.694
+XAUUSDm,CONFIRM,random,8,"Budget 1 R, no add",2024 H2,1018,-0.0360095,0.142731,65.7171,-14.7241,-36.6576
+XAUUSDm,CONFIRM,random,8,"Budget 1 R, no add",2025 H1,1047,-0.29929,0.2557,64.1834,-26.6426,-313.356
+XAUUSDm,CONFIRM,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H1,779,-0.458113,0.238456,50.0642,-14.7859,-356.87
+XAUUSDm,CONFIRM,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2024 H2,1018,0.00465276,0.191942,52.7505,-15.504,4.73651
+XAUUSDm,CONFIRM,random,9,"Budget 1 R, 2 adds 0.17 ATR apart",2025 H1,1047,-0.158579,0.360542,51.8625,-26.6426,-166.032
+XAUUSDm,CONFIRM,random,10,"Budget 2 R, no add",2024 H1,779,-0.202694,0.206887,78.0488,-32.725,-157.898
+XAUUSDm,CONFIRM,random,10,"Budget 2 R, no add",2024 H2,1018,-0.123935,0.20359,78.8802,-29.4482,-126.166
+XAUUSDm,CONFIRM,random,10,"Budget 2 R, no add",2025 H1,1047,-0.133476,0.345671,79.1786,-70.01,-139.749
+XAUUSDm,CONFIRM,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H1,779,-0.256224,0.297797,69.448,-60.5214,-199.598
+XAUUSDm,CONFIRM,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2024 H2,1018,-0.179913,0.225448,70.4322,-29.4482,-183.152
+XAUUSDm,CONFIRM,random,11,"Budget 2 R, 2 adds 0.33 ATR apart",2025 H1,1047,-0.663517,0.559938,69.341,-53.2853,-694.702
+XAUUSDm,CONFIRM,random,12,"Budget 3 R, no add",2024 H1,779,-0.307891,0.185167,83.5687,-41.5874,-239.847
+XAUUSDm,CONFIRM,random,12,"Budget 3 R, no add",2024 H2,1018,-0.188561,0.25569,84.5776,-39.4271,-191.955
+XAUUSDm,CONFIRM,random,12,"Budget 3 R, no add",2025 H1,1047,-0.278949,0.417881,84.6227,-79.7582,-292.06
+XAUUSDm,CONFIRM,random,13,"Budget 3 R, 1 add 1 ATR apart",2024 H1,779,-0.642839,0.309172,79.846,-41.5874,-500.771
+XAUUSDm,CONFIRM,random,13,"Budget 3 R, 1 add 1 ATR apart",2024 H2,1018,-0.291185,0.276538,81.8271,-44.1723,-296.427
+XAUUSDm,CONFIRM,random,13,"Budget 3 R, 1 add 1 ATR apart",2025 H1,1047,-0.2304,0.458032,82.5215,-116.812,-241.229
+XAUUSDm,CONFIRM,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H1,779,-0.346642,0.376067,77.792,-58.057,-270.034
+XAUUSDm,CONFIRM,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2024 H2,1018,-0.2166,0.286907,79.1749,-44.1723,-220.499
+XAUUSDm,CONFIRM,random,14,"Budget 3 R, 2 adds 0.5 ATR apart",2025 H1,1047,0.22269,0.453435,79.9427,-79.7582,233.156
+XAUUSDm,CONFIRM,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H1,779,-0.306004,0.353942,74.4544,-61.0142,-238.377
+XAUUSDm,CONFIRM,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2024 H2,1018,-0.0541034,0.340488,76.1297,-44.1723,-55.0772
+XAUUSDm,CONFIRM,random,15,"Budget 3 R, 3 adds 0.3 ATR apart",2025 H1,1047,-0.885929,0.68369,74.4986,-79.9279,-927.568
+XAUUSDm,CONFIRM,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H1,779,-0.419807,0.470118,70.7317,-89.3034,-327.029
+XAUUSDm,CONFIRM,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2024 H2,1018,-0.506547,0.337063,71.4145,-44.1723,-515.664
+XAUUSDm,CONFIRM,random,16,"Budget 3 R, 4 adds 0.2 ATR apart",2025 H1,1047,-1.09424,0.871931,70.7736,-79.9279,-1145.66
+XAUUSDm,CONFIRM,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H1,779,-0.346642,0.376067,77.792,-58.057,-270.034
+XAUUSDm,CONFIRM,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2024 H2,1018,-0.2166,0.286907,79.1749,-44.1723,-220.499
+XAUUSDm,CONFIRM,random,17,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart",2025 H1,1047,0.104012,0.483908,79.7517,-60,108.901
+XAUUSDm,CONFIRM,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H1,768,-0.263511,0.323326,77.474,-41.5874,-202.377
+XAUUSDm,CONFIRM,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2024 H2,1003,-0.193521,0.274085,79.0628,-44.1723,-194.102
+XAUUSDm,CONFIRM,random,18,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over the weekend",2025 H1,1021,0.100255,0.491394,79.334,-60,102.361
+XAUUSDm,CONFIRM,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H1,761,-0.407358,0.340239,75.5585,-41.5874,-309.999
+XAUUSDm,CONFIRM,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2024 H2,991,-0.235339,0.285349,76.7911,-43.2019,-233.221
+XAUUSDm,CONFIRM,random,19,"Budget 3 R but never more than $60, 2 adds 0.5 ATR apart, flat over every market closure",2025 H1,980,0.266354,0.405764,77.9592,-60,261.027
+XAUUSDm,CONFIRM,random,20,Add when the M5 MACD histogram turns,2024 H1,779,-0.492709,0.319055,80.3594,-41.5874,-383.82
+XAUUSDm,CONFIRM,random,20,Add when the M5 MACD histogram turns,2024 H2,1018,-0.258672,0.260755,81.7289,-44.1723,-263.329
+XAUUSDm,CONFIRM,random,20,Add when the M5 MACD histogram turns,2025 H1,1047,-0.343495,0.381139,82.1394,-113.997,-359.639
+XAUUSDm,CONFIRM,random,21,Add when the M15 MACD histogram turns,2024 H1,779,-0.18517,0.259121,82.1566,-41.5874,-144.248
+XAUUSDm,CONFIRM,random,21,Add when the M15 MACD histogram turns,2024 H2,1018,-0.325413,0.324697,82.4165,-44.1723,-331.27
+XAUUSDm,CONFIRM,random,21,Add when the M15 MACD histogram turns,2025 H1,1047,-0.30925,0.421602,82.617,-114.232,-323.784
+XAUUSDm,CONFIRM,random,22,Add when the M5 RSI comes back through 35 / 65,2024 H1,779,-0.339293,0.267299,81.5148,-41.5874,-264.309
+XAUUSDm,CONFIRM,random,22,Add when the M5 RSI comes back through 35 / 65,2024 H2,1018,-0.393417,0.270272,82.0236,-44.1723,-400.499
+XAUUSDm,CONFIRM,random,22,Add when the M5 RSI comes back through 35 / 65,2025 H1,1047,-0.508672,0.36491,82.3305,-113.997,-532.579
+XAUUSDm,CONFIRM,random,23,Add when the M15 RSI comes back through 35 / 65,2024 H1,779,-0.288241,0.215725,82.7985,-41.5874,-224.54
+XAUUSDm,CONFIRM,random,23,Add when the M15 RSI comes back through 35 / 65,2024 H2,1018,-0.306838,0.260443,83.3006,-44.1723,-312.361
+XAUUSDm,CONFIRM,random,23,Add when the M15 RSI comes back through 35 / 65,2025 H1,1047,-0.0452962,0.422736,84.3362,-114.701,-47.4251
+XAUUSDm,CONFIRM,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H1,779,-0.0877105,0.180335,32.7343,-32.725,-68.3264
+XAUUSDm,CONFIRM,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2024 H2,1018,-0.10378,0.170251,31.8271,-14.7241,-105.648
+XAUUSDm,CONFIRM,random,24,"Break-even at +0.5 ATR (stop 1, target 1)",2025 H1,1047,0.000983312,0.305831,34.4795,-26.6426,1.02953
+XAUUSDm,CONFIRM,random,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H1,779,-0.193049,0.272076,23.4917,-32.725,-150.386
+XAUUSDm,CONFIRM,random,25,"Break-even at +1 ATR (stop 1, target 2)",2024 H2,1018,-0.348523,0.223941,23.0845,-15.504,-354.797
+XAUUSDm,CONFIRM,random,25,"Break-even at +1 ATR (stop 1, target 2)",2025 H1,1047,0.171957,0.424203,26.2655,-50.884,180.039
+XAUUSDm,CONFIRM,random,26,"Trailing stop 1 ATR, no target",2024 H1,779,-0.375083,0.241997,33.8896,-32.725,-292.19
+XAUUSDm,CONFIRM,random,26,"Trailing stop 1 ATR, no target",2024 H2,1018,-0.250952,0.194349,35.167,-12.3261,-255.47
+XAUUSDm,CONFIRM,random,26,"Trailing stop 1 ATR, no target",2025 H1,1047,0.601123,0.472531,38.6819,-26.6426,629.376
+XAUUSDm,CONFIRM,random,27,"Trailing stop 2 ATR, no target",2024 H1,779,-0.0602238,0.449084,36.3286,-32.725,-46.9143
+XAUUSDm,CONFIRM,random,27,"Trailing stop 2 ATR, no target",2024 H2,1018,-0.624418,0.464675,33.5953,-27.0502,-635.657
+XAUUSDm,CONFIRM,random,27,"Trailing stop 2 ATR, no target",2025 H1,1047,1.42967,0.869728,39.5415,-70.01,1496.86
+XAUUSDm,CONFIRM,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H1,779,-0.166543,0.254361,48.7805,-32.725,-129.737
+XAUUSDm,CONFIRM,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2024 H2,1018,-0.346433,0.213143,47.053,-15.504,-352.669
+XAUUSDm,CONFIRM,random,28,"Scale-out: half at +1 ATR, rest trailed by 1 ATR",2025 H1,1047,-0.133806,0.387764,47.851,-50.884,-140.095
+XAUUSDm,CONFIRM,random,29,"Pyramid, 2 adds",2024 H1,779,-0.496123,0.435145,17.8434,-32.725,-386.48
+XAUUSDm,CONFIRM,random,29,"Pyramid, 2 adds",2024 H2,1018,-0.632791,0.267897,20.0393,-12.3261,-644.181
+XAUUSDm,CONFIRM,random,29,"Pyramid, 2 adds",2025 H1,1047,1.00565,0.779853,23.4957,-26.6426,1052.92
+XAUUSDm,CONFIRM,random,30,"Pyramid, 4 adds",2024 H1,779,-0.511506,0.47988,17.8434,-32.725,-398.463
+XAUUSDm,CONFIRM,random,30,"Pyramid, 4 adds",2024 H2,1018,-0.672349,0.284732,20.0393,-12.3261,-684.451
+XAUUSDm,CONFIRM,random,30,"Pyramid, 4 adds",2025 H1,1047,0.853593,0.800245,23.4957,-26.6426,893.712
+XAUUSDm,CONFIRM,random,31,"Hedge lock, unlocked by the next vote signal",2024 H1,779,-0.101531,0.278582,62.516,-46.8943,-79.0928
+XAUUSDm,CONFIRM,random,31,"Hedge lock, unlocked by the next vote signal",2024 H2,1018,-0.206871,0.283427,61.3949,-28.8013,-210.595
+XAUUSDm,CONFIRM,random,31,"Hedge lock, unlocked by the next vote signal",2025 H1,1047,-0.378699,0.43393,60.554,-70.2661,-396.497
+XAUUSDm,CONFIRM,random,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H1,779,-0.101531,0.278582,62.516,-46.8943,-79.0928
+XAUUSDm,CONFIRM,random,32,"Close at -1 ATR, re-enter on the next vote signal",2024 H2,1018,-0.206871,0.283427,61.5914,-28.8013,-210.595
+XAUUSDm,CONFIRM,random,32,"Close at -1 ATR, re-enter on the next vote signal",2025 H1,1047,-0.378699,0.43393,60.2674,-70.2661,-396.497
+XAUUSDm,CONFIRM,random,33,"Hedge lock, both legs closed 4 h later",2024 H1,779,-0.24338,0.238357,48.7805,-32.925,-189.593
+XAUUSDm,CONFIRM,random,33,"Hedge lock, both legs closed 4 h later",2024 H2,1018,-0.367478,0.208893,47.053,-15.684,-374.093
+XAUUSDm,CONFIRM,random,33,"Hedge lock, both legs closed 4 h later",2025 H1,1047,-0.395975,0.358373,47.851,-51.044,-414.586
+XAUUSDm,CONFIRM,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H1,779,-0.725146,0.999233,92.2978,-166.121,-564.889
+XAUUSDm,CONFIRM,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2024 H2,1018,0.320151,0.863237,93.9096,-157.113,325.913
+XAUUSDm,CONFIRM,random,34,"Zone 1 ATR, target 1 ATR, legs 1 / 3 / 6 / 12",2025 H1,1047,1.35926,1.41948,93.7918,-277.622,1423.15
+XAUUSDm,CONFIRM,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H1,779,-1.0469,0.531804,77.792,-58.513,-815.533
+XAUUSDm,CONFIRM,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2024 H2,1018,-1.26771,0.408388,77.2102,-63.8401,-1290.53
+XAUUSDm,CONFIRM,random,35,"Zone 0.5 ATR, target 1 ATR, legs 1 / 2.5 / 3.75 / 5.62",2025 H1,1047,-0.587317,0.805031,78.7011,-111.818,-614.921
+XAUUSDm,CONFIRM,random,36,"Stop and reverse, same size",2024 H1,779,0.073693,0.269556,49.0372,-47.5109,57.4068
+XAUUSDm,CONFIRM,random,36,"Stop and reverse, same size",2024 H2,1018,-0.2692,0.237554,47.2495,-31.0081,-274.046
+XAUUSDm,CONFIRM,random,36,"Stop and reverse, same size",2025 H1,1047,-0.205909,0.402575,48.3286,-69.0812,-215.586
+XAUUSDm,CONFIRM,random,37,"Stop and reverse, double size",2024 H1,779,0.280783,0.368477,76.2516,-65.6334,218.73
+XAUUSDm,CONFIRM,random,37,"Stop and reverse, double size",2024 H2,1018,-0.260482,0.339181,73.5756,-46.5121,-265.171
+XAUUSDm,CONFIRM,random,37,"Stop and reverse, double size",2025 H1,1047,-0.09952,0.556152,73.5435,-119.928,-104.197
+XAUUSDm,CONFIRM,random,38,"Martingale: double after a loss, up to x8",2024 H1,779,-0.78694,0.79467,48.7805,-261.8,-613.027
+XAUUSDm,CONFIRM,random,38,"Martingale: double after a loss, up to x8",2024 H2,1018,-0.827515,0.877436,47.053,-77.3162,-842.41
+XAUUSDm,CONFIRM,random,38,"Martingale: double after a loss, up to x8",2025 H1,1047,-0.480122,1.03617,47.851,-203.536,-502.687
+XAUUSDm,CONFIRM,random,39,"Anti-martingale: double after a win, up to x8",2024 H1,779,0.147841,0.803438,48.7805,-77.4901,115.168
+XAUUSDm,CONFIRM,random,39,"Anti-martingale: double after a win, up to x8",2024 H2,1018,-1.53727,0.4365,47.053,-117.793,-1564.94
+XAUUSDm,CONFIRM,random,39,"Anti-martingale: double after a win, up to x8",2025 H1,1047,-1.18988,0.976588,47.851,-218.699,-1245.8
+XAUUSDm,CONFIRM,random,40,Daily loss limit 1 R,2024 H1,333,0.0269489,0.313502,49.2492,-11.2847,8.97398
+XAUUSDm,CONFIRM,random,40,Daily loss limit 1 R,2024 H2,428,-0.478841,0.310461,45.5607,-12.0386,-204.944
+XAUUSDm,CONFIRM,random,40,Daily loss limit 1 R,2025 H1,469,-0.282694,0.636203,48.4009,-27.3373,-132.583
+XAUUSDm,CONFIRM,random,41,Daily loss limit 2 R,2024 H1,518,-0.239437,0.273307,47.4903,-12.5063,-124.028
+XAUUSDm,CONFIRM,random,41,Daily loss limit 2 R,2024 H2,734,-0.293658,0.241841,46.594,-15.504,-215.545
+XAUUSDm,CONFIRM,random,41,Daily loss limit 2 R,2025 H1,761,-0.143705,0.405817,48.6202,-27.3373,-109.359

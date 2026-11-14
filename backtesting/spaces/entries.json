@@ -1,0 +1,56 @@
+{
+  "name": "entries",
+  "description": "Which timeframes vote for the entry, with the exits of the V2 design held fixed (no ladder, 20 USD target and stop per 0.01 lot, 4 h pause after a loss, force-close off).",
+  "base": {
+    "max_adds": 0,
+    "target_usd_per_unit": 20,
+    "stop_loss_usd_per_unit": 20,
+    "force_close_enabled": false,
+    "loss_cooldown_s": 14400
+  },
+  "parameters": {
+    "open_weights": {
+      "values": {
+        "H1+M15": {"H1": 1, "M15": 1},
+        "M15": {"M15": 1},
+        "H1": {"H1": 1},
+        "H4+M15": {"H4": 1, "M15": 1},
+        "H4+H1": {"H4": 1, "H1": 1}
+      },
+      "note": "timeframes whose RSI and MACD slope signs add up to the OPEN score; H1+M15 is live"
+    },
+    "entry_s": {
+      "values": [2, 4],
+      "note": "OPEN score needed: 2 = one timeframe fully aligned (live), 4 = two timeframes fully aligned"
+    },
+    "entry_agree_s": {
+      "values": [0, 2],
+      "note": "how far the M15 force-close score has to agree with the entry: 2 = fully (live), 0 = not at all"
+    },
+    "trend_tf": {
+      "values": [null, "H1", "H4", "D1"],
+      "note": "entries only with this timeframe's trend; null = no filter"
+    },
+    "slope_on_closed_bars": {
+      "values": [false, true],
+      "note": "true = the slope signs are read from closed bars only, so a signal cannot appear and vanish inside a bar"
+    },
+    "entry_confirm_s": {
+      "values": [0, 60, 300],
+      "note": "the entry direction has to hold this many seconds before an order is sent"
+    }
+  },
+  "constraints": [
+    "not (entry_s == 4 and open_weights in ('M15', 'H1'))"
+  ],
+  "references": {
+    "V2": {
+      "trend_tf": "H1",
+      "max_adds": 0,
+      "target_usd_per_unit": 20,
+      "stop_loss_usd_per_unit": 20,
+      "force_close_enabled": false,
+      "loss_cooldown_s": 14400
+    }
+  }
+}

@@ -9,6 +9,7 @@ Command line for the backtesting suite.
     python -m backtesting sweep   --symbol XAUUSDm --kind timeframes   # which timeframes for OPEN / FC / BOOK
     python -m backtesting robust  --symbol XAUUSDm                     # timing, costs, start date, bootstrap
     python -m backtesting reproduce                                    # the whole pipeline behind backtest_results/
+    python -m backtesting optimise --space ladder --symbol XAUUSDm     # search a parameter space, test how it generalises
     python -m backtesting docs                                         # index.html + PNG snapshots + BACKTEST.md
     python -m backtesting studio                                       # interactive replay in the browser
 
@@ -24,6 +25,9 @@ lists them in full):
                                   constants.py, symbols.json and live code are used; default: this
                                   one), and each command's own switches
     reproduce                     --symbols, --only, --out, --live-root DIR, --jobs, --force, --no-index
+    optimise                      --space FILE|NAME, --symbol, --start / --end, --block, --holdout-from /
+                                  --holdout-to, --sampler, --n, --seed, --objective, --validate,
+                                  --report-only, --jobs, --out, --live-root DIR (backtesting/OPTIMISER.md)
     docs                          --symbols, --out, --live-root DIR, --md, --no-images
     studio                        --host, --port, --debug; always reads this checkout's settings
 
@@ -265,6 +269,12 @@ def cmd_docs(args) -> int:
     return 0
 
 
+def cmd_optimise(args) -> int:
+    """Search a parameter space and report how far the best settings can be trusted (backtesting/OPTIMISER.md)."""
+    from . import optimise
+    return optimise.command(args)
+
+
 def cmd_studio(args) -> int:
     from .viz.studio import serve
     serve(host=args.host, port=args.port, debug=args.debug)
@@ -369,6 +379,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--md", default=None, help="where to write the markdown (default <live root>/BACKTEST.md)")
     sp.add_argument("--no-images", action="store_true", help="skip the PNG snapshots (they need headless Chrome)")
     sp.set_defaults(fn=cmd_docs)
+
+    sp = sub.add_parser("optimise", help="search a parameter space (a JSON file) and say how far the best settings generalise")
+    from .optimise import add_arguments as optimise_arguments
+    optimise_arguments(sp)
+    sp.set_defaults(fn=cmd_optimise)
 
     sp = sub.add_parser("studio", help="interactive replay studio (Dash); reads this checkout's live settings")
     sp.add_argument("--host", default="127.0.0.1")

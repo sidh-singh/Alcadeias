@@ -2,8 +2,70 @@
 
 Everything here is backtest-only: the live files (`app.py`, `strategy.py`, …) are untouched. The
 designs below are switched on through backtester settings, so the default run is still the live bot.
+The log of every logic change, adopted or rejected, is in `LOGIC_CHANGELOG.md`.
 
-## The short version
+## Round 2 (15 Nov 2026): what holds up on data it was never fitted to
+
+**Recommended for gold: V3-lite** — H1 trend filter · entry votes on H1, M15 must agree · target 8 and
+stop 8 volatility units on the whole basket · no DCA ladder · 12 h pause after a losing basket · M15
+force-close off. (A volatility unit is the average size of one H1 bar's move over the last day, read when
+the basket opens.)
+
+**BTC:** no design tested makes money reliably. Every improved design is close to break-even on BTC, with
+small drawdowns; the live settings lose heavily. Trading BTC with V3-lite stops the losses; whether to
+trade BTC with this strategy at all is a fair question.
+
+Real $2,000 account per quarter, the bot's unit rule, every tick replayed, each quarter run under eight
+random loop timings. Designs were chosen on DEV and CONFIRM together and frozen before 2023 was run once.
+
+| Gold, average per quarter (runs that lost money) | DEV Aug 2025 – Nov 2026 | CONFIRM Jan 2024 – Jun 2025 | **FINAL 2023 (untouched)** |
+|---|---|---|---|
+| Live settings | −$1,480 (37 of 40, 27 wiped) | −$675 (47 of 48) | **−$666** (24 of 32) |
+| V2 ($20 / $20, H1 trend, no ladder) | +$251 (7 of 40) | +$71 (16 of 48) | **+$30** (16 of 32) |
+| V3 (live votes + one MACD-turn add) | +$453 (8 of 40) | +$180 (12 of 48) | **+$58** (17 of 32) |
+| V3 without the add | +$133 (8 of 40) | +$78 (16 of 48) | **+$5** (13 of 32) |
+| **V3-lite** | +$404 (8 of 40) | +$152 (**0 of 48**) | **+$106 (0 of 32)** |
+
+| BTC, average per quarter (runs that lost money) | DEV | CONFIRM | **FINAL 2023** |
+|---|---|---|---|
+| Live settings | −$585 (30 of 40) | −$1,995 (48 of 48, 46 wiped) | **−$1,194** (32 of 32) |
+| V2 | +$159 (7 of 40) | −$7 (24 of 48) | **−$17** (24 of 32) |
+| V3 | +$109 (8 of 40) | +$34 (26 of 48) | **−$18** (16 of 32) |
+| V3 without the add | +$100 (14 of 40) | +$60 (24 of 48) | **+$3** (12 of 32) |
+| **V3-lite** | +$114 (8 of 40) | +$48 (24 of 48) | **+$7** (16 of 32) |
+
+Worst drawdown of any V3-lite run: gold 45% on DEV, 10% on CONFIRM, 6% in 2023; BTC 9%, 13%, 4%.
+
+**What each idea came to** (details: `backtest_results/improve/`):
+
+| Idea | Verdict |
+|---|---|
+| H1 trend filter | the change that matters most; an H4 trend does not hold up outside 2025-26 |
+| Stop and target on the whole basket, in volatility units | removes the wipe-outs; 8 / 8 units is the most robust size |
+| DCA ladder | the live ladder (Fibonacci at RSI 35 / 65) is what empties the account. A bounded ladder (one equal add, released by a MACD turn, at least 1 unit away) earned a little more than no ladder on gold in every period (+$321, +$102, +$53 a quarter) but less on BTC (+$9, −$27, −$21), and it makes the worst basket larger. Not recommended as the default |
+| Other recovery mechanisms | 42 mechanisms on the same 32,553 entries (`recovery_mechanisms.md`): none raises the expectancy; they only trade many small losses for a few large ones or the reverse. A ladder with equal lots, at most two adds and a hard $60 budget never lost more than $60 but earned no more than not adding. A hedge lock pays exactly what closing and re-entering pays, plus one spread. Zone recovery and martingale lose the most |
+| Support / resistance (H1, H4, D1 swings, previous day / week, round numbers) | two independent studies (`sr_study.md`, `sr_trades.md`): price does not hold at these levels more often than at random prices, and no bounce, retest or breakout rule pays after the spread in both periods. Real levels did no better than placebo levels |
+| MACD or RSI cross-back instead of an RSI level for the ladder | better than the live RSI-level trigger, but no ladder trigger beat no ladder on average |
+| Trailing exit, longer pause after any close, time stop | no gain on average over 500 designs (optimiser, `backtesting/OPTIMISER.md`) |
+| Spread cap on entries | no effect |
+
+**How far to trust this.** More than 1,200 strategy designs were tried in all (plus several hundred support /
+resistance and recovery variants), so the best of them are flattered; the
+2023 run is the honest number, and for gold it is about a quarter of the DEV figure. The edge per trade is
+small (gold about +$4 a basket in 2023). Gold rose through most of 2023-2026, which suits a with-trend rule.
+The next step is a demo account, not more searching.
+
+**Settings** (backtester, `python -m backtesting run --set ...`): `trend_tf=H1`, `open_weights={"H1": 1}`,
+`entry_agree_s=2`, `max_adds=0`, `force_close_enabled=false`, `vol_tf=H1`, `vol_len=24`, `target_vol=8`,
+`stop_vol=8`, `target_usd_per_unit=null`, `stop_loss_usd_per_unit=null`, `loss_cooldown_s=43200`.
+The volatility unit has no dollar ceiling in these runs; in wild markets (gold early 2026: about $15 a unit)
+a basket risks about $120 per 0.01 lot. `vol_cap_usd_per_unit` caps it; that cap has not been through the 2023 test.
+
+---
+
+## Round 1 (14 Nov 2026): V2
+
+### The short version
 
 One redesign beats the live settings on both symbols, in all five quarters tested, without a single stop-out:
 
@@ -25,7 +87,7 @@ random loop timing (40 quarter-runs per row):
 This is a large improvement in what the backtest measures. It is **not proof of a profitable system**:
 see "How far to trust this" below before risking money on it.
 
-## What the evidence says, step by step
+### What the evidence says, step by step
 
 **1. No classic entry idea predicts direction here** (`backtest_results/improve/edge_screen_*.txt`).
 Twenty signals were measured on every closed M15 bar of the fifteen months: the bot's own RSI / MACD
@@ -77,7 +139,7 @@ Designs were chosen on the three 2026 quarters only; the two earlier hold-out qu
 Two things stand out. The trend filter is what gold needs (a no-ladder $10 / $10 design without it
 still loses $504 a quarter). And removing the ladder with a real stop is what ends the wipe-outs on both.
 
-## What V2 is, exactly
+### What V2 is, exactly
 
 | Rule | Live | V2 | Backtester setting |
 |---|---|---|---|
@@ -95,7 +157,7 @@ python -m backtesting.research.improve report XAUUSDm      # every table above, 
 python -m backtesting.research.improve validate XAUUSDm    # recompute the raw-tick validation (about 6 min)
 ```
 
-## How far to trust this
+### How far to trust this
 
 - **191 designs were tried and the best are shown.** That flatters them. What speaks for the result:
   they were chosen on three quarters and held up on two unseen ones; whole families of settings are
@@ -111,7 +173,7 @@ python -m backtesting.research.improve validate XAUUSDm    # recompute the raw-t
 - **The unit still steps up with the balance** in these runs (the live rule). Keeping it at 1 until V2
   has run on a demo account for a quarter is the safer choice.
 
-## What has not been done yet
+### What has not been done yet
 
 - Nothing was changed in the live bot. Moving V2 into `strategy.py` / `app.py` (trend gate, stop and
   target, no ladder, loss pause) is a separate step; the backtester can then be parity-checked against it.

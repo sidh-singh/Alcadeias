@@ -1,0 +1,84 @@
+{
+  "name": "v3",
+  "description": "Entries with the trend of a higher timeframe, stop and target in units of volatility, and an optional bounded ladder: at most two equal-sized adds, released by a price step, an RSI cross-back, a MACD turn or (adding to a winner) a step in profit. max_adds 0 is the same design without a ladder, so the search itself says whether a ladder earns its risk.",
+  "base": {
+    "force_close_enabled": false,
+    "vol_tf": "H1",
+    "vol_len": 24,
+    "target_usd_per_unit": null,
+    "stop_loss_usd_per_unit": null,
+    "ladder_multipliers": [1, 1, 1, 1],
+    "ladder_tfs": ["M5", "M15", "H1", "H1", "H1"]
+  },
+  "parameters": {
+    "trend_tf": {
+      "values": ["H1", "H4"],
+      "note": "entries only in the direction of this timeframe's trend (sign of its MACD signal line on the last closed bar)"
+    },
+    "entry_agree_s": {
+      "values": [0, 2],
+      "note": "2 = the live rule: both M15 votes must agree with the entry; 0 = the OPEN score alone decides"
+    },
+    "target_vol": {
+      "values": [3, 4, 5, 6, 8],
+      "note": "basket target per unit, in H1 volatility units (gold: about 6 to 15 USD each in 2025-26; BTC: about 2 to 3)"
+    },
+    "stop_vol": {
+      "values": [3, 4, 5, 6, 8],
+      "note": "basket stop per unit, in the same units"
+    },
+    "vol_cap_usd_per_unit": {
+      "values": [0, 8, 12],
+      "ordered": false,
+      "note": "ceiling on what one volatility unit may be worth, USD per unit; 0 = none (it never binds on BTC at these prices)"
+    },
+    "max_adds": {
+      "values": [0, 1, 2],
+      "note": "equal-sized ladder adds allowed after the entry"
+    },
+    "ladder_trigger": {
+      "values": ["price_step", "rsi_cross", "macd_turn", "profit_step"],
+      "note": "what releases an add: distance alone, the tier RSI coming back from beyond 35 / 65, the tier MACD vote turning with the basket, or (profit_step) price moving in the basket's favour"
+    },
+    "ladder_gap_vol": {
+      "values": [1, 1.5, 2, 3],
+      "note": "least distance between fills, in volatility units (for the two step triggers it is the step)"
+    },
+    "trail_gap_vol": {
+      "values": [0, 2, 3],
+      "ordered": false,
+      "note": "trailing exit: close when the basket has given back this much from its best, in volatility units; 0 = no trailing"
+    },
+    "trail_start_vol": {
+      "values": [1, 2],
+      "note": "the trailing exit is armed once the basket has been this far in profit"
+    },
+    "loss_cooldown_s": {
+      "values": [3600, 14400, 43200],
+      "note": "pause after a losing basket, seconds"
+    },
+    "reentry_cooldown_s": {
+      "values": [300, 1800],
+      "note": "pause after any close, seconds (live: 300)"
+    },
+    "max_hold_s": {
+      "values": [0, 43200, 86400],
+      "ordered": false,
+      "note": "close a basket that has been open this long, seconds; 0 = no time stop"
+    }
+  },
+  "conditions": [
+    {"when": "max_adds == 0", "ignore": ["ladder_trigger", "ladder_gap_vol"]},
+    {"when": "trail_gap_vol == 0", "ignore": ["trail_start_vol"]}
+  ],
+  "references": {
+    "V2": {
+      "trend_tf": "H1", "max_adds": 0, "target_usd_per_unit": 20, "stop_loss_usd_per_unit": 20,
+      "force_close_enabled": false, "loss_cooldown_s": 14400
+    },
+    "V2 in volatility units (6 / 6)": {
+      "trend_tf": "H1", "max_adds": 0, "force_close_enabled": false, "loss_cooldown_s": 14400,
+      "vol_tf": "H1", "vol_len": 24, "target_vol": 6, "stop_vol": 6, "target_usd_per_unit": null
+    }
+  }
+}

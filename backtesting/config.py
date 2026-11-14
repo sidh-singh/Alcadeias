@@ -37,6 +37,9 @@ FIBO: List[float] = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233]
 
 Weight = Union[float, Tuple[float, float]]  # scalar = same weight on RSI and MACD; tuple = (rsi, macd)
 
+# what can release a ladder add (BacktestConfig.ladder_trigger); the position in this list is the kernel's code
+LADDER_TRIGGERS = ("rsi_level", "rsi_cross", "macd_turn", "price_step", "profit_step")
+
 
 @dataclass(frozen=True)
 class SymbolSpec:
@@ -211,6 +214,40 @@ class BacktestConfig:
     entry_max_spread: float = 0.0       # no fresh entry while the quoted spread is wider than this, in price units (0 = off)
     loss_cooldown_s: float = 0.0        # wait this long (instead of reentry_cooldown_s) after a basket that lost (0 = off)
 
+    # What releases a ladder add (each add still needs its tier, the open-score gate and the spacing levers):
+    #   'rsi_level'    the live rule: the tier timeframe's RSI is at or beyond the level. A state: it can stay
+    #                  true for hours, which is how several tiers fire within seconds of each other.
+    #   'rsi_cross'    that RSI has been beyond the level since the last fill and has come back inside it by
+    #                  ladder_rsi_exit points: the add waits for the move to turn, an event that happens once.
+    #   'macd_turn'    the tier timeframe's MACD vote was not in the basket's favour at some poll since the
+    #                  last fill and now is (the histogram has turned from a pivot back towards the basket).
+    #   'price_step'   distance alone: price is ladder_min_gap (or ladder_gap_vol) worse than the last fill.
+    #   'profit_step'  the reverse of averaging down: price is that much BETTER than the last fill.
+    ladder_trigger: str = "rsi_level"
+    ladder_rsi_exit: float = 0.0
+
+    # Distances in units of volatility. With vol_tf set, a *_vol value above zero replaces its dollar or price
+    # counterpart: it is that multiple of the timeframe's recent bar-to-bar move (the exponentially weighted
+    # mean absolute change of the close over vol_len closed bars), measured when the basket opens and kept
+    # for its life. No basket is opened while that volatility is not yet known.
+    vol_tf: Optional[str] = None
+    vol_len: int = 24
+    vol_cap_usd_per_unit: float = 0.0   # the most one volatility unit may be worth, USD per unit (0 = no cap): in a
+                                        # wild market the distances stop growing, so a basket's dollar risk stays bounded
+    target_vol: float = 0.0             # in place of target_usd_per_unit
+    stop_vol: float = 0.0               # in place of stop_loss_usd_per_unit
+    ladder_gap_vol: float = 0.0         # in place of ladder_min_gap
+    trail_start_vol: float = 0.0        # in place of trail_start_usd_per_unit
+    trail_gap_vol: float = 0.0          # in place of trail_gap_usd_per_unit
+
+    # Trailing exit: once the basket has been trail_start in profit (per unit), it is closed when it has given
+    # back trail_gap from its best. trail_gap = 0 switches it off. The best starts at break-even, so with
+    # trail_start = 0 the exit trails from the entry and is also a stop at -trail_gap.
+    trail_start_usd_per_unit: float = 0.0
+    trail_gap_usd_per_unit: float = 0.0
+    # No fresh entry for the rest of the UTC day once that day's closed baskets have lost this much per unit (0 = off).
+    daily_loss_limit_usd_per_unit: float = 0.0
+
     # ── output ───────────────────────────────────────────────────────────────
     record_interval_s: int = 60         # equity / score sampling for the charts
 
@@ -229,6 +266,25 @@ class BacktestConfig:
             raise ValueError("ladder_multipliers[0] is the entry and must be 1 (the adds are elements 1, 2, ...)")
         if self.fixed_units and self.fixed_units > self.unit_max_limit:
             raise ValueError(f"fixed_units={self.fixed_units} exceeds unit_max_limit={self.unit_max_limit}")
+        if self.trend_tf is not None and self.trend_tf not in TF_SECONDS:
+            raise ValueError(f"unknown trend timeframe {self.trend_tf!r}")
+        if self.trend_mode not in (1, -1):
+            raise ValueError("trend_mode is +1 (with the trend) or -1 (against it); trend_tf=None switches the filter off")
+        if self.ladder_rsi_exit < 0:
+            raise ValueError("ladder_rsi_exit counts RSI points back inside the level and cannot be negative")
+        if self.vol_cap_usd_per_unit > 0 and not self.vol_tf:
+            raise ValueError("vol_cap_usd_per_unit caps the volatility unit and needs vol_tf")
+        if self.ladder_trigger not in LADDER_TRIGGERS:
+            raise ValueError(f"unknown ladder_trigger {self.ladder_trigger!r}; known: {', '.join(LADDER_TRIGGERS)}")
+        vols = (self.target_vol, self.stop_vol, self.ladder_gap_vol, self.trail_start_vol, self.trail_gap_vol)
+        if min(vols) < 0:
+            raise ValueError("volatility multiples cannot be negative")
+        if max(vols) > 0 and not self.vol_tf:
+            raise ValueError("a *_vol distance needs vol_tf, the timeframe whose volatility is the unit")
+        if self.vol_tf and self.vol_tf not in TF_SECONDS:
+            raise ValueError(f"unknown volatility timeframe {self.vol_tf!r}")
+        if self.vol_len < 2:
+            raise ValueError("vol_len must be at least 2 bars")
 
     @property
     def spec(self) -> SymbolSpec:
@@ -262,6 +318,8 @@ class BacktestConfig:
             used |= set(self.ladder_tfs[: self.n_ladder_adds])
         if self.trend_tf:
             used.add(self.trend_tf)
+        if self.vol_tf:
+            used.add(self.vol_tf)
         return sorted(used, key=TF_SECONDS.get)
 
     def replace(self, **kw) -> "BacktestConfig":

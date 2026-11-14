@@ -327,6 +327,8 @@ def _perturbed(cfg: BacktestConfig, f: dataclasses.Field):
         "ladder_tfs": lambda: ["M5", "H1"], "ladder_multipliers": lambda: [1, 1, 2, 3],
         "entry_hours_utc": lambda: [1, 2, 3], "data_hole_s": lambda: 7200.0, "data_hole_quarantine_s": lambda: 3600.0,
         "target_usd_per_unit": lambda: None if v is not None else 1.5, "stop_loss_usd_per_unit": lambda: 12.5,
+        "trend_tf": lambda: "H4" if v != "H4" else "H1", "vol_tf": lambda: "H4" if v != "H4" else "H1",
+        "ladder_trigger": lambda: "rsi_cross" if v != "rsi_cross" else "macd_turn", "trend_mode": lambda: -v,
     }
     if f.name in special:
         return special[f.name]()
@@ -348,7 +350,8 @@ def test_replace_and_dict_round_trip_preserve_every_field():
     """
     base = BacktestConfig.live("BTCUSDm") if False else BacktestConfig(
         symbol="BTCUSDm", open_weights={"H1": (1, 0), "M5": (0, 1)}, fc_weights={"M15": 2},
-        entry_hours_utc=[6, 7], stop_loss_usd_per_unit=40.0, target_usd_per_unit=None, book_enabled=True)
+        entry_hours_utc=[6, 7], stop_loss_usd_per_unit=40.0, target_usd_per_unit=None, book_enabled=True,
+        vol_tf="H1")                    # (a volatility timeframe, so that the *_vol distances can be changed one at a time)
     snapshot = json.dumps(base.to_dict(), sort_keys=True)
 
     d = base.to_dict()
@@ -408,7 +411,9 @@ def test_key_is_a_stable_hash_of_the_whole_configuration():
     assert BacktestConfig(open_weights={"H1": (1, 1), "M15": 1.0}).key() == key
     assert BacktestConfig(open_weights={"H1": 1, "M15": 1, "H4": 0}).key() == key      # zero weight = absent
     # every single field matters
-    seen = {key: "base"}
+    base = base.replace(vol_tf="H1")     # a *_vol distance is only accepted with its volatility timeframe set
+    seen = {key: "base", base.key(): "base with a volatility timeframe"}
+    assert len(seen) == 2
     for f in dataclasses.fields(BacktestConfig):
         k = base.replace(**{f.name: _perturbed(base, f)}).key()
         assert k not in seen, f"changing {f.name} gives the same key as {seen.get(k)}"

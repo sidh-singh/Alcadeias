@@ -1319,7 +1319,10 @@ def test_buy_and_sell_rules_are_mirror_images(live_cfg, prepared, symbol, name):
 LEVERS_OFF = dict(slope_on_closed_bars=False, ladder_on_closed_bars=False, min_hold_s=0.0, fc_confirm_s=0.0,
                   entry_confirm_s=0.0, stop_loss_usd_per_unit=None, ladder_min_gap=0.0, ladder_min_interval_s=0.0,
                   max_hold_s=0.0, target_per_lot=False, max_adds=99, allow_long=True, allow_short=True,
-                  entry_hours_utc=None, force_close_enabled=True, trend_tf=None, entry_max_spread=0.0, loss_cooldown_s=0.0)
+                  entry_hours_utc=None, force_close_enabled=True, trend_tf=None, entry_max_spread=0.0, loss_cooldown_s=0.0,
+                  ladder_trigger="rsi_level", ladder_rsi_exit=0.0, vol_tf=None, target_vol=0.0, stop_vol=0.0,
+                  ladder_gap_vol=0.0, trail_start_vol=0.0, trail_gap_vol=0.0, trail_start_usd_per_unit=0.0,
+                  trail_gap_usd_per_unit=0.0, daily_loss_limit_usd_per_unit=0.0, vol_cap_usd_per_unit=0.0)
 
 
 def test_the_off_values_are_the_configuration_defaults(live_cfg):
@@ -1437,16 +1440,32 @@ def test_trend_filter_opens_on_one_side_of_the_trend_only(live_cfg, engine_run, 
 
 
 @pytest.mark.parametrize("symbol", SYMBOLS)
-def test_spread_cap_keeps_entries_off_wide_quotes(live_cfg, engine_run, prepared, symbol):
-    """Protects: ``entry_max_spread``. No basket is opened on a quote wider than the cap; wanted entries on such quotes are counted."""
+def test_spread_cap_keeps_entries_off_wide_quotes(live_cfg, prepared, symbol):
+    """
+    Protects: ``entry_max_spread``. A cap at the usual spread refuses nothing (a quote exactly that wide
+    is not wider, whatever the last bit of the subtraction says); with wide quotes put into the data,
+    no basket opens on one of them, entries are refused there, and everywhere else the rule is unchanged.
+    """
     prep = prepared(symbol, mode="ticks")
-    spread = prep.ask - prep.bid
-    cap = float(np.quantile(spread, 0.3))
-    res = _run(engine_run, live_cfg(symbol, **QUICK, entry_max_spread=cap))
+    usual = float(np.median(prep.ask - prep.bid))
+    cfg = live_cfg(symbol, **QUICK)
+    plain = _checked(fast.run(cfg, prep, trace=True))
+    at_usual = _checked(fast.run(cfg.replace(entry_max_spread=usual), prep, trace=True))
+    _same_fills(plain, at_usual)
+    assert at_usual.counters["polls_entry_blocked_spread"] == 0
+    # widen the ask by three usual spreads on every other minute of the window
+    wide = ((prep.t_ms // 60_000) % 2 == 0)
+    ask = prep.ask + np.where(wide, 3 * usual, 0.0)
+    wprep = dataclasses.replace(prep, ask=ask, _cache={})
+    res = _checked(fast.run(cfg.replace(entry_max_spread=2 * usual), wprep, trace=True))
     opens = res.fills[res.fills["action"] == "open"]
-    at = np.searchsorted(prep.t_ms, _ms(opens["time"]), side="right") - 1
-    assert len(opens) > 0 and (spread[at] <= cap + 1e-12).all()
+    at = np.searchsorted(wprep.t_ms, _ms(opens["time"]), side="right") - 1
+    assert len(opens) > 0 and not wide[at].any()
     assert res.counters["polls_entry_blocked_spread"] > 0
+    # the uncapped run on the same data does open on wide quotes, so the cap is what kept them out
+    free = _checked(fast.run(cfg, wprep, trace=True))
+    fo = free.fills[free.fills["action"] == "open"]
+    assert wide[np.searchsorted(wprep.t_ms, _ms(fo["time"]), side="right") - 1].any()
 
 
 @pytest.mark.parametrize("symbol", SYMBOLS)
@@ -1460,3 +1479,277 @@ def test_a_losing_basket_is_followed_by_the_longer_cooldown(live_cfg, engine_run
     assert lost.any() and (~lost).any()
     assert (wait[lost] >= 120.0).all() and (wait[~lost] >= cfg.reentry_cooldown_s).all()
     assert (wait[~lost] < 120.0).any()               # winners do not wait the longer time
+
+
+# ───────────────────────────── what releases a ladder add ─────────────────────────────
+
+def _last_fill(p) -> np.ndarray:
+    """Index of the latest poll, at or before each poll, on which a position was opened or added."""
+    filled = (p["opened"] | p["added"]).to_numpy()
+    return np.maximum.accumulate(np.where(filled, np.arange(len(p)), -1))
+
+
+def _fill_price_before(res, p) -> np.ndarray:
+    """Price of the latest fill before each poll (NaN before the first)."""
+    t = p["t"].to_numpy()
+    f = res.fills[res.fills["action"] != "close"]
+    at = np.searchsorted(t, _ms(f["time"]))
+    price = np.full(len(p), np.nan)
+    price[at] = f["price"].to_numpy()
+    out = pd.Series(price).ffill().shift(1).to_numpy()
+    return out
+
+
+def _free_to_add(cfg, p) -> np.ndarray:
+    """Polls on which nothing but the trigger stands between the basket and its next add."""
+    gate = (p["open"] * p["side"] > -cfg.ladder_s).to_numpy()
+    room = ((p["count"] >= 1) & (p["count"] <= cfg.n_ladder_adds)).to_numpy()
+    return gate & room & (_expected_exit(cfg, p) == "")
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+def test_rsi_cross_ladder_adds_when_the_rsi_has_come_back_inside(live_cfg, engine_run, symbol):
+    """
+    Protects: ``ladder_trigger='rsi_cross'``. An add needs the tier's RSI to have been at or beyond
+    its level at some poll since the last fill and to be back inside it by ``ladder_rsi_exit``
+    points now; it is sent on the first poll where that holds, and never while the RSI is still out.
+    """
+    back_by = 2.0
+    cfg = live_cfg(symbol, **QUICK, **WIDE_LADDER, **TARGET).replace(ladder_trigger="rsi_cross", ladder_rsi_exit=back_by)
+    res = _run(engine_run, cfg)
+    p = _polls(res)
+    rsi, side, last, free = _tier_rsi(cfg, p), p["side"].to_numpy(), _last_fill(p), _free_to_add(cfg, p)
+    with np.errstate(invalid="ignore"):
+        out = np.where(side > 0, rsi <= cfg.rsi_oversold, rsi >= cfg.rsi_overbought)
+        back = np.where(side > 0, rsi > cfg.rsi_oversold + back_by, rsi < cfg.rsi_overbought - back_by)
+    adds = np.flatnonzero(p["added"].to_numpy())
+    assert len(adds) >= 2
+    for i in adds:
+        since = np.arange(last[i - 1] + 1, i + 1)                       # the polls after the previous fill
+        armed = np.maximum.accumulate(out[since])                       # having been out is a fact, whatever the gate said then
+        fire = armed & back[since] & free[since]
+        assert fire[-1] and not fire[:-1].any(), pd.Timestamp(int(p["t"].iloc[i]), unit="ms")
+        assert not out[i]
+    # under the live rule the same baskets add while the RSI is out
+    live = _polls(_run(engine_run, cfg.replace(ladder_trigger="rsi_level", ladder_rsi_exit=0.0)))
+    assert _tier_hit(cfg, live)[live["added"].to_numpy()].all()
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+def test_macd_turn_ladder_adds_when_the_tier_s_macd_vote_turns_with_the_basket(live_cfg, engine_run, prepared, symbol):
+    """
+    Protects: ``ladder_trigger='macd_turn'``. Checked against the live indicator code: on the poll
+    of an add the MACD vote of the tier's timeframe points with the basket, and on some poll since
+    the last fill it did not.
+    """
+    cfg = live_cfg(symbol, **QUICK, **TARGET).replace(ladder_trigger="macd_turn", ladder_tfs=["M1", "M1", "M5"], max_adds=3)
+    prep = prepared(symbol, mode="ticks")
+    res = _run(engine_run, cfg)
+    p = _polls(res)
+    t, bid, side, last = p["t"].to_numpy(), p["bid"].to_numpy(), p["side"].to_numpy(), _last_fill(p)
+
+    def vote(i, tf):
+        k = int(_forming_bar(prep, tf, [t[i]])[0])
+        return _live_reading(prep, cfg, tf, k, float(bid[i]))[1]
+
+    adds = np.flatnonzero(p["added"].to_numpy())
+    assert len(adds) >= 2
+    for i in adds:
+        tf = cfg.ladder_tfs[int(p["count"].iloc[i]) - 1]
+        assert vote(i, tf) * side[i] > 0
+        assert any(vote(j, tf) * side[i] <= 0 for j in range(last[i - 1] + 1, i))
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+@pytest.mark.parametrize("trigger", ["price_step", "profit_step"])
+def test_step_ladders_add_on_distance_from_the_last_fill_alone(live_cfg, engine_run, symbol, trigger):
+    """
+    Protects: ``ladder_trigger='price_step'`` (averaging down) and ``'profit_step'`` (adding to a
+    winner). The add is sent on the first poll on which the quote is a full step worse (or better)
+    than the last fill, whatever the RSI says.
+    """
+    step = PRICE_STEP[symbol]
+    cfg = live_cfg(symbol, **QUICK, **TARGET).replace(ladder_trigger=trigger, ladder_min_gap=step, max_adds=3,
+                                                      target_usd_per_unit=4.0)
+    res = _run(engine_run, cfg)
+    p = _polls(res)
+    side, last, free = p["side"].to_numpy(), _last_fill(p), _free_to_add(cfg, p)
+    ref = _fill_price_before(res, p)
+    against = np.where(side > 0, ref - p["ask"].to_numpy(), p["bid"].to_numpy() - ref)
+    # in favour: judged on the quote the basket is valued at (bid for a buy, ask for a sell)
+    with_it = np.where(side > 0, p["bid"].to_numpy() - ref, ref - p["ask"].to_numpy())
+    far = (against if trigger == "price_step" else with_it) >= step
+    adds = np.flatnonzero(p["added"].to_numpy())
+    assert len(adds) >= 2
+    assert (p["added"].to_numpy() == (far & free)).all()
+
+
+def test_ladder_settings_that_cannot_work_are_refused(live_cfg, engine_run):
+    with pytest.raises(ValueError, match="ladder_trigger"):
+        live_cfg("XAUUSDm", ladder_trigger="moon_phase")
+    # a step ladder without a step is refused when it is run (a trigger and its step may be set one after the other)
+    with pytest.raises(ValueError, match="needs a step"):
+        engine_run(live_cfg("XAUUSDm", ladder_trigger="price_step"))
+    assert len(engine_run(live_cfg("XAUUSDm", ladder_trigger="price_step", max_adds=0)).fills) >= 0      # no ladder: nothing to refuse
+    with pytest.raises(ValueError, match="vol_tf"):
+        live_cfg("XAUUSDm", stop_vol=2.0)
+    assert live_cfg("XAUUSDm", ladder_trigger="price_step", ladder_gap_vol=1.0, vol_tf="H1").vol_tf == "H1"
+
+
+# ───────────────────────────── volatility units, trailing exit, daily loss limit ─────────────────────────────
+
+def _volatility_at(prep, tf: str, n: int, times_ms) -> np.ndarray:
+    """The volatility unit as documented, computed apart from the engine: on the last closed bar at each time."""
+    c = np.asarray(prep.closes[tf], float)
+    move = np.abs(np.diff(c))
+    v = np.zeros(len(c))
+    v[1] = move[0]
+    for k in range(2, len(c)):
+        v[k] = v[k - 1] + (move[k - 1] - v[k - 1]) / n
+    return v[_forming_bar(prep, tf, times_ms) - 1]
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+@pytest.mark.parametrize("capped", [False, True])
+def test_volatility_units_fix_each_basket_s_distances_at_its_open(live_cfg, engine_run, prepared, symbol, capped):
+    """
+    Protects: ``vol_tf`` with ``target_vol`` / ``stop_vol``. Each basket's target and stop are the
+    given multiples of the volatility at its open, in dollars for its unit: it is closed on the
+    first poll beyond either and held on every poll inside them.
+    """
+    up, down = 0.6, 0.9
+    cfg = live_cfg(symbol, **QUICK).replace(max_adds=0, target_usd_per_unit=None, book_enabled=False, force_close_enabled=False,
+                                            vol_tf="M5", vol_len=10, target_vol=up, stop_vol=down)
+    prep = prepared(symbol, mode="ticks")
+    res = _run(engine_run, cfg)
+    b = res.baskets
+    assert {"target", "stop_loss"} <= set(b["reason"]) <= {"target", "stop_loss", "end"}
+    unit_usd = _volatility_at(prep, "M5", 10, _ms(b["open_time"])) * cfg.spec.contract_size * cfg.mtqty * b["units"].to_numpy()
+    assert (unit_usd > 0).all() and len(np.unique(np.round(unit_usd, 6))) > 1          # the unit moves from basket to basket
+    if capped:
+        # the same run with a ceiling on the unit, set where it binds for some baskets and not for others
+        cap = float(np.median(unit_usd / b["units"].to_numpy()))
+        cfg = cfg.replace(vol_cap_usd_per_unit=cap)
+        res = _run(engine_run, cfg)
+        b = res.baskets
+        raw = _volatility_at(prep, "M5", 10, _ms(b["open_time"])) * cfg.spec.contract_size * cfg.mtqty
+        assert (raw > cap).any() and (raw < cap).any()
+        unit_usd = np.minimum(raw, cap) * b["units"].to_numpy()
+    seen = b["profit_seen"].to_numpy()
+    tgt, sl = (b["reason"] == "target").to_numpy(), (b["reason"] == "stop_loss").to_numpy()
+    assert (seen[tgt] > up * unit_usd[tgt] - 1e-9).all() and (seen[sl] <= -down * unit_usd[sl] + 1e-9).all()
+    p = _polls(res)
+    for k, (bid_, g) in enumerate(p[p["basket"] >= 0].groupby("basket", sort=True)):
+        if k >= len(b):                 # the basket still open when the window ends has no row of its own
+            continue
+        held = g["profit"].to_numpy()[:-1] if g["reason"].iloc[-1] != "" else g["profit"].to_numpy()
+        assert ((held <= up * unit_usd[k] + 1e-9) & (held > -down * unit_usd[k] - 1e-9)).all()
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+def test_trailing_exit_closes_on_the_first_poll_that_gives_back_the_gap(live_cfg, engine_run, symbol):
+    """
+    Protects: ``trail_start_usd_per_unit`` / ``trail_gap_usd_per_unit``. Once a basket has been the
+    start amount in profit, it is closed on the first poll on which it stands the gap below its
+    best; a basket that never gets that far is never closed this way.
+    """
+    start, gap = 0.6, 0.4
+    cfg = live_cfg(symbol, **QUICK).replace(max_adds=0, target_usd_per_unit=None, book_enabled=False,
+                                            trail_start_usd_per_unit=start, trail_gap_usd_per_unit=gap)
+    res = _run(engine_run, cfg)
+    p = _polls(res)
+    assert (res.baskets["reason"] == "trailing").sum() >= 2
+    for _, g in p[p["basket"] >= 0].groupby("basket", sort=True):
+        u = float(g["b_units"].iloc[0])
+        profit = g["profit"].to_numpy()
+        best = np.maximum.accumulate(np.maximum(profit, 0.0))
+        fire = np.flatnonzero((best >= start * u) & (profit <= best - gap * u))
+        if len(fire):
+            assert fire[0] == len(g) - 1 and g["reason"].iloc[-1] == "trailing"
+        else:
+            assert g["reason"].iloc[-1] != "trailing"
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+def test_daily_loss_limit_ends_the_day_s_entries(live_cfg, engine_run, symbol):
+    """
+    Protects: ``daily_loss_limit_usd_per_unit``. Up to the basket that takes the day's closed
+    result per unit through the limit the run is the unrestricted one; after it nothing is opened
+    that day.
+    """
+    base = live_cfg(symbol, **QUICK, **WIDE_LADDER)
+    free = _run(engine_run, base).baskets.sort_values("close_time").reset_index(drop=True)
+    run = (free["pnl"] / free["units"]).cumsum()
+    assert run.min() < 0, "the fixture window must have a losing stretch for this test to mean anything"
+    limit = round(float(-run.min()) / 2, 2)
+    res = _run(engine_run, base.replace(daily_loss_limit_usd_per_unit=limit))
+    got = res.baskets.sort_values("close_time").reset_index(drop=True)
+    through = int(np.flatnonzero((run <= -limit).to_numpy())[0])          # the basket that crosses the limit
+    assert len(got) == through + 1 < len(free)
+    pd.testing.assert_frame_equal(got, free.iloc[:through + 1])
+    assert res.counters["polls_entry_blocked_daily_loss"] > 0
+
+
+# ───────────────────────────── no look-ahead with the levers switched on ─────────────────────────────
+
+def _shocked_after(prep, t_ms: int, factor: float):
+    """
+    A copy of the prepared data in which everything not yet known at time ``t_ms`` is changed: every
+    quote after it, and the close of every bar still forming at it and of every bar after it (a bar's
+    close is its last quote). Whatever the engine decides up to ``t_ms`` may not change.
+    """
+    row = int(np.searchsorted(prep.t_ms, t_ms, side="right")) - 1
+    later = np.arange(len(prep.t_ms)) > row
+    closes = {}
+    for tf in prep.tfs:
+        first = prep.start_row[tf]
+        last = np.append(first[1:] - 1, len(prep.t_ms) - 1)
+        moved = (first >= 0) & (last > row)              # bars whose last quote comes after t_ms
+        closes[tf] = np.where(moved, prep.closes[tf] * factor, prep.closes[tf])
+    return dataclasses.replace(prep, bid=np.where(later, prep.bid * factor, prep.bid),
+                               ask=np.where(later, prep.ask * factor, prep.ask), closes=closes, _cache={})
+
+
+def _lookahead_levers(symbol: str) -> dict:
+    step = PRICE_STEP[symbol]
+    fast_macd = dict(macd_fast=3, macd_slow=8, macd_signal=3)     # signal lines that change sign inside the windows
+    return {
+        "trend filter on M5": dict(QUICK, **WIDE_LADDER, **fast_macd, trend_tf="M5"),
+        "trend filter against M1": dict(QUICK, **WIDE_LADDER, **fast_macd, trend_tf="M1", trend_mode=-1),
+        "volatility units": dict(QUICK, max_adds=0, target_usd_per_unit=None, book_enabled=False, force_close_enabled=False,
+                                 vol_tf="M5", vol_len=6, target_vol=0.6, stop_vol=0.9),
+        "MACD-turn ladder": dict(QUICK, **TARGET, **fast_macd, ladder_trigger="macd_turn", ladder_tfs=["M1", "M5", "M15"], max_adds=3),
+        "RSI cross-back ladder": dict(QUICK, **WIDE_LADDER, **TARGET, ladder_trigger="rsi_cross", ladder_rsi_exit=2.0),
+        "step ladder and trailing in volatility units": dict(QUICK, **{**TARGET, "target_usd_per_unit": 4.0}, ladder_trigger="price_step",
+                                                             vol_tf="M1", vol_len=10, ladder_gap_vol=1.0, max_adds=3,
+                                                             trail_start_vol=1.0, trail_gap_vol=1.0),
+        "add to winners, daily limit, loss pause": dict(QUICK, **{**TARGET, "target_usd_per_unit": 4.0}, ladder_trigger="profit_step",
+                                                        ladder_min_gap=step, max_adds=2, daily_loss_limit_usd_per_unit=1.0,
+                                                        loss_cooldown_s=60.0),
+    }
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+@pytest.mark.parametrize("name", list(_lookahead_levers("XAUUSDm")))
+def test_no_lever_reads_the_future(live_cfg, prepared, symbol, name):
+    """
+    Protects: every lever against look-ahead, including into the bar still forming. At eight times
+    across the window everything not yet known is changed by a large shock; the poll trace and the
+    fills up to that time must stay exactly what they were.
+    """
+    cfg = live_cfg(symbol, **_lookahead_levers(symbol)[name])
+    prep = prepared(symbol, mode="ticks")
+    base = fast.run(cfg, prep, trace=True)
+    t0, t1 = int(prep.t_ms[0]), int(prep.t_ms[-1])
+    compared = 0
+    for q in range(1, 9):
+        cut = t0 + (t1 - t0) * q // 9 + 437                       # off any bar boundary
+        for factor in (1.6, 0.6):
+            other = fast.run(cfg, _shocked_after(prep, cut, factor), trace=True)
+            n = int(np.searchsorted(base.trace[:, K.T_T], cut, side="right"))
+            assert np.array_equal(base.trace[:n], other.trace[:n]), f"{name}: a decision before {pd.Timestamp(cut, unit='ms')} changed"
+            fb = base.fills[_ms(base.fills["time"]) <= cut].reset_index(drop=True)
+            fo = other.fills[_ms(other.fills["time"]) <= cut].reset_index(drop=True)
+            pd.testing.assert_frame_equal(fb, fo)
+            compared += len(fb)
+    assert compared > 0, "the levers never traded before the cuts, so nothing was compared"

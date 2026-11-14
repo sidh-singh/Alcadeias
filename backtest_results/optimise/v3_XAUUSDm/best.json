@@ -1,0 +1,270 @@
+{
+  "space": "v3",
+  "symbol": "XAUUSDm",
+  "objective": "lcb",
+  "written": "2026-11-14 19:23:45",
+  "stamp": {
+    "format": 1,
+    "space": "7a3a86fa558c",
+    "symbol": "XAUUSDm",
+    "engine": "b0c1554d4e48",
+    "live": "ff2eb10cc257",
+    "account": 2000.0
+  },
+  "period": {
+    "start": "2025-07-01",
+    "end": "2026-11-13",
+    "block": "3mo",
+    "slice": "1mo",
+    "selection_months": [
+      "2025-07",
+      "2025-08",
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10"
+    ],
+    "holdout_months": []
+  },
+  "constraints": {
+    "allow_wiped": false,
+    "max_dip": 500.0,
+    "account": 2000.0
+  },
+  "settings_run": 645,
+  "settings_eligible": 540,
+  "settings_tried_earlier": 0,
+  "also_tried": 0,
+  "verdict": "Not proven. The best setting passes luck, neighbours; is unclear on halves, walk-forward. Treat the result as a lead, not as an edge.",
+  "evidence": [
+    "On the months it was chosen on. The best setting made +242.8 USD a month on average over 16 months, standard error 74.1: a lower bound of +168.7. 12 of 16 months were positive; 665 baskets closed, the worst at -153.9.",
+    "Luck. It is the best of 540 eligible settings. If none of them had any edge, the one picked the same way would still show about +106.2 a month (below +208.0 in 95% of such searches), and 1% of such searches reach the objective found here. Luck alone rarely does this well.",
+    "Half and half. Over 20 ways of splitting the blocks into two halves, the best setting of one half ranked below the median on the other half in 45% of them (0% is ideal, 50% is what noise gives). It averaged +238.9 a month on the half it was chosen on and +103.1 on the other, where it lost money in 20% of the splits.",
+    "Walk-forward. Choosing again after every block from the earlier months only, and trading the next block, made +408.6 over 13 months: +31.4 a month, standard error 120.0, 9 of 13 positive. The settings chosen had averaged +219.0 on the months they were chosen on.",
+    "Neighbours. 3 of the 21 settings one step away were run: they average an objective of +125.0 against its own +168.7, and 3 of them are positive. It sits on a plateau."
+  ],
+  "checks": {
+    "luck": "pass",
+    "halves": "unclear",
+    "walk-forward": "unclear",
+    "neighbours": "pass"
+  },
+  "best": {
+    "key": "s4e71c5ca88a",
+    "values": {
+      "trend_tf": "H4",
+      "entry_agree_s": 0,
+      "target_vol": 5,
+      "stop_vol": 5,
+      "vol_cap_usd_per_unit": 12,
+      "max_adds": 2,
+      "ladder_trigger": "profit_step",
+      "ladder_gap_vol": 1.5,
+      "trail_gap_vol": 0,
+      "loss_cooldown_s": 14400,
+      "reentry_cooldown_s": 1800,
+      "max_hold_s": 0
+    },
+    "overrides": {
+      "force_close_enabled": false,
+      "vol_tf": "H1",
+      "vol_len": 24,
+      "target_usd_per_unit": null,
+      "stop_loss_usd_per_unit": null,
+      "ladder_multipliers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "ladder_tfs": [
+        "M5",
+        "M15",
+        "H1",
+        "H1",
+        "H1"
+      ],
+      "trend_tf": "H4",
+      "entry_agree_s": 0.0,
+      "target_vol": 5.0,
+      "stop_vol": 5.0,
+      "vol_cap_usd_per_unit": 12.0,
+      "max_adds": 2,
+      "ladder_trigger": "profit_step",
+      "ladder_gap_vol": 1.5,
+      "trail_gap_vol": 0.0,
+      "loss_cooldown_s": 14400.0,
+      "reentry_cooldown_s": 1800.0,
+      "max_hold_s": 0.0
+    },
+    "origin": "refine",
+    "run": "python -m backtesting run --symbol XAUUSDm --start 2025-07-01 --end 2026-11-13 --set entry_agree_s=0.0 --set force_close_enabled=false --set ladder_gap_vol=1.5 --set 'ladder_multipliers=[1.0, 1.0, 1.0, 1.0]' --set 'ladder_tfs=[\"M5\", \"M15\", \"H1\", \"H1\", \"H1\"]' --set 'ladder_trigger=\"profit_step\"' --set loss_cooldown_s=14400.0 --set max_adds=2 --set max_hold_s=0.0 --set reentry_cooldown_s=1800.0 --set stop_loss_usd_per_unit=null --set stop_vol=5.0 --set target_usd_per_unit=null --set target_vol=5.0 --set trail_gap_vol=0.0 --set 'trend_tf=\"H4\"' --set vol_cap_usd_per_unit=12.0 --set vol_len=24 --set 'vol_tf=\"H1\"'",
+    "run_last_block": "python -m backtesting run --symbol XAUUSDm --start '2026-10-01 00:00:00' --end '2026-11-13 00:00:00' --balance 1000000 --set fixed_units=1 --set entry_agree_s=0.0 --set force_close_enabled=false --set ladder_gap_vol=1.5 --set 'ladder_multipliers=[1.0, 1.0, 1.0, 1.0]' --set 'ladder_tfs=[\"M5\", \"M15\", \"H1\", \"H1\", \"H1\"]' --set 'ladder_trigger=\"profit_step\"' --set loss_cooldown_s=14400.0 --set max_adds=2 --set max_hold_s=0.0 --set reentry_cooldown_s=1800.0 --set stop_loss_usd_per_unit=null --set stop_vol=5.0 --set target_usd_per_unit=null --set target_vol=5.0 --set trail_gap_vol=0.0 --set 'trend_tf=\"H4\"' --set vol_cap_usd_per_unit=12.0 --set vol_len=24 --set 'vol_tf=\"H1\"'",
+    "last_block_net": -2.65,
+    "selection": {
+      "months": 16.0,
+      "objective": 168.715242147,
+      "mean": 242.83,
+      "se": 74.11475785339022,
+      "lcb": 168.7152421466098,
+      "median": 171.185,
+      "sharpe": 0.819101374,
+      "worst_block": 57.01,
+      "total": 3885.28,
+      "positive": 12.0,
+      "t": 3.276405496464727,
+      "baskets": 665.0,
+      "baskets_per_month": 40.75,
+      "worst_basket": -153.86,
+      "wiped_blocks": 0.0,
+      "max_dip": 236.84
+    },
+    "holdout": null,
+    "neighbours": {
+      "of": 21.0,
+      "n": 3.0,
+      "objective": 125.04788615199999,
+      "positive": 3.0
+    }
+  },
+  "haircut": {
+    "best": 592,
+    "objective": 168.715242147,
+    "mean": 242.83,
+    "se": 74.11475785339022,
+    "null_objective": 55.230657011118,
+    "null_mean": 106.15063968749999,
+    "null_mean_p95": 208.04831249999998,
+    "p": 0.014992503748125937,
+    "p_all": 0.014992503748125885,
+    "pool": 540,
+    "extra": 0,
+    "n_eff": 28.29409281302613,
+    "n_boot": 2000,
+    "independent": 156.45785211015863
+  },
+  "overfitting": {
+    "splits": 20,
+    "of": 20,
+    "skipped": 0,
+    "pbo": 0.45,
+    "rank_median": 0.851,
+    "is_mean": 238.86572222224999,
+    "oos_mean": 103.1487222222,
+    "oos_loss": 0.2,
+    "oos_wiped": 0.0
+  },
+  "walk_forward": {
+    "n": 13,
+    "total": 408.57000000000005,
+    "mean": 31.42846153846154,
+    "se": 120.03343605144187,
+    "positive": 9,
+    "train_mean": 219.0258333336,
+    "wiped_steps": 0,
+    "stayed_out": 0,
+    "hindsight_mean": 265.1238461538462,
+    "average_mean": 65.10193538461537
+  },
+  "references": [
+    {
+      "name": "live",
+      "key": "s5c5e866a4f9",
+      "overrides": {},
+      "selection": {
+        "months": 16.0,
+        "objective": -495.340304329,
+        "mean": -352.12625,
+        "se": 143.21405432916083,
+        "lcb": -495.34030432916086,
+        "median": -126.73,
+        "sharpe": -0.61468522,
+        "worst_block": -2041.05,
+        "total": -5634.02,
+        "positive": 5.0,
+        "t": -2.4587408802119297,
+        "baskets": 19600.0,
+        "baskets_per_month": 1195.0,
+        "worst_basket": -1687.09,
+        "wiped_blocks": 3.0,
+        "max_dip": 2000.0
+      },
+      "holdout": null
+    },
+    {
+      "name": "V2",
+      "key": "s2fb904cbd16",
+      "overrides": {
+        "trend_tf": "H1",
+        "max_adds": 0,
+        "target_usd_per_unit": 20.0,
+        "stop_loss_usd_per_unit": 20.0,
+        "force_close_enabled": false,
+        "loss_cooldown_s": 14400.0
+      },
+      "selection": {
+        "months": 16.0,
+        "objective": 45.190206837,
+        "mean": 74.65375,
+        "se": 29.46354316319011,
+        "lcb": 45.19020683680989,
+        "median": 83.11,
+        "sharpe": 0.633441721,
+        "worst_block": -117.19,
+        "total": 1194.46,
+        "positive": 11.0,
+        "t": 2.5337668856224895,
+        "baskets": 616.0,
+        "baskets_per_month": 37.375,
+        "worst_basket": -32.03,
+        "wiped_blocks": 0.0,
+        "max_dip": 165.89
+      },
+      "holdout": null
+    },
+    {
+      "name": "V2 in volatility units (6 / 6)",
+      "key": "sf289556c585",
+      "overrides": {
+        "trend_tf": "H1",
+        "max_adds": 0,
+        "force_close_enabled": false,
+        "loss_cooldown_s": 14400.0,
+        "vol_tf": "H1",
+        "vol_len": 24,
+        "target_vol": 6.0,
+        "stop_vol": 6.0,
+        "target_usd_per_unit": null
+      },
+      "selection": {
+        "months": 16.0,
+        "objective": 90.165752345,
+        "mean": 144.99312500000002,
+        "se": 54.82737265514029,
+        "lcb": 90.16575234485973,
+        "median": 138.365,
+        "sharpe": 0.661134749,
+        "worst_block": -197.49,
+        "total": 2319.8900000000003,
+        "positive": 12.0,
+        "t": 2.6445389953663287,
+        "baskets": 269.0,
+        "baskets_per_month": 16.375,
+        "worst_basket": -314.9,
+        "wiped_blocks": 0.0,
+        "max_dip": 297.59
+      },
+      "holdout": null
+    }
+  ]
+}

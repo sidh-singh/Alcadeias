@@ -79,7 +79,9 @@ CI_AFTER_MS = 48           # time of the first quote after the rows (the end of 
 CI_TREND_TF = 49           # index of the trend-filter timeframe (-1 = off)
 CI_TREND_MODE = 50         # +1 entries with that trend only, -1 against it only
 CI_LOSS_COOLDOWN_MS = 51   # re-entry wait after a losing basket (0 = the ordinary cooldown)
-CI_N = 52
+CI_LADDER_MODE = 52        # what releases an add: 0 RSI level (live), 1 RSI cross-back, 2 MACD turn, 3 price step, 4 profit step
+CI_VOL_TF = 53             # index of the volatility timeframe (-1 = distances are in USD / price as given)
+CI_N = 54
 
 # ── float config slots ──
 CF_BALANCE = 0
@@ -108,7 +110,17 @@ CF_MACD_AF = 22
 CF_MACD_AS = 23
 CF_MACD_ASG = 24
 CF_MAX_SPREAD = 25         # no fresh entry while ask - bid is wider than this (0 = off)
-CF_N = 26
+CF_RSI_EXIT = 26           # 'rsi_cross' ladder: points back inside the level
+CF_TARGET_VOL = 27         # volatility multiples (0 = use the USD / price setting)
+CF_STOP_VOL = 28
+CF_GAP_VOL = 29
+CF_TRAIL_START = 30        # trailing exit, USD per unit
+CF_TRAIL_GAP = 31
+CF_TRAIL_START_VOL = 32
+CF_TRAIL_GAP_VOL = 33
+CF_DAY_LIMIT = 34          # daily loss limit, USD per unit (0 = off)
+CF_VOL_CAP = 35            # ceiling on the volatility unit, USD per unit (0 = none)
+CF_N = 36
 
 # ── fill log columns ──
 F_T = 0            # decision time (poll), ms
@@ -137,6 +149,7 @@ F_N = 21
 ACT_OPEN, ACT_ADD, ACT_CLOSE = 1, 2, 3
 R_NONE, R_TARGET, R_BOOK, R_FORCE, R_STOPOUT, R_STOPLOSS, R_END, R_TIME = 0, 1, 2, 3, 4, 5, 6, 7
 R_HOLE = 8     # closed at the last quote before a hole in the tick history (data hygiene, not a bot decision)
+R_TRAIL = 9    # trailing exit: the basket gave back the trailing gap from its best
 
 # ── basket log columns ──
 B_ID = 0
@@ -205,7 +218,10 @@ K_BLOCK_HOLE = 26       # polls on which an entry was wanted during the quaranti
 K_BLOCK_CLOSED = 27     # orders (open, add or close) sent after the session's last quote: the server refuses them
 K_BLOCK_TREND = 28      # an entry was wanted against the trend filter
 K_BLOCK_SPREAD = 29     # an entry was wanted while the spread was wider than the cap
-K_N = 30
+K_BLOCK_NOVOL = 30      # an entry was wanted but the volatility unit was not known yet
+K_BLOCK_DAYLOSS = 31    # an entry was wanted after the day's loss limit had been reached
+K_CLOSE_TRAIL = 32
+K_N = 33
 
 # A session ends with its last quote. For three more minutes the bot still counts the market as
 # live (its liveness rule) and may send orders; the server answers "market closed". An order is
@@ -261,6 +277,26 @@ def _round2(x):
     if x >= 0.0:
         return math.floor(x * 100.0 + 0.5) / 100.0
     return -math.floor(-x * 100.0 + 0.5) / 100.0
+
+
+@njit(cache=True)
+def vol_array(C, n):
+    """
+    Recent bar-to-bar move of a close series: the exponentially weighted mean (weight 1/n per bar)
+    of the absolute change of the close. Element k uses closes up to and including bar k, so the
+    value of the last CLOSED bar is all a decision may read.
+    """
+    out = np.zeros(C.shape[0])
+    if C.shape[0] < 2:
+        return out
+    v = abs(C[1] - C[0])
+    out[1] = v
+    for k in range(2, C.shape[0]):
+        v += (abs(C[k] - C[k - 1]) - v) / n
+        out[k] = v
+    # not known until n bar-to-bar changes have been averaged (0 = unknown: no basket is opened on it)
+    out[:min(int(n), C.shape[0])] = 0.0
+    return out
 
 
 @njit(cache=True)
@@ -536,7 +572,7 @@ def forming_macd(C, EF, ES, SG, o, k, price, mf, ms, msig, af, as_, asg):
 @njit(cache=True)
 def run_kernel(t_ms, bid, ask,
                off, nb, nwarm, START_ROW,
-               C, AG, AL, RSIc, EF, ES, SG, HISTc,
+               C, AG, AL, RSIc, EF, ES, SG, HISTc, VOL,
                R_PH, R_PL, R_CH, R_CL, M_PH, M_PL, M_CH, M_CL,
                need_rsi, need_slope,
                w_or, w_om, w_fr, w_fm, w_br, w_bm,
@@ -554,6 +590,18 @@ def run_kernel(t_ms, bid, ask,
     loss_cooldown = ci[CI_LOSS_COOLDOWN_MS]
     max_spread = cf[CF_MAX_SPREAD]
     last_lost = False
+    ladder_mode = ci[CI_LADDER_MODE]
+    vol_f = ci[CI_VOL_TF]
+    rsi_exit = cf[CF_RSI_EXIT]
+    target_vol = cf[CF_TARGET_VOL]
+    stop_vol = cf[CF_STOP_VOL]
+    gap_vol = cf[CF_GAP_VOL]
+    trail_start = cf[CF_TRAIL_START]
+    trail_gap = cf[CF_TRAIL_GAP]
+    trail_start_vol = cf[CF_TRAIL_START_VOL]
+    trail_gap_vol = cf[CF_TRAIL_GAP_VOL]
+    day_limit = cf[CF_DAY_LIMIT]
+    vol_cap = cf[CF_VOL_CAP]
     poll = ci[CI_POLL_MS]
     latency = ci[CI_LATENCY_MS]
     open_delay = ci[CI_OPEN_DELAY_MS]
@@ -643,6 +691,18 @@ def run_kernel(t_ms, bid, ask,
     side = 0
     units = 1
     basket_units = 1
+    usd_per_price = contract * mtqty          # USD per unit for a move of 1.0 in price
+    # the distances of the basket in hand (fixed when it opens; the configured ones unless volatility units replace them)
+    b_target = target
+    b_target_on = target_on
+    b_sl = sl_usd
+    b_sl_on = sl_on
+    b_gap = ladder_gap
+    b_trail_start = trail_start
+    b_trail_gap = trail_gap
+    ladder_armed = False
+    day_id = -1
+    day_pnl = 0.0
     last_close = -(1 << 60)
     basket_open_t = 0
     basket_mae = 0.0
@@ -748,7 +808,7 @@ def run_kernel(t_ms, bid, ask,
 
         # forming-bar index of every timeframe in use
         for f in range(n_tf):
-            if need_rsi[f] == 1 or need_slope[f] == 1 or f == trend_f:
+            if need_rsi[f] == 1 or need_slope[f] == 1 or f == trend_f or f == vol_f:
                 o = off[f]
                 while K[f] + 1 < nb[f] and START_ROW[o + K[f] + 1] <= ptr:
                     K[f] += 1
@@ -951,13 +1011,17 @@ def run_kernel(t_ms, bid, ask,
             fc_fire = fc_hit and held and ((T - fc_since) >= fc_confirm)
             bk_fire = bk_hit and held
             # live: the target is $target x unit for the whole basket, however many lots it holds
-            tgt = target * (basket_lot_units if target_per_lot else basket_units)
-            if sl_on and profit <= -sl_usd * basket_units:
+            tgt = b_target * (basket_lot_units if target_per_lot else basket_units)
+            if b_sl_on and profit <= -b_sl * basket_units:
                 signal = 3 if side > 0 else 4
                 reason = R_STOPLOSS
-            elif target_on and profit > tgt:
+            elif b_target_on and profit > tgt:
                 signal = 3 if side > 0 else 4
                 reason = R_TARGET
+            elif (b_trail_gap > 0.0 and basket_mfe >= b_trail_start * basket_units
+                  and profit <= basket_mfe - b_trail_gap * basket_units):
+                signal = 3 if side > 0 else 4
+                reason = R_TRAIL
             elif bk_fire:
                 signal = 3 if side > 0 else 4
                 reason = R_BOOK
@@ -971,20 +1035,48 @@ def run_kernel(t_ms, bid, ask,
                 cnt = n_pos
                 if cnt <= n_tiers:
                     tf_i = ladder_tf[cnt - 1]
-                    if side > 0:
-                        hit = rsi_now[tf_i] <= rsi_os
+                    if ladder_mode == 0:
+                        # live: the tier timeframe's RSI is at or beyond the level
+                        if side > 0:
+                            hit = rsi_now[tf_i] <= rsi_os
+                        else:
+                            hit = rsi_now[tf_i] >= rsi_ob
+                    elif ladder_mode == 1:
+                        # that RSI has been beyond the level since the last fill and has come back inside
+                        if side > 0:
+                            if rsi_now[tf_i] <= rsi_os:
+                                ladder_armed = True
+                            hit = ladder_armed and rsi_now[tf_i] > rsi_os + rsi_exit
+                        else:
+                            if rsi_now[tf_i] >= rsi_ob:
+                                ladder_armed = True
+                            hit = ladder_armed and rsi_now[tf_i] < rsi_ob - rsi_exit
+                    elif ladder_mode == 2:
+                        # the tier timeframe's MACD vote was not with the basket since the last fill and now is
+                        if sgn_m[tf_i] * side <= 0:
+                            ladder_armed = True
+                        hit = ladder_armed and sgn_m[tf_i] * side > 0
                     else:
-                        hit = rsi_now[tf_i] >= rsi_ob
+                        hit = True                      # distance alone decides (3: against, 4: in favour)
                     if hit:
                         if not add_ok:
                             counters[K_LADDER_GATED] += 1
                         else:
                             gap_ok = True
-                            if ladder_gap > 0.0:
+                            if ladder_mode == 4:
+                                # judged on the quote the basket is valued at (bid for a buy, ask for a sell), so the
+                                # last position really is a step in profit and a widening spread alone releases nothing
                                 if side > 0:
-                                    gap_ok = (last_fill_price - a) >= ladder_gap
+                                    gap_ok = b_gap > 0.0 and (b - last_fill_price) >= b_gap
                                 else:
-                                    gap_ok = (b - last_fill_price) >= ladder_gap
+                                    gap_ok = b_gap > 0.0 and (last_fill_price - a) >= b_gap
+                            elif b_gap > 0.0:
+                                if side > 0:
+                                    gap_ok = (last_fill_price - a) >= b_gap
+                                else:
+                                    gap_ok = (b - last_fill_price) >= b_gap
+                            elif ladder_mode == 3:
+                                gap_ok = False
                             if ladder_interval > 0 and (T - last_fill_t) < ladder_interval:
                                 gap_ok = False
                             if gap_ok:
@@ -1063,8 +1155,14 @@ def run_kernel(t_ms, bid, ask,
                 elif trend_f >= 0 and want_side * trend_now * trend_mode <= 0:
                     counters[K_BLOCK_TREND] += 1
                     ok = False
-                elif max_spread > 0.0 and (a - b) > max_spread:
+                elif max_spread > 0.0 and (a - b) > max_spread + 1e-9:
                     counters[K_BLOCK_SPREAD] += 1
+                    ok = False
+                elif vol_f >= 0 and not (K[vol_f] >= 1 and VOL[off[vol_f] + K[vol_f] - 1] > 0.0):
+                    counters[K_BLOCK_NOVOL] += 1      # the volatility unit is not known yet (warm-up)
+                    ok = False
+                elif day_limit > 0.0 and day_id == tsec // 86400 and day_pnl <= -day_limit:
+                    counters[K_BLOCK_DAYLOSS] += 1
                     ok = False
                 elif hours_on and hour_ok[(tsec % 86400) // 3600] == 0:
                     counters[K_BLOCK_HOURS] += 1
@@ -1099,6 +1197,31 @@ def run_kernel(t_ms, bid, ask,
                         basket_open_t = T
                         basket_mae = 0.0
                         basket_mfe = 0.0
+                        ladder_armed = False
+                        # this basket's distances: the configured dollars / price, or multiples of the volatility now
+                        b_target = target
+                        b_target_on = target_on
+                        b_sl = sl_usd
+                        b_sl_on = sl_on
+                        b_gap = ladder_gap
+                        b_trail_start = trail_start
+                        b_trail_gap = trail_gap
+                        if vol_f >= 0:
+                            v_now = VOL[off[vol_f] + K[vol_f] - 1]
+                            if vol_cap > 0.0 and v_now * usd_per_price > vol_cap:
+                                v_now = vol_cap / usd_per_price
+                            if target_vol > 0.0:
+                                b_target = target_vol * v_now * usd_per_price
+                                b_target_on = True
+                            if stop_vol > 0.0:
+                                b_sl = stop_vol * v_now * usd_per_price
+                                b_sl_on = True
+                            if gap_vol > 0.0:
+                                b_gap = gap_vol * v_now
+                            if trail_start_vol > 0.0:
+                                b_trail_start = trail_start_vol * v_now * usd_per_price
+                            if trail_gap_vol > 0.0:
+                                b_trail_gap = trail_gap_vol * v_now * usd_per_price
                         basket_open_score = open_score
                         basket_fc_score = fc_score
                         basket_comm = lots * commission
@@ -1157,6 +1280,7 @@ def run_kernel(t_ms, bid, ask,
                     basket_comm += lots * commission
                     last_fill_price = price
                     last_fill_t = T
+                    ladder_armed = False
                     basket_lot_units += lots / mtqty
                     counters[K_ADDS] += 1
                     extra_wait = open_delay + add_delay
@@ -1250,8 +1374,15 @@ def run_kernel(t_ms, bid, ask,
                     counters[K_CLOSE_SL] += 1
                 elif reason == R_TIME:
                     counters[K_CLOSE_TIME] += 1
+                elif reason == R_TRAIL:
+                    counters[K_CLOSE_TRAIL] += 1
                 elif reason == R_HOLE:
                     counters[K_CLOSE_HOLE] += 1
+                # the day's result per unit, for the daily loss limit
+                if tsec // 86400 != day_id:
+                    day_id = tsec // 86400
+                    day_pnl = 0.0
+                day_pnl += (realised - basket_comm) / (basket_units if basket_units > 0 else 1)
                 if n_baskets < max_baskets:
                     baskets[n_baskets, B_ID] = n_baskets
                     baskets[n_baskets, B_SIDE] = side

@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from ..config import BacktestConfig, TF_SECONDS
+from ..config import BacktestConfig, TF_SECONDS, LADDER_TRIGGERS
 from ..data import store
 from . import kernels as K
 
@@ -32,7 +32,7 @@ SIGNAL_NAMES = {0: "DO_NOTHING", 1: "BUY", 2: "SELL", 3: "CLOSE_BUY", 4: "CLOSE_
                 5: "BUY_MORE", 6: "SELL_MORE"}
 REASON_NAMES = {K.R_NONE: "", K.R_TARGET: "target", K.R_BOOK: "book", K.R_FORCE: "force_close",
                 K.R_STOPOUT: "stop_out", K.R_STOPLOSS: "stop_loss", K.R_END: "end", K.R_TIME: "time_stop",
-                K.R_HOLE: "data_hole"}
+                K.R_HOLE: "data_hole", K.R_TRAIL: "trailing"}
 ACTION_NAMES = {K.ACT_OPEN: "open", K.ACT_ADD: "add", K.ACT_CLOSE: "close"}
 
 DEFAULT_WARM_BARS = 600   # the live bot fetches 500 bars per timeframe; this fully converges RSI/MACD
@@ -66,7 +66,7 @@ class Prepared:
     def flat(self, cfg: BacktestConfig) -> dict:
         """Flattened per-timeframe arrays for the indicator parameters in ``cfg`` (cached)."""
         key = (cfg.rsi_length, cfg.macd_fast, cfg.macd_slow, cfg.macd_signal,
-               cfg.pivot_width, float(cfg.rsi_peak_ob), float(cfg.rsi_peak_os))
+               cfg.pivot_width, float(cfg.rsi_peak_ob), float(cfg.rsi_peak_os), int(cfg.vol_len))
         hit = self._cache.get(key)
         if hit is not None:
             return hit
@@ -74,7 +74,7 @@ class Prepared:
         off = np.zeros(n_tf, np.int64)
         nb = np.zeros(n_tf, np.int64)
         nwarm = np.zeros(n_tf, np.int64)
-        parts = {k: [] for k in ("START_ROW", "C", "AG", "AL", "RSI", "EF", "ES", "SG", "HIST",
+        parts = {k: [] for k in ("START_ROW", "C", "AG", "AL", "RSI", "EF", "ES", "SG", "HIST", "VOL",
                                  "R_PH", "R_PL", "R_CH", "R_CL", "M_PH", "M_PL", "M_CH", "M_CL")}
         pos = 0
         for f, tf in enumerate(self.tfs):
@@ -90,6 +90,7 @@ class Prepared:
             pos += len(C)
             for name, arr in (("START_ROW", self.start_row[tf]), ("C", C), ("AG", AG), ("AL", AL),
                               ("RSI", RSI), ("EF", EF), ("ES", ES), ("SG", SG), ("HIST", HIST),
+                              ("VOL", K.vol_array(C, int(cfg.vol_len))),
                               ("R_PH", r_ph), ("R_PL", r_pl), ("R_CH", r_ch), ("R_CL", r_cl),
                               ("M_PH", m_ph), ("M_PL", m_pl), ("M_CH", m_ch), ("M_CL", m_cl)):
                 parts[name].append(arr)
@@ -235,6 +236,8 @@ _COUNTER_NAMES = {
     K.K_BLOCK_CLOSED: "orders_refused_market_closed",
     K.K_BLOCK_REOPEN: "polls_order_blocked_close_only",
     K.K_BLOCK_TREND: "polls_entry_blocked_trend", K.K_BLOCK_SPREAD: "polls_entry_blocked_spread",
+    K.K_BLOCK_NOVOL: "polls_entry_blocked_no_volatility", K.K_BLOCK_DAYLOSS: "polls_entry_blocked_daily_loss",
+    K.K_CLOSE_TRAIL: "closes_trailing",
 }
 _SCALAR_NAMES = {
     K.S_FINAL_BALANCE: "final_balance", K.S_FINAL_EQUITY: "final_equity",
@@ -270,10 +273,16 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
             w["br"][idx[tf]], w["bm"][idx[tf]] = r, m
             need_slope[idx[tf]] = 1
     n_tiers = cfg.n_ladder_adds
+    if (cfg.ladder_trigger in ("price_step", "profit_step") and n_tiers > 0
+            and cfg.ladder_min_gap <= 0 and cfg.ladder_gap_vol <= 0):
+        # (checked here, not when the configuration is built, so that a trigger and its step can be set one after the other)
+        raise ValueError(f"ladder_trigger={cfg.ladder_trigger!r} needs a step: ladder_min_gap or ladder_gap_vol")
     ladder_tf = np.zeros(max(n_tiers, 1), np.int64)
     for q in range(n_tiers):
         ladder_tf[q] = idx[cfg.ladder_tfs[q]]
         need_rsi[idx[cfg.ladder_tfs[q]]] = 1
+        if cfg.ladder_trigger == "macd_turn":
+            need_slope[idx[cfg.ladder_tfs[q]]] = 1      # its MACD vote is read (its weights in the scores stay zero)
     mult = np.asarray(list(cfg.ladder_multipliers) + [cfg.ladder_multipliers[-1]] * 64, dtype=np.float64)[:64]
     hour_ok = np.ones(24, np.uint8)
     if cfg.entry_hours_utc is not None:
@@ -293,6 +302,8 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
     ci[K.CI_LOSS_COOLDOWN_MS] = int(round(cfg.loss_cooldown_s * 1000))
     ci[K.CI_TREND_TF] = idx[cfg.trend_tf] if cfg.trend_tf else -1
     ci[K.CI_TREND_MODE] = 1 if cfg.trend_mode >= 0 else -1
+    ci[K.CI_LADDER_MODE] = LADDER_TRIGGERS.index(cfg.ladder_trigger)
+    ci[K.CI_VOL_TF] = idx[cfg.vol_tf] if cfg.vol_tf else -1
     ci[K.CI_LIVENESS_MS] = int(round(cfg.market_lookback_s * 1000))
     ci[K.CI_UNIT_MAX] = int(cfg.unit_max_limit)
     ci[K.CI_FIXED_UNITS] = int(cfg.fixed_units)
@@ -374,6 +385,16 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
     cf[K.CF_SL] = cfg.stop_loss_usd_per_unit if cfg.stop_loss_usd_per_unit is not None else 0.0
     cf[K.CF_LADDER_GAP] = cfg.ladder_min_gap
     cf[K.CF_MAX_SPREAD] = cfg.entry_max_spread
+    cf[K.CF_RSI_EXIT] = cfg.ladder_rsi_exit
+    cf[K.CF_TARGET_VOL] = cfg.target_vol
+    cf[K.CF_STOP_VOL] = cfg.stop_vol
+    cf[K.CF_GAP_VOL] = cfg.ladder_gap_vol
+    cf[K.CF_TRAIL_START] = cfg.trail_start_usd_per_unit
+    cf[K.CF_TRAIL_GAP] = cfg.trail_gap_usd_per_unit
+    cf[K.CF_TRAIL_START_VOL] = cfg.trail_start_vol
+    cf[K.CF_TRAIL_GAP_VOL] = cfg.trail_gap_vol
+    cf[K.CF_DAY_LIMIT] = cfg.daily_loss_limit_usd_per_unit
+    cf[K.CF_VOL_CAP] = cfg.vol_cap_usd_per_unit
     cf[K.CF_RSI_ALPHA] = 1.0 / cfg.rsi_length
     cf[K.CF_MACD_AF] = 2.0 / (cfg.macd_fast + 1.0)
     cf[K.CF_MACD_AS] = 2.0 / (cfg.macd_slow + 1.0)
@@ -427,7 +448,7 @@ def run(cfg: BacktestConfig, prep: Optional[Prepared] = None, mode: str = "sec",
         K.run_kernel(prep.t_ms, prep.bid, prep.ask,
                      flat["off"], flat["nb"], flat["nwarm"], flat["START_ROW"],
                      flat["C"], flat["AG"], flat["AL"], flat["RSI"],
-                     flat["EF"], flat["ES"], flat["SG"], flat["HIST"],
+                     flat["EF"], flat["ES"], flat["SG"], flat["HIST"], flat["VOL"],
                      flat["R_PH"], flat["R_PL"], flat["R_CH"], flat["R_CL"],
                      flat["M_PH"], flat["M_PL"], flat["M_CH"], flat["M_CL"],
                      need_rsi, need_slope,
