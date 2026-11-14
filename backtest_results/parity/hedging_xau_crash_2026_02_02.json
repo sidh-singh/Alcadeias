@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "polls_ref": 2998,
+  "polls_fast": 2998,
+  "signal_mismatches": 0,
+  "score_mismatches": 0,
+  "rsi_max_abs_diff": 2.1316282072803006e-14,
+  "fills_ref": 16,
+  "fills_fast": 16,
+  "fill_mismatches": 0,
+  "balance_ref": 1000018.5900000001,
+  "balance_fast": 1000018.5900000001,
+  "signals_ref": {
+    "none": 2383,
+    "BUY": 606,
+    "SELL": 1,
+    "CLOSE_BUY": 5,
+    "CLOSE_SELL": 1,
+    "BUY_MORE": 2
+  },
+  "first_differences": [],
+  "ref_errors": [],
+  "name": "hedging_xau_crash_2026_02_02",
+  "variant": "hedging",
+  "symbol": "XAUUSDm",
+  "start": "2026-02-02 00:50",
+  "end": "2026-02-02 01:40",
+  "scores": "open[H1x1 + M15x1] fc[M15x1]",
+  "elapsed_s": 44.7,
+  "config_overrides": {
+    "initial_balance": 1000000,
+    "unit_max_limit": 1
+  },
+  "refused_ref": {}
+}

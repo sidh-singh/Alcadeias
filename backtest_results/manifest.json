@@ -1,0 +1,80 @@
+{
+ "baseline/BTCUSDm/summary.json": {
+  "engine": "d81e31db77de",
+  "live": "ff2eb10cc257",
+  "data": "80d53874f109",
+  "written": "2026-11-14 15:25:30"
+ },
+ "baseline/XAUUSDm/summary.json": {
+  "engine": "d81e31db77de",
+  "live": "ff2eb10cc257",
+  "data": "50709323bc3f",
+  "written": "2026-11-14 15:25:22"
+ },
+ "data_quality/BTCUSDm.json": {
+  "engine": "d81e31db77de",
+  "live": "ff2eb10cc257",
+  "data": "80d53874f109",
+  "written": "2026-11-14 15:25:13"
+ },
+ "data_quality/XAUUSDm.json": {
+  "engine": "d81e31db77de",
+  "live": "ff2eb10cc257",
+  "data": "50709323bc3f",
+  "written": "2026-11-14 15:25:07"
+ },
+ "long/BTCUSDm/summary.json": {
+  "engine": "d81e31db77de",
+  "live": "ff2eb10cc257",
+  "data": "80d53874f109",
+  "written": "2026-11-14 15:25:49"
+ },
+ "long/XAUUSDm/summary.json": {
+  "engine": "d81e31db77de",
+  "live": "ff2eb10cc257",
+  "data": "50709323bc3f",
+  "written": "2026-11-14 15:25:35"
+ },
+ "signal/BTCUSDm.json": {
+  "engine": "d81e31db77de",
+  "live": "ff2eb10cc257",
+  "data": "80d53874f109",
+  "written": "2026-11-14 15:26:13"
+ },
+ "signal/XAUUSDm.json": {
+  "engine": "d81e31db77de",
+  "live": "ff2eb10cc257",
+  "data": "50709323bc3f",
+  "written": "2026-11-14 15:25:58"
+ },
+ "sweeps/BTCUSDm_split_fc.csv": {
+  "engine": "42e37670c4b3",
+  "live": "b3d4ff4c0beb",
+  "written": "2026-11-14 14:53:09"
+ },
+ "sweeps/BTCUSDm_split_open.csv": {
+  "engine": "42e37670c4b3",
+  "live": "b3d4ff4c0beb",
+  "written": "2026-11-14 14:51:46"
+ },
+ "sweeps/BTCUSDm_timeframes.csv": {
+  "engine": "42e37670c4b3",
+  "live": "b3d4ff4c0beb",
+  "written": "2026-11-14 14:50:33"
+ },
+ "sweeps/XAUUSDm_split_fc.csv": {
+  "engine": "42e37670c4b3",
+  "live": "b3d4ff4c0beb",
+  "written": "2026-11-14 14:37:05"
+ },
+ "sweeps/XAUUSDm_split_open.csv": {
+  "engine": "42e37670c4b3",
+  "live": "b3d4ff4c0beb",
+  "written": "2026-11-14 14:35:58"
+ },
+ "sweeps/XAUUSDm_timeframes.csv": {
+  "engine": "42e37670c4b3",
+  "live": "b3d4ff4c0beb",
+  "written": "2026-11-14 14:35:00"
+ }
+}

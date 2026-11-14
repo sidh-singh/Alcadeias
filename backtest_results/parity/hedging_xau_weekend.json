@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "polls_ref": 28764,
+  "polls_fast": 28764,
+  "signal_mismatches": 0,
+  "score_mismatches": 0,
+  "rsi_max_abs_diff": 4.263256414560601e-14,
+  "fills_ref": 25,
+  "fills_fast": 25,
+  "fill_mismatches": 0,
+  "balance_ref": 2018.1899999999998,
+  "balance_fast": 2018.1899999999998,
+  "signals_ref": {
+    "none": 25706,
+    "BUY": 211,
+    "SELL": 2835,
+    "CLOSE_SELL": 10,
+    "SELL_MORE": 2
+  },
+  "first_differences": [],
+  "ref_errors": [],
+  "name": "hedging_xau_weekend",
+  "variant": "hedging",
+  "symbol": "XAUUSDm",
+  "start": "2026-10-16 18:00",
+  "end": "2026-10-19 03:00",
+  "scores": "open[H1x1 + M15x1] fc[M15x1]",
+  "elapsed_s": 686.6,
+  "config_overrides": {},
+  "refused_ref": {}
+}

@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "polls_ref": 86375,
+  "polls_fast": 86375,
+  "signal_mismatches": 0,
+  "score_mismatches": 0,
+  "rsi_max_abs_diff": 4.263256414560601e-14,
+  "fills_ref": 108,
+  "fills_fast": 108,
+  "fill_mismatches": 0,
+  "balance_ref": 1992.8799999999999,
+  "balance_fast": 1992.8799999999999,
+  "signals_ref": {
+    "none": 86285,
+    "BUY": 23,
+    "SELL": 13,
+    "CLOSE_BUY": 22,
+    "CLOSE_SELL": 13,
+    "BUY_MORE": 19
+  },
+  "first_differences": [],
+  "ref_errors": [],
+  "name": "hedging_btc_default_24h_b",
+  "variant": "hedging",
+  "symbol": "BTCUSDm",
+  "start": "2026-09-15 00:00",
+  "end": "2026-09-16 00:00",
+  "scores": "open[H1x1 + M15x1] fc[M15x1]",
+  "elapsed_s": 2059.8,
+  "config_overrides": {},
+  "refused_ref": {}
+}

@@ -1,0 +1,181 @@
+{
+  "payoff": {
+    "baskets": 2608,
+    "win_rate_pct": 81.6717791411043,
+    "avg_win": 1.2353192488262912,
+    "avg_loss": -4.842029288702928,
+    "median_win": 1.0699999999999998,
+    "gross_win": 2631.23,
+    "gross_loss": -2314.49,
+    "worst_basket": -124.63,
+    "worst_basket_in_avg_wins": 100.88889986812251,
+    "breakeven_win_rate_pct": 79.6733848454162,
+    "worst_1_sum": -124.63,
+    "worst_1_pct_of_gross_win": 4.736568068925939,
+    "worst_5_sum": -406.13,
+    "worst_5_pct_of_gross_win": 15.434986679233667,
+    "worst_10_sum": -612.69,
+    "worst_10_pct_of_gross_win": 23.285307631791976,
+    "worst_25_sum": -995.01,
+    "worst_25_pct_of_gross_win": 37.815394321287,
+    "wins_to_repay_avg_loss": 3.9196582529604926
+  },
+  "ladder": {
+    "adds": 1570,
+    "baskets_with_adds": 823,
+    "baskets": 2608,
+    "median_seconds_since_previous_fill": 369.1,
+    "pct_adds_within_3s": 33.05732484076433,
+    "pct_adds_within_10s": 34.64968152866242,
+    "pct_adds_within_60s": 38.21656050955414,
+    "median_price_gap_usd_per_unit": 0.7645500000000174,
+    "pct_adds_closer_than_1usd": 58.66242038216561,
+    "by_tier": [
+      {
+        "tier": "M1",
+        "adds": 823,
+        "median_seconds": 1045.1,
+        "pct_within_10s": 5.224787363304982,
+        "median_gap_usd_per_unit": 1.2646000000000641
+      },
+      {
+        "tier": "M5",
+        "adds": 301,
+        "median_seconds": 179.1,
+        "pct_within_10s": 36.87707641196013,
+        "median_gap_usd_per_unit": 0.5498999999999069
+      },
+      {
+        "tier": "M15",
+        "adds": 214,
+        "median_seconds": 2.1,
+        "pct_within_10s": 79.43925233644859,
+        "median_gap_usd_per_unit": 0.09514999999999418
+      },
+      {
+        "tier": "H1",
+        "adds": 151,
+        "median_seconds": 2.1,
+        "pct_within_10s": 93.37748344370861,
+        "median_gap_usd_per_unit": 0.08240000000005239
+      },
+      {
+        "tier": "H4",
+        "adds": 81,
+        "median_seconds": 2.1,
+        "pct_within_10s": 97.53086419753086,
+        "median_gap_usd_per_unit": 0.07679999999993015
+      }
+    ],
+    "by_depth": [
+      {
+        "positions": 1,
+        "baskets": 1785,
+        "net": 1191.2000000000003,
+        "win_rate_pct": 82.80112044817926,
+        "avg_win": 1.0819012178619754,
+        "avg_loss": -1.328501628664495,
+        "worst": -6.41
+      },
+      {
+        "positions": 2,
+        "baskets": 522,
+        "net": 50.73999999999998,
+        "win_rate_pct": 81.99233716475096,
+        "avg_win": 1.1565420560747663,
+        "avg_loss": -4.7261702127659575,
+        "worst": -19.61
+      },
+      {
+        "positions": 3,
+        "baskets": 87,
+        "net": -406.29,
+        "win_rate_pct": 50.57471264367817,
+        "avg_win": 1.4081818181818184,
+        "avg_loss": -10.889534883720932,
+        "worst": -35.660000000000004
+      },
+      {
+        "positions": 4,
+        "baskets": 63,
+        "net": -267.32999999999987,
+        "win_rate_pct": 71.42857142857143,
+        "avg_win": 1.4957777777777779,
+        "avg_loss": -18.59111111111111,
+        "worst": -47.82
+      },
+      {
+        "positions": 5,
+        "baskets": 70,
+        "net": -117.61999999999996,
+        "win_rate_pct": 85.71428571428571,
+        "avg_win": 2.152333333333333,
+        "avg_loss": -24.676,
+        "worst": -53.08
+      },
+      {
+        "positions": 6,
+        "baskets": 81,
+        "net": -133.96,
+        "win_rate_pct": 92.5925925925926,
+        "avg_win": 3.716933333333333,
+        "avg_loss": -68.78833333333334,
+        "worst": -124.63
+      }
+    ],
+    "net_without_adds": 1191.2000000000003,
+    "net_with_adds": -874.46,
+    "full_ladder": {
+      "positions": 6,
+      "baskets": 81,
+      "net": -133.96,
+      "win_rate_pct": 92.5925925925926,
+      "avg_win": 3.716933333333333,
+      "avg_loss": -68.78833333333334,
+      "worst": -124.63,
+      "median_seconds_entry_to_full": 832.5,
+      "pct_full_within_60s": 19.753086419753085,
+      "median_price_range_usd_per_unit": 2.2559999999999127
+    }
+  },
+  "exits": {
+    "by_reason": [
+      {
+        "reason": "force_close",
+        "baskets": 501,
+        "net": -2307.75,
+        "win_rate_pct": 4.590818363273453,
+        "avg": -4.6062874251497,
+        "worst": -124.63,
+        "median_hold_s": 1075.1
+      },
+      {
+        "reason": "target",
+        "baskets": 2107,
+        "net": 2624.4900000000002,
+        "win_rate_pct": 100.0,
+        "avg": 1.2456051257712388,
+        "worst": 1.0099999999999996,
+        "median_hold_s": 685.1
+      }
+    ],
+    "losers": 478,
+    "loser_median_hold_s": 1043.6,
+    "loser_p90_hold_s": 3972.100000000001,
+    "loser_max_hold_s": 16594.3,
+    "pct_losers_closed_at_worst": 65.06276150627615,
+    "pct_losers_that_were_in_profit": 30.125523012552303,
+    "loser_median_mae": -2.07,
+    "winner_median_mae": -0.92,
+    "winner_p95_mae": -11.128499999999999,
+    "winner_worst_mae": -539.8,
+    "pct_winners_held_under_60s": 8.732394366197182
+  },
+  "costs": {
+    "spread_paid": 728.3360000000105,
+    "net": 316.74,
+    "net_before_spread": 1045.0760000000105,
+    "spread_pct_of_gross_win": 27.6804384261357,
+    "median_entry_spread_usd_per_unit": 0.1
+  }
+}
