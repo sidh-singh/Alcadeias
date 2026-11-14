@@ -20,6 +20,7 @@
   },
   "first_differences": [],
   "ref_errors": [],
+  "refused_ref": {},
   "name": "hedging_btc_units3_12h",
   "variant": "hedging",
   "symbol": "BTCUSDm",
@@ -30,5 +31,8 @@
   "config_overrides": {
     "initial_balance": 5200
   },
-  "refused_ref": {}
+  "stamp": {
+    "engine": "230d72b77889",
+    "live": "ff2eb10cc257"
+  }
 }

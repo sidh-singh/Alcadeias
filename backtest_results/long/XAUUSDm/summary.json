@@ -98,7 +98,12 @@
     "closes_data_hole": 0,
     "polls_entry_blocked_data_hole": 0,
     "orders_refused_market_closed": 198,
-    "polls_order_blocked_close_only": 361
+    "polls_order_blocked_close_only": 361,
+    "polls_entry_blocked_trend": 0,
+    "polls_entry_blocked_spread": 0,
+    "polls_entry_blocked_no_volatility": 0,
+    "polls_entry_blocked_daily_loss": 0,
+    "closes_trailing": 0
   },
   "scalars": {
     "final_balance": 0.0,
@@ -234,17 +239,34 @@
     "allow_long": true,
     "allow_short": true,
     "entry_hours_utc": null,
+    "trend_tf": null,
+    "trend_mode": 1,
+    "entry_max_spread": 0.0,
+    "loss_cooldown_s": 0.0,
+    "ladder_trigger": "rsi_level",
+    "ladder_rsi_exit": 0.0,
+    "vol_tf": null,
+    "vol_len": 24,
+    "vol_cap_usd_per_unit": 0.0,
+    "target_vol": 0.0,
+    "stop_vol": 0.0,
+    "ladder_gap_vol": 0.0,
+    "trail_start_vol": 0.0,
+    "trail_gap_vol": 0.0,
+    "trail_start_usd_per_unit": 0.0,
+    "trail_gap_usd_per_unit": 0.0,
+    "daily_loss_limit_usd_per_unit": 0.0,
     "record_interval_s": 60
   },
   "engine": {
     "mode": "sec",
-    "runtime_s": 1.868,
+    "runtime_s": 1.739,
     "warm_bars": {
       "M1": 600,
       "M5": 600,
       "M15": 600,
       "H1": 600,
-      "H4": 191
+      "H4": 600
     }
   }
 }

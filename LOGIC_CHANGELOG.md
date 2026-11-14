@@ -82,7 +82,48 @@ Average per quarter on a real $2,000 account (runs that lost money, of 8 timings
 after a loss; no ladder. **Rejected after testing:** support / resistance entries and targets (no edge in two
 independent studies); every other recovery mechanism (none raises the expectancy); the live Fibonacci
 ladder; an H4 trend filter (fails outside 2025-26). **Optional:** one equal-sized ladder add released by a
-MACD turn helps a little on gold and hurts a little on BTC; not the default. Details: `IMPROVEMENT.md`.
+MACD turn earned more than no add on gold in every period and less on BTC in two of three; not the default. Details: `IMPROVEMENT.md`.
+
+**V3-lite in one picture** (one pass of the loop, about once a second):
+
+```
+                     every ~1 second
+                           │
+              ┌────────────▼────────────┐
+              │ market live? (a tick in │── no ──► wait
+              │ the last 3 minutes)     │
+              └────────────┬────────────┘
+                          yes
+                    basket open?
+          ┌─────── no ─────┴───── yes ────────┐
+          ▼                                   ▼
+ ┌──────────────────────────┐   ┌────────────────────────────────┐
+ │ all five must be true:   │   │ loss reaches the stop          │
+ │ 1 inside the trading     │   │        → close the basket      │
+ │   window (Mon 01:00 –    │   │ profit beyond the target       │
+ │   Fri 22:00 UTC)         │   │        → close the basket      │
+ │ 2 pause over: 5 min after│   │ otherwise → hold               │
+ │   a win, 12 h after a    │   │ (no ladder, no M15 force-close,│
+ │   loss                   │   │  no time limit)                │
+ │ 3 H1 votes say BUY (SELL)│   └────────────────────────────────┘
+ │ 4 both M15 votes agree   │
+ │ 5 the H1 trend agrees    │
+ └────────────┬─────────────┘
+              ▼
+  open 1 unit (unit × 0.01 lot) at the ask (buy) / bid (sell)
+  stop = target = 8 × volatility unit × unit, fixed for this basket
+```
+
+- *H1 votes*: the bot's own RSI and MACD pivot-slope votes, read on H1 only (live: H1 + M15). BUY when both
+  point up, or one points up and the other is neutral.
+- *M15 agreement*: both M15 votes point the same way as the trade (the live `ENTRY_AGREE_S = 2`, unchanged).
+- *H1 trend*: the H1 MACD signal line is above zero for a buy, below zero for a sell, on the last closed H1 bar.
+- *Volatility unit*: the average move of one H1 candle (close to close) over about the last 24 H1 candles, in
+  dollars per 0.01 lot, measured when the basket opens. Median 8 units per 0.01 lot: gold $16 (2023), $23 (2024),
+  $39 (2025), $75 (2026); BTC $6, $18, $23, $16.
+- In the tests, gold: about 25 baskets a quarter, held about a day (median 23 to 37 h), 60 to 64% won, the average
+  win about the size of the average loss in 2023 and 2024-25 (2023: +$16.49 / −$16.09); in Aug 2025 – Nov 2026 the average
+  loss was larger (−$112 against +$87, worst basket −$789).
 
 ---
 
@@ -92,8 +133,8 @@ MACD turn helps a little on gold and hurts a little on BTC; not the default. Det
 
 Chosen on DEV + CONFIRM together (11 quarters per symbol) by a rule fixed in advance: the largest sum over
 both symbols of (mean per quarter − one standard error), never wiped, deepest dip under $500 on both.
-All use the H1 trend filter, force-close off, distances in H1 volatility units (24-bar average move),
-and are run unchanged on 2023.
+V3, V3 without the add and V3-lite use the H1 trend filter, force-close off and distances in H1 volatility units
+(24-bar average move); V2 (fixed $20 / $20) and Live are the references. All five are run unchanged on 2023.
 
 | Design | Rule |
 |---|---|

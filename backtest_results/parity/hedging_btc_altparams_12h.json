@@ -21,6 +21,7 @@
   },
   "first_differences": [],
   "ref_errors": [],
+  "refused_ref": {},
   "name": "hedging_btc_altparams_12h",
   "variant": "hedging",
   "symbol": "BTCUSDm",
@@ -51,5 +52,8 @@
     "rsi_peak_os": 45,
     "reentry_cooldown_s": 60
   },
-  "refused_ref": {}
+  "stamp": {
+    "engine": "230d72b77889",
+    "live": "ff2eb10cc257"
+  }
 }

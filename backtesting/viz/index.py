@@ -620,8 +620,9 @@ def section_packages(out: Path, sym: str) -> str:
     })
     return (f'<div class="card"><h3>{sym}</h3>'
             '<p class="cap">Bars: one fixed 0.01-lot unit, the three 2026 quarters added up. ✕ = the same baskets wipe a real '
-            '$2,000 account in at least one quarter. First row = the live settings. Each row is a single path per quarter: read '
-            'differences of a few hundred dollars as noise.</p>'
+            '$2,000 account in at least one quarter. First row = the live settings. Each row is a single path per quarter: '
+            'with the ladder on, a gold quarter moves by about $2,000 with the loop timing alone (a few hundred dollars on BTC), '
+            'so read smaller differences as noise.</p>'
             f'{_fig(fig, f"pkg_{sym}")}'
             f'<details open><summary>Table view</summary><div class="scroll">{_table(t, left_cols=["What-if"])}</div></details></div>')
 
@@ -732,8 +733,9 @@ def section_robust(out: Path, sym: str) -> str:
     p = d / "start_shift.csv"
     if p.exists():
         t = pd.read_csv(p)
-        card("Start date", f"Same settings, same end, started N days later (raw ticks, one path each; starts in a closed market "
-             f"repeat the next open and are left out). Net P/L ranged {_money(t['net_profit'].min(), signed=True)} … "
+        card("Start date", f"Same settings, same end, started N days later (raw ticks, one path each; starts before the bot's "
+             f"weekly trading window opens, in a closed market or on Monday before 01:00, give the same run as the next opening "
+             f"and are left out). Net P/L ranged {_money(t['net_profit'].min(), signed=True)} … "
              f"{_money(t['net_profit'].max(), signed=True)}.",
              fmt(t, ["start_shift_days", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor"]), ["Started N days later"])
     p = d / "segments_quarterly.csv"
@@ -744,7 +746,9 @@ def section_robust(out: Path, sym: str) -> str:
         tq = fmt(t, ["segment", "role", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor", "largest_loss"])
         tq.insert(3, "Stopped out", t["stopped_out"].map(lambda v: "YES" if bool(v) else "no"))
         card("Five quarters, each on a fresh $2,000", f"The live settings with the unit auto-step (per-second replay, one path "
-             f"each; the table at the top of the page gives eight paths per quarter). {pos} of {len(t)} quarters ended positive; "
+             f"each). The per-second replay keeps every pass on a whole second, without the 0.1 s after an order, and can land "
+             f"outside the spread of the eight raw-tick timings in the table at the top of the page; that table is the one to read "
+             f"for the live result. {pos} of {len(t)} quarters ended positive; "
              f"{so} ended in a stop-out.", tq.rename(columns={"Period": "Quarter", "role": "Used for"}), ["Quarter", "Used for"])
     for fn, ttl, cap in (("segments_monthly.csv", "Month by month, each on a fresh $2,000", "Calendar months over all fifteen months."),
                          ("segments_weekly.csv", "Week by week, each on a fresh $2,000", "Seven-day slices of the asked-for window.")):
@@ -853,9 +857,12 @@ def build_index(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), live
     if any(cd):
         body.append('<h2>Candidate settings on all five quarters</h2>'
                     '<p class="lede">Five hand-picked timeframe families, the same for both symbols, each with the live ladder, '
-                    'with no ladder, and with a short spaced ladder. They put H4 into the decision in different ways and were '
-                    'chosen by eye from an earlier sweep of the three 2026 quarters: they are not the best of the sweep on either '
-                    'symbol, those quarters flatter them, and only the two hold-out columns are independent evidence.</p>'
+                    'with no ladder, and with a short spaced ladder. Four of them (A to D) put H4 into the decision in different '
+                    'ways; E keeps the live H1 + M15 timeframes and requires both to be fully aligned. A and C enter on the same '
+                    'rule (H4 and M15 both fully aligned) and differ only in when a ladder add is blocked, so their no-ladder rows '
+                    'are identical. They were chosen by eye from an earlier sweep of the three 2026 quarters: they are not the best '
+                    'of the sweep on either symbol, those quarters flatter them, and only the two hold-out columns are independent '
+                    'evidence.</p>'
                     f'{stack}{"".join(x for x in cd if x)}</div>')
     # 5. changes to the rules
     pk = [section_packages(out, sym) for sym in symbols]
@@ -889,7 +896,9 @@ def build_index(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), live
 <h1>{variant.capitalize()} strategy on real Exness ticks</h1>
 <div class="sub">XAUUSDm and BTCUSDm · $2,000 start · 1:2000 · the live RSI+MACD slope logic replayed poll by poll</div></div></header>
 {banner}{''.join(b for b in body if b)}
-<div class="foot">Rebuild everything with <code>python -m backtesting reproduce</code>; explore interactively with
+<div class="foot">Rebuild every table with <code>python -m backtesting reproduce</code> (the round-2 research quoted in the
+findings on the 2023 test and in the recommendations is in <code>IMPROVEMENT.md</code> and <code>backtest_results/improve/</code>,
+and needs tick data from 2023); explore interactively with
 <code>python -m backtesting studio</code>. Method, assumptions and limits: <code>BACKTEST.md</code>. Historical simulation is not a
 forecast of live results.</div>
 </div>

@@ -18,7 +18,7 @@ trade BTC with this strategy at all is a fair question.
 Real $2,000 account per quarter, the bot's unit rule, every tick replayed, each quarter run under eight
 random loop timings. Designs were chosen on DEV and CONFIRM together and frozen before 2023 was run once.
 
-| Gold, average per quarter (runs that lost money) | DEV Aug 2025 – Nov 2026 | CONFIRM Jan 2024 – Jun 2025 | **FINAL 2023 (untouched)** |
+| Gold, average per quarter (runs that lost money) | DEV Aug 2025 – Nov 2026 | CONFIRM Jan 2024 – Jun 2025 | **FINAL Feb – Dec 2023 (untouched; three quarters and one two-month block)** |
 |---|---|---|---|
 | Live settings | −$1,480 (37 of 40, 27 wiped) | −$675 (47 of 48) | **−$666** (24 of 32) |
 | V2 ($20 / $20, H1 trend, no ladder) | +$251 (7 of 40) | +$71 (16 of 48) | **+$30** (16 of 32) |
@@ -28,7 +28,7 @@ random loop timings. Designs were chosen on DEV and CONFIRM together and frozen 
 
 | BTC, average per quarter (runs that lost money) | DEV | CONFIRM | **FINAL 2023** |
 |---|---|---|---|
-| Live settings | −$585 (30 of 40) | −$1,995 (48 of 48, 46 wiped) | **−$1,194** (32 of 32) |
+| Live settings | −$585 (30 of 40) | −$1,995 (48 of 48, 46 wiped) | **−$1,194** (32 of 32, 3 wiped) |
 | V2 | +$159 (7 of 40) | −$7 (24 of 48) | **−$17** (24 of 32) |
 | V3 | +$109 (8 of 40) | +$34 (26 of 48) | **−$18** (16 of 32) |
 | V3 without the add | +$100 (14 of 40) | +$60 (24 of 48) | **+$3** (12 of 32) |
@@ -41,11 +41,11 @@ Worst drawdown of any V3-lite run: gold 45% on DEV, 10% on CONFIRM, 6% in 2023; 
 | Idea | Verdict |
 |---|---|
 | H1 trend filter | the change that matters most; an H4 trend does not hold up outside 2025-26 |
-| Stop and target on the whole basket, in volatility units | removes the wipe-outs; 8 / 8 units is the most robust size |
-| DCA ladder | the live ladder (Fibonacci at RSI 35 / 65) is what empties the account. A bounded ladder (one equal add, released by a MACD turn, at least 1 unit away) earned a little more than no ladder on gold in every period (+$321, +$102, +$53 a quarter) but less on BTC (+$9, −$27, −$21), and it makes the worst basket larger. Not recommended as the default |
-| Other recovery mechanisms | 42 mechanisms on the same 32,553 entries (`recovery_mechanisms.md`): none raises the expectancy; they only trade many small losses for a few large ones or the reverse. A ladder with equal lots, at most two adds and a hard $60 budget never lost more than $60 but earned no more than not adding. A hedge lock pays exactly what closing and re-entering pays, plus one spread. Zone recovery and martingale lose the most |
-| Support / resistance (H1, H4, D1 swings, previous day / week, round numbers) | two independent studies (`sr_study.md`, `sr_trades.md`): price does not hold at these levels more often than at random prices, and no bounce, retest or breakout rule pays after the spread in both periods. Real levels did no better than placebo levels |
-| MACD or RSI cross-back instead of an RSI level for the ladder | better than the live RSI-level trigger, but no ladder trigger beat no ladder on average |
+| Stop and target on the whole basket, in volatility units | removes the wipe-outs; 8 / 8 units was the best size in the ladder grid on both symbols and inside the V3-lite entry frame (across all no-ladder gold designs 6 / 6 averaged a little more) |
+| DCA ladder | the live ladder (Fibonacci at RSI 35 / 65) is what empties the account. A bounded ladder (one equal add, released by a MACD turn, at least 1 unit away) earned more than its no-add twin on gold in every period (+$321, +$102, +$53 a quarter more, against a twin making +$133, +$78, +$5) and less on BTC in two of the three periods (+$9, −$27, −$21), and it makes the worst basket larger. Not recommended as the default |
+| Other recovery mechanisms | 42 mechanisms on the same 32,553 entries (`recovery_mechanisms.md`): none raises the expectancy; they only trade many small losses for a few large ones or the reverse. A ladder with equal lots, at most two adds and a hard $60 budget, closed before every market closure, never lost more than $60 (held through closures, a gap took one gold basket to −$222); it earned no more than not adding. A hedge lock unlocked on the next signal pays exactly what closing and re-entering pays; closing both legs together later costs one spread more than a plain stop. Zone recovery and martingale lose the most |
+| Support / resistance (H1, H4, D1 swings, previous day / week, round numbers) | two independent studies (`sr_study.md`, `sr_trades.md`): price does not hold at these levels more often than at random prices, and every bounce rule loses after the spread in both periods, doing worse than the same rule at placebo levels. Three gold retest / breakout rules that trade with the trend were slightly positive in both periods (+$1 to +$93 a quarter per 0.01 lot), but they were picked after both periods had been seen, the one rule named in advance (a BTC breakout) failed, and in 2025-26 the same rules at placebo levels did as well: leads, not an edge |
+| MACD or RSI cross-back instead of an RSI level for the ladder | the RSI cross-back beat the live RSI-level trigger on both symbols, the MACD turn only on gold; no ladder trigger beat no ladder on average |
 | Trailing exit, longer pause after any close, time stop | no gain on average over 500 designs (optimiser, `backtesting/OPTIMISER.md`) |
 | Spread cap on entries | no effect |
 

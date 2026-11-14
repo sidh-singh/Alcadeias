@@ -703,8 +703,8 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
           f"beyond 60 / 40. Both are therefore votes to fade the last extreme. The bold columns are the test of whether that "
           f"predicts anything: after both votes agreed, how often was price further that way four bars later, against how "
           f"often that happens on any bar. Neighbouring bars overlap (each looks four bars ahead), so a difference of a "
-          f"point or two between a bold figure and its neighbour is within noise; a bar that closed unchanged counts as "
-          f"neither higher nor lower.\n")
+          f"point or two between a bold figure and its neighbour is within noise. A bar that closed unchanged counts as "
+          f"neither higher nor lower in the bold columns; in the (any bar) lower column it counts as lower.\n")
         for sym, t in sg:
             if t:
                 A(f"### {sym}\n")
@@ -753,7 +753,9 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
         from .index import candidates_mode
         from ..analysis import holdout as H
         A("Five hand-picked timeframe families, the same for both symbols, each with the live ladder, without a ladder, and "
-          "with a short spaced ladder. They put H4 into the decision in different ways and were chosen by eye from an earlier "
+          "with a short spaced ladder. Four of them (A to D) put H4 into the decision in different ways; E keeps the live H1 + "
+          "M15 timeframes and requires both to be fully aligned. A and C enter on the same rule (H4 and M15 both fully "
+          "aligned) and differ only in when a ladder add is blocked, so their no-ladder rows are identical. They were chosen by eye from an earlier "
           "sweep of the three 2026 quarters: they are not the best of the sweep on either symbol, those quarters flatter "
           "them, and the two hold-out columns are the only independent evidence.\n")
         for sym, t in cd:
@@ -830,7 +832,9 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
 
     A("## Reproduce\n")
     A("```bash\npip install -r requirements-backtest.txt\npython -m backtesting data --from 2025-07 --to 2026-11   # ~2 GB download\n"
-      "python -m backtesting reproduce                         # every number on this page\npython -m backtesting docs"
+      "python -m backtesting reproduce                         # every table except the round-2 research (findings on the\n"
+      "                                                        # 2023 test, recommendations: IMPROVEMENT.md, backtest_results/improve/)\n"
+      "python -m backtesting docs"
       "                              # this file\npython -m pytest tests -q                               # test-suite\n```\n")
 
     target = Path(target) if target else Path(live_root) / "BACKTEST.md"

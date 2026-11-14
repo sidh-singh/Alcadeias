@@ -31,5 +31,9 @@
   "end": "2026-10-15 00:00",
   "scores": "open[H1x1 + M15x1] fc[M15x1]",
   "elapsed_s": 1449.6,
-  "config_overrides": {}
+  "config_overrides": {},
+  "stamp": {
+    "engine": "230d72b77889",
+    "live": "ff2eb10cc257"
+  }
 }

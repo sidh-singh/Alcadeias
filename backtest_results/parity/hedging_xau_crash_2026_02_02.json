@@ -20,6 +20,7 @@
   },
   "first_differences": [],
   "ref_errors": [],
+  "refused_ref": {},
   "name": "hedging_xau_crash_2026_02_02",
   "variant": "hedging",
   "symbol": "XAUUSDm",
@@ -31,5 +32,8 @@
     "initial_balance": 1000000,
     "unit_max_limit": 1
   },
-  "refused_ref": {}
+  "stamp": {
+    "engine": "230d72b77889",
+    "live": "ff2eb10cc257"
+  }
 }

@@ -19,6 +19,7 @@
   },
   "first_differences": [],
   "ref_errors": [],
+  "refused_ref": {},
   "name": "hedging_xau_weekend",
   "variant": "hedging",
   "symbol": "XAUUSDm",
@@ -27,5 +28,8 @@
   "scores": "open[H1x1 + M15x1] fc[M15x1]",
   "elapsed_s": 686.6,
   "config_overrides": {},
-  "refused_ref": {}
+  "stamp": {
+    "engine": "230d72b77889",
+    "live": "ff2eb10cc257"
+  }
 }
