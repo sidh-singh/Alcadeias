@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "polls_ref": 43196,
+  "polls_fast": 43196,
+  "signal_mismatches": 0,
+  "score_mismatches": 0,
+  "rsi_max_abs_diff": 2.842170943040401e-14,
+  "fills_ref": 7,
+  "fills_fast": 7,
+  "fill_mismatches": 0,
+  "balance_ref": 2595.93,
+  "balance_fast": 2595.93,
+  "signals_ref": {
+    "none": 43190,
+    "BUY": 1,
+    "SELL": 1,
+    "CLOSE_BUY": 1,
+    "BUY_MORE": 1,
+    "SELL_MORE": 2
+  },
+  "first_differences": [],
+  "ref_errors": [],
+  "refused_ref": {},
+  "name": "netting_xau_units2_12h",
+  "variant": "netting",
+  "symbol": "XAUUSDm",
+  "start": "2026-09-09 06:00",
+  "end": "2026-09-09 18:00",
+  "scores": "open[H1x1 + M15x1] fc[M15x1] book[M15x1]",
+  "elapsed_s": 908.8,
+  "config_overrides": {
+    "initial_balance": 2600
+  },
+  "stamp": {
+    "engine": "230d72b77889",
+    "live": "194337b74ef3"
+  }
+}

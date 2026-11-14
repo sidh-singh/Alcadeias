@@ -1,0 +1,582 @@
+{
+  "symbol": "BTCUSDm",
+  "window": [
+    "2025-08-13T00:00:00+00:00",
+    "2026-11-13T00:00:00+00:00"
+  ],
+  "first_tick": "2025-08-13T00:00:00.161000+00:00",
+  "last_tick": "2026-11-12T23:59:59.652000+00:00",
+  "ticks_total": 70060891,
+  "active_seconds": 25079111,
+  "m1_bars": 653077,
+  "rows_dropped_invalid": 0,
+  "rows_out_of_order": 0,
+  "timestamps_monotonic": true,
+  "price": {
+    "min": 57718.54,
+    "max": 126287.86,
+    "first": 120118.4,
+    "last": 71361.18
+  },
+  "spread": {
+    "min": 6.399999999994179,
+    "median": 14.0,
+    "mean": 13.931770110591424,
+    "p95": 21.60000000000582,
+    "p99": 21.60000000000582,
+    "p999": 27.0,
+    "max": 413.8899999999994,
+    "non_positive": 0,
+    "pct_of_price_median": 0.015988939917294543
+  },
+  "spread_by_hour_utc": {
+    "0": {
+      "median": 14.0,
+      "mean": 13.955522188402153,
+      "max": 27.0
+    },
+    "1": {
+      "median": 14.0,
+      "mean": 13.943512415983847,
+      "max": 27.0
+    },
+    "2": {
+      "median": 14.0,
+      "mean": 13.921910099621222,
+      "max": 27.0
+    },
+    "3": {
+      "median": 14.0,
+      "mean": 13.8941071685559,
+      "max": 27.0
+    },
+    "4": {
+      "median": 14.0,
+      "mean": 13.865880195143188,
+      "max": 27.0
+    },
+    "5": {
+      "median": 14.0,
+      "mean": 13.815351397138157,
+      "max": 27.0
+    },
+    "6": {
+      "median": 14.0,
+      "mean": 13.797464080781587,
+      "max": 27.0
+    },
+    "7": {
+      "median": 14.0,
+      "mean": 13.87795935492515,
+      "max": 27.0
+    },
+    "8": {
+      "median": 14.0,
+      "mean": 13.9103884597553,
+      "max": 27.0
+    },
+    "9": {
+      "median": 14.0,
+      "mean": 13.903280138258713,
+      "max": 27.0
+    },
+    "10": {
+      "median": 14.0,
+      "mean": 13.844489164650014,
+      "max": 27.0
+    },
+    "11": {
+      "median": 14.0,
+      "mean": 13.807724325702706,
+      "max": 27.0
+    },
+    "12": {
+      "median": 14.0,
+      "mean": 13.795849467010019,
+      "max": 21.60000000000582
+    },
+    "13": {
+      "median": 14.0,
+      "mean": 13.878474521096782,
+      "max": 21.60000000000582
+    },
+    "14": {
+      "median": 14.0,
+      "mean": 14.085583417824672,
+      "max": 21.60000000000582
+    },
+    "15": {
+      "median": 14.0,
+      "mean": 14.169289425551819,
+      "max": 21.60000000000582
+    },
+    "16": {
+      "median": 14.0,
+      "mean": 14.141429440200131,
+      "max": 27.0
+    },
+    "17": {
+      "median": 14.0,
+      "mean": 14.065564163804735,
+      "max": 21.60000000000582
+    },
+    "18": {
+      "median": 14.0,
+      "mean": 14.005935606025446,
+      "max": 21.60000000000582
+    },
+    "19": {
+      "median": 14.0,
+      "mean": 13.95811481205559,
+      "max": 21.60000000000582
+    },
+    "20": {
+      "median": 14.0,
+      "mean": 13.945982997643778,
+      "max": 21.60000000000582
+    },
+    "21": {
+      "median": 14.0,
+      "mean": 13.82192549199475,
+      "max": 100.83999999999651
+    },
+    "22": {
+      "median": 14.0,
+      "mean": 13.982214904363952,
+      "max": 413.8899999999994
+    },
+    "23": {
+      "median": 14.0,
+      "mean": 13.837944924510897,
+      "max": 27.0
+    }
+  },
+  "gaps_over_3min": {
+    "count": 72,
+    "by_kind": {
+      "short pause (maintenance)": 69,
+      "hole in the archive": 3
+    },
+    "largest": [
+      {
+        "from": "2026-03-29T23:59:59.846000+00:00",
+        "to": "2026-04-01T00:00:00.331000+00:00",
+        "minutes": 2880.0,
+        "kind": "hole in the archive",
+        "price_jump": 2248.27,
+        "price_jump_pct": 3.4086
+      },
+      {
+        "from": "2025-08-29T23:59:59.901000+00:00",
+        "to": "2025-08-31T00:00:00.987000+00:00",
+        "minutes": 1440.0,
+        "kind": "hole in the archive",
+        "price_jump": 436.28,
+        "price_jump_pct": 0.4025
+      },
+      {
+        "from": "2025-11-30T18:29:04.651000+00:00",
+        "to": "2025-12-01T00:00:01.786000+00:00",
+        "minutes": 331.0,
+        "kind": "hole in the archive",
+        "price_jump": -1041.37,
+        "price_jump_pct": -1.1395
+      },
+      {
+        "from": "2025-12-13T07:19:24.535000+00:00",
+        "to": "2025-12-13T08:01:17.832000+00:00",
+        "minutes": 41.9,
+        "kind": "short pause (maintenance)",
+        "price_jump": -18.16,
+        "price_jump_pct": -0.0201
+      },
+      {
+        "from": "2026-06-14T06:01:08.231000+00:00",
+        "to": "2026-06-14T06:27:01.684000+00:00",
+        "minutes": 25.9,
+        "kind": "short pause (maintenance)",
+        "price_jump": -33.25,
+        "price_jump_pct": -0.0517
+      },
+      {
+        "from": "2025-12-06T07:12:31.119000+00:00",
+        "to": "2025-12-06T07:35:23.701000+00:00",
+        "minutes": 22.9,
+        "kind": "short pause (maintenance)",
+        "price_jump": -103.41,
+        "price_jump_pct": -0.1153
+      },
+      {
+        "from": "2025-09-06T05:53:46.543000+00:00",
+        "to": "2025-09-06T06:13:24.808000+00:00",
+        "minutes": 19.6,
+        "kind": "short pause (maintenance)",
+        "price_jump": -15.81,
+        "price_jump_pct": -0.0143
+      },
+      {
+        "from": "2025-10-25T05:40:21.465000+00:00",
+        "to": "2025-10-25T05:54:32.847000+00:00",
+        "minutes": 14.2,
+        "kind": "short pause (maintenance)",
+        "price_jump": 54.21,
+        "price_jump_pct": 0.0487
+      },
+      {
+        "from": "2025-08-29T06:23:57.100000+00:00",
+        "to": "2025-08-29T06:37:04.929000+00:00",
+        "minutes": 13.1,
+        "kind": "short pause (maintenance)",
+        "price_jump": -38.12,
+        "price_jump_pct": -0.0343
+      },
+      {
+        "from": "2025-08-29T06:39:28.340000+00:00",
+        "to": "2025-08-29T06:50:04.902000+00:00",
+        "minutes": 10.6,
+        "kind": "short pause (maintenance)",
+        "price_jump": 192.36,
+        "price_jump_pct": 0.1733
+      },
+      {
+        "from": "2025-12-13T05:09:07.535000+00:00",
+        "to": "2025-12-13T05:18:32.647000+00:00",
+        "minutes": 9.4,
+        "kind": "short pause (maintenance)",
+        "price_jump": -2.08,
+        "price_jump_pct": -0.0023
+      },
+      {
+        "from": "2025-11-23T07:02:45.179000+00:00",
+        "to": "2025-11-23T07:06:36.680000+00:00",
+        "minutes": 3.9,
+        "kind": "short pause (maintenance)",
+        "price_jump": -17.96,
+        "price_jump_pct": -0.0209
+      }
+    ],
+    "unexplained": [],
+    "holes": [
+      {
+        "from": "2025-08-29T23:59:59.901000+00:00",
+        "to": "2025-08-31T00:00:00.987000+00:00",
+        "minutes": 1440.0,
+        "kind": "hole in the archive",
+        "price_jump": 436.28,
+        "price_jump_pct": 0.4025
+      },
+      {
+        "from": "2025-11-30T18:29:04.651000+00:00",
+        "to": "2025-12-01T00:00:01.786000+00:00",
+        "minutes": 331.0,
+        "kind": "hole in the archive",
+        "price_jump": -1041.37,
+        "price_jump_pct": -1.1395
+      },
+      {
+        "from": "2026-03-29T23:59:59.846000+00:00",
+        "to": "2026-04-01T00:00:00.331000+00:00",
+        "minutes": 2880.0,
+        "kind": "hole in the archive",
+        "price_jump": 2248.27,
+        "price_jump_pct": 3.4086
+      }
+    ]
+  },
+  "days": {
+    "with_ticks": 454,
+    "missing": [
+      "2025-08-30",
+      "2026-03-30",
+      "2026-03-31"
+    ],
+    "seconds_per_day_min": 19680,
+    "seconds_per_day_median": 46444,
+    "seconds_per_day_max": 86538
+  },
+  "jumps": {
+    "max_1s_move_pct": 3.789471846264854,
+    "moves_over_0p1pct": 8486,
+    "moves_over_0p5pct": 47,
+    "m1_range_p99_pct": 0.30945144016312837,
+    "m1_range_max_pct": 5.846612528197443
+  },
+  "months": [
+    {
+      "year": 2025,
+      "month": 8,
+      "ticks": 13994799,
+      "seconds": 2573650,
+      "m1_bars": 43162,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 21.60000000000582,
+      "spread_mean": 21.592386509444697,
+      "spread_p99": 21.60000000000582,
+      "first": "2025-08-01T00:00:00.073000+00:00",
+      "last": "2025-08-31T23:59:59.994000+00:00"
+    },
+    {
+      "year": 2025,
+      "month": 9,
+      "ticks": 13381986,
+      "seconds": 2581984,
+      "m1_bars": 43165,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 18.0,
+      "spread_mean": 18.82286665073483,
+      "spread_p99": 21.60000000000582,
+      "first": "2025-09-01T00:00:00.218000+00:00",
+      "last": "2025-09-30T23:59:59.723000+00:00"
+    },
+    {
+      "year": 2025,
+      "month": 10,
+      "ticks": 4380299,
+      "seconds": 1408482,
+      "m1_bars": 44614,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 18.0,
+      "spread_mean": 18.655525405914073,
+      "spread_p99": 27.0,
+      "first": "2025-10-01T00:00:00.074000+00:00",
+      "last": "2025-10-31T23:59:57.800000+00:00"
+    },
+    {
+      "year": 2025,
+      "month": 11,
+      "ticks": 3346640,
+      "seconds": 1255934,
+      "m1_bars": 42850,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 18.0,
+      "spread_mean": 18.0,
+      "spread_p99": 18.0,
+      "first": "2025-11-01T00:00:01.521000+00:00",
+      "last": "2025-11-30T18:29:04.651000+00:00"
+    },
+    {
+      "year": 2025,
+      "month": 12,
+      "ticks": 2706937,
+      "seconds": 1194222,
+      "m1_bars": 44555,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 18.0,
+      "spread_mean": 18.0,
+      "spread_p99": 18.0,
+      "first": "2025-12-01T00:00:01.017000+00:00",
+      "last": "2025-12-31T23:59:58.629000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 1,
+      "ticks": 2336767,
+      "seconds": 1123425,
+      "m1_bars": 44622,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 18.0,
+      "spread_mean": 18.0,
+      "spread_p99": 18.0,
+      "first": "2026-01-01T00:00:05.831000+00:00",
+      "last": "2026-01-31T23:59:57.263000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 2,
+      "ticks": 3960879,
+      "seconds": 1318607,
+      "m1_bars": 40307,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 18.0,
+      "spread_mean": 18.004378573543903,
+      "spread_p99": 18.0,
+      "first": "2026-02-01T00:00:01.935000+00:00",
+      "last": "2026-02-28T23:59:58.531000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 3,
+      "ticks": 3058400,
+      "seconds": 1277841,
+      "m1_bars": 41744,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 18.0,
+      "spread_mean": 16.88987182840701,
+      "spread_p99": 18.0,
+      "first": "2026-03-01T00:00:00.016000+00:00",
+      "last": "2026-03-29T23:59:59.846000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 4,
+      "ticks": 2199442,
+      "seconds": 1094481,
+      "m1_bars": 43187,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 14.0,
+      "spread_mean": 14.0,
+      "spread_p99": 14.0,
+      "first": "2026-04-01T00:00:00.242000+00:00",
+      "last": "2026-04-30T23:59:58.640000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 5,
+      "ticks": 1772450,
+      "seconds": 965140,
+      "m1_bars": 44624,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 14.0,
+      "spread_mean": 14.0,
+      "spread_p99": 14.0,
+      "first": "2026-05-01T00:00:00.694000+00:00",
+      "last": "2026-05-31T23:59:57.641000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 6,
+      "ticks": 3331776,
+      "seconds": 1201966,
+      "m1_bars": 43166,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 10.0,
+      "spread_mean": 10.558813365604403,
+      "spread_p99": 14.0,
+      "first": "2026-06-01T00:00:00.546000+00:00",
+      "last": "2026-06-30T23:59:59.696000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 7,
+      "ticks": 3090307,
+      "seconds": 2033823,
+      "m1_bars": 44626,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 10.0,
+      "spread_mean": 10.0,
+      "spread_p99": 10.0,
+      "first": "2026-07-01T00:00:00.677000+00:00",
+      "last": "2026-07-31T23:59:59.167000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 8,
+      "ticks": 3698481,
+      "seconds": 2403616,
+      "m1_bars": 44625,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 10.0,
+      "spread_mean": 10.0,
+      "spread_p99": 10.0,
+      "first": "2026-08-01T00:00:00.220000+00:00",
+      "last": "2026-08-31T23:59:59.894000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 9,
+      "ticks": 3536357,
+      "seconds": 2343674,
+      "m1_bars": 43198,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 10.0,
+      "spread_mean": 10.0,
+      "spread_p99": 10.0,
+      "first": "2026-09-01T00:00:00.897000+00:00",
+      "last": "2026-09-30T23:59:59.355000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "ticks": 3645516,
+      "seconds": 2401819,
+      "m1_bars": 44630,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 6.399999999994179,
+      "spread_mean": 6.9845315724852375,
+      "spread_p99": 10.0,
+      "first": "2026-10-01T00:00:00.309000+00:00",
+      "last": "2026-10-31T23:59:59.807000+00:00"
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "ticks": 1619855,
+      "seconds": 931455,
+      "m1_bars": 17276,
+      "rows_dropped_invalid": 0,
+      "rows_out_of_order": 0,
+      "spread_median": 6.399999999994179,
+      "spread_mean": 6.399999999999998,
+      "spread_p99": 6.400000000008731,
+      "first": "2026-11-01T00:00:00.883000+00:00",
+      "last": "2026-11-12T23:59:59.652000+00:00"
+    }
+  ],
+  "windows": {
+    "IS": {
+      "start": "2026-08-13",
+      "end": "2026-11-13",
+      "spread_median": 10.0,
+      "spread_mean": 8.538053479751223,
+      "price_first": 63403.22,
+      "price_last": 71361.18,
+      "price_low": 62457.3,
+      "price_high": 87382.55
+    },
+    "OOS1": {
+      "start": "2026-05-13",
+      "end": "2026-08-13",
+      "spread_median": 10.0,
+      "spread_mean": 10.628756533456107,
+      "price_first": 80483.57,
+      "price_last": 63404.32,
+      "price_low": 57718.54,
+      "price_high": 82043.43
+    },
+    "OOS2": {
+      "start": "2026-02-13",
+      "end": "2026-05-13",
+      "spread_median": 14.0,
+      "spread_mean": 15.822103403122933,
+      "price_first": 66213.74,
+      "price_last": 80485.2,
+      "price_low": 62444.32,
+      "price_high": 82827.61
+    },
+    "HO2": {
+      "start": "2025-11-13",
+      "end": "2026-02-13",
+      "spread_median": 18.0,
+      "spread_mean": 18.00215388956624,
+      "price_first": 101623.6,
+      "price_last": 66213.8,
+      "price_low": 59832.35,
+      "price_high": 104022.75
+    },
+    "HO1": {
+      "start": "2025-08-13",
+      "end": "2025-11-13",
+      "spread_median": 18.0,
+      "spread_mean": 19.343989347179274,
+      "price_first": 120118.4,
+      "price_last": 101635.63,
+      "price_low": 98893.42,
+      "price_high": 126287.86
+    }
+  }
+}

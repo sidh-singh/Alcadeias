@@ -1,0 +1,37 @@
+{
+  "ok": true,
+  "polls_ref": 86381,
+  "polls_fast": 86381,
+  "signal_mismatches": 0,
+  "score_mismatches": 0,
+  "rsi_max_abs_diff": 4.973799150320701e-14,
+  "fills_ref": 48,
+  "fills_fast": 48,
+  "fill_mismatches": 0,
+  "balance_ref": 2066.0899999999997,
+  "balance_fast": 2066.0899999999997,
+  "signals_ref": {
+    "none": 86348,
+    "BUY": 4,
+    "SELL": 5,
+    "CLOSE_BUY": 4,
+    "CLOSE_SELL": 4,
+    "BUY_MORE": 7,
+    "SELL_MORE": 9
+  },
+  "first_differences": [],
+  "ref_errors": [],
+  "refused_ref": {},
+  "name": "netting_btc_default_24h",
+  "variant": "netting",
+  "symbol": "BTCUSDm",
+  "start": "2026-10-20 00:00",
+  "end": "2026-10-21 00:00",
+  "scores": "open[H1x1 + M15x1] fc[M15x1] book[M15x1]",
+  "elapsed_s": 2105.0,
+  "config_overrides": {},
+  "stamp": {
+    "engine": "230d72b77889",
+    "live": "194337b74ef3"
+  }
+}

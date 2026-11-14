@@ -1,0 +1,63 @@
+{
+  "ok": true,
+  "polls_ref": 43182,
+  "polls_fast": 43182,
+  "signal_mismatches": 0,
+  "score_mismatches": 0,
+  "rsi_max_abs_diff": 0.0,
+  "fills_ref": 46,
+  "fills_fast": 46,
+  "fill_mismatches": 0,
+  "balance_ref": 2133.7200000000003,
+  "balance_fast": 2133.7200000000003,
+  "signals_ref": {
+    "none": 43150,
+    "BUY": 2,
+    "SELL": 7,
+    "CLOSE_BUY": 2,
+    "CLOSE_SELL": 6,
+    "BUY_MORE": 6,
+    "SELL_MORE": 9
+  },
+  "first_differences": [],
+  "ref_errors": [],
+  "refused_ref": {},
+  "name": "netting_btc_altparams_12h",
+  "variant": "netting",
+  "symbol": "BTCUSDm",
+  "start": "2026-09-22 00:00",
+  "end": "2026-09-22 12:00",
+  "scores": "open[H4x1 + M5x1] fc[D1x1 + H4x2 + H1x3 + M15x4] book[M5x1]",
+  "elapsed_s": 1544.6,
+  "config_overrides": {
+    "open_weights": {
+      "H4": 1,
+      "M5": 1
+    },
+    "book_weights": {
+      "M5": 1
+    },
+    "fc_weights": {
+      "M15": 4,
+      "H1": 3,
+      "H4": 2,
+      "D1": 1
+    },
+    "force_close_s": 12,
+    "entry_agree_s": 0,
+    "peak_lookback": 12,
+    "pivot_width": 3,
+    "rsi_length": 9,
+    "macd_fast": 8,
+    "macd_slow": 17,
+    "macd_signal": 5,
+    "rsi_peak_ob": 55,
+    "rsi_peak_os": 45,
+    "reentry_cooldown_s": 60,
+    "profit_protect_usd_per_unit": 0.5
+  },
+  "stamp": {
+    "engine": "230d72b77889",
+    "live": "194337b74ef3"
+  }
+}

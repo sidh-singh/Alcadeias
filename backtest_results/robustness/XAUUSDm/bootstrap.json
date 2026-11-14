@@ -1,0 +1,32 @@
+{
+  "source": "the baseline run (raw ticks, live cadence)",
+  "baskets": 393,
+  "live_units": {
+    "days": 68,
+    "paths": 5000,
+    "final_p05": 0.0,
+    "final_p25": 0.0,
+    "final_p50": 0.0,
+    "final_p75": 391.517875000002,
+    "final_p95": 26956.210975000024,
+    "prob_loss": 0.7758,
+    "prob_loss_over_25pct": 0.7644,
+    "prob_wiped": 0.7478,
+    "dip_p50": 2000.0,
+    "dip_p95": 2000.0
+  },
+  "fixed_unit_1": {
+    "days": 68,
+    "paths": 5000,
+    "final_p05": 0.0,
+    "final_p25": 0.0,
+    "final_p50": 0.0,
+    "final_p75": 5769.967541666671,
+    "final_p95": 10427.885324999996,
+    "prob_loss": 0.575,
+    "prob_loss_over_25pct": 0.5632,
+    "prob_wiped": 0.5498,
+    "dip_p50": 2000.0,
+    "dip_p95": 2000.0
+  }
+}

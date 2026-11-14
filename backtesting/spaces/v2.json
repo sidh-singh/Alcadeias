@@ -1,0 +1,39 @@
+{
+  "name": "v2",
+  "description": "Around the V2 design: entries only with the trend of a higher timeframe, no DCA ladder, a real stop and a larger target. Varies which trend is used, how far the target and the stop sit, how long the bot pauses after a loss and whether the M15 force-close stays on.",
+  "base": {
+    "max_adds": 0
+  },
+  "parameters": {
+    "trend_tf": {
+      "values": [null, "H1", "H4", "D1"],
+      "note": "entries only in the direction of this timeframe's trend (sign of its MACD signal line on the last closed bar); null = no trend filter"
+    },
+    "target_usd_per_unit": {
+      "values": [5, 10, 20, 30, 40],
+      "note": "USD of basket profit per 0.01 lot at which the basket is closed (gold: the same move in price; BTC: x100)"
+    },
+    "stop_loss_usd_per_unit": {
+      "values": [10, 20, 30, 40],
+      "note": "USD of basket loss per 0.01 lot at which the basket is closed"
+    },
+    "loss_cooldown_s": {
+      "values": [0, 3600, 14400, 28800],
+      "note": "pause after a losing basket, seconds; 0 = the live 5 minutes"
+    },
+    "force_close_enabled": {
+      "values": [false, true],
+      "note": "true = the live exit when the M15 slope score turns against the basket stays on"
+    }
+  },
+  "references": {
+    "V2": {
+      "trend_tf": "H1",
+      "max_adds": 0,
+      "target_usd_per_unit": 20,
+      "stop_loss_usd_per_unit": 20,
+      "force_close_enabled": false,
+      "loss_cooldown_s": 14400
+    }
+  }
+}

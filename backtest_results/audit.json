@@ -1,0 +1,62 @@
+[
+ {
+  "title": "No stop exists at the broker: every loss exit lives in the Python loop",
+  "where": "mt5_helper.py:471-481, constants.py:125",
+  "detail": "With RISK_REWARD_RATIO = [1, 1] every BUY is sent with SL = price − price×1 = 0.0 (which MT5 reads as \"no stop\") and TP = 2× price; every SELL with SL = 2× price and TP = 0.0. The only thing that ever closes a losing basket is the M15 force-close, and it only runs while the Python process is alive, connected and sees the market as live. The CHANGELOG records this as a deliberate choice; it is listed first because every other item below is made worse by it. At unit 1 a full 0.32-lot basket loses the whole $2,000 on a $62.50 move in gold or a $6,250 move in BTC."
+ },
+ {
+  "title": "A dead MT5 connection is swallowed silently",
+  "where": "app.py:238, 479-844",
+  "detail": "The bot connects once at start-up. If the terminal or its IPC link dies while Python keeps running, every helper call returns \"no data\": positions read as flat, the market reads as closed, no signal is computed and no close can be sent. The loop prints one console line per pass, keeps writing a fresh dashboard file showing 0 positions, and never reconnects, exits or raises an alert."
+ },
+ {
+  "title": "A failed position read is treated as \"no positions\"",
+  "where": "mt5_helper.py:52-53, 101-102; app.py:503-511",
+  "detail": "get_buy_positions / get_sell_positions return None both when there are no positions and when the read failed, and the loop maps None to a count of 0. One failed read while a basket is open makes the bot believe it is flat: it re-derives the unit and, if the entry conditions hold, opens a second basket on top of the first. Demonstrated on this branch's real app.py by tests/test_live_fault_injection.py::test_failed_position_read_is_treated_as_flat."
+ },
+ {
+  "title": "Open and add orders are never checked",
+  "where": "mt5_helper.py:508-511, 526-529; app.py:729-750, 769-790",
+  "detail": "buy() / sell() return the order result unread and the bot logs BUY_EXECUTED / SELL_EXECUTED unconditionally. A rejected order (market closed, no money, requote) leaves the signal true, so it is re-sent every loop with no back-off and no alert, and each attempt is logged as executed. Demonstrated by test_rejected_open_is_logged_as_executed_and_resent_every_loop: twelve seconds of refusals produce an \"executed\" line on every pass and no position."
+ },
+ {
+  "title": "A basket close is several independent orders, never retried",
+  "where": "mt5_helper.py:531-621; app.py:752-762, 792-802",
+  "detail": "close_by_type sends one market order per leg in the order MT5 lists them. A leg that fails or fills partially is counted and left; the caller ignores the failure count, starts the re-entry cooldown and logs the close as done. The leftover leg stays open until a close condition happens to fire again."
+ },
+ {
+  "title": "Ladder tier comes from the ticket count, lot size from the summed volume",
+  "where": "strategy.py:39-65; strategy.py:291-300, 312-321; app.py:739, 779",
+  "detail": "The two stay in step only while the open positions are exactly the bot's own ladder. After a partial close, a manual trade or a second process on the same symbol, the next add continues up the Fibonacci series from whatever volume is left: a lone 0.13 leg is followed by 0.13, 0.21, 0.34, 0.55 and 0.89 lots. There is no maximum-lot cap."
+ },
+ {
+  "title": "No magic number and no instance lock",
+  "where": "mt5_helper.py:483-493, 591-601; strategy.py:274 / 281 / 302",
+  "detail": "Orders carry no magic number or comment, so every position on the symbol counts as the bot's: a manual trade or a second copy of the bot is added into the basket profit, used to size the next add, and closed by the bot. If positions exist on both sides at once the strategy has no branch for it and does nothing at all, with no log line, until someone intervenes."
+ },
+ {
+  "title": "A restart forgets the unit and the cooldown",
+  "where": "app.py:468, 477, 505-511",
+  "detail": "The unit and the time of the last close exist only in process memory. After a restart with a basket open the unit is 1 until the symbol is flat: on an account above $2,500 the remaining adds are mis-sized (0.44× to 1.27× of the intended ladder). The 300 s re-entry cooldown is also forgotten: test_restart_forgets_the_reentry_cooldown shows an immediate re-entry where the running process would still be waiting. Changing any constant requires exactly such a restart."
+ },
+ {
+  "title": "Brake and trading window only block the first order of a basket",
+  "where": "app.py:516-517, 726, 766",
+  "detail": "Ladder adds are sent under the manual brake, outside the trading window and at the weekend reopen, and nothing flattens a basket before the weekend. The backtest reproduces this as written; the worst gold baskets in the results were carried across a session break."
+ },
+ {
+  "title": "The liveness gate compares the VPS clock with broker time, and the bars that drive decisions are not checked at all",
+  "where": "mt5_helper.py:420-431; app.py:558, 580-584",
+  "detail": "All actions, exits included, run only when the newest tick is less than three minutes old measured against the VPS wall clock. A VPS clock running more than three minutes fast, or a server whose time is not UTC, makes the bot treat an open market as closed and stop evaluating exits. Separately, the RSI / MACD inputs come from a single unverified copy_rates_from_pos call with no bar-age check, so stale bars would hold the force-close silent while ticks keep the gate open."
+ },
+ {
+  "title": "Decisions are taken on the still-forming bar, about once a second",
+  "where": "indicator.py:188-198; app.py:580-611, 834; strategy.py:291-300, 312-321",
+  "detail": "The current value, the newest pivot's right-hand neighbour and the MACD side selector all include the forming bar, so a pivot can appear and vanish inside one bar and a close or entry fires on the first poll that sees it. This is how the live bot works and the backtest replays it poll by poll; it is listed because any closed-bar backtest (TradingView, MT5 strategy tester on bar closes) will not reproduce the live trades."
+ },
+ {
+  "title": "If any account is in MT5 netting mode, the ladder would run away",
+  "where": "strategy.py:291-300, 312-321; mt5_helper.py:50-71",
+  "detail": "The ladder tier is the number of position tickets. On an MT5 netting-mode account there is always exactly one ticket, so tier 1 (M1 RSI ≤ 35 / ≥ 65) would re-fire about every two seconds with growing Fibonacci lots: 2.31 lots after nine adds. Nothing in the repo says any account is in that mode (\"netting\" here names the strategy variant, and the code documents six separate positions), but the code never checks account_info().margin_mode. Worth confirming for all forty accounts."
+ }
+]

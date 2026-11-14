@@ -1,0 +1,80 @@
+{
+  "IS->OOS1": {
+    "n": 432,
+    "spearman": 0.15308804950682112,
+    "median_IS": -725.5699999999999,
+    "median_OOS1": -12.345,
+    "pct_positive_IS": 27.314814814814813,
+    "pct_positive_OOS1": 49.53703703703704,
+    "top_decile_mean_IS": 912.1588372093022,
+    "top_decile_mean_OOS1": 346.5541860465117,
+    "top_decile_pct_positive_OOS1": 69.76744186046511,
+    "best_IS": 1939.16,
+    "best_IS_then_OOS1": 504.22
+  },
+  "IS->OOS2": {
+    "n": 432,
+    "spearman": 0.4406018612097646,
+    "median_IS": -725.5699999999999,
+    "median_OOS2": -391.65999999999997,
+    "pct_positive_IS": 27.314814814814813,
+    "pct_positive_OOS2": 33.101851851851855,
+    "top_decile_mean_IS": 912.1588372093022,
+    "top_decile_mean_OOS2": 72.12232558139533,
+    "top_decile_pct_positive_OOS2": 60.46511627906976,
+    "best_IS": 1939.16,
+    "best_IS_then_OOS2": 695.71
+  },
+  "OOS1->IS": {
+    "n": 432,
+    "spearman": 0.15308804950682112,
+    "median_OOS1": -12.345,
+    "median_IS": -725.5699999999999,
+    "pct_positive_OOS1": 49.53703703703704,
+    "pct_positive_IS": 27.314814814814813,
+    "top_decile_mean_OOS1": 1593.4462790697676,
+    "top_decile_mean_IS": -743.3883720930232,
+    "top_decile_pct_positive_IS": 30.23255813953488,
+    "best_OOS1": 2296.23,
+    "best_OOS1_then_IS": 238.12
+  },
+  "OOS1->OOS2": {
+    "n": 432,
+    "spearman": 0.3160545224411851,
+    "median_OOS1": -12.345,
+    "median_OOS2": -391.65999999999997,
+    "pct_positive_OOS1": 49.53703703703704,
+    "pct_positive_OOS2": 33.101851851851855,
+    "top_decile_mean_OOS1": 1593.4462790697676,
+    "top_decile_mean_OOS2": -815.8339534883719,
+    "top_decile_pct_positive_OOS2": 27.906976744186046,
+    "best_OOS1": 2296.23,
+    "best_OOS1_then_OOS2": -983.94
+  },
+  "OOS2->IS": {
+    "n": 432,
+    "spearman": 0.4406018612097646,
+    "median_OOS2": -391.65999999999997,
+    "median_IS": -725.5699999999999,
+    "pct_positive_OOS2": 33.101851851851855,
+    "pct_positive_IS": 27.314814814814813,
+    "top_decile_mean_OOS2": 955.540465116279,
+    "top_decile_mean_IS": -131.99232558139533,
+    "top_decile_pct_positive_IS": 46.51162790697674,
+    "best_OOS2": 1771.54,
+    "best_OOS2_then_IS": -329.8
+  },
+  "OOS2->OOS1": {
+    "n": 432,
+    "spearman": 0.3160545224411851,
+    "median_OOS2": -391.65999999999997,
+    "median_OOS1": -12.345,
+    "pct_positive_OOS2": 33.101851851851855,
+    "pct_positive_OOS1": 49.53703703703704,
+    "top_decile_mean_OOS2": 955.540465116279,
+    "top_decile_mean_OOS1": 603.4502325581396,
+    "top_decile_pct_positive_OOS1": 81.3953488372093,
+    "best_OOS2": 1771.54,
+    "best_OOS2_then_OOS1": -373.56
+  }
+}

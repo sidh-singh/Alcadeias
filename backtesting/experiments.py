@@ -1,0 +1,782 @@
+"""
+The experiment pipeline behind the committed results.
+
+    python -m backtesting reproduce                      # everything, for this branch's variant
+    python -m backtesting reproduce --only baseline sweeps
+
+Stages (each writes plain CSV / JSON under ``backtest_results/`` and is skipped when its
+output is there and was written by this build of the backtester, for these live settings,
+from this tick data; ``--force`` recomputes regardless):
+
+  quality     data-quality report per symbol
+  baseline    the live configuration, raw-tick replay with the live loop cadence, HTML report
+  long        the same configuration over all fifteen months in one run (per-second replay)
+  signal      what the RSI / MACD slope votes are made of and what followed them (closed bars)
+  sweeps      which timeframes should drive OPEN / FORCE-CLOSE / BOOK -- RSI and MACD together
+              and separately -- on three disjoint three-month windows
+  levers      one-at-a-time sensitivity of every other parameter + structural what-ifs
+  improve     hypothesis-driven what-if packages aimed at the flaws the baseline exposed
+  holdout     the whole timeframe grid again on the two hold-out quarters
+  candidates  a short list of settings (timeframes x ladder fixes): every quarter under eight
+              loop timings on a real $2,000 account, and one run of all fifteen months
+  robust      every quarter under eight loop timings; a slower loop, order latency and costs,
+              each level under several timings; start date, sub-periods, a day bootstrap
+
+Windows. ``IS`` is the three months the owner asked for. ``OOS1`` and ``OOS2`` are the two
+three-month blocks before it. A setting is only interesting if it holds up on windows it
+was not chosen on. ``HO2`` and ``HO1`` are two still earlier quarters kept as a hold-out:
+nothing is ever selected on them, they are only used to test what was selected.
+
+Sweeps run with a fixed unit of 1 (0.01 lot entry, no balance auto-step) on a balance too
+large to be stopped out. The auto-step doubles every lot once the balance passes $2,500,
+which makes results path-dependent and would bury the effect of the parameter being
+studied; and a stop-out would hide everything after it. Each row therefore reports the
+P/L of one 0.01-lot unit over the whole window, and next to it what the same baskets do to
+a real $2,000 account that steps its unit as the bot does (``acct_net``, ``acct_wiped``,
+``acct_dip``: ``metrics.replay_account``). The baseline, the fifteen-month run, the timing
+ensembles of the live settings and of the candidates, and the cost / latency tables use the
+live auto-step and the real $2,000 directly; the five-quarter candidate table and the
+fixed-unit ensemble are fixed-unit runs with the replay.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import time
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Tuple
+
+import pandas as pd
+
+from .analysis import robustness, sweep
+from .analysis.metrics import score_row
+from .config import BacktestConfig, FIBO, REPO_ROOT
+from .engine.fast import run
+
+WINDOWS: Dict[str, Tuple[str, str]] = {
+    "IS": ("2026-08-13", "2026-11-13"),
+    "OOS1": ("2026-05-13", "2026-08-13"),
+    "OOS2": ("2026-02-13", "2026-05-13"),
+}
+# Hold-out: two earlier quarters that play NO part in choosing anything. Every setting that
+# looks good on the three windows above was picked with hindsight on them; these two say
+# whether such a pick carries over to data it has never seen.
+HOLDOUT: Dict[str, Tuple[str, str]] = {
+    "HO2": ("2025-11-13", "2026-02-13"),
+    "HO1": ("2025-08-13", "2025-11-13"),
+}
+ALL_WINDOWS: Dict[str, Tuple[str, str]] = {**WINDOWS, **HOLDOUT}
+LONG_WINDOW = ("2025-08-13", "2026-11-13")          # all five quarters in one run
+SYMBOLS = ("XAUUSDm", "BTCUSDm")
+# Sweeps, levers and packages run a fixed 0.01-lot unit on a balance too large to be stopped
+# out, so every configuration is measured over the *whole* window (a stop-out would hide
+# whatever came after it). Whether the owner's $2,000 account would have survived is read off
+# the account replay that every row carries (metrics.replay_account, ACCOUNT in metrics.py).
+SWEEP_BALANCE = 1_000_000.0
+UNIVERSE = ["M1", "M5", "M15", "M30", "H1", "H4"]
+
+
+def _log(msg: str) -> None:
+    print(time.strftime("%H:%M:%S"), msg, flush=True)
+
+
+# ───────────────────────────── which build wrote what ─────────────────────────────
+# Every output is stamped in manifest.json with three fingerprints: of the code that decides its
+# numbers, of the live rules it was computed for, and of the tick data it read. A stage is skipped
+# only when its output carries the current three; anything else is stale and is recomputed, and
+# the pages warn about stale or unstamped files. (Stages are skipped when their output exists,
+# which makes it easy to assemble a directory from two builds by accident.)
+_ENGINE_FILES = ("engine/kernels.py", "engine/fast.py", "config.py", "data/store.py", "data/quality.py",
+                 "analysis/metrics.py", "analysis/diagnostics.py", "analysis/signal.py", "analysis/sweep.py",
+                 "analysis/robustness.py", "viz/report.py", "experiments.py")
+_PARITY_FILES = _ENGINE_FILES[:4] + ("engine/reference.py", "engine/parity.py")
+_LIVE_FILES = ("constants.py", "symbols.json", "strategy.py", "indicator.py", "app.py", "mt5_helper.py")
+_LIVE_ROOT: List[Path] = [REPO_ROOT]          # the checkout the current reproduce() call mirrors
+_RUN: Dict[str, str] = {}                     # fingerprints taken when reproduce() started
+# result files the pipeline writes (relative to the results directory); used to notice unstamped ones
+_OUTPUT_PATTERNS = ("data_quality/*.json", "baseline/*/summary.json", "long/*/summary.json", "signal/*.json",
+                    "sweeps/*.csv", "levers/*.csv", "packages/*.csv", "candidates/*.csv",
+                    "robustness/*/*.csv", "robustness/*/bootstrap.json")
+
+
+def _hash(files) -> str:
+    """One fingerprint over several files. Line endings are normalised so a CRLF checkout gives the same value."""
+    h = hashlib.sha1()
+    for f in files:
+        f = Path(f)
+        h.update(f.name.encode())
+        h.update(f.read_bytes().replace(b"\r\n", b"\n") if f.exists() else b"-")
+    return h.hexdigest()[:12]
+
+
+def engine_fingerprint() -> str:
+    root = Path(__file__).resolve().parent
+    return _hash(root / rel for rel in _ENGINE_FILES)
+
+
+def parity_fingerprint() -> str:
+    """The two engines and the comparison itself: what a parity report vouches for."""
+    root = Path(__file__).resolve().parent
+    return _hash(root / rel for rel in _PARITY_FILES)
+
+
+def live_fingerprint(live_root: Optional[Path] = None) -> str:
+    """Fingerprint of the live rules and settings a result was computed for."""
+    root = Path(live_root or _LIVE_ROOT[0])
+    return _hash(root / rel for rel in _LIVE_FILES)
+
+
+_META_KEYS = ("store_version", "ticks", "seconds", "m1_bars", "rows_raw", "rows_kept", "first", "last", "bid_min", "bid_max")
+
+
+def data_fingerprint(symbol: str) -> str:
+    """
+    Fingerprint of the tick history of ``symbol`` that the pipeline reads: for every month before
+    the one the last window ends in, what the store recorded when it built it (tick counts, first
+    and last quote, price range: all fixed by the archive, none by when it was downloaded); for the
+    last month, the quotes themselves up to the end of the window, so that a month's archive
+    which has grown since does not look like other data. '' when the store holds nothing for the
+    symbol (a checkout without the history can build the pages but cannot judge the data).
+    """
+    from .data import store
+    end_ms = store.to_ms(LONG_WINDOW[1])
+    end = store.ms_to_dt(max(end_ms - 1, 0))
+    months = [(y, m) for (y, m) in store.available_months(symbol) if (y, m) <= (end.year, end.month)]
+    if not months:
+        return ""
+    h = hashlib.sha1()
+    for (y, m) in months:
+        h.update(f"{symbol} {y:04d}-{m:02d}".encode())
+        if (y, m) < (end.year, end.month):
+            try:
+                meta = json.loads((store.month_dir(store.DEFAULT_STORE_DIR, symbol, y, m) / "meta.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                meta = {}
+            h.update(json.dumps([meta.get(k) for k in _META_KEYS]).encode())
+        else:
+            sec = store.load_sec(symbol, store.to_ms(f"{y:04d}-{m:02d}-01"), end_ms)
+            for k in ("t_ms", "bid", "ask"):
+                h.update(sec[k].tobytes() if sec else b"-")
+    return h.hexdigest()[:12]
+
+
+def _symbol_of(rel: str) -> Optional[str]:
+    return next((sym for sym in SYMBOLS if sym in rel), None)
+
+
+def _current(rel: str, live_root: Optional[Path] = None, frozen: bool = False, cache: Optional[dict] = None) -> Dict[str, str]:
+    """
+    The fingerprints an output at ``rel`` should carry now (``frozen``: as they were when the
+    running reproduce() started). ``cache`` lets a caller that asks about many files hash once.
+    """
+    sym = _symbol_of(rel)
+    if frozen and _RUN:
+        return {"engine": _RUN["engine"], "live": _RUN["live"], "data": _RUN.get(f"data:{sym}", "")}
+    cache = {} if cache is None else cache
+    if "engine" not in cache:
+        cache.update(engine=engine_fingerprint(), live=live_fingerprint(live_root))
+    if sym and f"data:{sym}" not in cache:
+        cache[f"data:{sym}"] = data_fingerprint(sym)
+    return {"engine": cache["engine"], "live": cache["live"], "data": cache.get(f"data:{sym}", "")}
+
+
+def _manifest(out: Path) -> dict:
+    try:
+        return json.loads((Path(out) / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _stamp(out: Path, path: Path) -> None:
+    """
+    Record in ``out/manifest.json`` what ``path`` was computed with. The code in memory is the
+    code as it was when the run started, so the stamp uses the fingerprints taken then, and the
+    run stops if the files have changed since: a result computed now could mix two builds
+    (worker processes import whatever is on disk when they start).
+    """
+    rel = Path(path).relative_to(out).as_posix()
+    stamp = _current(rel, frozen=True)
+    data = _manifest(out)
+    if _RUN and (engine_fingerprint() != _RUN["engine"] or live_fingerprint() != _RUN["live"]):
+        if data.pop(rel, None) is not None:    # the file was just rewritten: an earlier stamp no longer describes it
+            _write_manifest(out, data)
+        raise RuntimeError("the backtester or the live rules changed on disk while the pipeline was running; "
+                           f"{rel} was not stamped. Start `reproduce` again: it recomputes what is stale.")
+    data[rel] = {**stamp, "written": time.strftime("%Y-%m-%d %H:%M:%S")}
+    _write_manifest(out, data)
+
+
+def _write_manifest(out: Path, data: dict) -> None:
+    mf = Path(out) / "manifest.json"
+    tmp = mf.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(dict(sorted(data.items())), indent=1), encoding="utf-8")
+    os.replace(tmp, mf)                        # never leaves a half-written manifest behind
+
+
+def _matches(meta: Optional[dict], want: Dict[str, str]) -> bool:
+    """A stamp carries every fingerprint wanted (a wanted value of '' = cannot be judged here, not compared)."""
+    return isinstance(meta, dict) and bool(meta) and all(meta.get(k) == v for k, v in want.items() if v != "")
+
+
+def _fresh(out: Path, path: Path, force: bool = False) -> bool:
+    """
+    True when ``path`` exists and was written by this build, for these live settings, from this
+    tick data, i.e. the stage can be skipped. Anything else is stale and is recomputed.
+    """
+    path = Path(path)
+    if force or not path.exists():
+        return False
+    rel = path.relative_to(out).as_posix()
+    if not _matches(_manifest(out).get(rel), _current(rel, frozen=True)):
+        _log(f"  {rel}: written by another build, for other live settings or from other tick data - recomputing")
+        return False
+    return True
+
+
+def manifest_builds(out: Path) -> Dict[str, List[str]]:
+    """'engine/live' fingerprint pair -> outputs it wrote (more than one key = the directory mixes builds)."""
+    builds: Dict[str, List[str]] = {}
+    for rel, meta in _manifest(out).items():
+        if (Path(out) / rel).exists():
+            builds.setdefault(f'{meta.get("engine", "?")}/{meta.get("live", "?")}', []).append(rel)
+    return builds
+
+
+def stale_outputs(out: Path, live_root: Path = REPO_ROOT) -> List[str]:
+    """
+    Result files that cannot be vouched for: written by another build of the engine, for other
+    live settings or from other tick data than this checkout has now; pipeline outputs that carry
+    no stamp at all (written before stamps existed, or the manifest is missing or damaged); and
+    parity reports made with other engines or other live rules.
+    """
+    out = Path(out)
+    mf = _manifest(out)
+    stale = set()
+    cache: dict = {}
+    files = {p.relative_to(out).as_posix() for pat in _OUTPUT_PATTERNS for p in out.glob(pat)}
+    for rel in sorted(files | {r for r in mf if (out / r).exists()}):
+        if not _matches(mf.get(rel), _current(rel, live_root, cache=cache)):
+            stale.add(rel)
+    want = {"engine": parity_fingerprint(), "live": live_fingerprint(live_root)}
+    for p in sorted((out / "parity").glob("*.json")) if (out / "parity").exists() else []:
+        try:
+            j = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            j = {}
+        if not _matches(j.get("stamp"), want):
+            stale.add(p.relative_to(out).as_posix())
+    return sorted(stale)
+
+
+def live_config(symbol: str, live_root: Path = REPO_ROOT, **kw) -> BacktestConfig:
+    return BacktestConfig.live(symbol, repo_root=live_root, **kw)
+
+
+def _progress(tag: str):
+    return lambda name, a, b, t: _log(f"    {tag} {name}: {a}/{b} ({t:.0f}s)")
+
+
+# ───────────────────────────── stages ─────────────────────────────
+
+def stage_quality(out: Path, symbols: Sequence[str], force: bool = False) -> None:
+    from .data import quality
+    d = out / "data_quality"
+    d.mkdir(parents=True, exist_ok=True)
+    for sym in symbols:
+        p = d / f"{sym}.json"
+        if _fresh(out, p, force):
+            continue
+        q = quality.quality_report(sym, LONG_WINDOW[0], LONG_WINDOW[1])
+        # what one round trip cost in each quarter (the spread is a large part of a $1 target)
+        from .data import store
+        q["windows"] = {}
+        for name, (a, z) in ALL_WINDOWS.items():
+            sec = store.load_sec(sym, a, z)
+            sp = sec["ask"] - sec["bid"]
+            q["windows"][name] = {"start": a, "end": z, "spread_median": float(pd.Series(sp).median()),
+                                  "spread_mean": float(sp.mean()),
+                                  "price_first": float(sec["bid"][0]), "price_last": float(sec["bid"][-1]),
+                                  "price_low": float(sec["bid"].min()), "price_high": float(sec["bid"].max())}
+        p.write_text(json.dumps(q, indent=2, default=str), encoding="utf-8")
+        _stamp(out, p)
+        _log("quality\n" + quality.format_quality(q))
+
+
+def stage_baseline(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False,
+                   window: Tuple[str, str] = WINDOWS["IS"], name: str = "baseline", mode: str = "ticks",
+                   closeups: bool = True) -> None:
+    from .viz.report import build_report, ensure_plotly_js
+    ensure_plotly_js(out / "assets")
+    for sym in symbols:
+        d = out / name / sym
+        if _fresh(out, d / "summary.json", force):
+            continue
+        cfg = live_config(sym, live_root, start=window[0], end=window[1])
+        if mode == "ticks":
+            cfg = cfg.replace(open_order_delay_ms=100)   # the 0.1 s sleep inside the live buy()/sell()
+        t0 = time.time()
+        res = run(cfg, mode=mode)
+        s = res.summary()
+        _log(f"{name} {cfg.variant} {sym} [{mode}] net {s['net_profit']:+.2f}  maxDD {s['max_drawdown_usd']:.2f} "
+             f"({s['max_drawdown_pct']:.1f}%)  baskets {s['baskets']}  win {s.get('win_rate_pct')}%  "
+             f"PF {s.get('profit_factor')}  ({time.time() - t0:.0f}s)")
+        build_report(res, d, closeups=closeups, plotly_src="../../assets/plotly.min.js",
+                     tfs=("M15", "H1", "H4") if name == "baseline" else ("H1", "H4"))
+        # the same run (same data resolution, same loop cadence) without the balance auto-step
+        r1 = run(cfg.replace(fixed_units=1), mode=mode, light=True)
+        (d / "fixed_unit.json").write_text(json.dumps(score_row(r1), indent=2), encoding="utf-8")
+        _stamp(out, d / "summary.json")
+
+
+def stage_signal(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False) -> None:
+    """The slope votes on closed bars, per quarter and over the whole history (describes the signal, not the trading)."""
+    from .analysis.signal import vote_study
+    d = out / "signal"
+    d.mkdir(parents=True, exist_ok=True)
+    for sym in symbols:
+        p = d / f"{sym}.json"
+        if _fresh(out, p, force):
+            continue
+        cfg = live_config(sym, live_root)
+        tfs = sorted(set(cfg.open_weights) | set(cfg.fc_weights), key=lambda tf: cfg.timeframes().index(tf)
+                     if tf in cfg.timeframes() else 0)
+        res = {name: vote_study(sym, a, z, live_root=live_root, tfs=tfs)
+               for name, (a, z) in {**ALL_WINDOWS, "ALL": LONG_WINDOW}.items()}
+        p.write_text(json.dumps(res, indent=2), encoding="utf-8")
+        _stamp(out, p)
+        _log(f"signal {cfg.variant} {sym}: votes on {', '.join(tfs)} over {len(res)} periods")
+
+
+def joint_grid(variant: str) -> Tuple[List[dict], List[dict]]:
+    # the BOOK timeframe is swept separately (split-book); here it stays at the live setting
+    return sweep.grid_joint_timeframes(UNIVERSE, "hedging")
+
+
+def stage_sweeps(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False,
+                 n_jobs: Optional[int] = None, windows: Dict[str, Tuple[str, str]] = WINDOWS) -> None:
+    d = out / "sweeps"
+    d.mkdir(parents=True, exist_ok=True)
+    for sym in symbols:
+        base = live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE)
+        variant = base.variant
+        plans: Dict[str, Tuple[List[dict], List[dict]]] = {
+            "timeframes": joint_grid(variant),
+            "split_open": sweep.grid_split_indicator(UNIVERSE, "hedging", fc_tfs=list(base.fc_weights)),
+            "split_fc": sweep.grid_split_exit(UNIVERSE, variant, "fc"),
+        }
+        if variant == "netting":
+            plans["split_book"] = sweep.grid_split_exit(UNIVERSE, variant, "book")
+            plans["book_joint"] = _book_joint_grid()
+        for kind, (grid, labels) in plans.items():
+            p = d / f"{sym}_{kind}.csv"
+            if _fresh(out, p, force):
+                continue
+            _log(f"sweep {variant} {sym} {kind}: {len(grid)} configurations x {len(windows)} windows")
+            t0 = time.time()
+            df = robustness.across_windows(base, grid, labels, windows, n_jobs=n_jobs,
+                                           progress=_progress(f"{sym} {kind}"))
+            df.to_csv(p, index=False)
+            _stamp(out, p)
+            agree = {f"{a}->{b}": robustness.rank_agreement(df, a, b)
+                     for a in windows for b in windows if a != b}
+            (d / f"{sym}_{kind}_agreement.json").write_text(json.dumps(agree, indent=2), encoding="utf-8")
+            _log(f"  done in {time.time() - t0:.0f}s -> {p.name}")
+
+
+def _book_joint_grid() -> Tuple[List[dict], List[dict]]:
+    """Netting: BOOK timeframe x FORCE-CLOSE timeframe (the two exits interact), open as live."""
+    grid, labels = [], []
+    for bk in UNIVERSE:
+        for fc in UNIVERSE:
+            for lvl in ("half", "full"):
+                grid.append(dict(book_weights={bk: 1}, book_s=1.0, fc_weights={fc: 1}, entry_agree_s=2.0,
+                                 force_close_s=1.0 if lvl == "half" else 2.0))
+                labels.append(dict(book=bk, fc=fc, fc_level=lvl))
+    return grid, labels
+
+
+def lever_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
+    """Every other knob, one at a time, plus structural what-ifs (all relative to the live settings)."""
+    xau = base.symbol.startswith("XAU")
+    gap_unit = 1.0 if xau else 100.0          # $1 of gold / $100 of BTC = $1 P/L on 0.01 lot
+    params: Dict[str, list] = {
+        # With one weight per timeframe and grey-fill the OPEN score only takes even values, so
+        # entry_s 1 = 2 and 3 = 4; ladder_s 1 = 2, and 3 = 4 = "never" (an OPEN score of -4 needs
+        # M15 fully against, which has already force-closed). Only the distinct rules are run.
+        "entry_s": [2, 4],
+        "entry_agree_s": [0, 1, 2],
+        "force_close_s": [1, 2],
+        "ladder_s": [2, 4],
+        "rsi_oversold": [20, 25, 30, 35, 40],
+        "rsi_overbought": [60, 65, 70, 75, 80],
+        "rsi_length": [7, 9, 14, 21, 28],
+        "peak_lookback": [8, 12, 20, 30, 50],
+        "pivot_width": [1, 2, 3, 4],
+        "rsi_peak_ob": [55, 60, 65, 70],
+        "rsi_peak_os": [30, 35, 40, 45],
+        "reentry_cooldown_s": [0, 60, 300, 900, 1800, 3600],
+        "max_adds": [0, 1, 2, 3, 4, 5],
+        "@macd": [{"name": f"{f},{s},{g}", "set": dict(macd_fast=f, macd_slow=s, macd_signal=g)}
+                  for f, s, g in ((5, 13, 4), (8, 17, 9), (12, 26, 9), (19, 39, 9), (24, 52, 18))],
+        "@rsi_bands": [{"name": f"{lo}/{hi}", "set": dict(rsi_oversold=lo, rsi_overbought=hi)}
+                       for lo, hi in ((20, 80), (25, 75), (30, 70), (35, 65), (40, 60))],
+        "@ladder_shape": [
+            {"name": "fibonacci 1,2,3,5,8,13 (live)", "set": dict(ladder_multipliers=list(FIBO))},
+            {"name": "flat 1,1,1,1,1,1", "set": dict(ladder_multipliers=[1] * 12)},
+            {"name": "linear 1,2,3,4,5,6", "set": dict(ladder_multipliers=list(range(1, 13)))},
+            {"name": "double 1,2,4,8,16,32", "set": dict(ladder_multipliers=[2 ** i for i in range(12)])},
+        ],
+        # which timeframe's RSI releases each add (live: 1st add M1, 2nd M5, 3rd M15, 4th H1, 5th H4); depth kept at five
+        "@ladder_timeframes": [
+            {"name": "M1,M5,M15,H1,H4 (live)", "set": dict()},
+            {"name": "M5,M15,H1,H4,H4", "set": dict(ladder_tfs=["M5", "M15", "H1", "H4", "H4"])},
+            {"name": "M15,H1,H4,H4,H4", "set": dict(ladder_tfs=["M15", "H1", "H4", "H4", "H4"])},
+            {"name": "H4,H1,M15,M5,M1", "set": dict(ladder_tfs=["H4", "H1", "M15", "M5", "M1"])},
+            {"name": "all five on M1", "set": dict(ladder_tfs=["M1"] * 5)},
+            {"name": "all five on M5", "set": dict(ladder_tfs=["M5"] * 5)},
+            {"name": "all five on M15", "set": dict(ladder_tfs=["M15"] * 5)},
+            {"name": "all five on H1", "set": dict(ladder_tfs=["H1"] * 5)},
+        ],
+        "@ladder_min_gap": [{"name": f"${g * gap_unit:,.0f} in price", "set": dict(ladder_min_gap=g * gap_unit)}
+                            for g in (0, 1, 2, 3, 5, 8)],
+        "@signals_on": [
+            {"name": "forming bar (live)", "set": dict()},
+            {"name": "closed bars: slopes", "set": dict(slope_on_closed_bars=True)},
+            {"name": "closed bars: slopes + ladder RSI", "set": dict(slope_on_closed_bars=True, ladder_on_closed_bars=True)},
+        ],
+        "@ladder_min_interval": [{"name": f"{m} min", "set": dict(ladder_min_interval_s=m * 60.0)}
+                                 for m in (0, 1, 5, 15, 30, 60)],
+        "@max_hold": [{"name": "none (live)", "set": dict(max_hold_s=0.0)}] + [
+            {"name": f"{h:g} h", "set": dict(max_hold_s=h * 3600.0)} for h in (0.25, 0.5, 1, 2, 4, 8)],
+        "fc_confirm_s": [0, 10, 30, 60, 120, 300],
+        "entry_confirm_s": [0, 10, 30, 60, 120, 300],
+        "min_hold_s": [0, 30, 60, 300, 900],
+        "@stop_loss": [{"name": "none (live)", "set": dict(stop_loss_usd_per_unit=None)}] + [
+            {"name": f"${x} per unit", "set": dict(stop_loss_usd_per_unit=float(x))} for x in (3, 5, 10, 20, 40, 80)],
+        "@side": [
+            {"name": "both (live)", "set": dict()},
+            {"name": "long only", "set": dict(allow_short=False)},
+            {"name": "short only", "set": dict(allow_long=False)},
+        ],
+        "@exit_mix": [
+            {"name": "force-close off", "set": dict(force_close_enabled=False)},
+        ],
+    }
+    if base.book_enabled:
+        # book_s 1 and 2 are one rule (the grey-filled one-timeframe score is -2, 0 or +2), so it is not swept.
+        # The protect threshold is kept although, with BOOK and FORCE-CLOSE on the same timeframe, it only
+        # changes the label of an exit, never a fill: the flat line in the table is the evidence of that.
+        # ("book + $1 target" would be the hedging exit again: the target, tested first, closes before the book can.)
+        params["profit_protect_usd_per_unit"] = [0.0, 1.0, 3.0, 10.0]
+        params["@exit_mix"] += [
+            {"name": "book + $3 target", "set": dict(target_usd_per_unit=3.0)},
+            {"name": "book + $10 target", "set": dict(target_usd_per_unit=10.0)},
+            {"name": "target $1 only (hedging exit)", "set": dict(target_usd_per_unit=1.0, book_enabled=False)},
+        ]
+    else:
+        params["target_usd_per_unit"] = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0]
+        # ("target + slope book" would be the live rule again: the book needs profit > $1 x unit,
+        #  and the target, tested first, has already closed on that)
+        params["@exit_mix"] += [
+            {"name": "slope book only (netting exit)", "set": dict(book_enabled=True, target_usd_per_unit=None)},
+        ]
+    return sweep.grid_one_at_a_time(params)
+
+
+def stage_levers(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False,
+                 n_jobs: Optional[int] = None, windows: Dict[str, Tuple[str, str]] = WINDOWS) -> None:
+    d = out / "levers"
+    d.mkdir(parents=True, exist_ok=True)
+    for sym in symbols:
+        p = d / f"{sym}.csv"
+        if _fresh(out, p, force):
+            continue
+        base = live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE)
+        grid, labels = lever_grid(base)
+        _log(f"levers {base.variant} {sym}: {len(grid)} configurations x {len(windows)} windows")
+        df = robustness.across_windows(base, grid, labels, windows, n_jobs=n_jobs, progress=_progress(f"{sym} levers"))
+        df.to_csv(p, index=False)
+        _stamp(out, p)
+
+
+def stage_robust(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False,
+                 n_jobs: Optional[int] = None, window: Tuple[str, str] = WINDOWS["IS"]) -> None:
+    for sym in symbols:
+        d = out / "robustness" / sym
+        d.mkdir(parents=True, exist_ok=True)
+        cfg = live_config(sym, live_root, start=window[0], end=window[1])
+        quarters = dict(sorted(ALL_WINDOWS.items(), key=lambda kv: kv[1][0]))
+        tick_jobs = max(1, min(n_jobs or 2, 3))        # raw-tick workers each hold a quarter of ticks in memory
+        todo = {
+            # every quarter under eight loop timings: how much of a quarter's result is timing luck
+            "quarters_timing.csv": lambda: robustness.timing_ensemble(live_config(sym, live_root), quarters, n_jobs=tick_jobs),
+            # the same at the sweeps' sizing (one fixed 0.01-lot unit, no stop-out): the noise in one sweep cell
+            "quarters_timing_fixed_unit.csv": lambda: robustness.timing_ensemble(
+                live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE), quarters, n_jobs=tick_jobs),
+            "timing.csv": lambda: robustness.timing_grid(cfg, n_jobs=tick_jobs),
+            "costs.csv": lambda: robustness.cost_grid(cfg, n_jobs=tick_jobs),
+            "start_shift.csv": lambda: robustness.start_shift(cfg, n_jobs=tick_jobs),
+            "segments_monthly.csv": lambda: robustness.segments(
+                live_config(sym, live_root, start=LONG_WINDOW[0], end=LONG_WINDOW[1]), n_jobs=n_jobs),
+            "segments_weekly.csv": lambda: robustness.segments(cfg, fixed_days=7, n_jobs=n_jobs),
+            "segments_quarterly.csv": lambda: _quarters(live_config(sym, live_root), n_jobs),
+        }
+        for name, fn in todo.items():
+            p = d / name
+            if _fresh(out, p, force):
+                continue
+            t0 = time.time()
+            df = fn()
+            if len(df) == 0:                 # e.g. a window too short to cut into weeks or months
+                continue
+            df.to_csv(p, index=False)
+            _stamp(out, p)
+            _log(f"robust {cfg.variant} {sym} {name} ({time.time() - t0:.0f}s)")
+        p = d / "bootstrap.json"
+        if not _fresh(out, p, force):
+            # the baskets of the published baseline run itself (raw ticks, live cadence), not of another path
+            res = run(cfg.replace(open_order_delay_ms=100), mode="ticks", light=True)
+            b = res.baskets
+            p.write_text(json.dumps({
+                "source": "the baseline run (raw ticks, live cadence)", "baskets": int(len(b)),
+                "live_units": robustness.bootstrap(b, cfg.initial_balance, cfg.step_up_balance, cfg.unit_max_limit),
+                "fixed_unit_1": robustness.bootstrap(b, cfg.initial_balance, 0.0, 1)}, indent=2), encoding="utf-8")
+            _stamp(out, p)
+            _log(f"robust {cfg.variant} {sym} bootstrap")
+
+
+def package_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
+    """
+    Hypothesis-driven what-if packages. Each one answers a flaw the baseline exposed
+    (the ladder that deploys at one price, the missing price-based exit, the fixed tiny
+    target on a growing basket); none of them was tuned on the data.
+    """
+    xau = base.symbol.startswith("XAU")
+    px = 1.0 if xau else 100.0     # price move worth $1 on a 0.01 lot
+    hedging = not base.book_enabled
+
+    def apart(n: float) -> str:      # a ladder gap as the price distance it is on this symbol
+        return f"${n * px:,.0f} apart"
+
+    P: List[Tuple[str, dict]] = [
+        ("live settings", {}),
+        ("no ladder", dict(max_adds=0)),
+        ("ladder: 1 add only", dict(max_adds=1)),
+        ("ladder: 2 adds only", dict(max_adds=2)),
+        (f"ladder: adds >= {apart(3)}", dict(ladder_min_gap=3 * px)),
+        (f"ladder: adds >= {apart(5)}", dict(ladder_min_gap=5 * px)),
+        ("ladder: adds >= 15 min apart", dict(ladder_min_interval_s=900.0)),
+        (f"ladder: adds >= {apart(3)} and >= 5 min apart", dict(ladder_min_gap=3 * px, ladder_min_interval_s=300.0)),
+        ("ladder: flat lots 1,1,1,1,1,1", dict(ladder_multipliers=[1] * 12)),
+        (f"ladder: flat lots, adds >= {apart(3)}", dict(ladder_multipliers=[1] * 12, ladder_min_gap=3 * px)),
+        ("stop: $10 per unit", dict(stop_loss_usd_per_unit=10.0)),
+        ("stop: $20 per unit", dict(stop_loss_usd_per_unit=20.0)),
+        ("stop: $40 per unit", dict(stop_loss_usd_per_unit=40.0)),
+        ("stop: $80 per unit", dict(stop_loss_usd_per_unit=80.0)),
+        ("time stop: 1 h", dict(max_hold_s=3600.0)),
+        ("time stop: 4 h", dict(max_hold_s=4 * 3600.0)),
+        ("no ladder + stop $5", dict(max_adds=0, stop_loss_usd_per_unit=5.0)),
+        ("no ladder + stop $10", dict(max_adds=0, stop_loss_usd_per_unit=10.0)),
+        ("no ladder + stop $20", dict(max_adds=0, stop_loss_usd_per_unit=20.0)),
+        (f"2 adds >= {apart(3)} + stop $20", dict(max_adds=2, ladder_min_gap=3 * px, stop_loss_usd_per_unit=20.0)),
+        (f"adds >= {apart(3)} + stop $40", dict(ladder_min_gap=3 * px, stop_loss_usd_per_unit=40.0)),
+        (f"adds >= {apart(5)} + stop $80", dict(ladder_min_gap=5 * px, stop_loss_usd_per_unit=80.0)),
+        (f"flat lots, >= {apart(3)} + stop $20", dict(ladder_multipliers=[1] * 12, ladder_min_gap=3 * px,
+                                                   stop_loss_usd_per_unit=20.0)),
+        ("signals on closed bars", dict(slope_on_closed_bars=True, ladder_on_closed_bars=True)),
+        ("closed bars + no ladder", dict(slope_on_closed_bars=True, ladder_on_closed_bars=True, max_adds=0)),
+        ("closed bars + no ladder + stop $10", dict(slope_on_closed_bars=True, ladder_on_closed_bars=True,
+                                                    max_adds=0, stop_loss_usd_per_unit=10.0)),
+        ("force-close needs 60 s confirmation", dict(fc_confirm_s=60.0)),
+        ("cooldown 30 min", dict(reentry_cooldown_s=1800.0)),
+    ]
+    if hedging:
+        P += [
+            ("target: $1 per 0.01 lot held", dict(target_per_lot=True)),
+            (f"target per lot + adds >= {apart(3)}", dict(target_per_lot=True, ladder_min_gap=3 * px)),
+            (f"target per lot + adds >= {apart(3)} + stop $40", dict(target_per_lot=True, ladder_min_gap=3 * px,
+                                                                  stop_loss_usd_per_unit=40.0)),
+            ("no ladder, target $2", dict(max_adds=0, target_usd_per_unit=2.0)),
+            ("no ladder, target $3, stop $10", dict(max_adds=0, target_usd_per_unit=3.0, stop_loss_usd_per_unit=10.0)),
+            ("no ladder, target $5, stop $10", dict(max_adds=0, target_usd_per_unit=5.0, stop_loss_usd_per_unit=10.0)),
+            ("no ladder, slope book instead of target", dict(max_adds=0, target_usd_per_unit=None, book_enabled=True)),
+        ]
+    else:
+        P += [
+            ("no ladder + $3 target on top of the book", dict(max_adds=0, target_usd_per_unit=3.0)),
+            ("no ladder + protect $3", dict(max_adds=0, profit_protect_usd_per_unit=3.0)),
+            ("no ladder + stop $10 + protect $3", dict(max_adds=0, stop_loss_usd_per_unit=10.0,
+                                                       profit_protect_usd_per_unit=3.0)),
+            ("no ladder, $1 target instead of the book", dict(max_adds=0, target_usd_per_unit=1.0, book_enabled=False)),
+        ]
+    return [ov for _, ov in P], [dict(package=name) for name, _ in P]
+
+
+def stage_improve(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False,
+                  n_jobs: Optional[int] = None, windows: Dict[str, Tuple[str, str]] = WINDOWS) -> None:
+    d = out / "packages"
+    d.mkdir(parents=True, exist_ok=True)
+    for sym in symbols:
+        p = d / f"{sym}.csv"
+        if _fresh(out, p, force):
+            continue
+        base = live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE)
+        grid, labels = package_grid(base)
+        _log(f"packages {base.variant} {sym}: {len(grid)} configurations x {len(windows)} windows")
+        df = robustness.across_windows(base, grid, labels, windows, n_jobs=n_jobs, progress=_progress(f"{sym} packages"))
+        df.to_csv(p, index=False)
+        _stamp(out, p)
+
+
+def _quarters(cfg: BacktestConfig, n_jobs: Optional[int]) -> pd.DataFrame:
+    """The live configuration on each of the five quarters, a fresh $2,000 every time."""
+    order = sorted(ALL_WINDOWS.items(), key=lambda kv: kv[1][0])
+    base = cfg.replace(start=LONG_WINDOW[0], end=LONG_WINDOW[1])
+    grid = [dict(start=a, end=z) for _, (a, z) in order]
+    labels = [dict(window=k, segment=f"{a} → {z}", role="hold-out" if k in HOLDOUT else "analysed") for k, (a, z) in order]
+    return sweep.run_grid(base, grid, n_jobs=n_jobs, labels=labels)
+
+
+def stage_holdout(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False,
+                  n_jobs: Optional[int] = None) -> None:
+    """The timeframe grid on the two hold-out quarters (same grid, same fixed unit, never used to choose)."""
+    d = out / "sweeps"
+    d.mkdir(parents=True, exist_ok=True)
+    for sym in symbols:
+        p = d / f"{sym}_timeframes_holdout.csv"
+        if _fresh(out, p, force):
+            continue
+        base = live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE)
+        grid, labels = joint_grid(base.variant)
+        _log(f"holdout {base.variant} {sym}: {len(grid)} configurations x {len(HOLDOUT)} windows")
+        df = robustness.across_windows(base, grid, labels, HOLDOUT, n_jobs=n_jobs, progress=_progress(f"{sym} holdout"))
+        df.to_csv(p, index=False)
+        _stamp(out, p)
+
+
+def candidate_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
+    """
+    A short list of settings to look at closely: five hand-picked timeframe families, the same
+    for both symbols, each with the live ladder, with no ladder and with a short spaced one.
+
+    The families were chosen by eye from an earlier sweep of the three analysed quarters (they
+    put H4 into the decision in different ways), so those quarters flatter them and they are
+    not "the best of the sweep" on either symbol. The two hold-out quarters are the honest test.
+    """
+    xau = base.symbol.startswith("XAU")
+    px = 1.0 if xau else 100.0
+    netting = base.book_enabled
+    tf_sets: List[Tuple[str, dict]] = [
+        ("live timeframes", {}),
+        ("A: H4 must agree - open H4+M15 (both aligned), close on M15",
+         dict(open_weights={"H4": 1, "M15": 1}, entry_s=4.0, fc_weights={"M15": 1}, entry_agree_s=2.0, force_close_s=1.0)),
+        ("B: H4 gate - open M5+M15, H4 must agree, close when H4 turns",
+         dict(open_weights={"M15": 1, "M5": 1}, entry_s=2.0, fc_weights={"H4": 1}, entry_agree_s=2.0, force_close_s=2.0)),
+        ("C: open on H4 alone, close on M15",
+         dict(open_weights={"H4": 1}, entry_s=2.0, fc_weights={"M15": 1}, entry_agree_s=2.0,
+              force_close_s=2.0 if netting else 1.0)),
+        ("D: slow - open H1+H4 (both aligned), close on H1",
+         dict(open_weights={"H4": 1, "H1": 1}, entry_s=4.0, fc_weights={"H1": 1}, entry_agree_s=2.0, force_close_s=1.0)),
+        ("E: live timeframes, H1 must fully agree",
+         dict(entry_s=4.0)),
+    ]
+    risk: List[Tuple[str, dict]] = [
+        ("live ladder", {}),
+        ("no ladder", dict(max_adds=0)),
+        (f"2 adds, >= ${3 * px:,.0f} apart", dict(max_adds=2, ladder_min_gap=3 * px)),
+    ]
+    grid, labels = [], []
+    for tname, tov in tf_sets:
+        for rname, rov in risk:
+            grid.append({**tov, **rov})
+            labels.append(dict(candidate=f"{tname} · {rname}", timeframes=tname, ladder=rname))
+    extras: List[Tuple[str, dict]] = [
+        ("live timeframes · no ladder, 1 h cooldown", dict(max_adds=0, reentry_cooldown_s=3600.0)),
+        ("live timeframes · closed-bar signals, no ladder", dict(slope_on_closed_bars=True, ladder_on_closed_bars=True, max_adds=0)),
+    ]
+    for name, ov in extras:
+        grid.append(ov)
+        labels.append(dict(candidate=name, timeframes=name.split(" · ")[0], ladder=name.split(" · ")[1]))
+    return grid, labels
+
+
+def stage_candidates(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False,
+                     n_jobs: Optional[int] = None) -> None:
+    d = out / "candidates"
+    d.mkdir(parents=True, exist_ok=True)
+    for sym in symbols:
+        p = d / f"{sym}.csv"
+        if not _fresh(out, p, force):
+            base = live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE)
+            grid, labels = candidate_grid(base)
+            _log(f"candidates {base.variant} {sym}: {len(grid)} configurations x {len(ALL_WINDOWS)} windows")
+            df = robustness.across_windows(base, grid, labels, ALL_WINDOWS, n_jobs=n_jobs,
+                                           progress=_progress(f"{sym} candidates"))
+            df.to_csv(p, index=False)
+            _stamp(out, p)
+        p = d / f"{sym}_account.csv"
+        if not _fresh(out, p, force):
+            # the same settings on the real account: $2,000, unit auto-step, all fifteen months in one go
+            acct = live_config(sym, live_root, start=LONG_WINDOW[0], end=LONG_WINDOW[1])
+            grid, labels = candidate_grid(acct)
+            df = sweep.run_grid(acct, grid, n_jobs=n_jobs, labels=labels)
+            df.to_csv(p, index=False)
+            _stamp(out, p)
+            _log(f"candidates {acct.variant} {sym}: real-account runs over {LONG_WINDOW[0]} → {LONG_WINDOW[1]}")
+        p = d / f"{sym}_timing.csv"
+        if not _fresh(out, p, force):
+            # every candidate, every quarter, eight loop timings, raw ticks, a fresh $2,000 with the unit auto-step:
+            # a single run of a quarter is one path, the spread over timings is what a setting is worth
+            acct = live_config(sym, live_root)
+            grid, labels = candidate_grid(acct)
+            t0 = time.time()
+            df = robustness.timing_ensemble(acct, dict(sorted(ALL_WINDOWS.items(), key=lambda kv: kv[1][0])),
+                                            n_jobs=max(1, min(n_jobs or 4, 5)), overrides=grid, override_labels=labels)
+            df.to_csv(p, index=False)
+            _stamp(out, p)
+            _log(f"candidates {acct.variant} {sym}: {len(df)} timing runs ({time.time() - t0:.0f}s)")
+
+
+STAGES = ("quality", "baseline", "long", "signal", "sweeps", "levers", "improve", "holdout", "candidates", "robust")
+
+
+def reproduce(out: Path, symbols: Sequence[str] = SYMBOLS, live_root: Path = REPO_ROOT,
+              only: Optional[Sequence[str]] = None, force: bool = False, n_jobs: Optional[int] = None) -> None:
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    _LIVE_ROOT[0] = Path(live_root)
+    # what this run computes with: taken once, because the code in memory is the code as it is now
+    _RUN.clear()
+    _RUN.update(engine=engine_fingerprint(), live=live_fingerprint(), **{f"data:{sym}": data_fingerprint(sym) for sym in symbols})
+    _log(f"engine build {_RUN['engine']} · live settings {_RUN['live']} ({live_root}) · tick data "
+         + ", ".join(f"{sym} {_RUN[f'data:{sym}']}" for sym in symbols))
+    stages = [s for s in STAGES if not only or s in only]
+    t0 = time.time()
+    try:
+        for st in stages:
+            _log(f"== stage {st}")
+            if st == "quality":
+                stage_quality(out, symbols, force)
+            elif st == "baseline":
+                stage_baseline(out, symbols, live_root, force, window=WINDOWS["IS"])
+            elif st == "long":
+                stage_baseline(out, symbols, live_root, force, window=LONG_WINDOW, name="long", mode="sec", closeups=False)
+            elif st == "signal":
+                stage_signal(out, symbols, live_root, force)
+            elif st == "sweeps":
+                stage_sweeps(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
+            elif st == "levers":
+                stage_levers(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
+            elif st == "improve":
+                stage_improve(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
+            elif st == "holdout":
+                stage_holdout(out, symbols, live_root, force, n_jobs)
+            elif st == "candidates":
+                stage_candidates(out, symbols, live_root, force, n_jobs)
+            elif st == "robust":
+                stage_robust(out, symbols, live_root, force, n_jobs, window=WINDOWS["IS"])
+    finally:
+        _RUN.clear()          # the frozen fingerprints belong to this run only
+    _log(f"all stages done in {(time.time() - t0) / 60:.1f} min -> {out}")

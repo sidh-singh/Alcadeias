@@ -1,0 +1,37 @@
+{
+  "ok": true,
+  "polls_ref": 2995,
+  "polls_fast": 2995,
+  "signal_mismatches": 0,
+  "score_mismatches": 0,
+  "rsi_max_abs_diff": 1.4210854715202004e-14,
+  "fills_ref": 13,
+  "fills_fast": 13,
+  "fill_mismatches": 0,
+  "balance_ref": 997367.53,
+  "balance_fast": 997367.53,
+  "signals_ref": {
+    "none": 2386,
+    "BUY": 603,
+    "CLOSE_BUY": 1,
+    "BUY_MORE": 5
+  },
+  "first_differences": [],
+  "ref_errors": [],
+  "refused_ref": {},
+  "name": "netting_xau_crash_2026_02_02",
+  "variant": "netting",
+  "symbol": "XAUUSDm",
+  "start": "2026-02-02 00:50",
+  "end": "2026-02-02 01:40",
+  "scores": "open[H1x1 + M15x1] fc[M15x1] book[M15x1]",
+  "elapsed_s": 44.1,
+  "config_overrides": {
+    "initial_balance": 1000000,
+    "unit_max_limit": 1
+  },
+  "stamp": {
+    "engine": "230d72b77889",
+    "live": "194337b74ef3"
+  }
+}

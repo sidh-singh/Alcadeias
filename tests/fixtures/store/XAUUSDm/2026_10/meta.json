@@ -1,0 +1,18 @@
+{
+  "symbol": "XAUUSDm",
+  "year": 2026,
+  "month": 10,
+  "store_version": 3,
+  "fixture": true,
+  "has_ticks": true,
+  "ticks": 0,
+  "seconds": 0,
+  "m1_bars": 358,
+  "first": "2026-10-30T15:00:00+00:00",
+  "last": "2026-10-30T20:57:00+00:00",
+  "window": [
+    "2026-11-11 15:00",
+    "2026-11-11 15:45"
+  ],
+  "warm_days": 12
+}
