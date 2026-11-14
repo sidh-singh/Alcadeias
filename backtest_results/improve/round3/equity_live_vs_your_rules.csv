@@ -1,0 +1,9 @@
+symbol,window,design,net,stopped_out,stopped_at,max_dd_pct,baskets
+XAUUSDm,Jan 2024 – Jun 2025,Your live logic,-2000.0,True,2024-07-19 00:03,100.1,4148
+XAUUSDm,Jan 2024 – Jun 2025,"Your rules (literal), M15 force-close",-2000.0,True,2025-04-09 19:41,100.1,6036
+XAUUSDm,Aug 2025 – Nov 2026,Your live logic,-2000.0,True,2025-10-14 03:24,100.3,1919
+XAUUSDm,Aug 2025 – Nov 2026,"Your rules (literal), M15 force-close",1244.16,False,,53.9,11411
+BTCUSDm,Jan 2024 – Jun 2025,Your live logic,-2000.0,True,2024-02-28 16:34,100.1,1243
+BTCUSDm,Jan 2024 – Jun 2025,"Your rules (literal), M15 force-close",-2000.0,True,2024-07-13 09:54,100.0,2609
+BTCUSDm,Aug 2025 – Nov 2026,Your live logic,-2000.0,True,2026-02-06 00:06,100.2,5350
+BTCUSDm,Aug 2025 – Nov 2026,"Your rules (literal), M15 force-close",-1876.45,False,,94.4,8167

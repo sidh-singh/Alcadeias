@@ -32,7 +32,7 @@ SIGNAL_NAMES = {0: "DO_NOTHING", 1: "BUY", 2: "SELL", 3: "CLOSE_BUY", 4: "CLOSE_
                 5: "BUY_MORE", 6: "SELL_MORE"}
 REASON_NAMES = {K.R_NONE: "", K.R_TARGET: "target", K.R_BOOK: "book", K.R_FORCE: "force_close",
                 K.R_STOPOUT: "stop_out", K.R_STOPLOSS: "stop_loss", K.R_END: "end", K.R_TIME: "time_stop",
-                K.R_HOLE: "data_hole", K.R_TRAIL: "trailing"}
+                K.R_HOLE: "data_hole", K.R_TRAIL: "trailing", K.R_RSI_FC: "force_close_rsi"}
 ACTION_NAMES = {K.ACT_OPEN: "open", K.ACT_ADD: "add", K.ACT_CLOSE: "close"}
 
 DEFAULT_WARM_BARS = 600   # the live bot fetches 500 bars per timeframe; this fully converges RSI/MACD
@@ -238,6 +238,7 @@ _COUNTER_NAMES = {
     K.K_BLOCK_TREND: "polls_entry_blocked_trend", K.K_BLOCK_SPREAD: "polls_entry_blocked_spread",
     K.K_BLOCK_NOVOL: "polls_entry_blocked_no_volatility", K.K_BLOCK_DAYLOSS: "polls_entry_blocked_daily_loss",
     K.K_CLOSE_TRAIL: "closes_trailing",
+    K.K_BLOCK_RSI: "polls_entry_blocked_rsi", K.K_CLOSE_RSI_FC: "closes_force_rsi",
 }
 _SCALAR_NAMES = {
     K.S_FINAL_BALANCE: "final_balance", K.S_FINAL_EQUITY: "final_equity",
@@ -259,7 +260,7 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
     if missing:
         raise ValueError(f"timeframes {missing} not in the prepared set {tfs}")
     n_tf = len(tfs)
-    w = {k: np.zeros(n_tf) for k in ("or", "om", "fr", "fm", "br", "bm")}
+    w = {k: np.zeros(n_tf) for k in ("or", "om", "fr", "fm", "br", "bm", "ar", "am")}
     need_slope = np.zeros(n_tf, np.uint8)
     need_rsi = np.zeros(n_tf, np.uint8)
     for tf, (r, m) in cfg.open_weights.items():
@@ -272,6 +273,16 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
         for tf, (r, m) in cfg.book_weights.items():
             w["br"][idx[tf]], w["bm"][idx[tf]] = r, m
             need_slope[idx[tf]] = 1
+    for tf, (r, m) in (cfg.agree_weights or {}).items():
+        w["ar"][idx[tf]], w["am"][idx[tf]] = r, m
+        need_slope[idx[tf]] = 1
+    entry_rsi_mask = fc_rsi_mask = 0
+    for tf in cfg.entry_rsi_block_tfs or []:
+        entry_rsi_mask |= 1 << idx[tf]
+        need_rsi[idx[tf]] = 1
+    for tf in cfg.fc_rsi_tfs or []:
+        fc_rsi_mask |= 1 << idx[tf]
+        need_rsi[idx[tf]] = 1
     n_tiers = cfg.n_ladder_adds
     if (cfg.ladder_trigger in ("price_step", "profit_step") and n_tiers > 0
             and cfg.ladder_min_gap <= 0 and cfg.ladder_gap_vol <= 0):
@@ -304,6 +315,10 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
     ci[K.CI_TREND_MODE] = 1 if cfg.trend_mode >= 0 else -1
     ci[K.CI_LADDER_MODE] = LADDER_TRIGGERS.index(cfg.ladder_trigger)
     ci[K.CI_VOL_TF] = idx[cfg.vol_tf] if cfg.vol_tf else -1
+    ci[K.CI_ENTRY_RSI_MASK] = entry_rsi_mask
+    ci[K.CI_ENTRY_RSI_MODE] = 1 if cfg.entry_rsi_block_mode == "any" else 0
+    ci[K.CI_FC_RSI_MASK] = fc_rsi_mask
+    ci[K.CI_AGREE_SEP] = 1 if cfg.agree_weights is not None else 0
     ci[K.CI_LIVENESS_MS] = int(round(cfg.market_lookback_s * 1000))
     ci[K.CI_UNIT_MAX] = int(cfg.unit_max_limit)
     ci[K.CI_FIXED_UNITS] = int(cfg.fixed_units)
@@ -452,7 +467,7 @@ def run(cfg: BacktestConfig, prep: Optional[Prepared] = None, mode: str = "sec",
                      flat["R_PH"], flat["R_PL"], flat["R_CH"], flat["R_CL"],
                      flat["M_PH"], flat["M_PL"], flat["M_CH"], flat["M_CL"],
                      need_rsi, need_slope,
-                     w["or"], w["om"], w["fr"], w["fm"], w["br"], w["bm"],
+                     w["or"], w["om"], w["fr"], w["fm"], w["br"], w["bm"], w["ar"], w["am"],
                      ladder_tf, mult, hour_ok, ci, cf,
                      fills, baskets, eq, tr, counters, scal)
         if counters[K.K_FILL_OVERFLOW] == 0 and counters[K.K_BASKET_OVERFLOW] == 0:

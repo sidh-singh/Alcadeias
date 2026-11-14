@@ -1322,7 +1322,8 @@ LEVERS_OFF = dict(slope_on_closed_bars=False, ladder_on_closed_bars=False, min_h
                   entry_hours_utc=None, force_close_enabled=True, trend_tf=None, entry_max_spread=0.0, loss_cooldown_s=0.0,
                   ladder_trigger="rsi_level", ladder_rsi_exit=0.0, vol_tf=None, target_vol=0.0, stop_vol=0.0,
                   ladder_gap_vol=0.0, trail_start_vol=0.0, trail_gap_vol=0.0, trail_start_usd_per_unit=0.0,
-                  trail_gap_usd_per_unit=0.0, daily_loss_limit_usd_per_unit=0.0, vol_cap_usd_per_unit=0.0)
+                  trail_gap_usd_per_unit=0.0, daily_loss_limit_usd_per_unit=0.0, vol_cap_usd_per_unit=0.0,
+                  agree_weights=None, entry_rsi_block_tfs=None, fc_rsi_tfs=None)
 
 
 def test_the_off_values_are_the_configuration_defaults(live_cfg):
@@ -1753,3 +1754,108 @@ def test_no_lever_reads_the_future(live_cfg, prepared, symbol, name):
             pd.testing.assert_frame_equal(fb, fo)
             compared += len(fb)
     assert compared > 0, "the levers never traded before the cuts, so nothing was compared"
+
+
+# ───────────────────────────── higher-timeframe RSI extremes: entry block and force-close ─────────────────────────────
+
+def _rsi_at(prep, cfg, tf: str, p) -> np.ndarray:
+    """The RSI of ``tf`` on the forming bar at every poll, from the live indicator code (closed bars + the bid)."""
+    k = _forming_bar(prep, tf, p["t"].to_numpy())
+    out = np.empty(len(p))
+    cache = {}
+    for i, (kk, bid) in enumerate(zip(k, p["bid"].to_numpy())):
+        key = (int(kk), float(bid))
+        if key not in cache:
+            cache[key] = _live_reading(prep, cfg, tf, int(kk), float(bid))[2]
+        out[i] = cache[key]
+    return out
+
+
+# levels where the fixture windows' M5 / M15 RSI cross them often enough for both rules to act
+RSI_LEVELS = dict(rsi_oversold=45.0, rsi_overbought=55.0)
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+@pytest.mark.parametrize("mode", ["directional", "any"])
+def test_entry_rsi_block_keeps_entries_off_higher_timeframe_extremes(live_cfg, engine_run, prepared, symbol, mode):
+    """
+    Protects: ``entry_rsi_block_tfs`` / ``entry_rsi_block_mode``. Checked against the live indicator code:
+    no basket opens while the RSI of a listed timeframe is beyond a level ('directional': the level on the
+    trade's own side; 'any': either level), every signalled entry outside those states opens, and the
+    blocked ones are counted.
+    """
+    prep = prepared(symbol, mode="ticks")
+    plain = live_cfg(symbol, **QUICK)
+    seen = _polls(_run(engine_run, plain))
+    r = np.concatenate([_rsi_at(prep, plain, "M5", seen), _rsi_at(prep, plain, "M15", seen)])
+    # levels taken from the window's own RSI, so that entries are both blocked and let through whatever the market did
+    q = (0.05, 0.95) if mode == "any" else (0.3, 0.7)
+    levels = dict(rsi_oversold=float(np.quantile(r, q[0])), rsi_overbought=float(np.quantile(r, q[1])))
+    cfg = plain.replace(**levels, entry_rsi_block_tfs=["M5", "M15"], entry_rsi_block_mode=mode)
+    res = _run(engine_run, cfg)
+    p = _polls(res)
+    r5, r15 = _rsi_at(prep, cfg, "M5", p), _rsi_at(prep, cfg, "M15", p)
+    want = p["signal"].isin([1, 2]) & (p["brake"] == 0)
+    buy = (p["signal"] == 1).to_numpy()
+    hi = (r5 >= cfg.rsi_overbought) | (r15 >= cfg.rsi_overbought)
+    lo = (r5 <= cfg.rsi_oversold) | (r15 <= cfg.rsi_oversold)
+    blocked = (hi | lo) if mode == "any" else np.where(buy, hi, lo)
+    assert (p["opened"].to_numpy() == (want.to_numpy() & ~blocked)).all()
+    assert (want.to_numpy() & blocked).sum() == res.counters["polls_entry_blocked_rsi"] > 0
+    assert p["opened"].any()
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+def test_rsi_force_close_fires_when_every_listed_rsi_is_against_the_basket(live_cfg, engine_run, prepared, symbol):
+    """
+    Protects: ``fc_rsi_tfs``. A basket is force-closed (reason 'force_close_rsi') on the first poll on which the
+    RSI of every listed timeframe is beyond the level against it, unless an earlier exit in the documented
+    order fires on that poll; and never while one of them is not.
+    """
+    cfg = live_cfg(symbol, **QUICK, **RSI_LEVELS, **TARGET).replace(fc_rsi_tfs=["M5", "M15"], target_usd_per_unit=3.0,
+                                                                    force_close_enabled=True)
+    prep = prepared(symbol, mode="ticks")
+    res = _run(engine_run, cfg)
+    p = _polls(res)
+    r5, r15 = _rsi_at(prep, cfg, "M5", p), _rsi_at(prep, cfg, "M15", p)
+    side = p["side"].to_numpy()
+    against = np.where(side > 0, (r5 <= cfg.rsi_oversold) & (r15 <= cfg.rsi_oversold),
+                       (r5 >= cfg.rsi_overbought) & (r15 >= cfg.rsi_overbought)) & (side != 0)
+    reason = p["reason"].to_numpy()
+    slope_fc = np.where(side > 0, p["fc"].to_numpy() <= -cfg.force_close_s, p["fc"].to_numpy() >= cfg.force_close_s) & (side != 0)
+    target = (p["profit"].to_numpy() > cfg.target_usd_per_unit * p["b_units"].to_numpy()) & (side != 0)
+    assert (reason == "force_close_rsi").sum() == res.counters["closes_force_rsi"] > 0
+    # it fires exactly where the rule says and nothing earlier in the order takes the poll
+    fired = reason == "force_close_rsi"
+    assert (against[fired]).all() and not (slope_fc[fired]).any() and not (target[fired]).any()
+    # on every poll where the rule holds and no earlier exit fires, the basket is closed there
+    due = against & ~target & ~slope_fc
+    assert (reason[due] == "force_close_rsi").all()
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+def test_agreement_section_moves_the_force_close_without_changing_the_entry(live_cfg, engine_run, symbol):
+    """
+    Protects: ``agree_weights``. The entry agreement is read from the agreement section, the force-close from
+    its own: with the force-close switched off, moving fc_weights to another timeframe changes nothing as long as
+    the agreement stays where it was (and does change the run without agree_weights); with it on, every slope
+    force-close happens with the moved force-close score against the basket. agree_weights equal to fc_weights is
+    the live run.
+    """
+    base = live_cfg(symbol, **QUICK)
+    _assert_same_run(_run(engine_run, base), _run(engine_run, base.replace(agree_weights=dict(base.fc_weights))))
+    off = base.replace(force_close_enabled=False)
+    kept = off.replace(fc_weights={"M5": 1}, agree_weights=dict(base.fc_weights))
+    a, b = _run(engine_run, off).fills, _run(engine_run, kept).fills
+    cols = [c for c in a.columns if c not in ("fc_score", "book_score")]     # (the scores at the fill are diagnostics)
+    pd.testing.assert_frame_equal(a[cols], b[cols])
+    drifted = _run(engine_run, off.replace(fc_weights={"M5": 1}))           # the agreement moves with the force-close
+    assert not _run(engine_run, off).fills.equals(drifted.fills), "M5 and M15 agree everywhere: the comparison shows nothing"
+    # (a target far enough away that baskets live long enough to meet the force-close in both windows)
+    moved = _run(engine_run, base.replace(fc_weights={"M15": 1}, agree_weights=dict(base.fc_weights), target_usd_per_unit=6.0,
+                                          book_enabled=False))
+    p = _polls(moved)
+    fc_polls = (p["reason"] == "force_close").to_numpy()
+    side = p["side"].to_numpy()
+    assert fc_polls.sum() > 0
+    assert (np.where(side > 0, p["fc"].to_numpy() <= -base.force_close_s, p["fc"].to_numpy() >= base.force_close_s)[fc_polls]).all()

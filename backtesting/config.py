@@ -122,6 +122,10 @@ class BacktestConfig:
     open_weights: Dict[str, Weight] = field(default_factory=lambda: {"H1": 1, "M15": 1})
     fc_weights: Dict[str, Weight] = field(default_factory=lambda: {"M15": 1})
     book_weights: Dict[str, Weight] = field(default_factory=lambda: {"M15": 1})
+    # The section whose score gates a fresh entry against entry_agree_s. Live it is the force-close section
+    # (fc_weights); set it to move the force-close to another timeframe while the entry rule stays as it is.
+    # None = fc_weights.
+    agree_weights: Optional[Dict[str, Weight]] = None
     open_grey_fill: bool = True         # a grey (0) sign borrows the other indicator's sign on that TF
     book_grey_fill: bool = True
     fc_grey_fill: bool = False
@@ -245,6 +249,17 @@ class BacktestConfig:
     # trail_start = 0 the exit trails from the entry and is also a stop at -trail_gap.
     trail_start_usd_per_unit: float = 0.0
     trail_gap_usd_per_unit: float = 0.0
+    # RSI extremes of higher timeframes, at the bot's own levels (rsi_oversold / rsi_overbought, live 35 / 65), on the
+    # forming bar as the ladder reads them:
+    #   entry_rsi_block_tfs  no fresh entry while the RSI of one of these timeframes is beyond a level:
+    #                        'directional' = no buy while one is at or above rsi_overbought, no sell while one is at or
+    #                        below rsi_oversold; 'any' = no entry at all while one is beyond either level
+    #   fc_rsi_tfs           force-close a basket when the RSI of ALL these timeframes is beyond the level against it
+    #                        (a buy: all at or below rsi_oversold; a sell: all at or above rsi_overbought), in addition
+    #                        to the force-close score. Reason 'force_close_rsi'.
+    entry_rsi_block_tfs: Optional[List[str]] = None
+    entry_rsi_block_mode: str = "directional"
+    fc_rsi_tfs: Optional[List[str]] = None
     # No fresh entry for the rest of the UTC day once that day's closed baskets have lost this much per unit (0 = off).
     daily_loss_limit_usd_per_unit: float = 0.0
 
@@ -256,6 +271,14 @@ class BacktestConfig:
         self.open_weights = _norm_weights(self.open_weights)
         self.fc_weights = _norm_weights(self.fc_weights)
         self.book_weights = _norm_weights(self.book_weights)
+        if self.agree_weights is not None:
+            self.agree_weights = _norm_weights(self.agree_weights)
+        for name in ("entry_rsi_block_tfs", "fc_rsi_tfs"):
+            for tf in getattr(self, name) or []:
+                if tf not in TF_SECONDS:
+                    raise ValueError(f"unknown timeframe {tf!r} in {name}")
+        if self.entry_rsi_block_mode not in ("directional", "any"):
+            raise ValueError("entry_rsi_block_mode is 'directional' or 'any'")
         for tf in self.ladder_tfs:
             if tf not in TF_SECONDS:
                 raise ValueError(f"unknown ladder timeframe {tf!r}")
@@ -320,6 +343,7 @@ class BacktestConfig:
             used.add(self.trend_tf)
         if self.vol_tf:
             used.add(self.vol_tf)
+        used |= set(self.agree_weights or {}) | set(self.entry_rsi_block_tfs or []) | set(self.fc_rsi_tfs or [])
         return sorted(used, key=TF_SECONDS.get)
 
     def replace(self, **kw) -> "BacktestConfig":
@@ -333,8 +357,9 @@ class BacktestConfig:
 
     def to_dict(self) -> dict:
         d = asdict(self)
-        for k in ("open_weights", "fc_weights", "book_weights"):
-            d[k] = {tf: list(v) for tf, v in getattr(self, k).items()}
+        for k in ("open_weights", "fc_weights", "book_weights", "agree_weights"):
+            if getattr(self, k) is not None:
+                d[k] = {tf: list(v) for tf, v in getattr(self, k).items()}
         return d
 
     @classmethod

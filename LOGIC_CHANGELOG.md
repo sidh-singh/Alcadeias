@@ -56,6 +56,50 @@ replayed, five quarters (13 Aug 2025 → 13 Nov 2026), each run eight times with
 
 ---
 
+## 2026-11-15 · Owner's rules on the live hedging logic: RSI-extreme entry block and RSI force-close
+
+**Status:** backtest-only. Nothing changed in the live bot.
+
+**Asked for.** Keep the live hedging logic (H1 + M15 entry, M15 force-close, Fibonacci ladder, $1 target) and add:
+(1) no new position while the H1 or H4 RSI is beyond the overbought / oversold levels (35 / 65); (2) force-close a
+basket also when the H1 and H4 RSI are both at the extreme against it (a buy: both ≤ 35; a sell: both ≥ 65), with the
+reversal check on M15 (live) or H1. Aim: avoid entering on spikes and get out of spike positions quickly.
+
+**New backtester settings** (off by default): `entry_rsi_block_tfs` with `entry_rsi_block_mode` (`any` = no entry
+while either extreme is reached; `directional` = no buy at the overbought level, no sell at the oversold level),
+`fc_rsi_tfs` (the RSI force-close), `agree_weights` (lets the force-close move to H1 while the entry still needs M15 to
+agree, as live).
+
+**Result.** Average per quarter, all 15 quarters (Feb 2023 – Nov 2026), real $2,000, every tick, eight loop timings per
+quarter (accounts wiped of 120 runs):
+
+| Design | Gold | BTC |
+|---|---|---|
+| Live logic | −$941 (27) | −$1,311 (49) |
+| Your rules, entry block read as "directional" | −$781 (6) | −$1,255 (20) |
+| **Your rules, literal: no entry while H1 or H4 RSI is beyond either level** | **−$175 (0)** | **−$712 (0)** |
+| literal, force-close on H1 instead of M15 | −$197 (4) | −$598 (0) |
+| literal entry block only (no RSI force-close) | −$129 (0) | −$772 (3) |
+| literal + at most 3 ladder adds | −$148 (0) | −$620 (0) |
+| "directional" reading + basket stop $40 per unit | −$1,057 (0) | −$1,209 (2) |
+| literal + H1 trend filter | −$4 (0) | −$140 (0) |
+| literal + H1 trend filter + 4 h pause after a loss | **+$9 (0)** | **−$125 (0)** |
+
+- The "directional" reading lets the bot buy while H1 and H4 are both oversold; the RSI force-close then shuts that buy
+  at once, so the bot churns small losses. The literal reading avoids it.
+- The entry block is the part that removes the wipe-outs; the RSI force-close caps the worst basket.
+- One continuous $2,000 account (per-second replay): the live logic was wiped in every window (gold 19 Jul 2024 and
+  14 Oct 2025, BTC 28 Feb 2024 and 6 Feb 2026); with the literal rules gold ended Aug 2025 – Nov 2026 at +$1,244 (deepest
+  drawdown 54%) but was wiped in the 2024-25 window on 9 Apr 2025, and BTC lost steadily. Chart:
+  `backtest_results/improve/round3/equity_live_vs_your_rules.html`.
+
+**Verdict.** The rules do what they are meant to: no more wiped accounts and a much smaller worst basket. The logic
+still does not make money over 2023-2026: with the $1 target the small wins do not cover the spread and the remaining
+losses. Adding the H1 trend filter and a 4 h pause brings gold to break-even and BTC to a small loss. For comparison,
+V3-lite (entry below) made +$106 a quarter on gold in 2023.
+
+---
+
 ## 2026-11-15 · Final exam result: V3-lite adopted for gold (backtest); BTC has no edge
 
 **Status:** backtest-only. Recommended for a demo account: V3-lite on gold. Nothing changed in the live bot.

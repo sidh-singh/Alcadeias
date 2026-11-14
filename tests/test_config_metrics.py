@@ -329,6 +329,8 @@ def _perturbed(cfg: BacktestConfig, f: dataclasses.Field):
         "target_usd_per_unit": lambda: None if v is not None else 1.5, "stop_loss_usd_per_unit": lambda: 12.5,
         "trend_tf": lambda: "H4" if v != "H4" else "H1", "vol_tf": lambda: "H4" if v != "H4" else "H1",
         "ladder_trigger": lambda: "rsi_cross" if v != "rsi_cross" else "macd_turn", "trend_mode": lambda: -v,
+        "agree_weights": lambda: {"H1": 1}, "entry_rsi_block_tfs": lambda: ["H1", "H4"], "fc_rsi_tfs": lambda: ["H1", "H4"],
+        "entry_rsi_block_mode": lambda: "any" if v != "any" else "directional",
     }
     if f.name in special:
         return special[f.name]()

@@ -81,7 +81,11 @@ CI_TREND_MODE = 50         # +1 entries with that trend only, -1 against it only
 CI_LOSS_COOLDOWN_MS = 51   # re-entry wait after a losing basket (0 = the ordinary cooldown)
 CI_LADDER_MODE = 52        # what releases an add: 0 RSI level (live), 1 RSI cross-back, 2 MACD turn, 3 price step, 4 profit step
 CI_VOL_TF = 53             # index of the volatility timeframe (-1 = distances are in USD / price as given)
-CI_N = 54
+CI_ENTRY_RSI_MASK = 54     # bit f set: the RSI of timeframe f can block a fresh entry (0 = off)
+CI_ENTRY_RSI_MODE = 55     # 0 directional, 1 either extreme blocks
+CI_FC_RSI_MASK = 56        # bit f set: force-close when all these timeframes' RSI are beyond the level against the basket
+CI_AGREE_SEP = 57          # 1: the entry agreement is read from its own section (w_ar / w_am), 0: from the force-close section
+CI_N = 58
 
 # ── float config slots ──
 CF_BALANCE = 0
@@ -150,6 +154,7 @@ ACT_OPEN, ACT_ADD, ACT_CLOSE = 1, 2, 3
 R_NONE, R_TARGET, R_BOOK, R_FORCE, R_STOPOUT, R_STOPLOSS, R_END, R_TIME = 0, 1, 2, 3, 4, 5, 6, 7
 R_HOLE = 8     # closed at the last quote before a hole in the tick history (data hygiene, not a bot decision)
 R_TRAIL = 9    # trailing exit: the basket gave back the trailing gap from its best
+R_RSI_FC = 10  # force-close because the listed timeframes' RSI were all beyond the level against the basket
 
 # ── basket log columns ──
 B_ID = 0
@@ -221,7 +226,9 @@ K_BLOCK_SPREAD = 29     # an entry was wanted while the spread was wider than th
 K_BLOCK_NOVOL = 30      # an entry was wanted but the volatility unit was not known yet
 K_BLOCK_DAYLOSS = 31    # an entry was wanted after the day's loss limit had been reached
 K_CLOSE_TRAIL = 32
-K_N = 33
+K_BLOCK_RSI = 33        # an entry was wanted while a higher timeframe's RSI was beyond its level
+K_CLOSE_RSI_FC = 34     # baskets force-closed because every listed RSI was beyond the level against them
+K_N = 35
 
 # A session ends with its last quote. For three more minutes the bot still counts the market as
 # live (its liveness rule) and may send orders; the server answers "market closed". An order is
@@ -277,6 +284,20 @@ def _round2(x):
     if x >= 0.0:
         return math.floor(x * 100.0 + 0.5) / 100.0
     return -math.floor(-x * 100.0 + 0.5) / 100.0
+
+
+@njit(cache=True)
+def _rsi_blocks(mask, any_extreme, want_side, rsi_now, rsi_os, rsi_ob):
+    """True when the RSI of a timeframe in ``mask`` forbids a fresh entry on ``want_side`` (see entry_rsi_block_tfs)."""
+    for f in range(rsi_now.shape[0]):
+        if (mask >> f) & 1:
+            r = rsi_now[f]
+            if any_extreme:
+                if r >= rsi_ob or r <= rsi_os:
+                    return True
+            elif (want_side > 0 and r >= rsi_ob) or (want_side < 0 and r <= rsi_os):
+                return True
+    return False
 
 
 @njit(cache=True)
@@ -575,7 +596,7 @@ def run_kernel(t_ms, bid, ask,
                C, AG, AL, RSIc, EF, ES, SG, HISTc, VOL,
                R_PH, R_PL, R_CH, R_CL, M_PH, M_PL, M_CH, M_CL,
                need_rsi, need_slope,
-               w_or, w_om, w_fr, w_fm, w_br, w_bm,
+               w_or, w_om, w_fr, w_fm, w_br, w_bm, w_ar, w_am,
                ladder_tf, ladder_mult, hour_ok,
                ci, cf,
                fills, baskets, eq, trace, counters, scal):
@@ -591,6 +612,10 @@ def run_kernel(t_ms, bid, ask,
     max_spread = cf[CF_MAX_SPREAD]
     last_lost = False
     ladder_mode = ci[CI_LADDER_MODE]
+    entry_rsi_mask = ci[CI_ENTRY_RSI_MASK]
+    entry_rsi_any = ci[CI_ENTRY_RSI_MODE] == 1
+    fc_rsi_mask = ci[CI_FC_RSI_MASK]
+    agree_sep = ci[CI_AGREE_SEP] == 1
     vol_f = ci[CI_VOL_TF]
     rsi_exit = cf[CF_RSI_EXIT]
     target_vol = cf[CF_TARGET_VOL]
@@ -915,6 +940,7 @@ def run_kernel(t_ms, bid, ask,
         open_score = 0.0
         fc_score = 0.0
         book_score = 0.0
+        agree_score = 0.0
         for f in range(n_tf):
             if need_slope[f] == 0:
                 continue
@@ -953,12 +979,26 @@ def run_kernel(t_ms, bid, ask,
                     elif mm == 0 and rr != 0:
                         mm = rr
                 book_score += wr * rr + wm * mm
+            if agree_sep:
+                wr = w_ar[f]
+                wm = w_am[f]
+                if wr != 0.0 or wm != 0.0:
+                    rr = r
+                    mm = m
+                    if grey_fc and wr != 0.0 and wm != 0.0:
+                        if rr == 0 and mm != 0:
+                            rr = mm
+                        elif mm == 0 and rr != 0:
+                            mm = rr
+                    agree_score += wr * rr + wm * mm
+        if not agree_sep:
+            agree_score = fc_score
 
         # ── Strategy.calculate_signal ──
         entry_dir = 0
-        if open_score >= entry_s and fc_score >= entry_agree_s:
+        if open_score >= entry_s and agree_score >= entry_agree_s:
             entry_dir = 1
-        elif open_score <= -entry_s and fc_score <= -entry_agree_s:
+        elif open_score <= -entry_s and agree_score <= -entry_agree_s:
             entry_dir = -1
         open_wants = 0
         if open_score >= entry_s:
@@ -995,6 +1035,13 @@ def run_kernel(t_ms, bid, ask,
         else:
             prev_dir = 0
             held = (T - basket_open_t) >= min_hold
+            # every listed timeframe's RSI beyond the level against the basket
+            rsi_fc = fc_enabled and fc_rsi_mask != 0
+            if rsi_fc:
+                for f in range(n_tf):
+                    if (fc_rsi_mask >> f) & 1:
+                        if (side > 0 and not (rsi_now[f] <= rsi_os)) or (side < 0 and not (rsi_now[f] >= rsi_ob)):
+                            rsi_fc = False
             if side > 0:
                 fc_hit = fc_enabled and (fc_score <= -force_close_s)
                 bk_hit = book_enabled and (profit > protect * basket_units) and (book_score <= -book_s)
@@ -1003,6 +1050,8 @@ def run_kernel(t_ms, bid, ask,
                 fc_hit = fc_enabled and (fc_score >= force_close_s)
                 bk_hit = book_enabled and (profit > protect * basket_units) and (book_score >= book_s)
                 add_ok = open_score < ladder_s
+            fc_slope = fc_hit
+            fc_hit = fc_hit or rsi_fc
             if fc_hit:
                 if fc_since < 0:
                     fc_since = T
@@ -1027,7 +1076,7 @@ def run_kernel(t_ms, bid, ask,
                 reason = R_BOOK
             elif fc_fire:
                 signal = 3 if side > 0 else 4
-                reason = R_FORCE
+                reason = R_FORCE if fc_slope else R_RSI_FC
             elif max_hold > 0 and (T - basket_open_t) >= max_hold:
                 signal = 3 if side > 0 else 4
                 reason = R_TIME
@@ -1163,6 +1212,9 @@ def run_kernel(t_ms, bid, ask,
                     ok = False
                 elif day_limit > 0.0 and day_id == tsec // 86400 and day_pnl <= -day_limit:
                     counters[K_BLOCK_DAYLOSS] += 1
+                    ok = False
+                elif entry_rsi_mask != 0 and _rsi_blocks(entry_rsi_mask, entry_rsi_any, want_side, rsi_now, rsi_os, rsi_ob):
+                    counters[K_BLOCK_RSI] += 1
                     ok = False
                 elif hours_on and hour_ok[(tsec % 86400) // 3600] == 0:
                     counters[K_BLOCK_HOURS] += 1
@@ -1376,6 +1428,8 @@ def run_kernel(t_ms, bid, ask,
                     counters[K_CLOSE_TIME] += 1
                 elif reason == R_TRAIL:
                     counters[K_CLOSE_TRAIL] += 1
+                elif reason == R_RSI_FC:
+                    counters[K_CLOSE_RSI_FC] += 1
                 elif reason == R_HOLE:
                     counters[K_CLOSE_HOLE] += 1
                 # the day's result per unit, for the daily loss limit
