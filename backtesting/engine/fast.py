@@ -234,6 +234,7 @@ _COUNTER_NAMES = {
     K.K_CLOSE_HOLE: "closes_data_hole", K.K_BLOCK_HOLE: "polls_entry_blocked_data_hole",
     K.K_BLOCK_CLOSED: "orders_refused_market_closed",
     K.K_BLOCK_REOPEN: "polls_order_blocked_close_only",
+    K.K_BLOCK_TREND: "polls_entry_blocked_trend", K.K_BLOCK_SPREAD: "polls_entry_blocked_spread",
 }
 _SCALAR_NAMES = {
     K.S_FINAL_BALANCE: "final_balance", K.S_FINAL_EQUITY: "final_equity",
@@ -289,6 +290,9 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
     ci[K.CI_OPEN_DELAY_MS] = int(cfg.open_order_delay_ms)
     ci[K.CI_ADD_DELAY_MS] = int(cfg.add_order_delay_ms)
     ci[K.CI_COOLDOWN_MS] = int(round(cfg.reentry_cooldown_s * 1000))
+    ci[K.CI_LOSS_COOLDOWN_MS] = int(round(cfg.loss_cooldown_s * 1000))
+    ci[K.CI_TREND_TF] = idx[cfg.trend_tf] if cfg.trend_tf else -1
+    ci[K.CI_TREND_MODE] = 1 if cfg.trend_mode >= 0 else -1
     ci[K.CI_LIVENESS_MS] = int(round(cfg.market_lookback_s * 1000))
     ci[K.CI_UNIT_MAX] = int(cfg.unit_max_limit)
     ci[K.CI_FIXED_UNITS] = int(cfg.fixed_units)
@@ -369,6 +373,7 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
     cf[K.CF_STOP_OUT] = cfg.stop_out_level
     cf[K.CF_SL] = cfg.stop_loss_usd_per_unit if cfg.stop_loss_usd_per_unit is not None else 0.0
     cf[K.CF_LADDER_GAP] = cfg.ladder_min_gap
+    cf[K.CF_MAX_SPREAD] = cfg.entry_max_spread
     cf[K.CF_RSI_ALPHA] = 1.0 / cfg.rsi_length
     cf[K.CF_MACD_AF] = 2.0 / (cfg.macd_fast + 1.0)
     cf[K.CF_MACD_AS] = 2.0 / (cfg.macd_slow + 1.0)

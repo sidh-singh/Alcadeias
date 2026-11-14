@@ -224,9 +224,16 @@ fixes for the weaknesses the backtest exposes:
 price and time stops · `target_usd_per_unit`, `target_per_lot`, `book_enabled`,
 `profit_protect_usd_per_unit` — profit exits · `slope_on_closed_bars`,
 `ladder_on_closed_bars`, `fc_confirm_s`, `entry_confirm_s`, `min_hold_s` — signal
-stability · `allow_long`, `allow_short`, `entry_hours_utc` — filters · separate RSI / MACD
+stability · `allow_long`, `allow_short`, `entry_hours_utc` — filters · `trend_tf`, `trend_mode` —
+entries only with (+1) or against (-1) the trend of one timeframe, read as the sign of the MACD
+signal line of its last closed bar · `entry_max_spread` — no entry on a quote wider than this ·
+`loss_cooldown_s` — a longer pause after a losing basket · separate RSI / MACD
 weights per timeframe in `open_weights`, `fc_weights`, `book_weights`
 (`{"H4": [1, 0], "M15": [0, 1]}` = RSI on H4, MACD on M15).
+
+The improvement search built on these levers (which designs were tried, how they were chosen and
+what they did on five quarters) is in [`IMPROVEMENT.md`](../IMPROVEMENT.md); its code is
+`backtesting/research/` (`python -m backtesting.research.improve report XAUUSDm`).
 
 ## Layout
 

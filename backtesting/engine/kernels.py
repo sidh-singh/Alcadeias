@@ -76,7 +76,10 @@ CI_JITTER_MS = 45          # each loop pass takes up to this much longer, drawn 
 CI_JITTER_SEED = 46
 CI_REOPEN_UNTIL0 = 47      # the broker is still in close-only mode until this time when the run starts
 CI_AFTER_MS = 48           # time of the first quote after the rows (the end of the window if the history stops there)
-CI_N = 49
+CI_TREND_TF = 49           # index of the trend-filter timeframe (-1 = off)
+CI_TREND_MODE = 50         # +1 entries with that trend only, -1 against it only
+CI_LOSS_COOLDOWN_MS = 51   # re-entry wait after a losing basket (0 = the ordinary cooldown)
+CI_N = 52
 
 # ── float config slots ──
 CF_BALANCE = 0
@@ -104,7 +107,8 @@ CF_RSI_ALPHA = 21
 CF_MACD_AF = 22
 CF_MACD_AS = 23
 CF_MACD_ASG = 24
-CF_N = 25
+CF_MAX_SPREAD = 25         # no fresh entry while ask - bid is wider than this (0 = off)
+CF_N = 26
 
 # ── fill log columns ──
 F_T = 0            # decision time (poll), ms
@@ -199,7 +203,9 @@ K_BLOCK_REOPEN = 24     # an open / add was wanted while the broker was in close
 K_CLOSE_HOLE = 25       # baskets closed at the last quote before a hole in the tick history
 K_BLOCK_HOLE = 26       # polls on which an entry was wanted during the quarantine after such a hole
 K_BLOCK_CLOSED = 27     # orders (open, add or close) sent after the session's last quote: the server refuses them
-K_N = 28
+K_BLOCK_TREND = 28      # an entry was wanted against the trend filter
+K_BLOCK_SPREAD = 29     # an entry was wanted while the spread was wider than the cap
+K_N = 30
 
 # A session ends with its last quote. For three more minutes the bot still counts the market as
 # live (its liveness rule) and may send orders; the server answers "market closed". An order is
@@ -543,6 +549,11 @@ def run_kernel(t_ms, bid, ask,
     start_ms = ci[CI_START_MS]
     end_ms = ci[CI_END_MS]
     after_ms = ci[CI_AFTER_MS]
+    trend_f = ci[CI_TREND_TF]
+    trend_mode = ci[CI_TREND_MODE]
+    loss_cooldown = ci[CI_LOSS_COOLDOWN_MS]
+    max_spread = cf[CF_MAX_SPREAD]
+    last_lost = False
     poll = ci[CI_POLL_MS]
     latency = ci[CI_LATENCY_MS]
     open_delay = ci[CI_OPEN_DELAY_MS]
@@ -737,7 +748,7 @@ def run_kernel(t_ms, bid, ask,
 
         # forming-bar index of every timeframe in use
         for f in range(n_tf):
-            if need_rsi[f] == 1 or need_slope[f] == 1:
+            if need_rsi[f] == 1 or need_slope[f] == 1 or f == trend_f:
                 o = off[f]
                 while K[f] + 1 < nb[f] and START_ROW[o + K[f] + 1] <= ptr:
                     K[f] += 1
@@ -894,7 +905,15 @@ def run_kernel(t_ms, bid, ask,
             open_wants = 1
         elif open_score <= -entry_s:
             open_wants = -1
-        entry_allowed = (T - last_close) >= cooldown
+        entry_allowed = (T - last_close) >= (loss_cooldown if (last_lost and loss_cooldown > 0) else cooldown)
+        # trend filter: the sign of the MACD signal line of the trend timeframe's last closed bar
+        trend_now = 0
+        if trend_f >= 0 and K[trend_f] >= 1:
+            sgt = SG[off[trend_f] + K[trend_f] - 1]
+            if sgt > 0.0:
+                trend_now = 1
+            elif sgt < 0.0:
+                trend_now = -1
 
         signal = 0
         reason = R_NONE
@@ -1040,6 +1059,12 @@ def run_kernel(t_ms, bid, ask,
                     counters[K_BLOCK_HOLE] += 1       # quarantine after a hole in the tick history
                     ok = False
                 elif (want_side > 0 and not allow_long) or (want_side < 0 and not allow_short):
+                    ok = False
+                elif trend_f >= 0 and want_side * trend_now * trend_mode <= 0:
+                    counters[K_BLOCK_TREND] += 1
+                    ok = False
+                elif max_spread > 0.0 and (a - b) > max_spread:
+                    counters[K_BLOCK_SPREAD] += 1
                     ok = False
                 elif hours_on and hour_ok[(tsec % 86400) // 3600] == 0:
                     counters[K_BLOCK_HOURS] += 1
@@ -1235,6 +1260,7 @@ def run_kernel(t_ms, bid, ask,
                     baskets[n_baskets, B_NPOS] = n_pos
                     baskets[n_baskets, B_LOTS] = tot_lots
                     baskets[n_baskets, B_PNL] = realised - basket_comm
+                    last_lost = (realised - basket_comm) < 0.0
                     baskets[n_baskets, B_REASON] = reason
                     baskets[n_baskets, B_UNITS] = basket_units
                     baskets[n_baskets, B_MAE] = basket_mae

@@ -203,6 +203,13 @@ class BacktestConfig:
     allow_long: bool = True
     allow_short: bool = True
     entry_hours_utc: Optional[List[int]] = None      # restrict fresh entries to these UTC hours
+    # Trend filter: fresh entries only in the direction (trend_mode +1) of this timeframe's trend, or only
+    # against it (-1). The trend is the sign of the MACD signal line of that timeframe's last CLOSED bar,
+    # the same line the live MACD vote uses to choose its pivot side. None = off.
+    trend_tf: Optional[str] = None
+    trend_mode: int = 1
+    entry_max_spread: float = 0.0       # no fresh entry while the quoted spread is wider than this, in price units (0 = off)
+    loss_cooldown_s: float = 0.0        # wait this long (instead of reentry_cooldown_s) after a basket that lost (0 = off)
 
     # ── output ───────────────────────────────────────────────────────────────
     record_interval_s: int = 60         # equity / score sampling for the charts
@@ -253,6 +260,8 @@ class BacktestConfig:
             used |= set(self.book_weights)
         if self.ladder_enabled:
             used |= set(self.ladder_tfs[: self.n_ladder_adds])
+        if self.trend_tf:
+            used.add(self.trend_tf)
         return sorted(used, key=TF_SECONDS.get)
 
     def replace(self, **kw) -> "BacktestConfig":

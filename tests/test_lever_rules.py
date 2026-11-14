@@ -1319,7 +1319,7 @@ def test_buy_and_sell_rules_are_mirror_images(live_cfg, prepared, symbol, name):
 LEVERS_OFF = dict(slope_on_closed_bars=False, ladder_on_closed_bars=False, min_hold_s=0.0, fc_confirm_s=0.0,
                   entry_confirm_s=0.0, stop_loss_usd_per_unit=None, ladder_min_gap=0.0, ladder_min_interval_s=0.0,
                   max_hold_s=0.0, target_per_lot=False, max_adds=99, allow_long=True, allow_short=True,
-                  entry_hours_utc=None, force_close_enabled=True)
+                  entry_hours_utc=None, force_close_enabled=True, trend_tf=None, entry_max_spread=0.0, loss_cooldown_s=0.0)
 
 
 def test_the_off_values_are_the_configuration_defaults(live_cfg):
@@ -1400,3 +1400,63 @@ def test_target_per_lot_is_the_live_target_for_a_single_position(live_cfg, engin
     # polls over the live target but not over the per-lot target: the basket stays
     waits = (p["side"] != 0) & (p["profit"] > cfg.target_usd_per_unit * p["b_units"]) & (p["reason"] == "")
     assert waits.sum() > 0
+
+
+# ───────────────────────────── trend filter, spread cap, cooldown after a loss ─────────────────────────────
+
+def _trend_at(prep, tf: str, times_ms) -> np.ndarray:
+    """Sign of the MACD signal line of the last closed ``tf`` bar at each time, from the live indicator code."""
+    macd = Indicator().calculate_macd(pd.Series(prep.closes[tf]), fast=live_constants.MACD_FAST, slow=live_constants.MACD_SLOW,
+                                      signal=live_constants.MACD_SIGNAL)
+    tick_ms = prep.t_ms[np.searchsorted(prep.t_ms, np.asarray(times_ms, np.int64), side="right") - 1]
+    forming = np.searchsorted(prep.bar_t[tf] * 1000, tick_ms, side="right") - 1
+    return np.sign(macd["signal"].to_numpy()[forming - 1])
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+@pytest.mark.parametrize("tf", ["M5", "M15", "H1"])
+def test_trend_filter_opens_on_one_side_of_the_trend_only(live_cfg, engine_run, prepared, symbol, tf):
+    """
+    Protects: ``trend_tf`` / ``trend_mode``. The trend is the sign of the MACD signal line of the
+    trend timeframe's last closed bar. With the filter every basket opens in that direction
+    (mode +1) or against it (mode -1), entries on the other side are counted as blocked, and
+    the two filtered runs together take no entry the unfiltered rules would not signal.
+    """
+    prep = prepared(symbol, mode="ticks")
+    base = live_cfg(symbol, **QUICK, **WIDE_LADDER)
+    sides = {}
+    for mode in (1, -1):
+        res = _run(engine_run, base.replace(trend_tf=tf, trend_mode=mode))
+        opens = res.fills[res.fills["action"] == "open"]
+        want = np.where(opens["side"] == "BUY", 1, -1)
+        assert (want == mode * _trend_at(prep, tf, _ms(opens["time"]))).all()
+        assert res.counters["polls_entry_blocked_trend"] > 0
+        sides[mode] = len(opens)
+    assert sides[1] > 0 or sides[-1] > 0
+    assert _run(engine_run, base).counters["polls_entry_blocked_trend"] == 0
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+def test_spread_cap_keeps_entries_off_wide_quotes(live_cfg, engine_run, prepared, symbol):
+    """Protects: ``entry_max_spread``. No basket is opened on a quote wider than the cap; wanted entries on such quotes are counted."""
+    prep = prepared(symbol, mode="ticks")
+    spread = prep.ask - prep.bid
+    cap = float(np.quantile(spread, 0.3))
+    res = _run(engine_run, live_cfg(symbol, **QUICK, entry_max_spread=cap))
+    opens = res.fills[res.fills["action"] == "open"]
+    at = np.searchsorted(prep.t_ms, _ms(opens["time"]), side="right") - 1
+    assert len(opens) > 0 and (spread[at] <= cap + 1e-12).all()
+    assert res.counters["polls_entry_blocked_spread"] > 0
+
+
+@pytest.mark.parametrize("symbol", SYMBOLS)
+def test_a_losing_basket_is_followed_by_the_longer_cooldown(live_cfg, engine_run, symbol):
+    """Protects: ``loss_cooldown_s``. After a basket that lost the next entry waits that long; after a winner, the ordinary cooldown."""
+    cfg = live_cfg(symbol, **QUICK, **WIDE_LADDER).replace(loss_cooldown_s=120.0)
+    res = _run(engine_run, cfg)
+    b = res.baskets.sort_values("open_time")
+    wait = (_ms(b["open_time"])[1:] - _ms(b["close_time"])[:-1]) / 1000.0
+    lost = b["pnl"].to_numpy()[:-1] < 0
+    assert lost.any() and (~lost).any()
+    assert (wait[lost] >= 120.0).all() and (wait[~lost] >= cfg.reentry_cooldown_s).all()
+    assert (wait[~lost] < 120.0).any()               # winners do not wait the longer time
