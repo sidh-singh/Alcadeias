@@ -1,0 +1,156 @@
+{
+  "name": "v4",
+  "description": "Everything that has held up so far, combined: entries with the H1 trend, the bot's votes on H1 or H1 + M15, the owner's RSI-extreme entry block and RSI force-close, stop and target in H1 volatility units with an optional dollar cap, at most one MACD-turn ladder add, and a pause after a losing basket. Searched on Jan 2023 - Nov 2026; 2021-2022 is kept for one final test.",
+  "base": {
+    "trend_tf": "H1",
+    "vol_tf": "H1",
+    "vol_len": 24,
+    "target_usd_per_unit": null,
+    "stop_loss_usd_per_unit": null,
+    "ladder_trigger": "macd_turn",
+    "ladder_gap_vol": 1,
+    "ladder_multipliers": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "ladder_tfs": [
+      "M5",
+      "M15",
+      "H1",
+      "H1",
+      "H1"
+    ],
+    "entry_rsi_block_mode": "any"
+  },
+  "parameters": {
+    "open_weights": {
+      "values": {
+        "H1": {
+          "H1": 1
+        },
+        "H1+M15": {
+          "H1": 1,
+          "M15": 1
+        }
+      },
+      "note": "which timeframes' votes open a basket (live: H1 + M15; V3-lite: H1)"
+    },
+    "entry_agree_s": {
+      "values": [
+        0,
+        2
+      ],
+      "note": "2 = both M15 votes must agree with the entry (live); 0 = no agreement needed"
+    },
+    "target_vol": {
+      "values": [
+        4,
+        6,
+        8,
+        10
+      ],
+      "note": "basket target, H1 volatility units"
+    },
+    "stop_vol": {
+      "values": [
+        4,
+        6,
+        8,
+        10
+      ],
+      "note": "basket stop, H1 volatility units"
+    },
+    "vol_cap_usd_per_unit": {
+      "values": [
+        0,
+        12,
+        20
+      ],
+      "ordered": false,
+      "note": "most one volatility unit may be worth, USD per 0.01 lot; 0 = no cap"
+    },
+    "max_adds": {
+      "values": [
+        0,
+        1
+      ],
+      "note": "one equal-sized add released by an M5 MACD turn, at least 1 unit from the entry"
+    },
+    "loss_cooldown_s": {
+      "values": [
+        3600,
+        14400,
+        43200
+      ],
+      "note": "pause after a losing basket, seconds"
+    },
+    "entry_rsi_block_tfs": {
+      "values": {
+        "none": null,
+        "H1+H4": [
+          "H1",
+          "H4"
+        ]
+      },
+      "note": "the owner's rule: no new basket while the H1 or H4 RSI is beyond 35 / 65"
+    },
+    "fc_rsi_tfs": {
+      "values": {
+        "none": null,
+        "H1+H4": [
+          "H1",
+          "H4"
+        ]
+      },
+      "note": "the owner's rule: force-close when the H1 and H4 RSI are both beyond the level against the basket (needs the force-close on)"
+    },
+    "force_close_enabled": {
+      "values": [
+        false,
+        true
+      ],
+      "note": "the live M15 slope force-close (and with it the RSI force-close)"
+    }
+  },
+  "conditions": [
+    {
+      "when": "force_close_enabled == false",
+      "ignore": [
+        "fc_rsi_tfs"
+      ]
+    }
+  ],
+  "references": {
+    "V3-lite": {
+      "trend_tf": "H1",
+      "force_close_enabled": false,
+      "loss_cooldown_s": 43200,
+      "vol_tf": "H1",
+      "vol_len": 24,
+      "target_usd_per_unit": null,
+      "stop_loss_usd_per_unit": null,
+      "max_adds": 0,
+      "open_weights": {
+        "H1": 1
+      },
+      "entry_agree_s": 2,
+      "target_vol": 8,
+      "stop_vol": 8
+    },
+    "Owner's rules + H1 trend + 4 h pause": {
+      "entry_rsi_block_tfs": [
+        "H1",
+        "H4"
+      ],
+      "entry_rsi_block_mode": "any",
+      "fc_rsi_tfs": [
+        "H1",
+        "H4"
+      ],
+      "trend_tf": "H1",
+      "loss_cooldown_s": 14400
+    }
+  }
+}

@@ -220,6 +220,15 @@ def test_the_data_fingerprint_follows_the_quotes_the_pipeline_reads(results, fix
 
     edit("2026_11", bump)
     assert E.data_fingerprint(SYM) != fp
+    # history older than the warm-up of the earliest window is never read: adding it changes nothing
+    old = root / SYM / "2025_01"
+    shutil.copytree(root / SYM / "2026_10", old)
+    j_old = json.loads((old / "meta.json").read_text(encoding="utf-8"))
+    (old / "meta.json").write_text(json.dumps({**j_old, "year": 2025, "month": 1}), encoding="utf-8")
+    assert E.data_fingerprint(SYM) == E.data_fingerprint(SYM)
+    with_old = E.data_fingerprint(SYM)
+    shutil.rmtree(old)
+    assert E.data_fingerprint(SYM) == with_old
     # a checkout without the history cannot judge the data: '' is never compared
     monkeypatch.setenv("ALCADEIAS_STORE_DIR", str(tmp_path / "empty"))
     assert E.data_fingerprint(SYM) == ""

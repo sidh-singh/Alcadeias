@@ -141,9 +141,15 @@ def data_fingerprint(symbol: str) -> str:
     symbol (a checkout without the history can build the pages but cannot judge the data).
     """
     from .data import store
+    from .engine.fast import DEFAULT_WARM_BARS
     end_ms = store.to_ms(LONG_WINDOW[1])
     end = store.ms_to_dt(max(end_ms - 1, 0))
-    months = [(y, m) for (y, m) in store.available_months(symbol) if (y, m) <= (end.year, end.month)]
+    # from the indicator warm-up of the earliest window on (H4 is the slowest timeframe the stages read): older
+    # history is never read, so adding it to the store does not make a result stale
+    first_ms = min([store.to_ms(LONG_WINDOW[0])] + [store.to_ms(a) for a, _ in ALL_WINDOWS.values()])
+    start = store.ms_to_dt(first_ms - int(DEFAULT_WARM_BARS * 4 * 3600 * 1000 * 1.7) - 7 * 86_400_000)
+    months = [(y, m) for (y, m) in store.available_months(symbol)
+              if (start.year, start.month) <= (y, m) <= (end.year, end.month)]
     if not months:
         return ""
     h = hashlib.sha1()
