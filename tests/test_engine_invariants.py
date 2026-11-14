@@ -47,7 +47,7 @@ def test_the_account_adds_up(live_cfg, engine_run):
                 bal += r["profit"]
             assert r["balance"] == pytest.approx(bal, abs=0.006)
         n += len(b)
-    assert n > 20
+    assert n > 5          # not vacuous: the fixture windows hold dozens of baskets (hedging) or a handful (netting, no fixed target)
 
 
 def test_every_basket_closes_exactly_what_it_opened(live_cfg, engine_run):
