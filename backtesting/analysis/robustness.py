@@ -1,12 +1,12 @@
 """
 Robustness tests: does a result survive things the bot cannot control?
 
-* ``timing_grid``     loop period, poll phase and order latency (needs raw ticks)
-* ``timing_ensemble`` the same few loop timings on several windows (how much of a result is timing luck?)
-* ``cost_grid``       wider spread, slippage, commission
+* ``timing_ensemble`` every window under several loop timings (how much of a result is timing luck?)
+* ``timing_grid``     a slower loop and order latency, each level under several loop timings
+* ``cost_grid``       wider spread and slippage, each level under several loop timings
 * ``start_shift``     the same strategy started a few days later (path dependence)
-* ``segments``        each sub-period on a fresh balance (is the edge stable in time?)
-* ``bootstrap``       resampled sequences of whole trading days (drawdown / loss odds)
+* ``segments``        each sub-period on a fresh balance (is the result stable in time?)
+* ``bootstrap``       whole trading days resampled with replacement, re-sized by the bot's unit rule
 * ``across_windows``  one grid over several windows + rank agreement between them
                       (in-sample choice vs out-of-sample outcome)
 
@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
+from numba import njit
 
 from ..config import BacktestConfig
 from .sweep import run_grid
@@ -28,65 +29,71 @@ def _ts(x) -> pd.Timestamp:
     return pd.Timestamp(x)
 
 
+# ───────────────────────────── loop timing ─────────────────────────────
+# One run is one path. The live loop sleeps one second and then spends a varying time talking to
+# the terminal, so its polls do not sit on a fixed grid; which tick a poll lands on decides whether
+# the bot is inside a basket when a sharp move starts, and a few large baskets decide a quarter.
+# A "timing" below is therefore the live cadence (1 s sleep, 0.1 s after an order) with every pass
+# taking 0..ENSEMBLE_JITTER_MS longer, drawn from a reproducible sequence. Different seeds can never
+# fall back onto the same poll grid (fixed phase offsets can: the grid shifts by 0.1 s per order,
+# so runs that started 0.5 s apart end up identical).
+ENSEMBLE_SEEDS = (1, 2, 3, 4, 5, 6, 7, 8)
+ENSEMBLE_JITTER_MS = 200
+
+
+def live_timing(seed: int, jitter_ms: int = ENSEMBLE_JITTER_MS, poll_ms: int = 1000) -> dict:
+    """Overrides for one plausible loop timing (see the note above)."""
+    return dict(poll_interval_ms=int(poll_ms), poll_jitter_ms=int(jitter_ms), poll_jitter_seed=int(seed),
+                open_order_delay_ms=100)
+
+
 def timing_grid(cfg: BacktestConfig, periods_ms: Sequence[int] = (1000, 1250, 1500, 2000),
-                phases_ms: Sequence[int] = (0, 250, 500, 750),
-                latencies_ms: Sequence[int] = (0, 150, 300, 600, 1000),
-                n_jobs: int = 2, store_dir: Optional[str] = None) -> pd.DataFrame:
+                latencies_ms: Sequence[int] = (0, 150, 300, 600, 1000), seeds: Sequence[int] = (1, 2, 3, 4),
+                jitter_ms: int = ENSEMBLE_JITTER_MS, n_jobs: int = 2, store_dir: Optional[str] = None) -> pd.DataFrame:
     """
-    Loop timing the bot does not control. The live loop runs "about once a second" plus
-    however long MT5 takes to answer; an order reaches the server some time after the
-    quote that triggered it. Runs on raw ticks so sub-second offsets are real.
+    A slower loop, and a delay between the quote that triggered an order and the quote it fills at.
+    Every level is run under several loop timings, so a level is read by its median and range.
+    Raw ticks. Rows: test ('poll' / 'latency') x level x seed.
     """
-    start = _ts(cfg.start)
     grid, labels = [], []
     for p in periods_ms:
-        for ph in phases_ms:
-            if ph >= p:
-                continue
-            grid.append(dict(poll_interval_ms=int(p), latency_ms=0, open_order_delay_ms=100,
-                             start=str(start + pd.Timedelta(milliseconds=int(ph)))))
-            labels.append(dict(test="poll", poll_ms=int(p), phase_ms=int(ph), latency_ms=0))
+        for sd in seeds:
+            grid.append({**live_timing(sd, jitter_ms, p), "latency_ms": 0})
+            labels.append(dict(test="poll", poll_ms=int(p), latency_ms=0, seed=int(sd)))
     for lat in latencies_ms:
-        grid.append(dict(poll_interval_ms=1000, latency_ms=int(lat), open_order_delay_ms=100))
-        labels.append(dict(test="latency", poll_ms=1000, phase_ms=0, latency_ms=int(lat)))
+        for sd in seeds:
+            grid.append({**live_timing(sd, jitter_ms), "latency_ms": int(lat)})
+            labels.append(dict(test="latency", poll_ms=1000, latency_ms=int(lat), seed=int(sd)))
     return run_grid(cfg, grid, n_jobs=n_jobs, mode="ticks", labels=labels, store_dir=store_dir)
 
 
 def timing_ensemble(cfg: BacktestConfig, windows: Dict[str, Tuple[str, str]],
-                    periods_ms: Sequence[int] = (1000, 1250), phases_ms: Sequence[int] = (0, 250, 500, 750),
+                    seeds: Sequence[int] = ENSEMBLE_SEEDS, jitter_ms: int = ENSEMBLE_JITTER_MS,
                     n_jobs: int = 2, store_dir: Optional[str] = None,
                     overrides: Sequence[dict] = ({},), override_labels: Sequence[dict] = ({},)) -> pd.DataFrame:
     """
-    ``cfg`` on every window under each (loop period, phase) pair, raw ticks, a fresh balance each time.
-
-    One run of a strategy whose result rests on a handful of large baskets says little: whether
-    the bot happens to be in a basket when a sharp move starts depends on which tick its poll
-    lands on. The spread of outcomes over a few equally plausible loop timings is the honest
-    figure for a window. Rows: (setting x) window x timing; ``overrides`` runs several
-    settings through the same timings (``override_labels`` names them).
+    ``cfg`` on every window under each loop timing, raw ticks, a fresh balance each time.
+    Rows: (setting x) window x seed; ``overrides`` runs several settings through the same
+    timings (``override_labels`` names them).
     """
     out = []
     for name, (a, z) in windows.items():
         grid, labels = [], []
         for ov, lab in zip(overrides, override_labels):
-            for p in periods_ms:
-                for ph in phases_ms:
-                    if ph >= p:
-                        continue
-                    grid.append({**ov, "poll_interval_ms": int(p), "open_order_delay_ms": 100,
-                                 "start": str(_ts(a) + pd.Timedelta(milliseconds=int(ph)))})
-                    labels.append({**lab, "window": name, "segment": f"{a} → {z}", "poll_ms": int(p), "phase_ms": int(ph)})
+            for sd in seeds:
+                grid.append({**ov, **live_timing(sd, jitter_ms)})
+                labels.append({**lab, "window": name, "segment": f"{a} → {z}", "seed": int(sd)})
         out.append(run_grid(cfg.replace(start=a, end=z), grid, n_jobs=n_jobs, mode="ticks", labels=labels, store_dir=store_dir))
     return pd.concat(out, ignore_index=True)
 
 
-def ensemble_summary(df: pd.DataFrame, by: Sequence[str] = ()) -> pd.DataFrame:
-    """Per (``by`` ...,) window of a ``timing_ensemble``: median, range, how many timings lost money or were stopped out."""
+def spread_of(df: pd.DataFrame, by: Sequence[str]) -> pd.DataFrame:
+    """Median, range and loss / stop-out counts of the runs sharing the ``by`` columns (order kept)."""
     rows = []
-    keys = list(by) + ["window", "segment"]
-    for key, g in df.groupby(keys, sort=False):
-        w, seg = key[-2], key[-1]
-        rows.append({**dict(zip(keys[:-2], key[:-2])), "window": w, "segment": seg, "runs": int(len(g)),
+    by = list(by)
+    for key, g in df.groupby(by, sort=False):
+        key = key if isinstance(key, tuple) else (key,)
+        rows.append({**dict(zip(by, key)), "runs": int(len(g)),
                      "net_median": float(g["net_profit"].median()), "net_min": float(g["net_profit"].min()),
                      "net_max": float(g["net_profit"].max()), "losing_runs": int((g["net_profit"] < 0).sum()),
                      "stopped_out_runs": int(g["stopped_out"].astype(bool).sum()),
@@ -96,37 +103,57 @@ def ensemble_summary(df: pd.DataFrame, by: Sequence[str] = ()) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def ensemble_summary(df: pd.DataFrame, by: Sequence[str] = ()) -> pd.DataFrame:
+    """Per (``by`` ...,) window of a ``timing_ensemble``: median, range, how many timings lost money or were stopped out."""
+    return spread_of(df, list(by) + ["window", "segment"])
+
+
 def cost_grid(cfg: BacktestConfig, spread_mults: Sequence[float] = (1.0, 1.25, 1.5, 2.0, 3.0),
-              slippages: Optional[Sequence[float]] = None, n_jobs: Optional[int] = None,
-              store_dir: Optional[str] = None) -> pd.DataFrame:
-    """Transaction-cost stress: the recorded spread scaled up, and adverse slippage per fill."""
+              slippages: Optional[Sequence[float]] = None, seeds: Sequence[int] = (1, 2, 3, 4),
+              jitter_ms: int = ENSEMBLE_JITTER_MS, n_jobs: int = 2, store_dir: Optional[str] = None) -> pd.DataFrame:
+    """
+    Transaction-cost stress: the recorded spread scaled up, and adverse slippage on every fill.
+    Every level is run under several loop timings (raw ticks), because one path per level would
+    show timing luck, not the cost. Rows: test ('spread' / 'slippage') x level x seed.
+    """
     if slippages is None:
         # in price units: a few cents on gold, a few dollars on BTC
-        slippages = (0.0, 0.02, 0.05, 0.10) if cfg.symbol.startswith("XAU") else (0.0, 1.0, 2.5, 5.0)
+        slippages = (0.02, 0.05, 0.10) if cfg.symbol.startswith("XAU") else (1.0, 2.5, 5.0)
     grid, labels = [], []
     for m in spread_mults:
-        grid.append(dict(spread_mult=float(m)))
-        labels.append(dict(test="spread", spread_mult=float(m), slippage=0.0))
-    for s in slippages:
-        if s == 0.0:
+        for sd in seeds:
+            grid.append({**live_timing(sd, jitter_ms), "spread_mult": float(m)})
+            labels.append(dict(test="spread", spread_mult=float(m), slippage=0.0, seed=int(sd)))
+    for sl in slippages:
+        if sl == 0.0:
             continue
-        grid.append(dict(slippage=float(s)))
-        labels.append(dict(test="slippage", spread_mult=1.0, slippage=float(s)))
-    return run_grid(cfg, grid, n_jobs=n_jobs, labels=labels, store_dir=store_dir)
+        for sd in seeds:
+            grid.append({**live_timing(sd, jitter_ms), "slippage": float(sl)})
+            labels.append(dict(test="slippage", spread_mult=1.0, slippage=float(sl), seed=int(sd)))
+    return run_grid(cfg, grid, n_jobs=n_jobs, mode="ticks", labels=labels, store_dir=store_dir)
 
 
 def start_shift(cfg: BacktestConfig, shifts_days: Sequence[float] = (0, 1, 2, 3, 4, 5, 6, 7, 10, 14),
-                n_jobs: Optional[int] = None, store_dir: Optional[str] = None) -> pd.DataFrame:
-    """Start the same configuration later, same end. A robust edge should not care."""
+                n_jobs: int = 2, store_dir: Optional[str] = None) -> pd.DataFrame:
+    """
+    The same configuration started N days later, same end, on raw ticks at the cadence of the
+    baseline run (so a shift of 0 is that run). Starts that fall in a closed market give the
+    same run as the next open; those repeats are dropped.
+    """
     start = _ts(cfg.start)
-    grid = [dict(start=str(start + pd.Timedelta(days=float(d)))) for d in shifts_days]
+    grid = [dict(start=str(start + pd.Timedelta(days=float(d))), open_order_delay_ms=100) for d in shifts_days]
     labels = [dict(start_shift_days=float(d)) for d in shifts_days]
-    return run_grid(cfg, grid, n_jobs=n_jobs, labels=labels, store_dir=store_dir)
+    df = run_grid(cfg, grid, n_jobs=n_jobs, mode="ticks", labels=labels, store_dir=store_dir)
+    return df.drop_duplicates(subset=["net_profit", "baskets", "max_dd_usd", "largest_loss"]).reset_index(drop=True)
 
 
 def segments(cfg: BacktestConfig, freq: str = "MS", fixed_days: Optional[int] = None,
              n_jobs: Optional[int] = None, store_dir: Optional[str] = None) -> pd.DataFrame:
-    """Every sub-period on a fresh balance. ``fixed_days`` cuts equal slices instead of calendar months."""
+    """
+    Every sub-period on a fresh balance (per-second replay). ``fixed_days`` cuts equal slices
+    instead of calendar months. ``partial`` marks a slice clearly shorter than the nominal one
+    (the ends of the window); leave those out when counting winning periods.
+    """
     a, z = _ts(cfg.start), _ts(cfg.end)
     if fixed_days:
         edges = list(pd.date_range(a, z, freq=f"{int(fixed_days)}D"))
@@ -136,49 +163,95 @@ def segments(cfg: BacktestConfig, freq: str = "MS", fixed_days: Optional[int] = 
         edges.append(z)
     grid, labels = [], []
     for s, e in zip(edges[:-1], edges[1:]):
-        if (e - s).total_seconds() < 86400:
+        days = (e - s).total_seconds() / 86400
+        if days < 1:
             continue
+        nominal = float(fixed_days) if fixed_days else float(s.days_in_month)
         grid.append(dict(start=str(s), end=str(e)))
-        labels.append(dict(segment=f"{s:%Y-%m-%d} → {e:%Y-%m-%d}", days=round((e - s).total_seconds() / 86400, 1)))
+        labels.append(dict(segment=f"{s:%Y-%m-%d} → {e:%Y-%m-%d}", days=round(days, 1), partial=bool(days < 0.9 * nominal)))
     return run_grid(cfg, grid, n_jobs=n_jobs, labels=labels, store_dir=store_dir)
 
 
-def bootstrap(baskets: pd.DataFrame, initial_balance: float, n: int = 5000, seed: int = 7) -> Dict[str, float]:
-    """
-    Block bootstrap over whole UTC days of realised basket P/L.
+@njit(cache=True)
+def _boot_paths(pnl_u, mae_u, day_start, day_len, picks, account, step_up, unit_max):
+    """Final balance, deepest dip below the start and a wiped flag for every resampled path."""
+    n, k = picks.shape
+    finals = np.empty(n)
+    dips = np.empty(n)
+    wiped = np.zeros(n, np.uint8)
+    for i in range(n):
+        bal = account
+        low = account
+        dead = False
+        for j in range(k):
+            d = picks[i, j]
+            for q in range(day_start[d], day_start[d] + day_len[d]):
+                u = 1.0
+                if step_up > 0.0:
+                    u = float(int(bal // step_up) + 1)
+                    if u > unit_max:
+                        u = unit_max
+                    if u < 1.0:
+                        u = 1.0
+                worst = bal + u * mae_u[q]
+                if worst < low:
+                    low = worst
+                if worst <= 0.0:
+                    dead = True
+                    break
+                bal += u * pnl_u[q]
+                if bal < low:
+                    low = bal
+                if bal <= 0.0:
+                    dead = True
+                    break
+            if dead:
+                break
+        if dead:
+            bal = 0.0
+            low = 0.0
+            wiped[i] = 1
+        finals[i] = bal
+        dips[i] = account - low
+    return finals, dips, wiped
 
-    Days are resampled with replacement (keeping each day's baskets together and in
-    order, because losses cluster inside a day). Reports the spread of outcomes the same
-    trade population could have produced in a different order. Realised P/L only -- the
-    floating drawdown inside a basket is *not* in here, so real drawdowns are deeper.
+
+def bootstrap(baskets: pd.DataFrame, account: float, step_up: float = 0.0, unit_max: int = 1,
+              n: int = 5000, seed: int = 7) -> Dict[str, float]:
+    """
+    Whole UTC days of baskets drawn WITH replacement (each day's baskets kept together and in
+    order, because losses cluster inside a day): in a resampled quarter some days occur twice
+    and others not at all. That is not "the same trades in another order" (which could never
+    change the final balance); it asks how much the quarter's result depends on which days
+    happened to be in it.
+
+    Every basket is re-sized by the bot's own rule as the resampled balance evolves
+    (``floor(balance / step_up) + 1`` units, capped at ``unit_max``; ``step_up`` = 0 keeps one
+    unit), using its result and its worst floating loss per unit, and a path ends when the
+    balance can no longer cover a basket's worst floating loss.
     """
     if len(baskets) == 0:
         return {}
-    rng = np.random.default_rng(seed)
-    day = baskets["close_time"].dt.floor("D")
-    groups = [g["pnl"].to_numpy() for _, g in baskets.sort_values("close_time").groupby(day)]
-    k = len(groups)
-    finals = np.empty(n)
-    dds = np.empty(n)
-    ruin = 0
-    for i in range(n):
-        pick = rng.integers(0, k, size=k)
-        seq = np.concatenate([groups[j] for j in pick])
-        curve = initial_balance + np.cumsum(seq)
-        peak = np.maximum.accumulate(np.concatenate([[initial_balance], curve]))[1:]
-        dds[i] = float((peak - curve).max())
-        finals[i] = float(curve[-1])
-        if curve.min() <= 0:
-            ruin += 1
+    b = baskets.sort_values("close_time")
+    units = np.maximum(b["units"].to_numpy(float), 1.0)
+    pnl_u = np.ascontiguousarray(b["pnl"].to_numpy(float) / units)
+    mae_u = np.ascontiguousarray(np.minimum(b["mae"].to_numpy(float), 0.0) / units)
+    day = b["close_time"].dt.floor("D").to_numpy()
+    cut = np.flatnonzero(np.concatenate([[True], day[1:] != day[:-1]]))
+    day_start = cut.astype(np.int64)
+    day_len = np.diff(np.concatenate([cut, [len(b)]])).astype(np.int64)
+    k = len(day_start)
+    picks = np.random.default_rng(seed).integers(0, k, size=(n, k)).astype(np.int64)
+    finals, dips, wiped = _boot_paths(pnl_u, mae_u, day_start, day_len, picks, float(account), float(step_up), float(unit_max))
     q = lambda a, p: float(np.quantile(a, p))
     return {
         "days": int(k), "paths": int(n),
         "final_p05": q(finals, 0.05), "final_p25": q(finals, 0.25), "final_p50": q(finals, 0.50),
         "final_p75": q(finals, 0.75), "final_p95": q(finals, 0.95),
-        "prob_loss": float((finals < initial_balance).mean()),
-        "prob_loss_over_25pct": float((finals < initial_balance * 0.75).mean()),
-        "prob_ruin_realised": float(ruin / n),
-        "max_dd_p50": q(dds, 0.50), "max_dd_p95": q(dds, 0.95), "max_dd_p99": q(dds, 0.99),
+        "prob_loss": float((finals < account).mean()),
+        "prob_loss_over_25pct": float((finals < account * 0.75).mean()),
+        "prob_wiped": float(wiped.mean()),
+        "dip_p50": q(dips, 0.50), "dip_p95": q(dips, 0.95),
     }
 
 

@@ -29,16 +29,83 @@ def daily_returns(equity: pd.DataFrame, initial_balance: float) -> pd.Series:
     return (s / prev - 1.0).replace([np.inf, -np.inf], np.nan).dropna()
 
 
+ACCOUNT = 2000.0     # the owner's account: what "wiped" is measured against when a run uses another balance
+
+
+def replay_account(baskets: pd.DataFrame, account: float, step_up: float, unit_max: int,
+                   open_profit: float = 0.0, open_units: int = 1) -> Dict[str, float]:
+    """
+    The same sequence of baskets on a real account of ``account`` dollars with the bot's own sizing.
+
+    Sweeps run one fixed 0.01-lot unit on a balance too large to be stopped out, so that every
+    setting is measured over the whole window. The live account does not trade like that: it
+    re-derives its unit from the balance whenever it is flat (``floor(balance / step_up) + 1``),
+    so after a good run every later basket, and every later loss, is two or more times as large.
+    This replays the baskets in order with that rule: each basket's result and its worst floating
+    loss are scaled by (unit the balance implies) / (unit it was run at), and the account is
+    wiped when balance plus a basket's worst floating loss reaches zero (stop-out level 0 %).
+
+    It is the same path re-sized, not a second simulation: the small differences a different lot
+    size makes to the decisions themselves (cent rounding at the thresholds) are not in it.
+    """
+    bal = float(account)
+    low = bal
+    wiped = False
+    top_unit = 1
+
+    def unit_now() -> int:
+        if step_up <= 0:
+            return 1
+        return int(max(1, min(int(bal // step_up) + 1, int(unit_max))))
+
+    if len(baskets):
+        b = baskets.sort_values("close_time")
+        for pnl, mae, u0 in zip(b["pnl"].to_numpy(float), b["mae"].to_numpy(float), b["units"].to_numpy(float)):
+            u = unit_now()
+            k = u / max(u0, 1.0)
+            top_unit = max(top_unit, u)
+            worst = bal + k * min(mae, 0.0)
+            low = min(low, worst)
+            if worst <= 0.0:
+                wiped = True
+                bal = 0.0
+                break
+            bal += k * pnl
+            low = min(low, bal)
+            if bal <= 0.0:
+                wiped = True
+                bal = 0.0
+                break
+    final = bal
+    if not wiped and open_profit != 0.0:
+        k = unit_now() / max(float(open_units), 1.0)
+        final = bal + k * open_profit
+        low = min(low, final)
+        if final <= 0.0:
+            wiped, final = True, 0.0
+    return {"acct_net": round(final - account, 2), "acct_wiped": bool(wiped),
+            "acct_dip": round(min(max(account - low, 0.0), account), 2), "acct_max_units": int(top_unit)}
+
+
 def summarize(res) -> Dict[str, float]:
     """One flat dict of headline numbers for a Result."""
     cfg, b, sc, ct = res.cfg, res.baskets, res.scalars, res.counters
     init = float(cfg.initial_balance)
     final_eq = sc["final_equity"]
     days = max((pd.Timestamp(cfg.end) - pd.Timestamp(cfg.start)).total_seconds() / 86400.0, 1e-9)
+    # a run that is stopped out ends there: rates per day are over the days it actually traded
+    start_ms = pd.Timestamp(cfg.start).value // 1_000_000
+    ran_days = days
+    last = sc.get("last_poll_ms")
+    if last is not None and last == last and last > start_ms:
+        ran_days = min(days, max((float(last) - start_ms) / 86_400_000.0, 1e-9))
     n = int(len(b))
     out: Dict[str, float] = {
         "symbol": cfg.symbol, "variant": cfg.variant, "start": cfg.start, "end": cfg.end,
         "days": round(days, 2),
+        "ran_days": round(ran_days, 2),
+        "stopped_out_at": (pd.Timestamp(int(last), unit="ms").strftime("%Y-%m-%d %H:%M")
+                           if bool(sc["stopped_out"]) and last is not None and last == last else None),
         "initial_balance": init,
         "final_balance": round(sc["final_balance"], 2),
         "final_equity": round(final_eq, 2),
@@ -56,7 +123,7 @@ def summarize(res) -> Dict[str, float]:
                                  if math.isfinite(sc["min_margin_level_pct"]) else None),
         "stopped_out": bool(sc["stopped_out"]),
         "baskets": n,
-        "baskets_per_day": round(n / days, 2),
+        "baskets_per_day": round(n / ran_days, 2),
         "ladder_adds": int(ct["ladder_adds"]),
     }
     if n == 0:
@@ -119,15 +186,29 @@ def summarize(res) -> Dict[str, float]:
     return out
 
 
-def score_row(res) -> Dict[str, float]:
-    """Compact metrics for sweeps (no equity series needed)."""
+def score_row(res, account: float = ACCOUNT) -> Dict[str, float]:
+    """
+    Compact metrics for sweeps (no equity series needed).
+
+    ``acct_*`` say what the same baskets would have done to a real ``account`` with the bot's own
+    lot sizing (see ``replay_account``). For a run that already is such an account they simply
+    repeat the run's own figures.
+    """
     cfg, b, sc, ct = res.cfg, res.baskets, res.scalars, res.counters
     init = float(cfg.initial_balance)
     n = int(len(b))
     pnl = b["pnl"].to_numpy() if n else np.zeros(0)
     wins, losses = pnl[pnl > 0], pnl[pnl < 0]
     net = sc["final_equity"] - init
+    if cfg.fixed_units > 0 or abs(init - account) > 1e-9:
+        acct = replay_account(b, account, cfg.step_up_balance, cfg.unit_max_limit,
+                              open_profit=sc["open_profit_at_end"], open_units=max(cfg.fixed_units, 1))
+    else:
+        acct = {"acct_net": round(net, 2), "acct_wiped": bool(sc["stopped_out"]),
+                "acct_dip": round(min(max(init - sc["min_equity"], 0.0), init), 2),
+                "acct_max_units": int(b["units"].max()) if n else 1}
     return {
+        **acct,
         "net_profit": round(net, 2),
         "return_pct": round(net / init * 100.0, 3),
         "max_dd_usd": round(sc["max_drawdown_usd"], 2),

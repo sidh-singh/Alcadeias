@@ -271,9 +271,9 @@ def market_figure(res: Result, m1: Dict[str, np.ndarray], tfs: Sequence[str] = (
     if len(eq):
         e = eq.assign(time=_naive(eq["time"])).set_index("time")
         step = "15min"
-        last = e[["balance", "equity", "lots", "open_score", "fc_score", "book_score"]].resample(step).last().dropna(how="all")
-        lo = e["equity"].resample(step).min().reindex(last.index)
-        hi = e["equity"].resample(step).max().reindex(last.index)
+        last = e[["balance", "equity", "lots", "open_score", "fc_score", "book_score"]].resample(step, label="right", closed="right").last().dropna(how="all")
+        lo = e["equity"].resample(step, label="right", closed="right").min().reindex(last.index)
+        hi = e["equity"].resample(step, label="right", closed="right").max().reindex(last.index)
         x = last.index
         # simplify=False: with a zero-width line plotly would otherwise decimate the band to a rough hull
         fig.add_trace(go.Scatter(x=x, y=hi, mode="lines", line=dict(width=0, simplify=False), hoverinfo="skip",
@@ -508,7 +508,9 @@ def _observe_scores(cfg: BacktestConfig, start_ms: int, end_ms: int, store_dir) 
     """Per-second section scores over a short window (scores do not depend on positions)."""
     c = cfg.replace(start=str(store.ms_to_dt(start_ms).tz_localize(None)),
                     end=str(store.ms_to_dt(end_ms).tz_localize(None)),
-                    allow_long=False, allow_short=False, record_interval_s=1, window_enabled=False)
+                    allow_long=False, allow_short=False, record_interval_s=1, window_enabled=False,
+                    # pure observation on whole seconds: no order is ever sent, so no order timing applies
+                    poll_interval_ms=1000, poll_jitter_ms=0, open_order_delay_ms=0, latency_ms=0)
     prep = prepare(c.symbol, c.start, c.end, c.timeframes(), mode="sec", store_dir=store_dir)
     return run(c, prep).equity
 
@@ -707,8 +709,10 @@ def _tiles(s: dict, res: Result) -> str:
         tile("Daily Sharpe (annualised)", _num(s["daily_sharpe"], 2), f'{_num(s.get("pct_days_positive", float("nan")), 0)}% of days positive')
     hero = (f'<div class="card big"><div class="label">Net result on ${s["initial_balance"]:,.0f}</div>'
             f'<div class="value {_sign_cls(net)}">{_money(net, signed=True)}</div>'
-            f'<div class="note">{_num(s["return_pct"], 2)}% over {_num(s["days"], 0)} days · final equity {_money(s["final_equity"])}'
-            + (' · <b>account stopped out</b>' if s["stopped_out"] else '')
+            f'<div class="note">{_num(s["return_pct"], 2)}% over {_num(s.get("ran_days", s["days"]), 0)} days · final equity '
+            f'{_money(s["final_equity"])}'
+            + (f' · <b>account stopped out on {str(s.get("stopped_out_at") or "")[:10]}</b>, day '
+               f'{_num(s.get("ran_days", 0), 0)} of {_num(s["days"], 0)}; the run ends there' if s["stopped_out"] else '')
             + (f' · {_money(s["open_profit_at_end"], signed=True)} still open' if abs(s["open_profit_at_end"]) > 0.005 else '')
             + '</div></div>')
     return f'<div class="hero">{hero}<div class="tiles">{"".join(t)}</div></div>'
@@ -756,14 +760,16 @@ def build_report(res: Result, out_dir: Path, title: Optional[str] = None, subtit
     res.baskets.to_csv(out_dir / "baskets.csv", index=False, date_format=fmt)
     res.fills.to_csv(out_dir / "fills.csv", index=False, date_format=fmt)
     if len(res.equity):
-        eq5 = res.equity.set_index("time").resample("5min").last().dropna(how="all").reset_index()
+        # each row is the state at the END of its five minutes (stamped with that end time)
+        eq5 = (res.equity.set_index("time").resample("5min", label="right", closed="right").last()
+               .dropna(how="all").reset_index())
         eq5.to_csv(out_dir / "equity.csv.gz", index=False, compression="gzip", date_format=fmt)
     (out_dir / "summary.json").write_text(json.dumps(
         {"summary": s, "counters": res.counters, "scalars": res.scalars, "config": cfg.to_dict(),
          "engine": {"mode": res.mode, "runtime_s": round(res.runtime_s, 3), "warm_bars": res.warm_bars}},
-        indent=2, default=str))
+        indent=2, default=str), encoding="utf-8")
     from ..analysis import diagnostics
-    (out_dir / "diagnostics.json").write_text(json.dumps(diagnostics.diagnose(res), indent=2, default=str))
+    (out_dir / "diagnostics.json").write_text(json.dumps(diagnostics.diagnose(res), indent=2, default=str), encoding="utf-8")
     found = diagnostics.findings(res)
     diag_html = ""
     if found:

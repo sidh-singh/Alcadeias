@@ -70,7 +70,10 @@ CI_MACD_SIGNAL = 41
 CI_HOLE_MS = 42            # a silence this long is a hole in the tick history (0 = off)
 CI_HOLE_QUARANTINE_MS = 43
 CI_HOLE_UNTIL0 = 44        # entries blocked until this time because a hole ended shortly before the start
-CI_N = 45
+CI_JITTER_MS = 45          # each loop pass takes up to this much longer, drawn at random (0 = fixed period)
+CI_JITTER_SEED = 46
+CI_REOPEN_UNTIL0 = 47      # the broker is still in close-only mode until this time when the run starts
+CI_N = 48
 
 # ── float config slots ──
 CF_BALANCE = 0
@@ -192,7 +195,14 @@ K_LADDER_SPACED = 23   # ladder tier hit but held back by the experimental spaci
 K_BLOCK_REOPEN = 24     # an open / add was wanted while the broker was in close-only mode after a break
 K_CLOSE_HOLE = 25       # baskets closed at the last quote before a hole in the tick history
 K_BLOCK_HOLE = 26       # polls on which an entry was wanted during the quarantine after such a hole
-K_N = 27
+K_BLOCK_CLOSED = 27     # orders (open, add or close) sent after the session's last quote: the server refuses them
+K_N = 28
+
+# A session ends with its last quote. For three more minutes the bot still counts the market as
+# live (its liveness rule) and may send orders; the server answers "market closed". An order is
+# taken to have reached the server in time only within this long after that last quote.
+SESSION_CLOSE_GRACE_MS = 1000
+SESSION_BREAK_MS = 1_800_000     # a silence this long is a session break (daily break, weekend, holiday, maintenance)
 
 # ── scalar outputs ──
 S_FINAL_BALANCE = 0
@@ -565,6 +575,9 @@ def run_kernel(t_ms, bid, ask,
     reopen_weekly = ci[CI_REOPEN_WEEKLY_MS]
     hole_ms = ci[CI_HOLE_MS]
     hole_quarantine = ci[CI_HOLE_QUARANTINE_MS]
+    jitter_ms = ci[CI_JITTER_MS]
+    # a small linear congruential generator: reproducible, and all arithmetic stays inside int64
+    rng = (ci[CI_JITTER_SEED] * 2654435761 + 12345) % 2147483648
     rsi_len = ci[CI_RSI_LEN]
     mf = ci[CI_MACD_FAST]
     ms = ci[CI_MACD_SLOW]
@@ -649,7 +662,7 @@ def run_kernel(t_ms, bid, ask,
     prev_dir = 0
     dir_since = 0
     fc_since = -1
-    reopen_until = -(1 << 60)
+    reopen_until = ci[CI_REOPEN_UNTIL0]
     hole_until = ci[CI_HOLE_UNTIL0] if hole_ms > 0 else -(1 << 60)
     hole_close = 0
     next_rec = start_ms
@@ -706,6 +719,9 @@ def run_kernel(t_ms, bid, ask,
                 counters[K_DEAD_SKIPS] += 1
                 continue
         counters[K_LIVE] += 1
+
+        # the quote in hand is the last one before a session break and is no longer fresh: the server is shut
+        mkt_closed = (ptr + 1 < n) and (t_ms[ptr + 1] - tick_t >= SESSION_BREAK_MS) and (T - tick_t > SESSION_CLOSE_GRACE_MS)
 
         b = bid[ptr]
         a = b + (ask[ptr] - b) * spread_mult + extra_spread
@@ -1000,11 +1016,9 @@ def run_kernel(t_ms, bid, ask,
             if signal == 1 or signal == 2:
                 want_side = 1 if signal == 1 else -1
                 ok = True
+                # 1. reasons for which no order is sent at all
                 if brake:
                     counters[K_BLOCK_BRAKE] += 1
-                    ok = False
-                elif T < reopen_until:
-                    counters[K_BLOCK_REOPEN] += 1     # the live order is rejected; the bot retries next loop
                     ok = False
                 elif T < hole_until:
                     counters[K_BLOCK_HOLE] += 1       # quarantine after a hole in the tick history
@@ -1017,12 +1031,23 @@ def run_kernel(t_ms, bid, ask,
                 elif entry_confirm > 0 and (T - dir_since) < entry_confirm:
                     counters[K_BLOCK_CONFIRM] += 1
                     ok = False
+                # 2. the order is sent. The live helper sleeps after order_send whatever the broker answers,
+                #    so a refused order costs the loop the same time as a filled one.
+                elif mkt_closed:
+                    counters[K_BLOCK_CLOSED] += 1     # refused: the session has ended
+                    ok = False
+                    extra_wait = open_delay
+                elif T < reopen_until:
+                    counters[K_BLOCK_REOPEN] += 1     # refused: the broker is in close-only mode after a break
+                    ok = False
+                    extra_wait = open_delay
                 if ok:
                     lots = _round2(units * mtqty)
                     price = fa + slippage if want_side > 0 else fb - slippage
                     need = lots * contract * price / leverage
                     if need > equity:
                         counters[K_MARGIN_REJECT] += 1
+                        extra_wait = open_delay         # refused for margin: same sleep
                     else:
                         side = want_side
                         pos_lots[0] = lots
@@ -1073,10 +1098,16 @@ def run_kernel(t_ms, bid, ask,
                 lots = _round2(ladder_mult[n_pos] * basket_units * mtqty)
                 price = fa + slippage if side > 0 else fb - slippage
                 need = lots * contract * price / leverage
-                if T < reopen_until:
+                # live sleeps 0.1 s in the helper and ORDER_COOLDOWN_SECONDS after every add it sends, filled or refused
+                if mkt_closed:
+                    counters[K_BLOCK_CLOSED] += 1
+                    extra_wait = open_delay + add_delay
+                elif T < reopen_until:
                     counters[K_BLOCK_REOPEN] += 1
+                    extra_wait = open_delay + add_delay
                 elif need > equity - used_margin or n_pos >= MAXPOS:
                     counters[K_MARGIN_REJECT] += 1
+                    extra_wait = open_delay + add_delay
                 else:
                     pos_lots[n_pos] = lots
                     pos_price[n_pos] = price
@@ -1115,7 +1146,13 @@ def run_kernel(t_ms, bid, ask,
                         counters[K_FILL_OVERFLOW] += 1
 
             elif signal == 3 or signal == 4:
-                do_close = True
+                # a close the bot sends after the session's last quote is refused like any other order; the
+                # positions stay and the bot tries again on the next pass. (Closing at the last quote before a
+                # hole in the history is not an order at all, and a stop-out is the broker's own doing.)
+                if mkt_closed and reason != R_HOLE and reason != R_STOPOUT:
+                    counters[K_BLOCK_CLOSED] += 1
+                else:
+                    do_close = True
 
             if do_close and n_pos > 0:
                 cprice = fb - slippage if side > 0 else fa + slippage
@@ -1238,6 +1275,10 @@ def run_kernel(t_ms, bid, ask,
             next_rec = T - (T - start_ms) % rec_ms + rec_ms
 
         T += poll + extra_wait
+        if jitter_ms > 0:
+            # the live loop sleeps for the period and then spends a varying time talking to the terminal
+            rng = (rng * 1103515245 + 12345) % 2147483648
+            T += (rng >> 8) % (jitter_ms + 1)
 
     # mark any basket still open at the end to market (it is NOT closed)
     open_profit = 0.0

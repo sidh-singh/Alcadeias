@@ -2,13 +2,16 @@
 PNG snapshots of the interactive charts (for BACKTEST.md, which GitHub renders as-is).
 
 A figure is written to a throw-away HTML page and photographed by a headless
-Chrome / Chromium found on this machine. Nothing here is needed to run a backtest;
-without a browser the functions return ``None`` and the HTML reports are unaffected.
+Chrome, Chromium or Edge found on this machine (macOS, Windows or Linux). Nothing here
+is needed to run a backtest; without a browser the functions return ``None`` and the
+HTML reports are unaffected.
 """
 
 from __future__ import annotations
 
 import json
+import ntpath
+import os
 import shutil
 import subprocess
 import tempfile
@@ -20,24 +23,49 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from ..analysis.holdout import wiped as _wiped
 from ..config import BacktestConfig, REPO_ROOT, TF_SECONDS
 from ..data import store
 from ..engine.fast import Result, run
 from . import theme as T
 from .report import _RESCALE_JS, _naive, closeup_figure, market_figure
 
-_CHROME_CANDIDATES = [
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-    "google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome",
-]
+def chrome_candidates(environ=None) -> List[str]:
+    """
+    Where a Chromium-family browser that can take headless screenshots usually is: full paths
+    first (macOS application bundles, the Windows install folders), then the command names
+    looked up on PATH (Linux packages, and anything the user put on PATH elsewhere).
+    """
+    environ = os.environ if environ is None else environ
+    out = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    ]
+    # Windows installs per machine under Program Files (either one, depending on the installer's
+    # bitness) or per user under LocalAppData; the folders are read from the environment because
+    # they differ between machines and languages. Edge ships with Windows 10 and 11.
+    bases = [environ.get(k) for k in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData")]
+    for exe in (("Google", "Chrome", "Application", "chrome.exe"),
+                ("Microsoft", "Edge", "Application", "msedge.exe"),
+                ("Chromium", "Application", "chrome.exe")):
+        out += [ntpath.join(b, *exe) for b in bases if b]
+    out += ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
+            "microsoft-edge", "microsoft-edge-stable", "chrome", "msedge"]
+    return out
+
+
+_CHROME_CANDIDATES = chrome_candidates()
 
 
 def find_chrome() -> Optional[str]:
+    """The first candidate present on this machine, or None (the PNG snapshots are then skipped)."""
     for c in _CHROME_CANDIDATES:
-        if Path(c).exists():
-            return c
+        if os.path.isabs(c):
+            if os.path.isfile(c):
+                return c
+            continue
         w = shutil.which(c)
         if w:
             return w
@@ -74,7 +102,7 @@ def figure_png(fig: go.Figure, path: Path, width: int = 1500, height: Optional[i
         cmd = [chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
                f"--user-data-dir={tdp / 'profile'}", f"--window-size={width},{height}",
                f"--virtual-time-budget={wait_ms}", "--force-device-scale-factor=2",
-               f"--screenshot={path}", f"file://{tdp / 'page.html'}"]
+               f"--screenshot={path}", (tdp / "page.html").as_uri()]
         try:
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120, check=False)
         except (OSError, subprocess.TimeoutExpired):
@@ -143,8 +171,8 @@ def equity_figure(equity_csv: Path, title_balance: str = "Balance") -> go.Figure
     e["time"] = pd.to_datetime(e["time"], format="ISO8601")
     e = e.set_index("time")
     step = "4h"
-    last = e[["balance", "equity"]].resample(step).last().dropna()
-    lo = e["equity"].resample(step).min().reindex(last.index)
+    last = e[["balance", "equity"]].resample(step, label="right", closed="right").last().dropna()
+    lo = e["equity"].resample(step, label="right", closed="right").min().reindex(last.index)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=last.index, y=last["balance"], mode="lines", name=title_balance,
                              line=dict(color=T.CONTEXT, width=1.5, shape="hv")))
@@ -172,15 +200,17 @@ def timeframe_figure(out: Path, sym: str, base: BacktestConfig) -> Optional[go.F
     opens = sorted(sub["open"].unique(), key=lambda x: (len(x.split("+")), tuple(-TF_SECONDS[t] for t in x.split("+"))))
     fcs = sorted(sub["fc"].unique(), key=lambda x: -TF_SECONDS.get(x, 0))
     zmax = float(np.nanpercentile(np.abs(sub[[f"net_profit@{w}" for w in wins]].to_numpy()), 97)) or 1.0
-    labels = {"IS": "13 Aug → 13 Nov (asked for)", "OOS1": "13 May → 13 Aug", "OOS2": "13 Feb → 13 May"}
+    labels = {"IS": "13 Aug → 13 Nov 2026 (asked for)", "OOS1": "13 May → 13 Aug 2026", "OOS2": "13 Feb → 13 May 2026"}
     fig = make_subplots(rows=1, cols=len(wins), horizontal_spacing=0.035, shared_yaxes=True,
                         subplot_titles=[labels.get(w, w) for w in wins])
     live_open, live_fc = norm("+".join(base.open_weights)), norm("+".join(base.fc_weights))
     for i, w in enumerate(wins, 1):
         piv = sub.pivot_table(index="open", columns="fc", values=f"net_profit@{w}", aggfunc="first").reindex(index=opens, columns=fcs)
-        dip = sub.pivot_table(index="open", columns="fc", values=f"max_loss_from_start@{w}", aggfunc="first").reindex(index=opens, columns=fcs)
+        dip = (sub.assign(_w=_wiped(sub, w).astype(float))
+               .pivot_table(index="open", columns="fc", values="_w", aggfunc="first").reindex(index=opens, columns=fcs))
         z = piv.to_numpy()
-        text = [[("" if np.isnan(v) else f"{v:+,.0f}" + (" ✕" if dip.to_numpy()[r][c] >= 2000.0 else ""))
+        text = [[("" if np.isnan(v) else (f"{v / 1000:+.1f}k" if abs(v) >= 1000 else f"{v:+.0f}")
+                  + (" ✕" if dip.to_numpy()[r][c] > 0 else ""))
                  for c, v in enumerate(row)] for r, row in enumerate(z)]
         fig.add_trace(go.Heatmap(z=z, x=fcs, y=opens, zmin=-zmax, zmax=zmax, xgap=2, ygap=2,
                                  colorscale=[[0.0, T.DOWN], [0.5, "#27304d"], [1.0, T.UP]], showscale=(i == len(wins)),
@@ -208,7 +238,7 @@ def packages_figure(out: Path, sym: str) -> Optional[go.Figure]:
     df = pd.read_csv(p)
     wins = [c.split("@")[1] for c in df.columns if c.startswith("net_profit@")]
     df["total"] = df[[f"net_profit@{w}" for w in wins]].sum(axis=1)
-    df["n_ruin"] = (df[[f"max_loss_from_start@{w}" for w in wins]] >= 2000.0).sum(axis=1)
+    df["n_ruin"] = sum(_wiped(df, w).astype(int) for w in wins)
     live = df[df["package"] == "live settings"]
     rest = df[df["package"] != "live settings"].sort_values(["n_ruin", "total"], ascending=[True, False])
     d = pd.concat([live, rest])
@@ -228,7 +258,7 @@ def packages_figure(out: Path, sym: str) -> Optional[go.Figure]:
 
 
 def _load_result(run_dir: Path, live_root: Path, mode: str) -> Optional[Result]:
-    j = json.loads((run_dir / "summary.json").read_text())
+    j = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
     cfg = BacktestConfig.from_dict(j["config"])
     return run(cfg, mode=mode)
 
@@ -240,13 +270,14 @@ def build_gallery(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), li
     img = out / "img"
     made: List[Path] = []
     if find_chrome() is None:
-        log("no headless Chrome/Chromium found - skipping PNG snapshots")
+        log("no Chrome, Chromium or Edge found on this machine - skipping the PNG snapshots "
+            "(the HTML pages do not need them)")
         return made
     for sym in symbols:
         d = out / "baseline" / sym
         if not (d / "summary.json").exists():
             continue
-        j = json.loads((d / "summary.json").read_text())
+        j = json.loads((d / "summary.json").read_text(encoding="utf-8"))
         cfg = BacktestConfig.from_dict(j["config"])
         res = run(cfg, mode=j.get("engine", {}).get("mode", "sec"))
         m1 = store.load_m1(cfg.symbol, cfg.start, cfg.end)
@@ -284,7 +315,7 @@ def build_gallery(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), li
                 made += [p] if p else []
         le = out / "long" / sym / "equity.csv.gz"
         if le.exists():
-            lj = json.loads((out / "long" / sym / "summary.json").read_text())["summary"]
+            lj = json.loads((out / "long" / sym / "summary.json").read_text(encoding="utf-8"))["summary"]
             p = figure_png(equity_figure(le), img / f"{sym}_long_equity.png", width=1300,
                            title=f"{sym} · live settings from {lj['start']} to {lj['end']}",
                            subtitle=(f"net {lj['net_profit']:+,.2f} USD on ${lj['initial_balance']:,.0f} · max drawdown "
@@ -295,18 +326,18 @@ def build_gallery(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), li
         tf = timeframe_figure(out, sym, base)
         if tf is not None:
             p = figure_png(tf, img / f"{sym}_timeframes.png", width=1700,
-                           title=f"{sym} · OPEN timeframes × FORCE-CLOSE timeframe on three separate windows",
-                           subtitle="Net P/L of one 0.01-lot unit, USD · ✕ = the loss exceeded $2,000 at some point "
-                                    "(a $2,000 account would have been wiped out) · gold frame = the live setting")
+                           title=f"{sym} · OPEN timeframes × FORCE-CLOSE timeframe on three separate quarters",
+                           subtitle="Net P/L of one fixed 0.01-lot unit, USD · ✕ = the same baskets wipe a real $2,000 account "
+                                    "(the bot's own lot sizing) · gold frame = the live setting")
             made += [p] if p else []
         pk = packages_figure(out, sym)
         if pk is not None:
             p = figure_png(pk, img / f"{sym}_whatifs.png", width=1300,
                            title=f"{sym} · what-ifs aimed at the flaws",
-                           subtitle="One 0.01-lot unit, three windows added up · ✕ = would have wiped a $2,000 account in at "
-                                    "least one window · first row = live settings")
+                           subtitle="One fixed 0.01-lot unit, three quarters added up · ✕ = the same baskets wipe a real $2,000 "
+                                    "account in at least one quarter · first row = live settings")
             made += [p] if p else []
-    from .index import candidates_figure, holdout_figure
+    from .index import candidates_figure, candidates_mode, holdout_figure
     for sym in symbols:
         base = BacktestConfig.live(sym, repo_root=live_root)
         r = holdout_figure(out, sym, base, height=520)
@@ -320,11 +351,13 @@ def build_gallery(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), li
             made += [p] if p else []
         r = candidates_figure(out, sym)
         if r is not None:
-            fig, _, fams = r
+            fig, cdf, fams = r
+            what = ("Median net P/L of eight raw-tick runs per quarter on a fresh $2,000 (unit auto-step), USD · ✕ = one or more of "
+                    "the eight stopped out" if candidates_mode(cdf) == "ensemble" else
+                    "Net P/L of one fixed 0.01-lot unit per quarter, USD · ✕ = the same baskets wipe a real $2,000 account")
             p = figure_png(fig, img / f"{sym}_candidates.png", width=1300,
                            title=f"{sym} · candidate settings on five quarters",
-                           subtitle="Net P/L of one 0.01-lot unit per quarter, USD · ✕ = more than $2,000 down at some point · "
-                                    + " · ".join(f"{k} = {v}" for k, v in fams)[:330])
+                           subtitle=what + " · " + " · ".join(f"{k} = {v}" for k, v in fams)[:300])
             made += [p] if p else []
     for p in made:
         log(f"  {p.relative_to(out)}")

@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
+from ..analysis.holdout import dip as _dip, wiped as _wiped
 from ..config import BacktestConfig, REPO_ROOT, TF_SECONDS
 
 ACCOUNT = 2000.0
@@ -26,7 +27,7 @@ WIN_LABEL = {"IS": "Aug–Nov 2026", "OOS1": "May–Aug 2026", "OOS2": "Feb–Ma
 
 def _j(p: Path):
     try:
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
 
@@ -37,6 +38,15 @@ def _usd(x, signed: bool = True) -> str:
     s = f"{abs(x):,.0f}" if abs(x) >= 100 else f"{abs(x):,.2f}"
     sign = ("+" if x > 0 else "−" if x < 0 else "") if signed else ("−" if x < 0 else "")
     return f"{sign}${s}"
+
+
+def _pct(v, nd: int = 1) -> str:
+    """A percentage, or a dash when there is none (no losing basket means no break-even rate)."""
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return "–"
+    return "–" if v != v else f"{v:.{nd}f}%"
 
 
 def _table(df: pd.DataFrame) -> str:
@@ -52,8 +62,12 @@ def _windows(df: pd.DataFrame) -> List[str]:
     return [c.split("@")[1] for c in df.columns if c.startswith("net_profit@")]
 
 
-def _cell(net: float, dip: float) -> str:
-    return _usd(net) + (" ✕" if dip >= ACCOUNT else "")
+_WIPED_NOTE = "✕ = the same baskets wipe a real $2,000 account in that quarter (the bot's own lot sizing applied)"
+
+
+def _cell(net: float, wiped) -> str:
+    """A net figure, marked when the real $2,000 account would have been wiped (see holdout.wiped)."""
+    return _usd(net) + (" ✕" if bool(wiped) else "")
 
 
 # ───────────────────────────── sections ─────────────────────────────
@@ -73,14 +87,21 @@ def sec_runs(out: Path, symbols: Sequence[str]) -> str:
                 "Return": f"{s['return_pct']:+.1f}%",
                 "Max drawdown": f"{_usd(s['max_drawdown_usd'], False)} ({s['max_drawdown_pct']:.0f}%)",
                 "Baskets": f"{s['baskets']:,}",
-                "Win rate": f"{s.get('win_rate_pct', float('nan')):.1f}%",
-                "Needed to break even": f"{s.get('breakeven_win_rate_pct', float('nan')):.1f}%",
+                "Win rate": _pct(s.get("win_rate_pct")),
+                "Needed to break even": _pct(s.get("breakeven_win_rate_pct")),
                 "Avg win / avg loss": f"{_usd(s.get('avg_win', 0))} / {_usd(s.get('avg_loss', 0))}",
                 "Worst basket": _usd(s.get("largest_loss", 0)),
-                "Stopped out": "**yes**" if s["stopped_out"] else "no",
+                "Stopped out": (f"**yes, on {str(s.get('stopped_out_at') or '')[:10]}** (day {s.get('ran_days', 0):.0f} of "
+                                f"{s.get('days', 0):.0f})" if s["stopped_out"] else "no"),
                 "Same run, fixed 0.01-lot unit": _usd(fu.get("net_profit", float("nan"))),
             })
-    return _table(pd.DataFrame(rows)) if rows else ""
+    if not rows:
+        return ""
+    note = ""
+    if any("yes" in r["Stopped out"] for r in rows):
+        note = ("\n\nA run that is stopped out ends there: its basket count, win rate and averages describe the days up to the "
+                "stop-out, not the whole period.")
+    return _table(pd.DataFrame(rows)) + note
 
 
 def sec_images(out: Path, sym: str) -> str:
@@ -101,13 +122,18 @@ def sec_diagnostics(out: Path, sym: str) -> str:
     if not d or not d.get("payoff"):
         return ""
     p, l, x, c = d["payoff"], d["ladder"], d["exits"], d["costs"]
-    lines = [
-        f"- **Pay-off.** {p['win_rate_pct']:.1f}% of {p['baskets']:,} baskets won; break-even needs "
-        f"{p.get('breakeven_win_rate_pct', float('nan')):.1f}%. Average win {_usd(p['avg_win'])}, average loss "
-        f"{_usd(p['avg_loss'])} (one loss = {p.get('wins_to_repay_avg_loss', float('nan')):.0f} wins). The worst basket "
-        f"({_usd(p['worst_basket'])}) cancelled {p['worst_basket_in_avg_wins']:.0f} average wins; the ten worst gave back "
-        f"{p.get('worst_10_pct_of_gross_win', float('nan')):.0f}% of everything the winners made.",
-    ]
+    be = p.get("breakeven_win_rate_pct")
+    if be is None or be != be or not p.get("avg_loss"):
+        # no losing basket in the run: there is no pay-off ratio to speak of
+        lines = [f"- **Pay-off.** {p['win_rate_pct']:.1f}% of {p['baskets']:,} baskets won (average win {_usd(p['avg_win'])}); "
+                 f"the run holds no losing basket, so it says nothing about what a loss costs."]
+    else:
+        lines = [
+            f"- **Pay-off.** {p['win_rate_pct']:.1f}% of {p['baskets']:,} baskets won; break-even needs {be:.1f}%. Average win "
+            f"{_usd(p['avg_win'])}, average loss {_usd(p['avg_loss'])} (one loss = {p.get('wins_to_repay_avg_loss', 0):.0f} "
+            f"wins). The worst basket ({_usd(p['worst_basket'])}) cancelled {p['worst_basket_in_avg_wins']:.0f} average wins; "
+            f"the ten worst gave back {p.get('worst_10_pct_of_gross_win', 0):.0f}% of everything the winners made.",
+        ]
     if l.get("adds"):
         tiers = "; ".join(f"{t['tier']} {t['pct_within_10s']:.0f}% (median {t['median_seconds']:.0f} s, "
                           f"{_usd(t['median_gap_usd_per_unit'], False)} away)" for t in l.get("by_tier", []))
@@ -160,7 +186,7 @@ def sec_timeframes(out: Path, sym: str, base: BacktestConfig) -> str:
     df["total"] = df[net].sum(axis=1)
     df["worst"] = df[net].min(axis=1)
     df["n_pos"] = (df[net] > 0).sum(axis=1)
-    df["n_ruin"] = (df[[f"max_loss_from_start@{w}" for w in wins]] >= ACCOUNT).sum(axis=1)
+    df["n_ruin"] = sum(_wiped(df, w).astype(int) for w in wins)
     live_open, live_fc = _norm("+".join(base.open_weights)), _norm("+".join(base.fc_weights))
     strict = "strict" if (base.entry_s >= 2.0 * len(base.open_weights) and len(base.open_weights) > 1) else "loose"
     lvl = "half" if base.force_close_s <= 1.0 else "full"
@@ -173,12 +199,14 @@ def sec_timeframes(out: Path, sym: str, base: BacktestConfig) -> str:
                       "Median net": _usd(df[f"net_profit@{w}"].median()),
                       "Best": _usd(df[f"net_profit@{w}"].max()),
                       "Worst": _usd(df[f"net_profit@{w}"].min()),
-                      "Would have wiped $2,000": f"{(df[f'max_loss_from_start@{w}'] >= ACCOUNT).mean() * 100:.0f}%"})
+                      "Would have wiped $2,000": f"{_wiped(df, w).mean() * 100:.0f}%"})
     out_lines.append(_table(pd.DataFrame(stats)))
     ok = int(((df["n_pos"] == len(wins)) & (df["n_ruin"] == 0)).sum())
     out_lines.append(f"\n{len(df)} combinations of OPEN timeframes × FORCE-CLOSE timeframe × threshold convention. "
-                     f"**{ok}** made money in all {len(wins)} windows without ever standing $2,000 below the start; "
-                     f"{int((df['n_ruin'] > 0).sum())} would have wiped out a $2,000 account in at least one window.")
+                     f"**{ok}** made money in all {len(wins)} quarters without wiping a real $2,000 account; "
+                     f"{int((df['n_ruin'] > 0).sum())} wipe it out in at least one quarter. (\"Wiped\" replays each "
+                     f"setting's baskets on a $2,000 account with the bot's own lot sizing: the unit steps up above $2,500, "
+                     f"so later losses are larger than at the fixed unit shown in the net columns.)")
     noise = cell_noise(out, sym)
     if noise:
         out_lines.append("\n" + noise)
@@ -204,21 +232,22 @@ def sec_timeframes(out: Path, sym: str, base: BacktestConfig) -> str:
         "": show["_tag"], "OPEN": show["open"], "FORCE-CLOSE": show["fc"],
         "Entry needs": show["entry"].map({"loose": "one TF fully aligned", "strict": "every TF fully aligned"}),
         "FC fires on": show["fc_level"].map({"half": "one indicator reversing", "full": "both reversing"}),
-        **{WIN_LABEL.get(w, w): [_cell(n, d) for n, d in zip(show[f"net_profit@{w}"], show[f"max_loss_from_start@{w}"])]
+        **{WIN_LABEL.get(w, w): [_cell(n, k) for n, k in zip(show[f"net_profit@{w}"], _wiped(show, w))]
            for w in wins},
-        "Deepest dip": show[[f"max_loss_from_start@{w}" for w in wins]].max(axis=1).map(lambda v: _usd(v, False)),
-        "Baskets / window": show[[f"baskets@{w}" for w in wins]].mean(axis=1).map(lambda v: f"{v:,.0f}"),
+        "Deepest dip of the $2,000 account": pd.concat([_dip(show, w) for w in wins], axis=1).max(axis=1).map(lambda v: _usd(v, False)),
+        "Baskets / quarter": show[[f"baskets@{w}" for w in wins]].mean(axis=1).map(lambda v: f"{v:,.0f}"),
     })
-    out_lines.append("\nThe live setting and the ten that held up best (sorted by windows survived, windows profitable, worst "
-                     "window). Net P/L of one 0.01-lot unit; ✕ = the loss exceeded $2,000 at some point.\n\n" + _table(t))
+    out_lines.append("\nThe live setting and the ten that held up best on these three quarters (sorted by quarters survived, "
+                     "quarters profitable, worst quarter). Net P/L of one fixed 0.01-lot unit; " + _WIPED_NOTE + ". This ranking is "
+                     "hindsight; the hold-out section tests it.\n\n" + _table(t))
     # main effects
     rows = []
     for tf in sorted({x for s in df["open"] for x in s.split("+")}, key=TF_SECONDS.get, reverse=True):
         m = df[df["open"].map(lambda s: tf in s.split("+"))]
         rows.append({"Timeframe": tf, "in OPEN: mean net / window": _usd(m[net].mean().mean()),
-                     "in OPEN: wiped $2,000": f"{(m[[f'max_loss_from_start@{w}' for w in wins]] >= ACCOUNT).mean().mean() * 100:.0f}%",
+                     "in OPEN: wiped $2,000": f"{pd.concat([_wiped(m, w) for w in wins], axis=1).mean().mean() * 100:.0f}%",
                      "as FORCE-CLOSE: mean net / window": _usd(df[df["fc"] == tf][net].mean().mean()),
-                     "as FORCE-CLOSE: wiped $2,000": f"{(df[df['fc'] == tf][[f'max_loss_from_start@{w}' for w in wins]] >= ACCOUNT).mean().mean() * 100:.0f}%"})
+                     "as FORCE-CLOSE: wiped $2,000": f"{pd.concat([_wiped(df[df['fc'] == tf], w) for w in wins], axis=1).mean().mean() * 100:.0f}%"})
     out_lines.append("\nAveraged over every combination that contains the timeframe:\n\n" + _table(pd.DataFrame(rows)))
     return "\n".join(out_lines)
 
@@ -233,7 +262,7 @@ def sec_split(out: Path, sym: str, kind: str) -> str:
     rc, mc = f"{sec}_rsi", f"{sec}_macd"
     tfs = sorted(set(df[rc]) | set(df[mc]), key=lambda s: -TF_SECONDS.get(s, 0))
     df["total"] = df[[f"net_profit@{w}" for w in wins]].sum(axis=1)
-    df["dip"] = df[[f"max_loss_from_start@{w}" for w in wins]].max(axis=1)
+    df["dip"] = pd.concat([_wiped(df, w) for w in wins], axis=1).any(axis=1).astype(float)     # 1 = wiped in some quarter
     df["n_pos"] = (df[[f"net_profit@{w}" for w in wins]] > 0).sum(axis=1)
     piv = df.pivot_table(index=rc, columns=mc, values="total", aggfunc="mean").reindex(index=tfs, columns=tfs)
     dip = df.pivot_table(index=rc, columns=mc, values="dip", aggfunc="max").reindex(index=tfs, columns=tfs)
@@ -243,12 +272,14 @@ def sec_split(out: Path, sym: str, kind: str) -> str:
         row = {"RSI ↓ / MACD →": f"**{r}**"}
         for m in tfs:
             v = piv.loc[r, m]
-            row[m] = "–" if pd.isna(v) else f"{_cell(v, dip.loc[r, m])} ({int(npos.loc[r, m])}/{len(wins)})"
+            row[m] = "–" if pd.isna(v) else f"{_cell(v, dip.loc[r, m] > 0)} ({int(npos.loc[r, m])}/{len(wins)})"
         rows.append(row)
     name = {"open": "OPEN", "fc": "FORCE-CLOSE", "book": "BOOK"}[sec]
-    return (f"**{name}: RSI slope on one timeframe, MACD slope on another.** Three windows added up, one 0.01-lot unit; "
-            f"in brackets the number of windows that were profitable; ✕ = the loss exceeded $2,000 at some point. The "
-            f"diagonal is both indicators on the same timeframe.\n\n" + _table(pd.DataFrame(rows)))
+    return (f"**{name}: RSI slope on one timeframe, MACD slope on another.** Three quarters added up, one fixed 0.01-lot "
+            f"unit; in brackets the number of quarters that were profitable; ✕ = wipes a real $2,000 account in one of them. "
+            f"On the diagonal both indicators read the same timeframe. Every cell needs both votes to agree: grey-fill (a "
+            f"grey vote borrowing the other's sign) only exists when both sit on one timeframe, so it is off throughout "
+            f"this grid to keep the cells comparable.\n\n" + _table(pd.DataFrame(rows)))
 
 
 def _signal_frame(out: Path, sym: str, tf: str, horizon: int = 4) -> Optional[pd.DataFrame]:
@@ -275,6 +306,21 @@ def sec_signal(out: Path, sym: str, tf: str) -> str:
     return _table(t) if t is not None else ""
 
 
+def spread_note(out: Path, symbols: Sequence[str]) -> str:
+    """The median spread of each quarter, per symbol (from the data-quality stage), as one sentence each."""
+    parts = []
+    for sym in symbols:
+        q = (_j(out / "data_quality" / f"{sym}.json") or {}).get("windows") or {}
+        if not q:
+            continue
+        order = [w for w in ("HO1", "HO2", "OOS2", "OOS1", "IS") if w in q]
+        unit = 1.0 if sym.startswith("XAU") else 0.01           # price units of spread -> USD on a 0.01-lot unit
+        parts.append(f"{sym}: median spread " + ", ".join(
+            f"{WIN_LABEL.get(w, w)} {q[w]['spread_median']:.2f} (${q[w]['spread_median'] * unit:.2f} per 0.01 lot)"
+            for w in order) + ".")
+    return "  \n".join(parts)
+
+
 def sec_holdout(out: Path, sym: str) -> str:
     from ..analysis import holdout as H
     r = H.timeframe_carry_over(out, sym)
@@ -299,13 +345,14 @@ def sec_holdout(out: Path, sym: str) -> str:
         b = pd.DataFrame({
             "OPEN": best["open"].map(_norm), "FORCE-CLOSE": best["fc"].map(_norm),
             "Entry / FC": best["entry"] + " / " + best["fc_level"],
-            **{WIN_LABEL[w]: [_cell(n, d) for n, d in zip(best[f"net_profit@{w}"], best[f"max_loss_from_start@{w}"])]
+            **{WIN_LABEL[w]: [_cell(n, k) for n, k in zip(best[f"net_profit@{w}"], H.wiped(best, w))]
                for w in H.ANALYSED},
-            **{WIN_LABEL[w] + " (hold-out)": [_cell(n, d) for n, d in zip(best[f"net_profit@{w}"], best[f"max_loss_from_start@{w}"])]
+            **{WIN_LABEL[w] + " (hold-out)": [_cell(n, k) for n, k in zip(best[f"net_profit@{w}"], H.wiped(best, w))]
                for w in H.HELD_OUT},
         })
-        lines.append("\nThe eight settings one would have picked from the analysed quarters (windows survived, windows profitable, "
-                     "worst window), and what they then did on the hold-out:\n\n" + _table(b))
+        lines.append("\nThe eight settings one would have picked from the analysed quarters (quarters survived, quarters "
+                     "profitable, worst quarter), and what they then did on the hold-out (one fixed 0.01-lot unit; ✕ = wipes a "
+                     "real $2,000 account in that quarter):\n\n" + _table(b))
     return "\n".join(lines)
 
 
@@ -336,7 +383,7 @@ def sec_candidates(out: Path, sym: str) -> str:
     t = pd.DataFrame({
         "Setting": df["candidate"].map(lambda x: f"**{x}**" if x == "live timeframes · live ladder" else x),
         **{WIN_LABEL[w] + (" (hold-out)" if w in H.HELD_OUT else ""):
-           [_cell(n, d) for n, d in zip(df[f"net_profit@{w}"], df[f"max_loss_from_start@{w}"])] for w in wins},
+           [_cell(n, k) for n, k in zip(df[f"net_profit@{w}"], H.wiped(df, w))] for w in wins},
         "Quarters profitable": df["quarters_profitable"].astype(int).astype(str) + "/" + df["quarters"].astype(int).astype(str),
         "Deepest dip": df["deepest_dip"].map(lambda v: _usd(v, False)),
         "Worst basket": df["worst_basket"].map(_usd),
@@ -357,8 +404,8 @@ def sec_packages(out: Path, sym: str) -> str:
     wins = _windows(df)
     net = [f"net_profit@{w}" for w in wins]
     df["total"] = df[net].sum(axis=1)
-    df["dip"] = df[[f"max_loss_from_start@{w}" for w in wins]].max(axis=1)
-    df["n_ruin"] = (df[[f"max_loss_from_start@{w}" for w in wins]] >= ACCOUNT).sum(axis=1)
+    df["dip"] = pd.concat([_dip(df, w) for w in wins], axis=1).max(axis=1)
+    df["n_ruin"] = sum(_wiped(df, w).astype(int) for w in wins)
     df["n_pos"] = (df[net] > 0).sum(axis=1)
     live = df[df["package"] == "live settings"]
     rest = df[df["package"] != "live settings"].sort_values(["n_ruin", "total"], ascending=[True, False])
@@ -366,9 +413,9 @@ def sec_packages(out: Path, sym: str) -> str:
     t = pd.DataFrame({
         "What-if": d["package"].map(lambda s: f"**{s}**" if s == "live settings" else s),
         **{WIN_LABEL.get(w, w): d[f"net_profit@{w}"].map(_usd) for w in wins},
-        "Three windows": d["total"].map(_usd),
-        "Profitable windows": d["n_pos"].astype(int).astype(str) + f"/{len(wins)}",
-        "Deepest dip": d["dip"].map(lambda v: _usd(v, False)),
+        "Three quarters": d["total"].map(_usd),
+        "Profitable quarters": d["n_pos"].astype(int).astype(str) + f"/{len(wins)}",
+        "Deepest dip of the $2,000 account": d["dip"].map(lambda v: _usd(v, False)),
         "Wiped $2,000 in": d["n_ruin"].astype(int).astype(str) + f"/{len(wins)}",
         "Worst basket": d[[f"largest_loss@{w}" for w in wins]].min(axis=1).map(_usd),
     })
@@ -385,9 +432,9 @@ def sec_levers(out: Path, sym: str, top: int = 40) -> str:
     for param, g in df.groupby("param", sort=False):
         t = pd.DataFrame({
             param.replace("_", " "): g["value"],
-            **{WIN_LABEL.get(w, w): [_cell(n, d) for n, d in zip(g[f"net_profit@{w}"], g[f"max_loss_from_start@{w}"])]
+            **{WIN_LABEL.get(w, w): [_cell(n, k) for n, k in zip(g[f"net_profit@{w}"], _wiped(g, w))]
                for w in wins},
-            "Three windows": g[[f"net_profit@{w}" for w in wins]].sum(axis=1).map(_usd),
+            "Three quarters": g[[f"net_profit@{w}" for w in wins]].sum(axis=1).map(_usd),
         })
         blocks.append(_table(t))
     return "\n\n".join(blocks)
@@ -404,8 +451,8 @@ def sec_quarters(out: Path, sym: str) -> str:
         "Quarter": e["window"].map(lambda w: WIN_LABEL.get(w, w) + (" (hold-out)" if w in ("HO1", "HO2") else "")),
         "Median net P/L": e["net_median"].map(_usd),
         "Worst timing": e["net_min"].map(_usd), "Best timing": e["net_max"].map(_usd),
-        "Timings that lost money": e["losing_runs"].astype(str) + " of " + e["runs"].astype(str),
-        "Timings stopped out": e["stopped_out_runs"].astype(str) + " of " + e["runs"].astype(str),
+        "Runs that lost money": e["losing_runs"].astype(str) + " of " + e["runs"].astype(str),
+        "Runs stopped out": e["stopped_out_runs"].astype(str) + " of " + e["runs"].astype(str),
         "Median max drawdown": e["max_dd_pct_median"].map(lambda v: f"{v:.0f}%"),
         "Worst basket": e["worst_basket"].map(_usd),
         "Baskets (median)": e["baskets_median"].map(lambda v: f"{v:,.0f}"),
@@ -420,35 +467,42 @@ def sec_robust(out: Path, sym: str) -> str:
     if not d.exists():
         return ""
     lines = []
+    from ..analysis.robustness import spread_of
+
+    def levels(df, by, fmt):
+        """'level: median (min … max)' for every level of a stress test run under several loop timings."""
+        e = spread_of(df, [by])
+        return "; ".join(f"{fmt(r[by])}: {_usd(r['net_median'])} ({_usd(r['net_min'])} … {_usd(r['net_max'])})"
+                         for _, r in e.iterrows()), int(e["runs"].iloc[0]) if len(e) else 0
+
     p = d / "timing.csv"
     if p.exists():
         t = pd.read_csv(p)
         poll, lat = t[t["test"] == "poll"], t[t["test"] == "latency"]
         if len(poll):
-            lines.append(f"- **Loop timing** ({len(poll)} raw-tick replays, loop every 1.0–2.0 s at different phases): net P/L from "
-                         f"{_usd(poll['net_profit'].min())} to {_usd(poll['net_profit'].max())}, median "
-                         f"{_usd(poll['net_profit'].median())}; {int((poll['net_profit'] > 0).sum())} of {len(poll)} positive; "
-                         f"max drawdown {poll['max_dd_pct'].min():.0f}%–{poll['max_dd_pct'].max():.0f}%.")
+            txt, k = levels(poll, "poll_ms", lambda v: f"every {v / 1000:g} s")
+            lines.append(f"- **A slower loop** (median and range of {k} loop timings each): {txt}.")
         if len(lat):
-            lines.append("- **Order latency**: " + "; ".join(
-                f"{int(r['latency_ms'])} ms {_usd(r['net_profit'])}" for _, r in lat.iterrows()) + ".")
+            txt, k = levels(lat, "latency_ms", lambda v: f"{int(v)} ms")
+            lines.append(f"- **Order latency**, the delay between the quote that triggered an order and the quote it fills at "
+                         f"(median and range of {k} loop timings each): {txt}.")
     p = d / "costs.csv"
     if p.exists():
         t = pd.read_csv(p)
         sp, sl = t[t["test"] == "spread"], t[t["test"] == "slippage"]
         if len(sp):
-            lines.append("- **Spread scaled**: " + "; ".join(
-                f"×{r['spread_mult']:g} {_usd(r['net_profit'])}" for _, r in sp.iterrows()) + ".")
+            txt, k = levels(sp, "spread_mult", lambda v: f"×{v:g}")
+            lines.append(f"- **Spread scaled** (median and range of {k} loop timings each): {txt}.")
         if len(sl):
-            lines.append("- **Adverse slippage per fill** (price units): " + "; ".join(
-                f"{r['slippage']:g} {_usd(r['net_profit'])}" for _, r in sl.iterrows()) + ".")
+            txt, k = levels(sl, "slippage", lambda v: f"{v:g}")
+            lines.append(f"- **Adverse slippage on every fill**, in price units (median and range of {k} loop timings each): {txt}.")
     p = d / "start_shift.csv"
     if p.exists():
         t = pd.read_csv(p)
-        lines.append(f"- **Start date** (same settings and end date, started 0–14 days later, {len(t)} runs): net P/L from "
-                     f"{_usd(t['net_profit'].min())} to {_usd(t['net_profit'].max())}; "
+        lines.append(f"- **Start date** (same settings and end date, started up to 14 days later; {len(t)} distinct runs, one "
+                     f"path each): net P/L from {_usd(t['net_profit'].min())} to {_usd(t['net_profit'].max())}; "
                      f"{int((t['net_profit'] > 0).sum())} of {len(t)} positive; "
-                     f"{int(t['stopped_out'].sum())} stopped out.")
+                     f"{int(t['stopped_out'].astype(bool).sum())} stopped out.")
     p = d / "segments_quarterly.csv"
     if p.exists():
         t = pd.read_csv(p)
@@ -460,21 +514,28 @@ def sec_robust(out: Path, sym: str) -> str:
         p = d / fn
         if p.exists():
             t = pd.read_csv(p)
-            lines.append(f"- **{label}** ({len(t)} periods): {int((t['net_profit'] > 0).sum())} positive, "
-                         f"{int(t['stopped_out'].sum())} stopped out; best {_usd(t['net_profit'].max())}, worst "
-                         f"{_usd(t['net_profit'].min())}, median {_usd(t['net_profit'].median())}.")
+            if "partial" in t.columns:                    # the stubs at the ends of the window are not whole periods
+                t = t[~t["partial"].astype(bool)]
+            lines.append(f"- **{label}** ({len(t)} whole periods, per-second replay, one path each): "
+                         f"{int((t['net_profit'] > 0).sum())} positive, {int(t['stopped_out'].astype(bool).sum())} stopped out; "
+                         f"best {_usd(t['net_profit'].max())}, worst {_usd(t['net_profit'].min())}, median "
+                         f"{_usd(t['net_profit'].median())}.")
     b = _j(d / "bootstrap.json")
     if b and b.get("live_units"):
         x = b["live_units"]
-        lines.append(f"- **Same trades in a different order** (5,000 resamplings of whole days, realised P/L only): final balance "
-                     f"5th–95th percentile {_usd(x['final_p05'], False)}–{_usd(x['final_p95'], False)}, median "
-                     f"{_usd(x['final_p50'], False)}; probability of ending below the start {x['prob_loss'] * 100:.0f}%, of losing "
-                     f"more than a quarter {x['prob_loss_over_25pct'] * 100:.0f}%.")
+        lines.append(f"- **Which days happened to be in the quarter** (the baseline run's {b.get('baskets', 0):,} baskets; whole "
+                     f"days drawn with replacement {x['paths']:,} times, so some days count twice and others not at all; every "
+                     f"basket re-sized by the bot's own unit rule; a path ends when the balance cannot cover a basket's worst "
+                     f"floating loss): final balance 5th–95th percentile {_usd(x['final_p05'], False)}–{_usd(x['final_p95'], False)}, "
+                     f"median {_usd(x['final_p50'], False)}; ended below the start in {x['prob_loss'] * 100:.0f}% of the draws, "
+                     f"lost more than a quarter in {x['prob_loss_over_25pct'] * 100:.0f}%, wiped in {x['prob_wiped'] * 100:.0f}%.")
     out_s = "\n".join(lines)
     p = d / "segments_monthly.csv"
     if p.exists():
         t = pd.read_csv(p)
-        tt = pd.DataFrame({"Month (fresh $2,000 each)": t["segment"], "Net P/L": t["net_profit"].map(_usd),
+        part = t["partial"].astype(bool) if "partial" in t.columns else pd.Series(False, index=t.index)
+        tt = pd.DataFrame({"Month (fresh $2,000 each)": [x + (" (part)" if p_ else "") for x, p_ in zip(t["segment"], part)],
+                           "Net P/L": t["net_profit"].map(_usd),
                            "Max drawdown": t["max_dd_usd"].map(lambda v: _usd(v, False)),
                            "Baskets": t["baskets"].astype(int), "Win rate": t["win_rate_pct"].map(lambda v: f"{v:.1f}%"),
                            "Worst basket": t["largest_loss"].map(_usd),
@@ -489,18 +550,27 @@ def sec_parity(out: Path) -> str:
         j = _j(p)
         if not j:
             continue
+        ref = j.get("refused_ref") or {}
+        refused = ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in ref.items() if v) or "none"
         rows.append({"Window (UTC)": f"{j.get('symbol')} {j.get('start')} → {j.get('end')}",
                      "Settings": j.get("scores", "") + (" + other overrides" if j.get("config_overrides") else ""),
                      "Live polls": f"{j.get('polls_ref', 0):,}",
                      "Signal / score / fill mismatches": f"{j.get('signal_mismatches')} / {j.get('score_mismatches')} / {j.get('fill_mismatches')}",
                      "Fills": j.get("fills_ref"),
+                     "Orders the broker refused": refused,
                      "Final balance live = fast": f"{j.get('balance_ref', 0):,.2f} = {j.get('balance_fast', 0):,.2f}",
                      "Result": "identical" if j.get("ok") else "**differs**"})
     if not rows:
         return ""
     total = sum(int(r["Live polls"].replace(",", "")) for r in rows)
     return (f"{total:,} polls of the real `app.py` loop across {len(rows)} windows, compared with the fast engine poll by "
-            f"poll:\n\n" + _table(pd.DataFrame(rows)))
+            f"poll:\n\n" + _table(pd.DataFrame(rows)) +
+            "\n\nThe simulated terminal applies the same broker-side rules as the fast engine (an order sent after a session's "
+            "last quote is refused, new orders are refused for 90 s after a session break and 3.5 min after the weekly open, "
+            "and an order the free margin cannot carry is refused), so the windows in which the broker refused orders also "
+            "check what the live loop does next. Not covered by this comparison: the stop-out (the simulated terminal has "
+            "none; unit tests only), the handling of holes in the BTC history (the live code never meets one), and the 90 s / "
+            "3.5 min durations themselves, which are read off Exness's published behaviour, not measured.")
 
 
 def sec_quality(out: Path, symbols: Sequence[str]) -> str:
@@ -566,6 +636,12 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
       f"was changed. The strategy tested is exactly what `strategy.py` / `constants.py` on this branch do: open on the "
       f"{base[symbols[0]].describe_scores().split(' fc[')[0].replace('open[', '').rstrip(']')} slope score with full M15 "
       f"agreement, an RSI ladder of Fibonacci-sized adds, a force-close on an M15 slope reversal, and as profit exit {exit_rule}.\n")
+    from ..experiments import stale_outputs
+    stale = stale_outputs(out, live_root)
+    if stale:
+        A(f"> **Some results below are stale.** {len(stale)} result file{'s were' if len(stale) != 1 else ' was'} written by "
+          f"another build of the engine, or for other live settings than this checkout has now (for example `{stale[0]}`). "
+          f"Run `python -m backtesting reproduce` to recompute them before reading the numbers.\n")
     A("- **Results page:** [`backtest_results/index.html`](backtest_results/index.html) (open in a browser; every chart is interactive)")
     A("- **Per-run reports:** linked in the table below — candles with every fill, equity, attribution, second-by-second close-ups")
     A("- **Replay studio:** `python -m backtesting studio` — watch the bot trade the history tick by tick")
@@ -573,7 +649,9 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
 
     A("## Results with the live settings\n")
     A("$2,000 start, 1:2000 leverage, unit auto-stepped from the balance exactly as the bot does it "
-      "(`floor(balance / 2500) + 1`), real bid/ask ticks, the live loop cadence.\n")
+      "(`floor(balance / 2500) + 1`), real bid/ask quotes. The three-month runs replay every tick at the live loop's "
+      "cadence (one pass a second, 0.1 s more after an order, 1 s more after a ladder add); the fifteen-month runs use "
+      "the per-second series (one pass on every whole second).\n")
     A(sec_runs(out, symbols) + "\n")
     A("A *basket* is one fresh entry plus its ladder adds, closed together. \"Fixed 0.01-lot unit\" is the same run with the "
       "balance auto-step switched off.\n")
@@ -582,10 +660,11 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
     if any(t for _, t in qt):
         A("### Quarter by quarter, and how much is timing luck\n")
         A("One run is one path. Whether the bot happens to be inside a basket when a sharp move starts depends on which tick "
-          "its once-a-second poll lands on, and a few large baskets decide a quarter. So each of the five quarters was run "
-          "eight times on raw ticks, on a fresh $2,000, with the loop period (1.0 s or 1.25 s) and its phase (0 / 0.25 / 0.5 / "
-          "0.75 s) varied — all equally plausible for the live bot. The run in the table above is the first of the eight for "
-          "its quarter.\n")
+          "its once-a-second poll lands on, and a few large baskets decide a quarter. The live loop does not poll on a fixed "
+          "grid either: it sleeps a second and then spends a varying time talking to the terminal. So each of the five "
+          "quarters was run eight times on raw ticks, on a fresh $2,000, with every pass of the loop taking between 0 and "
+          "0.2 s longer, drawn at random (eight different random sequences). All eight are equally plausible for the live "
+          "bot; the run in the table above is a ninth path, on the fixed one-second grid.\n")
         for sym, t in qt:
             if t:
                 A(f"**{sym}**\n")
@@ -618,7 +697,9 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
           f"in an up-trend it reads \"down\" unless momentum makes a new high; the RSI vote is measured from the last pivot "
           f"beyond 60 / 40. Both are therefore votes to fade the last extreme. The bold columns are the test of whether that "
           f"predicts anything: after both votes agreed, how often was price further that way four bars later, against how "
-          f"often that happens on any bar.\n")
+          f"often that happens on any bar. Neighbouring bars overlap (each looks four bars ahead), so a difference of a "
+          f"point or two between a bold figure and its neighbour is within noise; a bar that closed unchanged counts as "
+          f"neither higher nor lower.\n")
         for sym, t in sg:
             if t:
                 A(f"### {sym}\n")
@@ -647,7 +728,12 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
         A("Everything above was read off three quarters of 2026. A setting that looks good there was chosen with hindsight, so "
           "the same 432 settings were run on two earlier quarters (13 Aug 2025 → 13 Feb 2026) that were never used to choose "
           "anything. If picking by past performance worked, the settings that did best on the analysed quarters would do "
-          "clearly better on the hold-out than the rest.\n")
+          "clearly better on the hold-out than the rest. The hold-out lies before the analysed quarters, so this tests whether "
+          "a choice is stable across periods, not whether it forecasts; and one round trip did not cost the same in every "
+          "quarter:\n")
+        sp = spread_note(out, symbols)
+        if sp:
+            A(sp + "\n")
         for sym, t in ho:
             if t:
                 A(f"### {sym}\n")
@@ -658,11 +744,16 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
     cd = [(sym, sec_candidates(out, sym)) for sym in symbols]
     if any(t for _, t in cd):
         A("## Candidate settings\n")
-        A("The timeframe families that held up best in the sweeps, each with the live ladder, without a ladder, and with a "
-          "short spaced ladder. Because one run is one path, every setting was run eight times per quarter on raw ticks (loop "
-          "period 1.0 / 1.25 s × four phases), each on a fresh $2,000 with the unit auto-step: 40 quarter-runs per setting. "
-          "Cells show the median of the eight; ✕ = one or more of the eight ended in a stop-out. The families were chosen after "
-          "looking at the three 2026 quarters, so the two hold-out columns are the only independent evidence.\n")
+        ens = all((out / "candidates" / f"{sym}_timing.csv").exists() for sym in symbols)
+        A("Five hand-picked timeframe families, the same for both symbols, each with the live ladder, without a ladder, and "
+          "with a short spaced ladder. They put H4 into the decision in different ways and were chosen by eye from an earlier "
+          "sweep of the three 2026 quarters: they are not the best of the sweep on either symbol, those quarters flatter "
+          "them, and the two hold-out columns are the only independent evidence. "
+          + ("Because one run is one path, every setting was run eight times per quarter on raw ticks (eight random loop "
+             "timings, as above), each on a fresh $2,000 with the unit auto-step: 40 quarter-runs per setting. Cells show "
+             "the median of the eight; ✕ = one or more of the eight ended in a stop-out.\n" if ens else
+             "One fixed 0.01-lot unit per quarter, a single path each; ✕ = the same baskets wipe a real $2,000 account in "
+             "that quarter.\n"))
         for sym, t in cd:
             if t:
                 A(f"### {sym}\n")
@@ -712,10 +803,12 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
               "unmodified, against a simulated MT5 terminal fed with the same ticks. " + par + "\n")
         if qual:
             A("**The data is the broker's own.** Exness's published tick history for `XAUUSDm` and `BTCUSDm`:\n\n" + qual + "\n")
-        A("**What it cannot know.** Real order latency and slippage, requotes and rejections, terminal or VPS outages, bot "
-          "restarts, and whether the live MT5 server's ticks match the archive tick for tick. The timing and cost stress "
-          "tests above bound the first two. Swaps are taken as zero (Exness accounts are swap-free by default). A "
-          "backtest is a description of the past, not a forecast.\n")
+        A("**What it cannot know.** Real order latency and slippage, requotes, terminal or VPS outages, bot restarts, how "
+          "long each pass of the live loop really takes, and whether the live MT5 server's ticks match the archive tick for "
+          "tick. The timing and cost tests above show how sensitive the result is to the first and the last of these; they "
+          "do not bound them. Leverage is taken as 1:2000 on gold and 1:400 on BTC and swaps as zero (Exness accounts are "
+          "swap-free by default); neither was read from a real account. A backtest is a description of the past, not a "
+          "forecast.\n")
 
     if audit:
         A("## Live-code findings (outside the strategy rules)\n")

@@ -47,6 +47,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
+import pandas as pd
 
 from ..config import BacktestConfig, TF_SECONDS
 from ..data import store
@@ -76,10 +77,15 @@ class ReplayError(ValueError):
 # ───────────────────────────── small helpers ─────────────────────────────
 
 def _ms(series) -> np.ndarray:
-    """A datetime column of a Result frame -> int64 epoch milliseconds."""
+    """
+    Datetimes (a column of a Result frame, or any datetime Series / index) -> int64 epoch
+    milliseconds. The values are brought to nanoseconds first, so the result does not depend
+    on the resolution the column happens to have (pandas 3 no longer defaults to nanoseconds).
+    A missing time (NaT) comes out as a large negative number, as it does in pandas itself.
+    """
     if len(series) == 0:
         return np.zeros(0, np.int64)
-    return (series.astype("int64") // 1_000_000).to_numpy(dtype=np.int64)
+    return np.asarray(pd.DatetimeIndex(series).as_unit("ns").asi8 // 1_000_000, dtype=np.int64)
 
 
 def iso_ms(ms) -> str:

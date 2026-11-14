@@ -228,7 +228,7 @@ def test_report_is_written_with_parseable_tables(tmp_path, fixture_store, live_c
     b = pd.read_csv(out / "baskets.csv")
     assert len(b) == len(res.baskets)
     assert b["pnl"].sum() == pytest.approx(res.baskets["pnl"].sum())
-    s = json.loads((out / "summary.json").read_text())
+    s = json.loads((out / "summary.json").read_text(encoding="utf-8"))
     assert s["summary"]["baskets"] == len(res.baskets)
     assert BacktestConfig.from_dict(s["config"]).key() == res.cfg.key()
 
@@ -289,13 +289,32 @@ def test_experiment_grids_are_valid_for_this_variant(live_cfg):
 def test_bootstrap_is_deterministic_and_bounded():
     rng = np.random.default_rng(3)
     t = pd.date_range("2026-01-01", periods=400, freq="3h", tz="UTC")
-    b = pd.DataFrame({"close_time": t, "pnl": np.where(rng.random(400) < 0.9, 1.0, -8.0)})
+    win = rng.random(400) < 0.9
+    b = pd.DataFrame({"close_time": t, "pnl": np.where(win, 1.0, -8.0), "mae": np.where(win, -0.5, -9.0), "units": 1})
     x = robustness.bootstrap(b, 2000.0, n=300, seed=1)
     y = robustness.bootstrap(b, 2000.0, n=300, seed=1)
     assert x == y
     assert 0.0 <= x["prob_loss"] <= 1.0 and x["final_p05"] <= x["final_p50"] <= x["final_p95"]
-    assert x["max_dd_p50"] <= x["max_dd_p95"] <= x["max_dd_p99"]
+    assert x["dip_p50"] <= x["dip_p95"] and x["prob_wiped"] == 0.0
     assert robustness.bootstrap(b.iloc[:0], 2000.0) == {}
+
+
+def test_bootstrap_resizes_baskets_and_stops_at_a_wiped_account():
+    """Per-unit results are re-sized by the unit rule as the resampled balance moves; a path ends when it is wiped."""
+    t = pd.date_range("2026-01-01", periods=60, freq="1D", tz="UTC")
+    # every day: +$300 at one unit. With a $2,500 step the unit grows with the balance, so the same days earn more.
+    b = pd.DataFrame({"close_time": t, "pnl": 300.0, "mae": 0.0, "units": 1})
+    flat = robustness.bootstrap(b, 2000.0, 0.0, 1, n=50, seed=1)
+    step = robustness.bootstrap(b, 2000.0, 2500.0, 10, n=50, seed=1)
+    assert flat["final_p50"] == pytest.approx(2000.0 + 60 * 300.0)
+    assert step["final_p50"] > flat["final_p50"] * 2
+    # a basket whose worst floating loss exceeds the balance wipes the account, whatever it closed at
+    c = pd.DataFrame({"close_time": t, "pnl": 5.0, "mae": -2500.0, "units": 1})
+    dead = robustness.bootstrap(c, 2000.0, 0.0, 1, n=50, seed=1)
+    assert dead["prob_wiped"] == 1.0 and dead["final_p95"] == 0.0 and dead["prob_loss"] == 1.0
+    # results recorded at two units are brought back to one unit first
+    d = b.assign(pnl=600.0, units=2)
+    assert robustness.bootstrap(d, 2000.0, 0.0, 1, n=50, seed=1)["final_p50"] == pytest.approx(flat["final_p50"])
 
 
 def test_rank_agreement_on_known_orderings():
@@ -318,7 +337,7 @@ def test_index_page_builds_from_a_results_directory(tmp_path, fixture_store, liv
     out = tmp_path / "results"
     res = engine_run(live_cfg("XAUUSDm"), mode="sec")
     build_report(res, out / "baseline" / "XAUUSDm", closeups=False, store_dir=fixture_store)
-    (out / "findings.json").write_text(json.dumps([{"title": "t", "detail": "d"}]))
+    (out / "findings.json").write_text(json.dumps([{"title": "t", "detail": "d"}]), encoding="utf-8")
     path = build_index(out, live_root=live_root)
     page = path.read_text(encoding="utf-8")
     assert "The live settings on real ticks" in page and "XAUUSDm" in page

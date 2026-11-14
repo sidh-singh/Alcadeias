@@ -1,9 +1,13 @@
 # Backtesting suite (the live bot's own requirements.txt is untouched).
-# Developed and verified on Python 3.10 with the versions noted; newer ones should work.
+# Developed and verified on Python 3.10 with the versions noted; newer minor versions should work.
+# pandas and plotly are held below their next major version, on which the suite is not verified:
+#   pandas 3  changes the default datetime resolution (no longer nanoseconds) and the string dtype;
+#   plotly 6  writes figure data in a form plotly.js 2 cannot read, and the plotly.min.js already
+#             saved next to the reports (assets/, written once by plotly 5) is kept as it is.
 numpy>=1.24        # 1.26.3
-pandas>=2.0        # 2.1.4
+pandas>=2.0,<3     # 2.1.4
 numba>=0.57        # 0.66.0  - the fast engine
-plotly>=5.18       # 5.18.0  - reports
+plotly>=5.18,<6    # 5.18.0  - reports
 dash>=2.14         # 2.14.2  - replay studio (python -m backtesting studio)
 pytest>=7.4        # 8.3.5   - test-suite
 # MetaTrader5 is NOT needed: the reference engine swaps it for a simulated terminal.

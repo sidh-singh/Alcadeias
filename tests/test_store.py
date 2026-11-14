@@ -409,7 +409,8 @@ def test_loaders_concatenate_months_and_skip_missing_ones(tmp_path):
         np.savez(d / "sec.npz", t_ms=st, bid=sb, ask=sa)
         np.savez(d / "m1.npz", **store.build_bars(t, bid, ask, 60))
         (d / "meta.json").write_text(json.dumps({"first": store.ms_to_dt(int(t[0])).isoformat(),
-                                                 "last": store.ms_to_dt(int(t[-1])).isoformat()}))
+                                                 "last": store.ms_to_dt(int(t[-1])).isoformat()}),
+                                     encoding="utf-8")
         parts[(y, m)] = (t, bid, ask)
     all_t = np.concatenate([parts[k][0] for k in sorted(parts)])
     all_b = np.concatenate([parts[k][1] for k in sorted(parts)])

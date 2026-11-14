@@ -120,7 +120,7 @@ def download_month(mf: MonthFile, raw_dir: Path, force: bool = False,
 
     if dest.exists() and not force:
         try:
-            local = json.loads(meta_p.read_text())
+            local = json.loads(meta_p.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             local = {}
         if (dest.stat().st_size == remote["size"]
@@ -157,7 +157,7 @@ def download_month(mf: MonthFile, raw_dir: Path, force: bool = False,
                 part.unlink(missing_ok=True)
                 raise IOError("corrupt zip")
             os.replace(part, dest)
-            meta_p.write_text(json.dumps({**remote, "url": mf.url}, indent=2))
+            meta_p.write_text(json.dumps({**remote, "url": mf.url}, indent=2), encoding="utf-8")
             dt = max(time.time() - t0, 1e-6)
             log(f"  {mf.name}: {got / 1e6:.1f} MB in {dt:.0f}s ({got / 1e6 / dt:.1f} MB/s)")
             return dest

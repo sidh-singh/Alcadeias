@@ -62,13 +62,13 @@ def write_live_root(root: Path, *, netting: bool, symbol: str = "XAUUSDm", **ove
         c.update(BOOK_SCORE_WEIGHTS={"M30": 2}, BOOK_S=3, PROFIT_PROTECT_USD_PER_UNIT=2.5)
     c.update(over)
     root.mkdir(parents=True, exist_ok=True)
-    (root / "constants.py").write_text("\n".join(f"{k} = {v!r}" for k, v in c.items()) + "\n")
+    (root / "constants.py").write_text("\n".join(f"{k} = {v!r}" for k, v in c.items()) + "\n", encoding="utf-8")
     (root / "symbols.json").write_text(json.dumps({
         "brake": 1, "mtqty": 0.02,
         "trading_window": {"enabled": True, "start_day": "Tuesday", "start_time": "03:30",
                            "end_day": "Thu", "end_time": "21:15"},
         "symbols": [{"symbol": symbol, "is_active": True, "step_up_balance": 1234, "unit_max_limit": 7}],
-    }))
+    }), encoding="utf-8")
     return root
 
 
@@ -113,7 +113,7 @@ def test_live_config_matches_this_branch_constants_and_symbols_json(live_root):
     of ``constants.py`` and the sizing / trading-window fields of ``symbols.json``.
     """
     c = live_constants
-    sj = json.loads((live_root / "symbols.json").read_text())
+    sj = json.loads((live_root / "symbols.json").read_text(encoding="utf-8"))
     file_symbols = [e["symbol"] for e in sj["symbols"]]
     for symbol in ("XAUUSDm", "BTCUSDm"):
         cfg = BacktestConfig.live(symbol, repo_root=live_root)
@@ -325,7 +325,7 @@ def _perturbed(cfg: BacktestConfig, f: dataclasses.Field):
         "start": lambda: "2026-01-05", "end": lambda: "2026-12-25", "open_weights": lambda: {"H4": 1},
         "fc_weights": lambda: {"H4": (1, 0)}, "book_weights": lambda: {"M5": 2},
         "ladder_tfs": lambda: ["M5", "H1"], "ladder_multipliers": lambda: [1, 1, 2, 3],
-        "entry_hours_utc": lambda: [1, 2, 3], "data_hole_s": lambda: 7200.0,
+        "entry_hours_utc": lambda: [1, 2, 3], "data_hole_s": lambda: 7200.0, "data_hole_quarantine_s": lambda: 3600.0,
         "target_usd_per_unit": lambda: None if v is not None else 1.5, "stop_loss_usd_per_unit": lambda: 12.5,
     }
     if f.name in special:

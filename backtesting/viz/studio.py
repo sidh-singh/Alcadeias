@@ -672,7 +672,7 @@ def _fit_y(fig, x0_ms: int, x1_ms: int) -> None:
         if lo is None or len(tr.x) == 0:
             continue
         x = pd.to_datetime(pd.Series(list(tr.x)), errors="coerce")
-        xm = (x.astype("int64") // 1_000_000).to_numpy()
+        xm = R._ms(x)
         ok = x.notna().to_numpy() & (xm >= x0_ms) & (xm <= x1_ms)
         lo = pd.to_numeric(pd.Series(list(lo)), errors="coerce").to_numpy(dtype=float)
         hi = pd.to_numeric(pd.Series(list(hi)), errors="coerce").to_numpy(dtype=float)

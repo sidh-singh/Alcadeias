@@ -136,7 +136,7 @@ def vote_table(out: Path, symbol: str, tf: str, horizon: int = 4):
     p = Path(out) / "signal" / f"{symbol}.json"
     if not p.exists():
         return None
-    j = json.loads(p.read_text())
+    j = json.loads(p.read_text(encoding="utf-8"))
     rows = []
     for key, label in PERIODS:
         r = (j.get(key) or {}).get(tf)

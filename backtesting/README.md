@@ -19,29 +19,54 @@ python -m backtesting studio                             # watch the bot trade h
 python -m pytest tests -q                                # test-suite (no download needed)
 ```
 
-Everything takes `--start/--end` (UTC), `--balance`, `--leverage`, and `--set key=value` for
-any field of `BacktestConfig`:
+The commands that run the strategy on one symbol — `run`, `parity`, `sweep`, `robust` — take
+`--symbol`, `--start/--end` (UTC), `--balance`, `--leverage`, `--set key=value` for any field
+of `BacktestConfig`, and `--live-root <dir>`:
 
 ```bash
 python -m backtesting run --symbol BTCUSDm --start 2026-09-01 --end 2026-10-01 \
     --set 'open_weights={"H4":1,"M15":1}' --set entry_s=4 --set max_adds=2 --set stop_loss_usd_per_unit=20
 ```
 
-| Command | What it does |
-|---|---|
-| `data` | Downloads Exness tick archives and builds the local store (`data/`, git-ignored) |
-| `quality` | Coverage, gaps, spread and jump statistics of the stored ticks |
-| `run` | One backtest → `report.html` + `baskets.csv`, `fills.csv`, `equity.csv.gz`, `summary.json` |
-| `parity` | Replays a window through the **real live code** and compares the fast engine with it |
-| `sweep` | Timeframe grids (OPEN / FORCE-CLOSE / BOOK; RSI and MACD together or split) |
-| `robust` | Loop timing, latency, costs, start date, sub-periods, bootstrap |
-| `reproduce` | The whole pipeline behind `backtest_results/` |
-| `docs` | Rebuilds `backtest_results/index.html`, the PNG gallery and `BACKTEST.md` from the results |
-| `studio` | Interactive results + live-style replay in the browser |
+The other commands take only what they use; `python -m backtesting <command> --help` lists it.
+
+| Command | What it does | Options besides its own switches |
+|---|---|---|
+| `data` | Downloads Exness tick archives and builds the local store (`data/`, git-ignored) | `--symbols`, `--from/--to` (months) |
+| `quality` | Coverage, gaps, spread and jump statistics of the stored ticks | `--symbol`, `--start/--end` |
+| `run` | One backtest → `report.html` + `baskets.csv`, `fills.csv`, `equity.csv.gz`, `summary.json` | `--symbol`, `--start/--end`, `--balance`, `--leverage`, `--set`, `--live-root` |
+| `parity` | Replays a window through the **real live code** and compares the fast engine with it | as `run` |
+| `sweep` | Timeframe grids (OPEN / FORCE-CLOSE / BOOK; RSI and MACD together or split) | as `run` |
+| `robust` | Loop timing, latency, costs, start date, sub-periods, bootstrap | as `run` |
+| `reproduce` | The whole pipeline behind `backtest_results/` | `--symbols`, `--live-root`; its windows and balances are fixed |
+| `docs` | Rebuilds `backtest_results/index.html`, the PNG gallery and `BACKTEST.md` from the results | `--symbols`, `--live-root` |
+| `studio` | Interactive results + live-style replay in the browser | `--host`, `--port`; always this checkout |
 
 The suite reads the strategy settings from this checkout's own `constants.py` and
 `symbols.json` (`BacktestConfig.live()`), and tells the two variants apart by whether
-`BOOK_SCORE_WEIGHTS` exists. `--live-root <dir>` points it at another checkout instead.
+`BOOK_SCORE_WEIGHTS` exists. `--live-root <dir>` (on `run`, `parity`, `sweep`, `robust`,
+`reproduce` and `docs`) points it at another checkout instead, for example a worktree of
+another deployment branch: the settings come from that directory's `constants.py` and
+`symbols.json`, and `parity` runs that directory's `app.py`. The `studio` has no such option
+and always shows this checkout's settings.
+
+The PNG snapshots of `docs` need a Chrome, Chromium or Edge on the machine (found in the usual
+places on macOS, Windows and Linux, or on `PATH`); without one that step is skipped with one
+log line and everything else is built. The suite is verified on pandas 2 and plotly 5, and
+`requirements-backtest.txt` holds both below their next major version.
+
+### Raw ticks or the per-second series
+
+`run` replays one of two series, chosen with `--mode`:
+
+| `--mode` | Data | Loop timing |
+|---|---|---|
+| `sec` (default) | the per-second series (`sec.npz`, see Data) | one poll on every whole second, +1 s after a ladder add. The 0.1 s the live `buy()` / `sell()` sleep after sending an entry or a ladder add is **not** modelled: this series cannot represent it, because a poll a tenth of a second off the whole second would need a quote the series does not hold. The sweeps use this mode |
+| `ticks` | every tick | the same, plus that 0.1 s (`open_order_delay_ms=100`, set by `run --mode ticks` unless you pass `--set open_order_delay_ms=...`), so the polls leave the whole seconds as the live loop's do. This is the timing of the pipeline's baseline runs |
+
+The two agree until the first order and can part afterwards, because from then on they poll
+at different instants. Neither includes the time the live loop spends on its MT5 calls; the
+`robust` tests vary that instead (see "One run is one path" below).
 
 ## Data
 
@@ -89,33 +114,45 @@ one-second polls take one to three seconds, which is what makes sweeps possible.
 
 **Parity.** `python -m backtesting parity` replays a window through both and requires
 identical poll timestamps, signals, scores, fills and final balance. The windows already
-checked are listed in `backtest_results/parity/` and on the results page; a short parity
-run on bundled real ticks is part of the test-suite.
+checked are listed in `backtest_results/parity/` and on the results page; parity runs on
+bundled real ticks, including one across a session break and two in which the broker
+refuses orders for margin, are part of the test-suite.
+
+What the comparison covers: the strategy rules, the loop cadence, fills, and what the live
+loop does when the broker refuses an order, because the simulated terminal applies the same
+broker-side rules as the fast engine (see the table below). What it does not cover: the
+stop-out (the simulated terminal has none; unit tests only), the handling of holes in the BTC
+history (the live code never meets one), a loop that does not take exactly one second per
+pass, and the 90 s / 3.5 min close-only durations themselves, which are read off Exness's
+published behaviour and not measured.
 
 ## What is simulated, and how
 
 | Aspect | Model |
 |---|---|
-| Loop | one poll per second; +0.1 s after an order and +1 s after a ladder add, as the live code sleeps |
+| Loop | one pass per second; 0.1 s more after every entry or add the bot sends and 1 s more after an add, filled or refused, as the live code sleeps. Raw-tick runs (`--mode ticks`: the baseline, the timing and cost tables, the candidate ensemble) model this exactly. Per-second runs (sweeps, the fifteen-month run, monthly and weekly segments) keep every pass on a whole second, i.e. without the 0.1 s; the engine warns if a per-second run is given a timing it cannot carry. `poll_jitter_ms` makes every pass take a random 0..N ms longer (reproducible by `poll_jitter_seed`): the live loop's own work time varies, so its polls do not sit on a fixed grid |
 | Indicators | recomputed on the forming bar at every poll, same seeds and comparisons as `indicator.py` |
 | Fill price | market order at the quote of the tick the decision saw: ask for a buy, bid for a sell (`latency_ms` delays the fill quote) |
 | Position P/L | (price difference) × lots × contract size, rounded to cents — what `positions_get()` reports |
 | Costs | the recorded bid/ask spread; no commission (Standard account); no swap |
 | Sizing | `unit = floor(balance / step_up_balance) + 1`, re-derived only while flat; entry `unit × 0.01` lot; ladder ×1,2,3,5,8,13 |
-| Margin | lots × contract × open price / leverage (gold follows the account's 1:2000; BTC is held at Exness's former fixed 1:400, the stricter of the two regimes in force during 2026); a rejected order is simply retried next poll, as live |
+| Margin | lots × contract × open price / leverage (gold follows the account's 1:2000; BTC is held at Exness's former fixed 1:400, the stricter of the two regimes in force during 2026); an order the free margin cannot carry is refused and retried on the next pass, after the same sleeps as a filled one |
 | Stop-out | all positions closed when equity ≤ 0 (Exness Standard stop-out level 0 %, balance floored at 0 by negative-balance protection); the run ends there |
-| Sessions | no decisions while the last tick is older than 3 minutes; fresh entries only inside the trading window; after a session break the broker's close-only mode refuses new orders for 90 s (3.5 min after the weekly open), read off the tick gaps |
-| Holes in the history | BTC trades around the clock, so three hours without a tick are missing data, not a closed market (the archive lacks 30 Aug 2025, the evening of 30 Nov 2025 and 30–31 Mar 2026). The open basket is closed at the last quote before the hole (reason `data_hole`; none of the missing hours' P/L is booked) and no basket is opened for 24 h after the history resumes. `data_hole_s=0` switches this off; gold, which has real closures, never uses it |
+| Sessions | no decisions while the last tick is older than 3 minutes (the bot's own liveness rule); fresh entries only inside the trading window. A session ends with its last quote before a silence of 30 minutes or more: an order sent more than a second after that quote is refused ("market closed") even though the bot still counts the market as live, so nothing is opened or closed on a stale quote. After the break the broker's close-only mode refuses new orders for 90 s (3.5 min after a break of a day or more) while closes go through. A run that starts just after a break inherits what is left of that period |
+| Holes in the history | BTC trades around the clock, so three hours without a tick are missing data, not a closed market (the archive lacks 30 Aug 2025, the evening of 30 Nov 2025 and 30–31 Mar 2026). The open basket is closed at the last quote before the hole (reason `data_hole`; none of the missing hours' P/L is booked) and no basket is opened during a quarantine after the history resumes: long enough for every indicator the configuration reads to have left the hole behind (38 bars of its slowest timeframe: 6.3 days when H4 is read, as it is by the fifth ladder tier; never less than a day). This removes most, not all, of the distortion: the bars still straddle the hole. `data_hole_s=0` switches it off; gold, which has real closures, never uses it |
 
-**Not simulated:** requotes, partial fills and rejections other than margin; terminal or VPS
-outages; bot restarts (which reset the live cooldown and unit); manual intervention; swaps;
-temporary broker margin increases around news and weekends. Loop timing and order latency
-are not knowable exactly, so they are stress-tested instead (`robust`).
+**Not simulated:** requotes and partial fills; refusals other than the three above; terminal
+or VPS outages; bot restarts (which reset the live cooldown and unit); manual intervention;
+swaps; temporary broker margin increases around news and weekends. How long a pass of the
+live loop really takes, and how long an order takes to reach the server, are not known, so
+the pipeline measures how sensitive the result is to them instead (`robust`). A run starts at
+the first pass that can see a quote of its own window.
 
 ## The experiment pipeline
 
-`python -m backtesting reproduce` runs these stages (each is skipped when its output exists,
-unless `--force`; `--only <stage ...>` picks some):
+`python -m backtesting reproduce` runs these stages (each is skipped when its output is
+there and was written by this build for these live settings, unless `--force`;
+`--only <stage ...>` picks some):
 
 | Stage | Output | What it answers |
 |---|---|---|
@@ -137,15 +174,32 @@ they only test what was selected.
 
 **One run is one path.** The result of a quarter rests on a handful of large baskets, and
 whether the bot is inside one when a sharp move starts depends on which tick its poll lands
-on: the same settings on the same ticks can end a quarter up or down when the loop phase
-moves by a quarter of a second. `robustness/<symbol>/quarters_timing.csv` therefore runs
-every quarter under eight loop timings; read single cells of a sweep with that spread in
-mind, and trust only patterns that repeat across windows.
+on: the same settings on the same ticks can end a quarter up or down when the loop timing
+moves by a fraction of a second. A "loop timing" in the pipeline is the live cadence with
+every pass taking a random 0 to 0.2 s longer; `robustness/<symbol>/quarters_timing.csv`
+runs every quarter under eight of them, the cost and latency tables run every level under
+four, and `candidates/<symbol>_timing.csv` runs every candidate setting under eight per
+quarter. (Fixed phase offsets would not do: the poll grid moves by 0.1 s with every order,
+so runs started half a second apart fall onto the same grid and become one path.) Read
+single cells of a sweep with that spread in mind, and trust only patterns that repeat
+across quarters.
 
-Sweeps trade a fixed 0.01-lot unit on a balance too large to be stopped out, so every
-setting is measured over the whole window; `max_loss_from_start >= 2000` then marks the
-runs in which a real $2,000 account would have been wiped out. Baseline, long, candidate
-"account" and robustness runs use the real $2,000 and the live unit auto-step.
+**One fixed unit, and the real account.** Sweeps trade a fixed 0.01-lot unit on a balance
+too large to be stopped out, so every setting is measured over the whole window. The live
+account does not trade like that: it steps its unit up with the balance, so after a good run
+every later loss is larger. Each sweep row therefore also carries `acct_net`, `acct_wiped`
+and `acct_dip`: the same baskets replayed in order on a $2,000 account with the bot's unit
+rule (`metrics.replay_account`); that is what "wiped" and ✕ mean in the tables. Baseline,
+long, candidate and robustness runs use the real $2,000 and the live unit auto-step
+directly.
+
+**Which build wrote what.** Every output is stamped in `backtest_results/manifest.json` with
+a fingerprint of the engine code and one of the live rules (`constants.py`, `symbols.json`,
+`strategy.py`, `indicator.py`, `app.py`, `mt5_helper.py`). A stage is skipped only when its
+output carries the current fingerprints; change a constant or the engine and `reproduce`
+recomputes what depends on it, and `docs` warns when a page would mix builds.
+
+The tick store lives in `data/store/`; set `ALCADEIAS_STORE_DIR` to keep it elsewhere.
 
 ## Experimental levers
 
@@ -192,7 +246,10 @@ BTC ticks and 45 minutes of real gold ticks with their warm-up history.
 | `test_store.py`, `test_config_metrics.py` | tick store and bar building; configuration loading; metrics |
 | `test_holdout_analysis.py` | the hold-out and candidate tables, the signal-vote study, the timing ensemble |
 | `test_studio.py` | the replay shows exactly the fills of the full run and never draws the future |
+| `test_cli_and_portability.py` | which command takes which option and that `--live-root` is used; the 0.1 s order sleep of `run --mode ticks`; nanosecond result times; browser discovery; non-ASCII text under a non-UTF-8 default encoding |
 
-`python -m pytest tests -q -m slow` adds the longer parity windows. To run the suite against
+`pytest.ini` leaves the tests marked `slow` (the full-window parity replays, about a minute
+each) out of the default run. `python -m pytest tests -q -m slow` runs **only** those;
+`python -m pytest tests -q -m "slow or not slow"` runs everything. To run the suite against
 another checkout of the live code (for example the other variant), set
 `ALCADEIAS_LIVE_ROOT=/path/to/checkout`.

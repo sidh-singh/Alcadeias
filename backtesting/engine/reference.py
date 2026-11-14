@@ -36,6 +36,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from . import kernels as K
 from ..config import BacktestConfig, REPO_ROOT, TF_SECONDS
 from ..data import store
 
@@ -148,13 +149,26 @@ class SimMT5:
     ORDER_TIME_GTC = 0
     ORDER_FILLING_IOC = 1
     TRADE_RETCODE_DONE = 10009
+    TRADE_RETCODE_MARKET_CLOSED = 10018
     TRADE_RETCODE_NO_MONEY = 10019
+    TRADE_RETCODE_CLOSE_ONLY = 10044
     COPY_TICKS_ALL = -1
     SYMBOL_TRADE_MODE_DISABLED = 0
 
     def __init__(self, symbol: str, t_ms: np.ndarray, bid: np.ndarray, ask: np.ndarray,
                  clock: SimClock, warm_m1: Dict[str, np.ndarray], contract_size: float,
-                 leverage: float, balance: float, warm_bars: int = 600):
+                 leverage: float, balance: float, warm_bars: int = 600,
+                 close_only_break_ms: int = 0, close_only_weekend_ms: int = 0):
+        """
+        Broker-side rules, the same ones the fast engine applies, so that the live code is
+        exercised against them and the two engines can be compared with them switched on:
+
+        * an order sent more than a second after the last quote before a session break is
+          answered "market closed" (the bot's own liveness rule lets it try for three minutes);
+        * for ``close_only_break_ms`` after a session break ends (``close_only_weekend_ms``
+          after a break of a day or more) closes are accepted and new orders refused;
+        * a new order the free margin cannot carry is refused.
+        """
         self.symbol = symbol
         self.t_ms, self.bid, self.ask = t_ms, bid, ask
         self.clock = clock
@@ -166,6 +180,10 @@ class SimMT5:
         self.deals: List[dict] = []
         self._ticket = 1000
         self.rejects = 0
+        self.refused = {"market_closed": 0, "close_only": 0, "no_money": 0}
+        self.close_only_break_ms = int(close_only_break_ms)
+        self.close_only_weekend_ms = int(close_only_weekend_ms)
+        self.reopen_until = -(1 << 60)
         for name, code in _MT5_TF.items():
             setattr(self, f"TIMEFRAME_{name}", code)
         span_s = int((t_ms[-1] - t_ms[0]) // 1000) + 1 if len(t_ms) else 0
@@ -186,6 +204,12 @@ class SimMT5:
         bars = list(self.bars.values())
         while p + 1 < n and t_ms[p + 1] <= now:
             p += 1
+            if p > 0:
+                gap = int(t_ms[p] - t_ms[p - 1])
+                if gap >= 86_400_000:
+                    self.reopen_until = int(t_ms[p]) + self.close_only_weekend_ms
+                elif gap >= K.SESSION_BREAK_MS:
+                    self.reopen_until = int(t_ms[p]) + self.close_only_break_ms
             ts = int(t_ms[p] // 1000)
             px = float(bid[p])
             for b in bars:
@@ -297,6 +321,12 @@ class SimMT5:
         i = self.ptr
         b, a = float(self.bid[i]), float(self.ask[i])
         now = self.clock.now_ms
+        refuse = lambda code: types.SimpleNamespace(retcode=code, price=0.0, volume=0.0, order=0, deal=0)
+        if (i + 1 < len(self.t_ms) and int(self.t_ms[i + 1] - self.t_ms[i]) >= K.SESSION_BREAK_MS
+                and now - int(self.t_ms[i]) > K.SESSION_CLOSE_GRACE_MS):
+            self.rejects += 1
+            self.refused["market_closed"] += 1
+            return refuse(self.TRADE_RETCODE_MARKET_CLOSED)
         if "position" in request:
             for k, p in enumerate(self.positions):
                 if p["ticket"] == request["position"]:
@@ -310,13 +340,18 @@ class SimMT5:
                     return types.SimpleNamespace(retcode=self.TRADE_RETCODE_DONE, price=price,
                                                  volume=p["volume"], order=p["ticket"], deal=len(self.deals))
             return types.SimpleNamespace(retcode=10013, price=0.0, volume=0.0, order=0, deal=0)
+        if now < self.reopen_until:
+            self.rejects += 1
+            self.refused["close_only"] += 1
+            return refuse(self.TRADE_RETCODE_CLOSE_ONLY)
         typ = int(request["type"])
         vol = _round2(float(request["volume"]))
         price = a if typ == self.ORDER_TYPE_BUY else b
         equity = self.balance + sum(self._pos_profit(p, b, a) for p in self.positions)
         if vol * self.contract * price / self.leverage > equity - self._margin():
             self.rejects += 1
-            return types.SimpleNamespace(retcode=self.TRADE_RETCODE_NO_MONEY, price=0.0, volume=0.0, order=0, deal=0)
+            self.refused["no_money"] += 1
+            return refuse(self.TRADE_RETCODE_NO_MONEY)
         self._ticket += 1
         self.positions.append(dict(ticket=self._ticket, type=typ, volume=vol, price_open=price, time=now))
         self.deals.append(dict(t_ms=now, tick_ms=int(self.t_ms[i]), entry="in", type=typ, volume=vol,
@@ -390,8 +425,16 @@ def _apply_config(mods, cfg: BacktestConfig) -> None:
         raise ValueError("experimental levers are not part of the live code")
     if cfg.spread_mult != 1.0 or cfg.extra_spread or cfg.slippage or cfg.commission_per_lot or cfg.latency_ms:
         raise ValueError("the reference engine fills at the raw quote with no extra costs")
-    if cfg.poll_interval_ms != 1000:
-        raise ValueError("the live loop sleeps exactly 1 s per iteration")
+    if cfg.poll_interval_ms != 1000 or cfg.poll_jitter_ms:
+        raise ValueError("the live loop sleeps exactly 1 s per iteration (and its work takes no simulated time)")
+    if cfg.open_order_delay_ms not in (0, 100):
+        raise ValueError("the sleep inside the live buy()/sell() is fixed at 0.1 s")
+    if is_netting and cfg.target_usd_per_unit is not None:
+        raise ValueError("the live netting variant has no fixed target")
+    if is_netting and not cfg.book_grey_fill:
+        raise ValueError("the live book score always grey-fills")
+    if cfg.stop_out_level != 0.0:
+        raise ValueError("the simulated terminal has no stop-out; keep stop_out_level at 0 for a reference run")
     if cfg.fixed_units:
         raise ValueError("the live unit is always derived from the balance")
 
@@ -427,6 +470,7 @@ class ReferenceResult:
     iterations: int
     errors: List[str] = field(default_factory=list)
     rejects: int = 0
+    refused: Dict[str, int] = field(default_factory=dict)   # orders the simulated broker refused, by reason
 
 
 _SIG = {"DO_NOTHING": 0, "BUY": 1, "SELL": 2, "CLOSE_BUY": 3, "CLOSE_SELL": 4, "BUY_MORE": 5, "SELL_MORE": 6}
@@ -465,7 +509,20 @@ def run_reference(cfg: BacktestConfig, live_root: Path = REPO_ROOT, mode: str = 
     if first_tick > start_ms:
         clock.now_ms = start_ms + -(-(first_tick - start_ms) // cfg.poll_interval_ms) * cfg.poll_interval_ms
     sim = SimMT5(cfg.symbol, rows["t_ms"], rows["bid"], rows["ask"], clock, warm_m1,
-                 cfg.spec.contract_size, cfg.effective_leverage, cfg.initial_balance, warm_bars)
+                 cfg.spec.contract_size, cfg.effective_leverage, cfg.initial_balance, warm_bars,
+                 close_only_break_ms=int(round(cfg.close_only_after_break_s * 1000)),
+                 close_only_weekend_ms=int(round(cfg.close_only_after_weekend_s * 1000)))
+    # a run that starts just after a session break inherits the broker's close-only window, as in the fast engine
+    from .fast import _PRE_MS, _silences
+    pre = store.load_sec(cfg.symbol, start_ms - _PRE_MS, start_ms, store_dir) if warm_from < start_ms else {}
+    gaps = _silences(warm_m1, rows["t_ms"], np.asarray(pre["t_ms"], np.int64) if pre else None)
+    past = gaps[gaps[:, 1] <= max(start_ms, first_tick)] if len(gaps) else gaps
+    if len(past):
+        length = int(past[-1][1] - past[-1][0])
+        if length >= 86_400_000:
+            sim.reopen_until = int(past[-1][1]) + sim.close_only_weekend_ms
+        elif length >= K.SESSION_BREAK_MS:
+            sim.reopen_until = int(past[-1][1]) + sim.close_only_break_ms
 
     trace_rows: List[tuple] = []
     events: List[dict] = []
@@ -574,4 +631,4 @@ def run_reference(cfg: BacktestConfig, live_root: Path = REPO_ROOT, mode: str = 
                  "open_t_ms", "price_open", "balance"])
     return ReferenceResult(cfg=cfg, trace=trace, deals=deals, events=events,
                            final_balance=float(sim.balance), final_equity=float(acct.equity),
-                           iterations=len(trace), errors=errors, rejects=sim.rejects)
+                           iterations=len(trace), errors=errors, rejects=sim.rejects, refused=dict(sim.refused))

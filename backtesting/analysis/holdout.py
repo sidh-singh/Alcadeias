@@ -26,34 +26,58 @@ SHORT = {"IS": "Aug-Nov 2026", "OOS1": "May-Aug 2026", "OOS2": "Feb-May 2026",
          "HO2": "Nov 2025-Feb 2026", "HO1": "Aug-Nov 2025"}
 
 
+def wiped(df: pd.DataFrame, w: str) -> pd.Series:
+    """
+    Would a real $2,000 account have been wiped in window ``w``?  Read from the account replay
+    (``acct_wiped@w``: the run's baskets re-sized by the bot's own unit rule, see
+    ``metrics.replay_account``). Results written before that column existed fall back to the
+    cruder test "more than $2,000 below the start at one fixed unit", which misses wipe-outs
+    that only happen because the account had stepped its unit up.
+    """
+    c = f"acct_wiped@{w}"
+    if c in df.columns:
+        return df[c].astype(bool)
+    return df[f"max_loss_from_start@{w}"] >= ACCOUNT
+
+
+def dip(df: pd.DataFrame, w: str) -> pd.Series:
+    """Deepest the replayed $2,000 account stood below its start in window ``w`` (at most 2,000)."""
+    c = f"acct_dip@{w}"
+    return df[c] if c in df.columns else df[f"max_loss_from_start@{w}"].clip(upper=ACCOUNT)
+
+
+def acct_net(df: pd.DataFrame, w: str) -> pd.Series:
+    """Net result of the replayed $2,000 account in window ``w`` (falls back to the fixed-unit net)."""
+    c = f"acct_net@{w}"
+    return df[c] if c in df.columns else df[f"net_profit@{w}"]
+
+
 def merged_timeframes(out: Path, sym: str) -> Optional[pd.DataFrame]:
     a, b = Path(out) / "sweeps" / f"{sym}_timeframes.csv", Path(out) / "sweeps" / f"{sym}_timeframes_holdout.csv"
     if not (a.exists() and b.exists()):
         return None
     m = pd.read_csv(a).merge(pd.read_csv(b), on=KEY)
     net_a = [f"net_profit@{w}" for w in ANALYSED]
-    dip_a = [f"max_loss_from_start@{w}" for w in ANALYSED]
     net_h = [f"net_profit@{w}" for w in HELD_OUT]
-    dip_h = [f"max_loss_from_start@{w}" for w in HELD_OUT]
     m["a_pos"] = (m[net_a] > 0).sum(axis=1)
-    m["a_ruin"] = (m[dip_a] >= ACCOUNT).sum(axis=1)
+    m["a_ruin"] = sum(wiped(m, w).astype(int) for w in ANALYSED)
     m["a_total"] = m[net_a].sum(axis=1)
     m["a_worst"] = m[net_a].min(axis=1)
     m["h_pos"] = (m[net_h] > 0).sum(axis=1)
-    m["h_ruin"] = (m[dip_h] >= ACCOUNT).sum(axis=1)
+    m["h_ruin"] = sum(wiped(m, w).astype(int) for w in HELD_OUT)
     m["h_total"] = m[net_h].sum(axis=1)
     return m
 
 
 def _group(m: pd.DataFrame) -> pd.Series:
-    g = np.where((m["a_pos"] == 3) & (m["a_ruin"] == 0), "3 of 3 profitable, never $2,000 down",
-        np.where(m["a_pos"] == 3, "3 of 3 profitable, but $2,000 down at some point",
+    g = np.where((m["a_pos"] == 3) & (m["a_ruin"] == 0), "3 of 3 profitable, account never wiped",
+        np.where(m["a_pos"] == 3, "3 of 3 profitable, but the account wiped in one",
         np.where(m["a_pos"] == 2, "2 of 3 profitable",
         np.where(m["a_pos"] == 1, "1 of 3 profitable", "0 of 3 profitable"))))
     return pd.Series(g, index=m.index)
 
 
-GROUP_ORDER = ["3 of 3 profitable, never $2,000 down", "3 of 3 profitable, but $2,000 down at some point",
+GROUP_ORDER = ["3 of 3 profitable, account never wiped", "3 of 3 profitable, but the account wiped in one",
                "2 of 3 profitable", "1 of 3 profitable", "0 of 3 profitable"]
 
 
@@ -105,7 +129,8 @@ def candidate_table(out: Path, sym: str) -> Optional[pd.DataFrame]:
     df["holdout_total"] = df[[f"net_profit@{w}" for w in ho]].sum(axis=1) if ho else np.nan
     df["quarters_profitable"] = (df[[f"net_profit@{w}" for w in an + ho]] > 0).sum(axis=1)
     df["quarters"] = len(an + ho)
-    df["deepest_dip"] = df[[f"max_loss_from_start@{w}" for w in an + ho]].max(axis=1)
+    df["deepest_dip"] = pd.concat([dip(df, w) for w in an + ho], axis=1).max(axis=1)
+    df["wiped_quarters"] = sum(wiped(df, w).astype(int) for w in an + ho)
     df["worst_basket"] = df[[f"largest_loss@{w}" for w in an + ho]].min(axis=1)
     df["baskets_per_quarter"] = df[[f"baskets@{w}" for w in an + ho]].mean(axis=1)
     pa = Path(out) / "candidates" / f"{sym}_account.csv"

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import zipfile
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -39,6 +40,18 @@ from .exness import MonthFile, month_range
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RAW_DIR = REPO_ROOT / "data" / "raw" / "exness"
 DEFAULT_STORE_DIR = REPO_ROOT / "data" / "store"
+
+
+def _root(store_dir) -> Path:
+    """
+    The directory a store path stands for. The environment variable ``ALCADEIAS_STORE_DIR``
+    relocates the default store (a larger disk; the miniature store the test-suite runs the whole
+    pipeline on); an explicitly given directory is used as it is.
+    """
+    env = os.environ.get("ALCADEIAS_STORE_DIR")
+    if env and Path(store_dir) == DEFAULT_STORE_DIR:
+        return Path(env)
+    return Path(store_dir)
 
 STORE_VERSION = 3
 
@@ -189,7 +202,7 @@ def resample_bars(m1: Dict[str, np.ndarray], tf_seconds: int) -> Dict[str, np.nd
 # ───────────────────────────── build ─────────────────────────────
 
 def month_dir(store_dir: Path, symbol: str, year: int, month: int) -> Path:
-    return Path(store_dir) / symbol / f"{year:04d}_{month:02d}"
+    return _root(store_dir) / symbol / f"{year:04d}_{month:02d}"
 
 
 def build_month(symbol: str, year: int, month: int,
@@ -205,7 +218,7 @@ def build_month(symbol: str, year: int, month: int,
     src_sig = {"size": zp.stat().st_size, "mtime": int(zp.stat().st_mtime)}
     if meta_p.exists() and not force:
         try:
-            meta = json.loads(meta_p.read_text())
+            meta = json.loads(meta_p.read_text(encoding="utf-8"))
             if (meta.get("source") == src_sig and meta.get("store_version") == STORE_VERSION
                     and (meta.get("has_ticks") or not keep_ticks)):
                 return meta
@@ -215,7 +228,7 @@ def build_month(symbol: str, year: int, month: int,
     out.mkdir(parents=True, exist_ok=True)
     if meta_p.exists() and not force and (out / "ticks.npz").exists():
         try:
-            old = json.loads(meta_p.read_text())
+            old = json.loads(meta_p.read_text(encoding="utf-8"))
         except ValueError:
             old = {}
         if old.get("source") == src_sig and old.get("store_version") == 2:
@@ -223,7 +236,7 @@ def build_month(symbol: str, year: int, month: int,
                 s_t, s_bid, s_ask = reduce_to_seconds(z["t_ms"], z["bid"], z["ask"])
             np.savez(out / "sec.npz", t_ms=s_t, bid=s_bid, ask=s_ask)
             old.update(store_version=STORE_VERSION, seconds=int(len(s_t)))
-            meta_p.write_text(json.dumps(old, indent=2))
+            meta_p.write_text(json.dumps(old, indent=2), encoding="utf-8")
             log(f"  upgraded {symbol} {year}-{month:02d} to store v{STORE_VERSION}: {len(s_t):,} per-second rows")
             return old
     t_ms, bid, ask, stats = parse_month_zip(zp)
@@ -245,7 +258,7 @@ def build_month(symbol: str, year: int, month: int,
         "bid_max": float(bid.max()) if len(bid) else None,
         **stats,
     }
-    meta_p.write_text(json.dumps(meta, indent=2))
+    meta_p.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     log(f"  built {symbol} {year}-{month:02d}: {meta['ticks']:,} ticks, {meta['seconds']:,} s, "
         f"{meta['m1_bars']:,} M1 bars, median spread {meta['spread_median']:.3f}")
     return meta
@@ -266,7 +279,7 @@ def build_range(symbols: Iterable[str], start: date, end: date,
 # ───────────────────────────── load ─────────────────────────────
 
 def available_months(symbol: str, store_dir: Path = DEFAULT_STORE_DIR) -> List[Tuple[int, int]]:
-    base = Path(store_dir) / symbol
+    base = _root(store_dir) / symbol
     if not base.exists():
         return []
     out = []
@@ -318,6 +331,6 @@ def data_span(symbol: str, store_dir: Path = DEFAULT_STORE_DIR) -> Optional[Tupl
     months = available_months(symbol, store_dir)
     if not months:
         return None
-    first = json.loads((month_dir(store_dir, symbol, *months[0]) / "meta.json").read_text())
-    last = json.loads((month_dir(store_dir, symbol, *months[-1]) / "meta.json").read_text())
+    first = json.loads((month_dir(store_dir, symbol, *months[0]) / "meta.json").read_text(encoding="utf-8"))
+    last = json.loads((month_dir(store_dir, symbol, *months[-1]) / "meta.json").read_text(encoding="utf-8"))
     return pd.Timestamp(first["first"]), pd.Timestamp(last["last"])

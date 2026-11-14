@@ -143,6 +143,11 @@ class BacktestConfig:
     open_order_delay_ms: int = 0        # extra wait after an open (live: 0.1 s inside buy()/sell())
     add_order_delay_ms: int = 1000      # extra wait after a ladder add (live: ORDER_COOLDOWN_SECONDS)
     latency_ms: int = 0                 # decision -> fill delay; the fill uses the quote at that later time
+    # The live loop sleeps for the period and then spends a varying time on its MT5 calls, so its
+    # polls do not sit on a fixed grid. With a jitter every pass takes 0..poll_jitter_ms longer,
+    # drawn from a reproducible sequence (poll_jitter_seed). 0 = the fixed grid of the parity runs.
+    poll_jitter_ms: int = 0
+    poll_jitter_seed: int = 0
     market_lookback_s: float = 180.0    # market "live" only if a tick arrived within this window
     # Broker "close-only" mode after a session break: quotes flow and closes are accepted, new
     # orders are refused. Exness gold: ~90 s after the daily break, ~3.5 min after the weekly
@@ -154,11 +159,17 @@ class BacktestConfig:
     # such a hole would freeze the bot for the missing time and hand whatever it holds the whole
     # price change in one jump. Instead the open basket is closed at the last quote before the hole
     # (reason "data_hole": the P/L of the missing hours is unknown, none of it is booked) and no
-    # fresh basket is opened for ``data_hole_quarantine_s`` after the history resumes, by which time
-    # the indicators have mostly left the artificial jump behind. None = the symbol's own setting
-    # (SymbolSpec.data_hole_s: BTC three hours, gold off); 0 = off.
+    # fresh basket is opened for a quarantine after the history resumes. data_hole_s: None = the
+    # symbol's own setting (SymbolSpec.data_hole_s: BTC three hours, gold off); 0 = off.
+    #
+    # The quarantine exists because the bars straddle the hole: the first bar after it carries the
+    # whole price change, and every bar-count window (RSI smoothing, the pivot scan) still reaches
+    # back across it. None = long enough for every indicator THIS configuration reads to have left
+    # the hole behind: peak_lookback + 2 x pivot_width + rsi_length bars of its slowest timeframe
+    # (38 bars with the live settings: 38 h if nothing slower than H1 is read, 6.3 days when H4 is,
+    # as it is by the fifth ladder tier), and never less than a day. A number fixes it instead.
     data_hole_s: Optional[float] = None
-    data_hole_quarantine_s: float = 86_400.0
+    data_hole_quarantine_s: Optional[float] = None
 
     # ── trading window (symbols.json; server time = UTC) ─────────────────────
     window_enabled: bool = True
@@ -201,6 +212,11 @@ class BacktestConfig:
                 raise ValueError(f"unknown ladder timeframe {tf!r}")
         if self.symbol not in SYMBOLS:
             raise ValueError(f"unknown symbol {self.symbol!r}; known: {', '.join(SYMBOLS)}")
+        # the entry is always one unit: element 0 of the ladder is that entry, the adds start at element 1
+        if len(self.ladder_multipliers) and float(self.ladder_multipliers[0]) != 1.0:
+            raise ValueError("ladder_multipliers[0] is the entry and must be 1 (the adds are elements 1, 2, ...)")
+        if self.fixed_units and self.fixed_units > self.unit_max_limit:
+            raise ValueError(f"fixed_units={self.fixed_units} exceeds unit_max_limit={self.unit_max_limit}")
 
     @property
     def spec(self) -> SymbolSpec:
@@ -210,6 +226,15 @@ class BacktestConfig:
     def effective_data_hole_s(self) -> float:
         """Silence (seconds) treated as a hole in the tick history; 0 = never."""
         return float(self.spec.data_hole_s if self.data_hole_s is None else self.data_hole_s)
+
+    @property
+    def effective_data_hole_quarantine_s(self) -> float:
+        """How long fresh entries stay out after a hole in the tick history (see ``data_hole_quarantine_s``)."""
+        if self.data_hole_quarantine_s is not None:
+            return float(self.data_hole_quarantine_s)
+        slowest = max(TF_SECONDS[tf] for tf in self.timeframes()) if self.timeframes() else 3600
+        bars = int(self.peak_lookback) + 2 * int(self.pivot_width) + int(self.rsi_length)
+        return float(max(86_400, bars * slowest))
 
     @property
     def effective_leverage(self) -> float:
@@ -334,7 +359,7 @@ def _symbols_json(symbol: str, repo_root: Path) -> dict:
     cfg, entry = {}, {}
     p = Path(repo_root) / "symbols.json"
     if p.exists():
-        cfg = json.loads(p.read_text())
+        cfg = json.loads(p.read_text(encoding="utf-8"))
         for e in cfg.get("symbols", []):
             if e.get("symbol") == symbol:
                 entry = e

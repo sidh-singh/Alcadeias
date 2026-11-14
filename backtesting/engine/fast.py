@@ -16,6 +16,7 @@ configurations (a sweep) can then be run against the same ``Prepared`` object.
 from __future__ import annotations
 
 import time
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -148,18 +149,35 @@ def prepare(symbol: str, start, end, tfs: Sequence[str], mode: str = "sec",
         bar_t[tf] = np.concatenate([w_ids, ids]).astype(np.int64) * tf_s
         nwarm[tf] = int(len(w_c))
         start_row[tf] = np.concatenate([np.full(len(w_c), -1, np.int64), first])
+    # the quotes of the last minutes before the window, only to time a session break that ended there exactly
+    pre = store.load_sec(symbol, start_ms - _PRE_MS, start_ms, store_dir) if warm_from < start_ms else {}
+    pre_t = np.asarray(pre["t_ms"], np.int64) if pre and len(pre["t_ms"]) else np.zeros(0, np.int64)
     return Prepared(symbol, start_ms, end_ms, mode, t_ms, bid, ask, list(tfs),
-                    closes, bar_t, nwarm, start_row, _silences(m1, t_ms))
+                    closes, bar_t, nwarm, start_row, _silences(m1, t_ms, pre_t))
 
 
-def _silences(m1: dict, t_ms: np.ndarray, at_least_ms: int = 300_000) -> np.ndarray:
-    """(from_ms, to_ms) of every silence of ``at_least_ms`` or more in the warm-up M1 history and the window rows."""
+_PRE_MS = 600_000      # how far before the window the exact quote times are looked at
+
+
+def _silences(m1: dict, t_ms: np.ndarray, pre_t: Optional[np.ndarray] = None, at_least_ms: int = 300_000) -> np.ndarray:
+    """
+    (from_ms, to_ms) of every silence of ``at_least_ms`` or more in the warm-up M1 history and the window rows.
+
+    An M1 bar only says that a quote fell somewhere inside its minute, so a silence read off the bars
+    starts at a minute's end and ends at a minute's start. ``pre_t`` (the quote times of the last minutes
+    before the window) lets a silence that ended there be timed to its first quote, which is what the
+    broker's close-only period after a session break is counted from.
+    """
     out = []
     if m1 and len(m1["t"]) > 0:
         mt = np.asarray(m1["t"], np.int64) * 1000
-        # an M1 bar says only that a tick fell inside its minute, so its silence starts at the minute's end
         for i in np.flatnonzero(np.diff(mt) >= at_least_ms + 60_000):
-            out.append((int(mt[i]) + 60_000, int(mt[i + 1])))
+            end = int(mt[i + 1])
+            if pre_t is not None and len(pre_t) and end >= int(pre_t[0]) - 60_000:
+                k = int(np.searchsorted(pre_t, end))
+                if k < len(pre_t) and int(pre_t[k]) < end + 60_000:
+                    end = int(pre_t[k])                      # the first quote of that minute
+            out.append((int(mt[i]) + 60_000, end))
         if len(t_ms) and int(t_ms[0]) - (int(mt[-1]) + 60_000) >= at_least_ms:
             out.append((int(mt[-1]) + 60_000, int(t_ms[0])))
     if len(t_ms) > 1:
@@ -199,6 +217,7 @@ _COUNTER_NAMES = {
     K.K_BLOCK_CONFIRM: "polls_entry_blocked_confirm", K.K_BLOCK_HOURS: "polls_entry_blocked_hours",
     K.K_CLOSE_TIME: "closes_time_stop", K.K_LADDER_SPACED: "polls_ladder_blocked_spacing",
     K.K_CLOSE_HOLE: "closes_data_hole", K.K_BLOCK_HOLE: "polls_entry_blocked_data_hole",
+    K.K_BLOCK_CLOSED: "orders_refused_market_closed",
     K.K_BLOCK_REOPEN: "polls_order_blocked_close_only",
 }
 _SCALAR_NAMES = {
@@ -284,15 +303,28 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
     ci[K.CI_TARGET_PER_LOT] = int(cfg.target_per_lot)
     ci[K.CI_REOPEN_DAILY_MS] = int(round(cfg.close_only_after_break_s * 1000))
     ci[K.CI_REOPEN_WEEKLY_MS] = int(round(cfg.close_only_after_weekend_s * 1000))
+    ci[K.CI_JITTER_MS] = int(cfg.poll_jitter_ms)
+    ci[K.CI_JITTER_SEED] = int(cfg.poll_jitter_seed)
     hole_ms = int(round(cfg.effective_data_hole_s * 1000))
     ci[K.CI_HOLE_MS] = hole_ms
-    ci[K.CI_HOLE_QUARANTINE_MS] = int(round(cfg.data_hole_quarantine_s * 1000))
+    ci[K.CI_HOLE_QUARANTINE_MS] = int(round(cfg.effective_data_hole_quarantine_s * 1000))
     ci[K.CI_HOLE_UNTIL0] = -(1 << 60)
-    if hole_ms > 0 and len(prep.gaps):
-        # a hole that ended shortly before this run starts: its quarantine still applies
-        g = prep.gaps[(prep.gaps[:, 1] <= ci[K.CI_START_MS]) & ((prep.gaps[:, 1] - prep.gaps[:, 0]) >= hole_ms)]
-        if len(g):
-            ci[K.CI_HOLE_UNTIL0] = int(g[:, 1].max()) + ci[K.CI_HOLE_QUARANTINE_MS]
+    ci[K.CI_REOPEN_UNTIL0] = -(1 << 60)
+    # What a run inherits from the silences that were over by the first quote it can see (a run that
+    # starts inside a silence sees its first quote when the silence ends, after its own start).
+    first_seen = max(int(ci[K.CI_START_MS]), int(prep.t_ms[0])) if len(prep.t_ms) else int(ci[K.CI_START_MS])
+    past = prep.gaps[prep.gaps[:, 1] <= first_seen] if len(prep.gaps) else prep.gaps
+    if len(past):
+        length = past[:, 1] - past[:, 0]
+        if hole_ms > 0 and (length >= hole_ms).any():
+            # a hole in the history that ended before (or as) this run starts: its quarantine still applies
+            ci[K.CI_HOLE_UNTIL0] = int(past[length >= hole_ms][:, 1].max()) + ci[K.CI_HOLE_QUARANTINE_MS]
+        # the latest session break: the broker's close-only window after it may still be running
+        last = past[-1]
+        if last[1] - last[0] >= 86_400_000:
+            ci[K.CI_REOPEN_UNTIL0] = int(last[1]) + ci[K.CI_REOPEN_WEEKLY_MS]
+        elif last[1] - last[0] >= K.SESSION_BREAK_MS:
+            ci[K.CI_REOPEN_UNTIL0] = int(last[1]) + ci[K.CI_REOPEN_DAILY_MS]
     ci[K.CI_RSI_LEN] = int(cfg.rsi_length)
     ci[K.CI_MACD_FAST] = int(cfg.macd_fast)
     ci[K.CI_MACD_SLOW] = int(cfg.macd_slow)
@@ -329,7 +361,7 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
 
 def run(cfg: BacktestConfig, prep: Optional[Prepared] = None, mode: str = "sec",
         trace: bool = False, light: bool = False, max_fills: int = 200_000,
-        store_dir: Path = store.DEFAULT_STORE_DIR) -> Result:
+        store_dir: Path = store.DEFAULT_STORE_DIR, warn_off_grid: bool = True) -> Result:
     """
     Run one backtest.
 
@@ -343,6 +375,18 @@ def run(cfg: BacktestConfig, prep: Optional[Prepared] = None, mode: str = "sec",
         prep = prepare(cfg.symbol, cfg.start, cfg.end, cfg.timeframes(), mode=mode, store_dir=store_dir)
     flat = prep.flat(cfg)
     w, need_rsi, need_slope, ladder_tf, mult, hour_ok, ci, cf = _kernel_inputs(cfg, prep)
+    if prep.mode == "sec" and warn_off_grid:
+        # The per-second series holds what a poll on a whole second can see. A timing value that is not a
+        # whole number of seconds moves polls or fills off that grid, where the quote in force is usually
+        # not in the series: the setting would then be applied only partly, without any sign of it.
+        off = [name for name, v in (("start", ci[K.CI_START_MS]), ("poll_interval_ms", ci[K.CI_POLL_MS]),
+                                    ("open_order_delay_ms", ci[K.CI_OPEN_DELAY_MS]),
+                                    ("add_order_delay_ms", ci[K.CI_ADD_DELAY_MS]),
+                                    ("latency_ms", ci[K.CI_LATENCY_MS]), ("poll_jitter_ms", ci[K.CI_JITTER_MS]))
+               if int(v) % 1000]
+        if off:
+            warnings.warn(f"{', '.join(off)} not a whole number of seconds: the per-second series cannot represent "
+                          f"that, use mode='ticks'", RuntimeWarning, stacklevel=2)
     span_ms = int(ci[K.CI_END_MS] - ci[K.CI_START_MS])
     n_eq = 2 if (light or cfg.record_interval_s <= 0) else span_ms // (cfg.record_interval_s * 1000) + 16
     if light:
@@ -390,7 +434,8 @@ def run(cfg: BacktestConfig, prep: Optional[Prepared] = None, mode: str = "sec",
 
 
 def _ts(ms: np.ndarray) -> pd.DatetimeIndex:
-    return pd.to_datetime(ms.astype(np.int64), unit="ms", utc=True)
+    # nanoseconds on every pandas version (pandas 3 no longer converts to them by default)
+    return pd.to_datetime(ms.astype(np.int64), unit="ms", utc=True).as_unit("ns")
 
 
 def _fills_frame(a: np.ndarray, tfs: List[str]) -> pd.DataFrame:

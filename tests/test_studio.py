@@ -35,7 +35,7 @@ def _ms(ts) -> int:
 
 def _expected(full_res, w: R.ReplayWindow) -> pd.DataFrame:
     f = full_res.fills
-    t = f["time"].astype("int64") // 1_000_000
+    t = f["time"].dt.as_unit("ns").astype("int64") // 1_000_000
     return f[(t >= w.anchor_ms) & (t < w.end_ms)].reset_index(drop=True)
 
 

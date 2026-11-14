@@ -68,7 +68,7 @@ def main() -> None:
                 "ticks": int(len(tk["t_ms"])), "seconds": int(len(sc["t_ms"])), "m1_bars": int(len(mm["t"])),
                 "first": store.ms_to_dt(first).isoformat(), "last": store.ms_to_dt(last).isoformat(),
                 "window": [a, z], "warm_days": warm_days,
-            }, indent=2))
+            }, indent=2), encoding="utf-8")
             print(f"{symbol} {y}-{m:02d}: {len(tk['t_ms']):,} ticks, {len(sc['t_ms']):,} s, {len(mm['t']):,} M1 bars")
     size = sum(p.stat().st_size for p in FIXTURE_STORE.rglob("*") if p.is_file())
     print(f"fixtures: {size / 1e6:.2f} MB in {FIXTURE_STORE}")

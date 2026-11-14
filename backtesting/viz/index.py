@@ -23,6 +23,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from ..analysis.holdout import dip as _dip, wiped as _wiped
 from ..config import BacktestConfig, REPO_ROOT, TF_SECONDS
 from . import theme as T
 from .report import _CONFIG, _FIT_JS, _money, _num, _table
@@ -42,7 +43,7 @@ def _fig(fig: go.Figure, div_id: str) -> str:
 
 def _read_json(p: Path):
     try:
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
 
@@ -113,8 +114,8 @@ def section_equity(out: Path, symbols: Sequence[str]) -> str:
             e["time"] = e["time"].dt.tz_convert(None)
         e = e.set_index("time")
         step = "1h" if name == "baseline" else "4h"
-        last = e[["balance", "equity"]].resample(step).last().dropna()
-        lo = e["equity"].resample(step).min().reindex(last.index)
+        last = e[["balance", "equity"]].resample(step, label="right", closed="right").last().dropna()
+        lo = e["equity"].resample(step, label="right", closed="right").min().reindex(last.index)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=last.index, y=last["balance"], mode="lines", name="Balance",
                                  line=dict(color=T.CONTEXT, width=1.4, shape="hv"),
@@ -153,6 +154,8 @@ def section_fidelity(out: Path, symbols: Sequence[str]) -> str:
                 "Live polls": f'{j.get("polls_ref", 0):,}',
                 "Mismatches: signals / scores / fills": f'{j.get("signal_mismatches")} / {j.get("score_mismatches")} / {j.get("fill_mismatches")}',
                 "Fills (live / fast)": f'{j.get("fills_ref")} / {j.get("fills_fast")}',
+                "Orders the broker refused": ", ".join(f'{v} {k.replace("_", " ")}' for k, v in (j.get("refused_ref") or {}).items()
+                                                       if v) or "none",
                 "Final balance (live / fast)": f'{j.get("balance_ref", 0):,.2f} / {j.get("balance_fast", 0):,.2f}',
                 "Result": "identical" if j.get("ok") else "DIFFERS",
             })
@@ -163,7 +166,10 @@ def section_fidelity(out: Path, symbols: Sequence[str]) -> str:
             f'<p class="lede">The reference engine runs the bot\'s own <code>app.py</code> loop, unmodified, against a simulated MT5 '
             f'terminal fed with the same Exness ticks. The fast engine used for everything on this page was compared with it poll '
             f'by poll: {total:,} live polls across {len(rows)} windows, both symbols, default and alternative settings. '
-            f'A mismatch would be a poll on which the two disagreed about the signal, a score or a fill.</p>'
+            f'A mismatch would be a poll on which the two disagreed about the signal, a score or a fill. The simulated terminal '
+            f'refuses orders as the broker does (after a session\'s last quote, for 90 s after a break, when margin is short), so '
+            f'windows with refused orders also check what the live loop does next. The stop-out and the handling of holes in the '
+            f'BTC history are not part of this comparison.</p>'
             f'<div class="card"><div class="scroll">{_table(pd.DataFrame(rows), left_cols=["Window", "Settings"])}</div></div>')
     qrows = []
     for sym in symbols:
@@ -173,12 +179,11 @@ def section_fidelity(out: Path, symbols: Sequence[str]) -> str:
         sp, g = q["spread"], q["gaps_over_3min"]
         qrows.append({
             "Symbol": sym, "From": q["first_tick"][:10], "To": q["last_tick"][:10],
-            "Ticks": f'{q["ticks_total"]:,}', "Rows dropped": q["rows_dropped_invalid"],
-            "Out of order": q["rows_out_of_order"],
+            "Ticks": f'{q["ticks_total"]:,}', "Bad / out-of-order rows": f'{q["rows_dropped_invalid"]} / {q["rows_out_of_order"]}',
             "Spread median": _num(sp["median"], 3), "Spread p99": _num(sp["p99"], 3), "Spread max": _num(sp["max"], 3),
-            "Silences > 3 min": g["count"], "Holes in the archive": len(g.get("holes") or []),
-            "Unexplained": len(g["unexplained"]), "Days without ticks": len(q["days"]["missing"]),
-            "Largest 1 s move": f'{_num(q["jumps"]["max_1s_move_pct"], 3)}%',
+            "Silences > 3 min": g["count"], "Holes": len(g.get("holes") or []),
+            "Unexplained": len(g["unexplained"]), "Empty days": len(q["days"]["missing"]),
+            "Max 1 s move": f'{_num(q["jumps"]["max_1s_move_pct"], 2)}%',
         })
     if qrows:
         import re
@@ -233,7 +238,7 @@ def section_timeframes(out: Path, sym: str, base: BacktestConfig) -> str:
     df["worst"] = df[[f"net_profit@{w}" for w in wins]].min(axis=1)
     df["n_pos"] = (df[[f"net_profit@{w}" for w in wins]] > 0).sum(axis=1)
     for w in wins:
-        df[f"ruin@{w}"] = df[f"max_loss_from_start@{w}"] >= ACCOUNT
+        df[f"ruin@{w}"] = _wiped(df, w)
     df["n_ruin"] = df[[f"ruin@{w}" for w in wins]].sum(axis=1)
     live_open = "+".join(sorted(base.open_weights, key=TF_SECONDS.get, reverse=True))
     live_fc = "+".join(sorted(base.fc_weights, key=TF_SECONDS.get, reverse=True))
@@ -255,8 +260,8 @@ def section_timeframes(out: Path, sym: str, base: BacktestConfig) -> str:
         fig = _heat(piv.to_numpy(), fcs, opens, "FORCE-CLOSE timeframe", "OPEN timeframes", mark=(live_fc, live_open),
                     zmax=zmax, ruin=rn.fillna(False).to_numpy())
         cards.append(f'<div class="card"><h3>{WIN_LABEL.get(w, w)}</h3>'
-                     f'<p class="cap">Net P/L of one 0.01-lot unit over the window, USD. ✕ = at some point the loss exceeded '
-                     f'$2,000, i.e. the account would have been wiped out. Gold frame = the live setting.</p>'
+                     f'<p class="cap">Net P/L of one fixed 0.01-lot unit over the quarter, USD. ✕ = the same baskets on a real '
+                     f'$2,000 account with the bot\'s own lot sizing wipe it out in that quarter. Gold frame = the live setting.</p>'
                      f'{_fig(fig, f"tf_{sym}_{w}")}</div>')
     blocks.append('<div class="grid3">' + "".join(cards) + "</div>")
     from .markdown import cell_noise
@@ -276,17 +281,18 @@ def section_timeframes(out: Path, sym: str, base: BacktestConfig) -> str:
         "Quarters > 0": show["n_pos"].astype(int).astype(str) + f"/{len(wins)}",
         "Wiped $2,000 in": show["n_ruin"].astype(int).astype(str) + f"/{len(wins)}",
         "Worst quarter": show["worst"].map(lambda v: _money(v, signed=True)),
-        "Deepest dip": show[[f"max_loss_from_start@{w}" for w in wins]].max(axis=1).map(_money),
+        "Deepest dip": pd.concat([_dip(show, w) for w in wins], axis=1).max(axis=1).map(_money),
         "Baskets / quarter": show[[f"baskets@{w}" for w in wins]].mean(axis=1).map(lambda v: f"{v:,.0f}"),
     })
     n_all3 = int(((df["n_pos"] == len(wins)) & (df["n_ruin"] == 0)).sum())
     n_ruin_any = int((df["n_ruin"] > 0).sum())
     blocks.append(
         f'<div class="card" style="margin-top:14px"><h3>Settings ranked by how they hold up across all three quarters</h3>'
-        f'<p class="cap">Net P/L of one 0.01-lot unit per quarter. Sorted by quarters survived, then profitable quarters, then the '
-        f'worst quarter. {n_all3} of {len(df)} timeframe combinations made money in all {len(wins)} quarters without ever being '
-        f'$2,000 down; {n_ruin_any} would have wiped out a $2,000 account in at least one. "Deepest dip" = furthest the account '
-        f'stood below its start in any of the quarters. This ranking is hindsight: the hold-out section below tests it.</p>'
+        f'<p class="cap">Net P/L of one fixed 0.01-lot unit per quarter. Sorted by quarters survived, then profitable quarters, then '
+        f'the worst quarter. {n_all3} of {len(df)} timeframe combinations made money in all {len(wins)} quarters without wiping a '
+        f'real $2,000 account (the same baskets with the bot\'s own lot sizing); {n_ruin_any} wipe it out in at least one quarter. '
+        f'"Deepest dip" = furthest that account stood below its start. This ranking is hindsight: the hold-out section below tests '
+        f'it.</p>'
         f'<div class="scroll">{_table(t, left_cols=["", "OPEN", "FORCE-CLOSE", "Entry", "FC level"])}</div></div>')
 
     ag = _read_json(out / "sweeps" / f"{sym}_timeframes_agreement.json") or {}
@@ -338,7 +344,7 @@ def section_split(out: Path, sym: str, kind: str, base: BacktestConfig) -> str:
     cards = []
     for w in wins + ["sum"]:
         col = df[[f"net_profit@{x}" for x in wins]].sum(axis=1) if w == "sum" else df[f"net_profit@{w}"]
-        ru = (df[[f"max_loss_from_start@{x}" for x in wins]].max(axis=1) if w == "sum" else df[f"max_loss_from_start@{w}"]) >= ACCOUNT
+        ru = pd.concat([_wiped(df, x) for x in wins], axis=1).any(axis=1) if w == "sum" else _wiped(df, w)
         piv = df.assign(v=col).pivot_table(index=rc, columns=mc, values="v", aggfunc="mean").reindex(index=tfs, columns=tfs)
         rn = df.assign(v=ru).pivot_table(index=rc, columns=mc, values="v", aggfunc="max").reindex(index=tfs, columns=tfs)
         fig = _heat(piv.to_numpy(), tfs, tfs, "MACD timeframe", "RSI timeframe", mark=mark, height=300,
@@ -347,8 +353,9 @@ def section_split(out: Path, sym: str, kind: str, base: BacktestConfig) -> str:
         cards.append(f'<div class="card"><h3>{ttl}</h3>{_fig(fig, f"{kind}_{sym}_{w}")}</div>')
     name = {"open": "OPEN", "fc": "FORCE-CLOSE", "book": "BOOK"}[sec]
     return (f'<h3 style="margin:22px 0 4px;font-size:13.5px">{name}: RSI on one timeframe, MACD on another</h3>'
-            f'<p class="lede" style="margin:0 0 10px;color:var(--ink-2)">The diagonal is the live structure (both indicators on the '
-            f'same timeframe). Net P/L of one 0.01-lot unit, USD; ✕ = would have wiped a $2,000 account; everything else as live. '
+            f'<p class="lede" style="margin:0 0 10px;color:var(--ink-2)">On the diagonal both indicators read the same timeframe. '
+            f'Every cell needs both votes to agree (no grey-fill anywhere in this grid, so the diagonal is a little stricter than '
+            f'the live score). Net P/L of one fixed 0.01-lot unit, USD; ✕ = wipes a real $2,000 account; everything else as live. '
             f'{"Gold frame = the live setting." if mark else ""}</p>'
             f'<div class="grid2">{"".join(cards)}</div>')
 
@@ -383,7 +390,7 @@ def holdout_figure(out: Path, sym: str, base: BacktestConfig, height: int = 420)
     fig = go.Figure()
     for mask, name, color, sym_, size, op in (
             (~robust, "every other setting", T.CONTEXT, "circle", 6, 0.55),
-            (robust, "profitable in all three analysed quarters, never $2,000 down", T.SERIES[0], "square", 8, 0.95)):
+            (robust, "profitable in all three analysed quarters, account never wiped", T.SERIES[0], "square", 8, 0.95)):
         fig.add_trace(go.Scatter(**pts(m[mask]), mode="markers", name=name, text=label[mask],
                                  marker=dict(color=color, size=size, symbol=sym_, opacity=op, line=dict(color=T.SURFACE, width=0.8)),
                                  hovertemplate=hover))
@@ -407,13 +414,13 @@ def section_holdout(out: Path, sym: str, base: BacktestConfig) -> str:
         return ""
     fig, tab, facts = r
     t = pd.DataFrame({
-        "On the three analysed quarters the setting was": tab["group"],
+        "On the three analysed quarters": tab["group"],
         "Settings": tab["settings"].astype(int),
-        "Profitable in both hold-out quarters": tab["both_holdout_profitable_pct"].map(lambda v: f"{v:.0f}%"),
-        "In at least one": tab["one_or_more_pct"].map(lambda v: f"{v:.0f}%"),
-        "Wiped $2,000 in the hold-out": tab["wiped_in_holdout_pct"].map(lambda v: f"{v:.0f}%"),
-        "Mean hold-out net / quarter": tab["mean_holdout_net_per_quarter"].map(lambda v: _money(v, signed=True)),
-        "Median": tab["median_holdout_net_per_quarter"].map(lambda v: _money(v, signed=True)),
+        "Hold-out: both quarters up": tab["both_holdout_profitable_pct"].map(lambda v: f"{v:.0f}%"),
+        "one or both": tab["one_or_more_pct"].map(lambda v: f"{v:.0f}%"),
+        "wiped": tab["wiped_in_holdout_pct"].map(lambda v: f"{v:.0f}%"),
+        "mean net / quarter": tab["mean_holdout_net_per_quarter"].map(lambda v: _money(v, signed=True)),
+        "median": tab["median_holdout_net_per_quarter"].map(lambda v: _money(v, signed=True)),
     })
     cap = (f'Each dot is one of the {facts["settings"]} timeframe settings (one 0.01-lot unit). Across is what it averaged per quarter on '
            f'the three 2026 quarters everything else on this page was read from; up is what it averaged on two earlier quarters '
@@ -421,9 +428,10 @@ def section_holdout(out: Path, sym: str, base: BacktestConfig) -> str:
            f'on its edge. Rank correlation {facts["rank_correlation"]:+.2f}. Of all settings, '
            f'{facts["base_both_profitable_pct"]:.0f}% were profitable in both hold-out quarters and '
            f'{facts["base_wiped_pct"]:.0f}% would have wiped $2,000 in one of them.')
-    return (f'<div class="card"><h3>{sym}</h3><p class="cap">{cap}</p>{_fig(fig, f"ho_{sym}")}'
-            f'<details open><summary>Table view: hold-out result by how the setting did on the analysed quarters</summary>'
-            f'<div class="scroll">{_table(t, left_cols=["On the three analysed quarters the setting was"])}</div></details></div>')
+    return (f'<div class="card"><h3>{sym}</h3><p class="cap">{cap}</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:18px;align-items:start"><div>{_fig(fig, f"ho_{sym}")}</div>'
+            f'<div><p class="cap" style="margin-top:6px">How the settings did on the two hold-out quarters, grouped by how they had '
+            f'done on the three analysed ones:</p><div class="scroll">'
+            f'{_table(t, left_cols=["On the three analysed quarters"])}</div></div></div></div>')
 
 
 def _cand_short(tf: str, ladder: str) -> str:
@@ -445,12 +453,18 @@ def candidates_figure(out: Path, sym: str):
         ruin = df[[f"ens_stopped@{w}" for w in wins]].to_numpy(float) > 0
     else:
         z = df[[f"net_profit@{w}" for w in wins]].to_numpy(float)
-        ruin = df[[f"max_loss_from_start@{w}" for w in wins]].to_numpy(float) >= ACCOUNT
+        ruin = np.column_stack([_wiped(df, w).to_numpy(bool) for w in wins])
     zmax = float(np.nanpercentile(np.abs(z), 92)) or 1.0
     fig = _heat(z, [WIN_SHORT[w] for w in wins], short, "Quarter (oldest first)", "", zmax=zmax, ruin=ruin,
                 height=110 + 24 * len(df), left=230)
     fams = [(tf.split(":")[0].strip(), tf.split(":", 1)[1].strip()) for tf in dict.fromkeys(df["timeframes"]) if ":" in tf]
     return fig, df, fams
+
+
+def candidates_mode(df: pd.DataFrame) -> str:
+    """'ensemble' when the candidate table carries the eight-timings runs (what the figure then draws), else 'single'."""
+    wins = [w for w in CHRONO if f"net_profit@{w}" in df.columns]
+    return "ensemble" if wins and all(f"ens_median@{w}" in df.columns for w in wins) else "single"
 
 
 def section_candidates(out: Path, sym: str) -> str:
@@ -464,37 +478,36 @@ def section_candidates(out: Path, sym: str) -> str:
     if ens:
         n = df["ens_runs"].astype(int).astype(str)
         t = pd.DataFrame({
-            "Setting": df["candidate"],
-            **{WIN_SHORT[w]: [_money(m, signed=True) + (WIPED if k > 0 else "")
-                              for m, k in zip(df[f"ens_median@{w}"], df[f"ens_stopped@{w}"])] for w in wins},
-            "Quarter-runs that lost": df["ens_losing_runs"].astype(int).astype(str) + " of " + n,
+            "Setting": [_cand_short(a, b) for a, b in zip(df["timeframes"], df["ladder"])],
+            **{WIN_SHORT[w].replace(" · hold-out", " (h-o)"): [_money(m, signed=True) + (WIPED if k > 0 else "")
+                                                               for m, k in zip(df[f"ens_median@{w}"], df[f"ens_stopped@{w}"])] for w in wins},
+            "Runs that lost": df["ens_losing_runs"].astype(int).astype(str) + " of " + n,
             "Stopped out": df["ens_stopped_runs"].astype(int).astype(str) + " of " + n,
-            "Median quarter-run": df["ens_median"].map(lambda v: _money(v, signed=True)),
-            "Mean": df["ens_mean"].map(lambda v: _money(v, signed=True)),
-            "Worst quarter-run": df["ens_worst_run"].map(lambda v: _money(v, signed=True)),
+            "Median run": df["ens_median"].map(lambda v: _money(v, signed=True)),
+            "Worst run": df["ens_worst_run"].map(lambda v: _money(v, signed=True)),
             "Worst basket": df["ens_worst_basket"].map(lambda v: _money(v, signed=True)),
             "Baskets / quarter": df["ens_baskets_per_quarter"].map(lambda v: f"{v:,.0f}"),
         })
-        cap = ('Each cell: the median net P/L of eight raw-tick runs of that quarter (loop period 1.0 / 1.25 s × four phases) on a '
-               'fresh $2,000 with the unit auto-step, USD. ✕ = one or more of the eight ended in a stop-out. ')
-        summ = "Table view: per-quarter medians and the spread over all quarter-runs"
+        cap = ('Each cell: the median net P/L of eight raw-tick runs of that quarter (eight random loop timings) on a fresh '
+               '$2,000 with the unit auto-step, USD. ✕ = one or more of the eight ended in a stop-out. ')
+        summ = ("Table view: per-quarter medians, the spread over all 40 quarter-runs, and one per-second run of all fifteen "
+                "months on $2,000 (✕ = stopped out); (h-o) = hold-out quarter")
     else:
         t = pd.DataFrame({
             "Setting": df["candidate"],
-            **{WIN_SHORT[w]: [_money(n, signed=True) + (WIPED if d >= ACCOUNT else "")
-                              for n, d in zip(df[f"net_profit@{w}"], df[f"max_loss_from_start@{w}"])] for w in wins},
+            **{WIN_SHORT[w]: [_money(n, signed=True) + (WIPED if k else "")
+                              for n, k in zip(df[f"net_profit@{w}"], _wiped(df, w))] for w in wins},
             "Quarters > 0": df["quarters_profitable"].astype(int).astype(str) + "/" + df["quarters"].astype(int).astype(str),
             "Hold-out total": df["holdout_total"].map(lambda v: _money(v, signed=True)),
             "Deepest dip": df["deepest_dip"].map(_money),
             "Worst basket": df["worst_basket"].map(lambda v: _money(v, signed=True)),
             "Baskets / quarter": df["baskets_per_quarter"].map(lambda v: f"{v:,.0f}"),
         })
-        cap = 'Net P/L of one 0.01-lot unit per quarter, USD. ✕ = more than $2,000 down at some point in that quarter. '
+        cap = 'Net P/L of one fixed 0.01-lot unit per quarter, USD. ✕ = the same baskets wipe a real $2,000 account in that quarter. '
         summ = "Table view"
     if "account_net" in df.columns:
-        t["One run of all 15 months on $2,000"] = df["account_net"].map(lambda v: _money(v, signed=True))
-        t["Max drawdown"] = df["account_max_dd_pct"].map(lambda v: f"{v:.0f}%")
-        t["Stopped out "] = df["account_stopped_out"].map(lambda v: "YES" if bool(v) else "no")
+        t["15 months in one run"] = [_money(v, signed=True) + (WIPED if bool(k) else "")
+                                     for v, k in zip(df["account_net"], df["account_stopped_out"])]
     return (f'<div class="card"><h3>{sym}</h3><p class="cap">{cap}{legend}</p>{_fig(fig, f"cand_{sym}")}'
             f'<details open><summary>{summ}</summary><div class="scroll">{_table(t, left_cols=["Setting"])}</div></details></div>')
 
@@ -516,7 +529,17 @@ def section_signal(out: Path, sym: str, tf: str, horizon: int = 4) -> str:
         f"→ lower {horizon} bars later": t["lower_after_both_down_pct"].map(f1),
         "any bar: lower": t["lower_all_bars_pct"].map(f1),
     })
-    return (f'<div class="card"><h3>{sym}</h3><div class="scroll">{_table(d, left_cols=["Period"])}</div></div>')
+    cap = ""
+    a = t[t["period"] == "All fifteen months"]
+    if len(a):
+        r = a.iloc[0]
+        cap = (f'<p class="cap">Over all {int(r["bars"]):,} bars: the MACD vote pointed against its own signal-line trend on '
+               f'{r["macd_against_trend_pct"]:.0f}% of them; {r["rsi_up_from_oversold_low_pct"]:.0f}% of RSI up-votes were measured '
+               f'from an oversold low. After both votes pointed up, price was higher {horizon} bars later {r["higher_after_both_up_pct"]:.1f}% '
+               f'of the time ({r["higher_all_bars_pct"]:.1f}% on any bar); after both pointed down it was lower '
+               f'{r["lower_after_both_down_pct"]:.1f}% of the time ({r["lower_all_bars_pct"]:.1f}% on any bar). Neighbouring bars overlap, '
+               f'so a point or two either way is noise.</p>')
+    return (f'<div class="card"><h3>{sym}</h3>{cap}<div class="scroll">{_table(d, left_cols=["Period"])}</div></div>')
 
 
 def section_levers(out: Path, sym: str) -> str:
@@ -540,7 +563,8 @@ def section_levers(out: Path, sym: str) -> str:
         fig.update_yaxes(**T.axis(title_text="Net P/L, USD", zeroline=True, zerolinecolor=T.AXIS))
         tbl = pd.DataFrame({"Value": g["value"],
                             **{WIN_SHORT.get(w, w): g[f"net_profit@{w}"].map(lambda v: _money(v, signed=True)) for w in wins},
-                            "Deepest dip": g[[f"max_loss_from_start@{w}" for w in wins]].max(axis=1).map(_money),
+                            "Deepest dip": pd.concat([_dip(g, w) for w in wins], axis=1).max(axis=1).map(_money),
+                            "Wiped $2,000 in": (sum(_wiped(g, w).astype(int) for w in wins)).astype(str) + f"/{len(wins)}",
                             "Baskets / quarter": g[[f"baskets@{w}" for w in wins]].mean(axis=1).map(lambda v: f"{v:,.0f}")})
         cards.append(f'<div class="card"><h3>{html.escape(param.replace("_", " "))}</h3>{_fig(fig, f"lev_{sym}_{i}")}'
                      f'<details><summary>Table view</summary><div class="scroll">{_table(tbl, left_cols=["Value"])}</div></details></div>')
@@ -555,8 +579,8 @@ def section_packages(out: Path, sym: str) -> str:
     wins = _windows(df)
     net = [f"net_profit@{w}" for w in wins]
     df["total"] = df[net].sum(axis=1)
-    df["dip"] = df[[f"max_loss_from_start@{w}" for w in wins]].max(axis=1)
-    df["n_ruin"] = (df[[f"max_loss_from_start@{w}" for w in wins]] >= ACCOUNT).sum(axis=1)
+    df["dip"] = pd.concat([_dip(df, w) for w in wins], axis=1).max(axis=1)
+    df["n_ruin"] = sum(_wiped(df, w).astype(int) for w in wins)
     df["n_pos"] = (df[net] > 0).sum(axis=1)
     live = df[df["package"] == "live settings"]
     rest = df[df["package"] != "live settings"].sort_values(["n_ruin", "total"], ascending=[True, False])
@@ -585,9 +609,9 @@ def section_packages(out: Path, sym: str) -> str:
         "Baskets / quarter": d[[f"baskets@{w}" for w in wins]].mean(axis=1).map(lambda v: f"{v:,.0f}"),
     })
     return (f'<div class="card"><h3>{sym}</h3>'
-            '<p class="cap">Bars: one 0.01-lot unit, the three 2026 quarters added up. ✕ = the loss exceeded $2,000 at some point '
-            'in at least one quarter. First row = the live settings. Each row is a single path per quarter: read differences of '
-            'a few hundred dollars as noise.</p>'
+            '<p class="cap">Bars: one fixed 0.01-lot unit, the three 2026 quarters added up. ✕ = the same baskets wipe a real '
+            '$2,000 account in at least one quarter. First row = the live settings. Each row is a single path per quarter: read '
+            'differences of a few hundred dollars as noise.</p>'
             f'{_fig(fig, f"pkg_{sym}")}'
             f'<details open><summary>Table view</summary><div class="scroll">{_table(t, left_cols=["What-if"])}</div></details></div>')
 
@@ -603,17 +627,17 @@ def section_quarters(out: Path, sym: str) -> str:
     lab = {w: WIN_SHORT.get(w, w) for w in e["window"]}
     fig = go.Figure()
     so = df["stopped_out"].astype(bool)
-    for mask, name, color, symbol in ((~so, "one run (a loop timing)", T.CONTEXT, "circle"),
+    for mask, name, color, symbol in ((~so, "one run (one random loop timing)", T.CONTEXT, "circle"),
                                       (so, "run ended in a stop-out", T.DOWN, "x")):
         d = df[mask]
         if len(d):
             fig.add_trace(go.Scatter(x=d["window"].map(lab), y=d["net_profit"], mode="markers", name=name,
                                      marker=dict(color=color, size=9, symbol=symbol, opacity=0.9,
                                                  line=dict(color=T.SURFACE, width=1)),
-                                     customdata=np.column_stack([d["poll_ms"], d["phase_ms"]]),
-                                     hovertemplate="%{x}<br>loop %{customdata[0]} ms, phase %{customdata[1]} ms<br>"
+                                     customdata=d["seed"].to_numpy(),
+                                     hovertemplate="%{x}<br>loop timing no. %{customdata}<br>"
                                                    "<b>%{y:+,.0f}</b><extra></extra>"))
-    fig.add_trace(go.Scatter(x=e["window"].map(lab), y=e["net_median"], mode="markers", name="median of the eight",
+    fig.add_trace(go.Scatter(x=e["window"].map(lab), y=e["net_median"], mode="markers", name="median of the runs",
                              marker=dict(color=T.EMPHASIS, size=30, symbol="line-ew", line=dict(color=T.EMPHASIS, width=3)),
                              hovertemplate="%{x}<br>median <b>%{y:+,.0f}</b><extra></extra>"))
     fig.update_layout(**T.plotly_layout(height=330, margin=dict(l=60, r=14, t=34, b=40), hovermode="closest"))
@@ -622,8 +646,8 @@ def section_quarters(out: Path, sym: str) -> str:
     t = pd.DataFrame({
         "Quarter": e["window"].map(lab),
         "Median": e["net_median"].map(lambda v: _money(v, signed=True)),
-        "Worst timing": e["net_min"].map(lambda v: _money(v, signed=True)),
-        "Best timing": e["net_max"].map(lambda v: _money(v, signed=True)),
+        "Worst run": e["net_min"].map(lambda v: _money(v, signed=True)),
+        "Best run": e["net_max"].map(lambda v: _money(v, signed=True)),
         "Lost money": e["losing_runs"].astype(str) + " of " + e["runs"].astype(str),
         "Stopped out": e["stopped_out_runs"].astype(str) + " of " + e["runs"].astype(str),
         "Median max DD": e["max_dd_pct_median"].map(lambda v: f"{v:.0f}%"),
@@ -631,8 +655,8 @@ def section_quarters(out: Path, sym: str) -> str:
     })
     tot = int(e["runs"].sum())
     return (f'<div class="card"><h3>{sym}</h3><p class="cap">{int(e["losing_runs"].sum())} of {tot} quarter-runs lost money; '
-            f'{int(e["stopped_out_runs"].sum())} ended with the account stopped out.</p>{_fig(fig, f"qt_{sym}")}'
-            f'<details open><summary>Table view</summary><div class="scroll">{_table(t, left_cols=["Quarter"])}</div></details></div>')
+            f'{int(e["stopped_out_runs"].sum())} ended with the account stopped out.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:18px;align-items:start"><div>{_fig(fig, f"qt_{sym}")}</div>'
+            f'<div class="scroll">{_table(t, left_cols=["Quarter"])}</div></div></div>')
 
 
 def section_robust(out: Path, sym: str) -> str:
@@ -653,31 +677,48 @@ def section_robust(out: Path, sym: str) -> str:
         return t.rename(columns={"net_profit": "Net P/L", "max_dd_usd": "Max DD", "baskets": "Baskets",
                                  "win_rate_pct": "Win %", "profit_factor": "PF", "largest_loss": "Worst basket"})
 
+    from ..analysis.robustness import spread_of
+
+    def levels(df, by, label, fmt_level):
+        """One row per level of a stress test: median and range over the loop timings it was run under."""
+        e = spread_of(df, [by])
+        return pd.DataFrame({
+            label: e[by].map(fmt_level), "Median net": e["net_median"].map(lambda v: _money(v, signed=True)),
+            "Worst": e["net_min"].map(lambda v: _money(v, signed=True)), "Best": e["net_max"].map(lambda v: _money(v, signed=True)),
+            "Lost money": e["losing_runs"].astype(str) + " of " + e["runs"].astype(str),
+            "Stopped out": e["stopped_out_runs"].astype(str) + " of " + e["runs"].astype(str),
+            "Median max DD": e["max_dd_pct_median"].map(lambda v: f"{v:.0f}%"),
+        }), (int(e["runs"].iloc[0]) if len(e) else 0)
+
     p = d / "timing.csv"
     if p.exists():
         t = pd.read_csv(p)
-        poll = t[t["test"] == "poll"]
-        lat = t[t["test"] == "latency"]
+        poll, lat = t[t["test"] == "poll"], t[t["test"] == "latency"]
         if len(poll):
-            card("Loop timing", f"Raw-tick replays with the loop running every 1.0–2.0 s at different phases. "
-                 f"Net P/L ranged {_money(poll['net_profit'].min(), signed=True)} … {_money(poll['net_profit'].max(), signed=True)} "
-                 f"from timing alone.",
-                 fmt(poll, ["poll_ms", "phase_ms", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor"]),
-                 ["poll_ms", "phase_ms"])
+            tb, k = levels(poll, "poll_ms", "Loop period", lambda v: f"{v / 1000:g} s")
+            card("A slower loop", f"The asked-for quarter with the loop sleeping longer between passes; each period under {k} "
+                 f"random loop timings (raw ticks).", tb, ["Loop period"])
         if len(lat):
-            card("Order latency", "Delay between the quote that triggered an order and the quote it filled at.",
-                 fmt(lat, ["latency_ms", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor"]), ["latency_ms"])
+            tb, k = levels(lat, "latency_ms", "Latency", lambda v: f"{int(v)} ms")
+            card("Order latency", f"Delay between the quote that triggered an order and the quote it filled at; each level under "
+                 f"{k} random loop timings.", tb, ["Latency"])
     p = d / "costs.csv"
     if p.exists():
         t = pd.read_csv(p)
-        card("Costs", "The recorded spread scaled up, and adverse slippage on every fill (price units).",
-             fmt(t, ["test", "spread_mult", "slippage", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor"]),
-             ["test"])
+        sp, sl = t[t["test"] == "spread"], t[t["test"] == "slippage"]
+        if len(sp):
+            tb, k = levels(sp, "spread_mult", "Spread", lambda v: f"× {v:g}")
+            card("Wider spread", f"The recorded spread scaled up; each level under {k} random loop timings.", tb, ["Spread"])
+        if len(sl):
+            tb, k = levels(sl, "slippage", "Slippage", lambda v: f"{v:g}")
+            card("Slippage", f"Every fill worse by this much, in price units; each level under {k} random loop timings.", tb,
+                 ["Slippage"])
     p = d / "start_shift.csv"
     if p.exists():
         t = pd.read_csv(p)
-        card("Start date", f"Same settings, same end, started N days later. Net P/L ranged "
-             f"{_money(t['net_profit'].min(), signed=True)} … {_money(t['net_profit'].max(), signed=True)}.",
+        card("Start date", f"Same settings, same end, started N days later (raw ticks, one path each; starts in a closed market "
+             f"repeat the next open and are left out). Net P/L ranged {_money(t['net_profit'].min(), signed=True)} … "
+             f"{_money(t['net_profit'].max(), signed=True)}.",
              fmt(t, ["start_shift_days", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor"]), ["start_shift_days"])
     p = d / "segments_quarterly.csv"
     if p.exists():
@@ -686,30 +727,40 @@ def section_robust(out: Path, sym: str) -> str:
         so = int(t["stopped_out"].astype(bool).sum())
         tq = fmt(t, ["segment", "role", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor", "largest_loss"])
         tq.insert(3, "Stopped out", t["stopped_out"].map(lambda v: "YES" if bool(v) else "no"))
-        card("Five quarters, each on a fresh $2,000", f"The live settings with the unit auto-step. {pos} of {len(t)} quarters ended "
-             f"positive; {so} ended in a stop-out.", tq.rename(columns={"segment": "Quarter", "role": "Used for"}), ["Quarter", "Used for"])
+        card("Five quarters, each on a fresh $2,000", f"The live settings with the unit auto-step (per-second replay, one path "
+             f"each; the table at the top of the page gives eight paths per quarter). {pos} of {len(t)} quarters ended positive; "
+             f"{so} ended in a stop-out.", tq.rename(columns={"segment": "Quarter", "role": "Used for"}), ["Quarter", "Used for"])
     for fn, ttl, cap in (("segments_monthly.csv", "Month by month, each on a fresh $2,000", "Calendar months over all fifteen months."),
                          ("segments_weekly.csv", "Week by week, each on a fresh $2,000", "Seven-day slices of the asked-for window.")):
         p = d / fn
         if p.exists():
             t = pd.read_csv(p)
-            pos = int((t["net_profit"] > 0).sum())
-            card(ttl, f"{cap} {pos} of {len(t)} periods ended positive.",
-                 fmt(t, ["segment", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor", "largest_loss"]), ["segment"])
+            whole = t[~t["partial"].astype(bool)] if "partial" in t.columns else t
+            pos = int((whole["net_profit"] > 0).sum())
+            so = int(whole["stopped_out"].astype(bool).sum())
+            tt = fmt(t, ["segment", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor", "largest_loss"])
+            if "partial" in t.columns:
+                tt["segment"] = [x + (" (part)" if bool(pp) else "") for x, pp in zip(t["segment"], t["partial"])]
+            card(ttl, f"{cap} Per-second replay, one path each. {pos} of {len(whole)} whole periods ended positive, {so} in a "
+                 f"stop-out.", tt, ["segment"])
     b = _read_json(d / "bootstrap.json")
     if b:
         rows = []
-        for k, lab in (("live_units", "Live unit auto-step"), ("fixed_unit_1", "Fixed unit 1")):
+        for k, lab in (("live_units", "The bot's unit rule"), ("fixed_unit_1", "One fixed unit")):
             x = b.get(k) or {}
             if not x:
                 continue
             rows.append({"Sizing": lab, "Final balance p5": _money(x["final_p05"]), "p50": _money(x["final_p50"]),
-                         "p95": _money(x["final_p95"]), "P(loss)": f'{x["prob_loss"] * 100:.0f}%',
-                         "P(loss > 25%)": f'{x["prob_loss_over_25pct"] * 100:.0f}%',
-                         "Realised DD p50": _money(x["max_dd_p50"]), "Realised DD p95": _money(x["max_dd_p95"])})
+                         "p95": _money(x["final_p95"]), "Ended below the start": f'{x["prob_loss"] * 100:.0f}%',
+                         "Lost over 25%": f'{x["prob_loss_over_25pct"] * 100:.0f}%',
+                         "Wiped": f'{x["prob_wiped"] * 100:.0f}%',
+                         "Deepest dip p50": _money(x["dip_p50"]), "p95 ": _money(x["dip_p95"])})
         if rows:
-            card("Same trades, different order", "5,000 resamplings of whole trading days (realised P/L only, so floating "
-                 "drawdowns inside a basket are not in here).", pd.DataFrame(rows), ["Sizing"])
+            n = (b.get("live_units") or b.get("fixed_unit_1") or {}).get("paths", 0)
+            card("Which days happened to be in the quarter", f"The baseline run's {b.get('baskets', 0):,} baskets, whole trading "
+                 f"days drawn with replacement {n:,} times (some days count twice, others not at all). Every basket is re-sized "
+                 f"as the resampled balance evolves, and a path ends when the balance cannot cover a basket's worst floating "
+                 f"loss.", pd.DataFrame(rows), ["Sizing"])
     return f'<div class="grid2">{"".join(cards)}</div>' if cards else ""
 
 
@@ -727,56 +778,67 @@ def build_index(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), live
     out = Path(out)
     base = {s: BacktestConfig.live(s, repo_root=live_root) for s in symbols}
     variant = next(iter(base.values())).variant
-    body = [section_findings(out), section_runs(out, symbols), section_fidelity(out, symbols)]
-    tf_parts = []
+    from ..experiments import stale_outputs
+    stale = stale_outputs(out, live_root)
+    banner = ""
+    if stale:
+        banner = (f'<div class="card" style="border-color:{T.DOWN};margin-bottom:18px"><h3>Some results on this page are stale</h3>'
+                  f'<p class="cap">{len(stale)} result file{"s were" if len(stale) != 1 else " was"} written by another build of the '
+                  f'engine, or for other live settings than this checkout has now (for example {html.escape(stale[0])}). Run '
+                  f'<code>python -m backtesting reproduce</code> to recompute them before reading the numbers.</p></div>')
+    stack = '<div style="display:grid;gap:14px">'       # full-width cards, one under the other
+    agree_tf = max(base[symbols[0]].fc_weights, key=lambda k: TF_SECONDS.get(k, 0))
+
+    # 1. what happened, and how much of it is one path's luck
+    body = [section_findings(out), section_runs(out, symbols)]
+    qt = [section_quarters(out, sym) for sym in symbols]
+    if any(qt):
+        body.append('<h2>Quarter by quarter, and how much is timing luck</h2>'
+                    '<p class="lede">One run is one path: whether the bot is inside a basket when a sharp move starts depends '
+                    'on which tick its once-a-second poll lands on, and a few large baskets decide a quarter. The live loop does '
+                    'not poll on a fixed grid: it sleeps a second, then spends a varying time talking to the terminal. Each of '
+                    'the five quarters was therefore run eight times on raw ticks, on a fresh $2,000 with the live unit '
+                    'auto-step, with every pass of the loop taking 0 to 0.2 s longer, drawn at random. All eight are equally '
+                    'plausible for the live bot.</p>'
+                    f'{stack}{"".join(x for x in qt if x)}</div>')
+    # 2. why: what the signal is
+    sg = [section_signal(out, sym, agree_tf) for sym in symbols]
+    if any(sg):
+        body.append('<h2>What the entry signal is made of</h2>'
+                    f'<p class="lede">An entry needs the {agree_tf} RSI vote and the {agree_tf} MACD vote to agree. Both are measured '
+                    f'from the last pivot of their indicator, so both are votes to fade the last extreme. The tables test, with the '
+                    f'live indicator functions on every closed {agree_tf} bar, whether that agreement says anything about where price '
+                    f'goes next. This describes the signal only: no spread, ladder or exits.</p>'
+                    f'{stack}{"".join(x for x in sg if x)}</div>')
+    # 3. can the numbers be trusted
+    body.append(section_fidelity(out, symbols))
+    # 4. timeframes: the grid, then the test of choosing from it, then the short list
     for sym in symbols:
         blk = section_timeframes(out, sym, base[sym])
         splits = "".join(section_split(out, sym, k, base[sym]) for k in ("split_open", "split_fc", "split_book"))
         if blk or splits:
-            tf_parts.append(f'<h2>{sym}: which timeframes for OPEN and FORCE-CLOSE'
-                            f'{" and BOOK" if variant == "netting" else ""}?</h2>'
-                            '<p class="lede">Every combination of one or two OPEN timeframes with one FORCE-CLOSE timeframe, '
-                            'thresholds following the live convention, on three separate three-month windows. A cell that is '
-                            'green in one window and red in the next is noise, not an edge.</p>' + blk + splits)
-    body += tf_parts
-    for sym in symbols:
-        lev = section_levers(out, sym)
-        if lev:
-            body.append(f'<h2>{sym}: every other knob, one at a time</h2>'
-                        '<p class="lede">Each chart changes one parameter (or one structural rule) and leaves the rest at the live '
-                        'value; one line per window. A parameter is only worth changing if all three lines move the same way.</p>' + lev)
-    qt = [section_quarters(out, sym) for sym in symbols]
-    if any(qt):
-        body.insert(2, '<h2>Quarter by quarter, and how much is timing luck</h2>'
-                       '<p class="lede">One run is one path: whether the bot is inside a basket when a sharp move starts depends '
-                       'on which tick its once-a-second poll lands on, and a few large baskets decide a quarter. Each of the five '
-                       'quarters was therefore run eight times on raw ticks, on a fresh $2,000 with the live unit auto-step, with '
-                       'the loop period (1.0 or 1.25 s) and its phase varied. All eight are equally plausible for the live bot.</p>'
-                       f'<div class="grid2">{"".join(x for x in qt if x)}</div>')
-    agree_tf = max(base[symbols[0]].fc_weights, key=lambda k: TF_SECONDS.get(k, 0))
-    sg = [section_signal(out, sym, agree_tf) for sym in symbols]
-    if any(sg):
-        body.insert(3 if any(qt) else 2,
-                    '<h2>What the entry signal is made of</h2>'
-                    f'<p class="lede">An entry needs the {agree_tf} RSI vote and the {agree_tf} MACD vote to agree. Measured with the '
-                    f'live indicator functions on every closed {agree_tf} bar: both votes fade the last extreme (the MACD vote points '
-                    f'against its own signal-line trend about four times in five), and after they agree price is further that way '
-                    f'four bars later about as often as on any bar. This describes the signal only: no spread, ladder or exits.</p>'
-                    f'<div style="display:grid;gap:14px">{"".join(x for x in sg if x)}</div>')
+            body.append(f'<h2>{sym}: which timeframes for OPEN and FORCE-CLOSE'
+                        f'{" and BOOK" if variant == "netting" else ""}?</h2>'
+                        '<p class="lede">Every combination of one or two OPEN timeframes with one FORCE-CLOSE timeframe, '
+                        'thresholds following the live convention, on three separate quarters. A cell that is green in one '
+                        'quarter and red in the next is noise, not an edge.</p>' + blk + splits)
     ho = [section_holdout(out, sym, base[sym]) for sym in symbols]
     if any(ho):
         body.append('<h2>Does choosing timeframes on past data work? The hold-out test</h2>'
                     '<p class="lede">Any setting that looks good above was picked with hindsight on those three quarters. The '
                     'honest test is data it has never seen: the same grid on two earlier quarters. If choosing by past performance '
-                    'worked, the highlighted squares would sit clearly above the grey cloud.</p>'
-                    f'<div class="grid2">{"".join(x for x in ho if x)}</div>')
+                    'worked, the highlighted squares would sit clearly above the grey cloud. The hold-out lies before the analysed '
+                    'quarters, so this tests whether a choice is stable across periods, not whether it forecasts.</p>'
+                    f'{stack}{"".join(x for x in ho if x)}</div>')
     cd = [section_candidates(out, sym) for sym in symbols]
     if any(cd):
         body.append('<h2>Candidate settings on all five quarters</h2>'
-                    '<p class="lede">The timeframe families that held up best in the sweeps, each with the live ladder, with no '
-                    'ladder, and with a short spaced ladder. They were chosen after looking at the three 2026 quarters, so only the '
-                    'two hold-out columns are independent evidence.</p>'
-                    f'<div class="grid2">{"".join(x for x in cd if x)}</div>')
+                    '<p class="lede">Five hand-picked timeframe families, the same for both symbols, each with the live ladder, '
+                    'with no ladder, and with a short spaced ladder. They put H4 into the decision in different ways and were '
+                    'chosen by eye from an earlier sweep of the three 2026 quarters: they are not the best of the sweep on either '
+                    'symbol, those quarters flatter them, and only the two hold-out columns are independent evidence.</p>'
+                    f'{stack}{"".join(x for x in cd if x)}</div>')
+    # 5. changes to the rules
     pk = [section_packages(out, sym) for sym in symbols]
     if any(pk):
         body.append('<h2>What-ifs aimed at the flaws</h2>'
@@ -784,6 +846,15 @@ def build_index(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), live
                     '(the ladder that deploys at one price, the missing price-based exit, the tiny fixed target on a growing '
                     'basket). None of them was tuned on the data; they are hypotheses to take to a demo account, not a promise.</p>'
                     f'<div class="grid2">{"".join(x for x in pk if x)}</div>')
+    for sym in symbols:
+        lev = section_levers(out, sym)
+        if lev:
+            body.append(f'<h2>{sym}: every other knob, one at a time</h2>'
+                        '<p class="lede">Each chart changes one parameter (or one structural rule) and leaves the rest at the live '
+                        'value; one line per quarter, one path each. A parameter is only worth changing if all three lines move the '
+                        f'same way by more than the timing noise above.</p><details><summary>Show the {lev.count("<h3>")} '
+                        f'parameter charts for {sym}</summary>{lev}</details>')
+    # 6. how fragile it all is
     for sym in symbols:
         rb = section_robust(out, sym)
         if rb:
@@ -798,7 +869,7 @@ def build_index(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), live
 <header class="top"><div><div class="brand">Alcadeias · backtest</div>
 <h1>{variant.capitalize()} strategy on real Exness ticks</h1>
 <div class="sub">XAUUSDm and BTCUSDm · $2,000 start · 1:2000 · the live RSI+MACD slope logic replayed poll by poll</div></div></header>
-{''.join(b for b in body if b)}
+{banner}{''.join(b for b in body if b)}
 <div class="foot">Rebuild everything with <code>python -m backtesting reproduce</code>; explore interactively with
 <code>python -m backtesting studio</code>. Method, assumptions and limits: <code>BACKTEST.md</code>. Historical simulation is not a
 forecast of live results.</div>

@@ -36,6 +36,7 @@ long runs use the live auto-step and the real $2,000 exactly as deployed.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -76,6 +77,82 @@ def _log(msg: str) -> None:
     print(time.strftime("%H:%M:%S"), msg, flush=True)
 
 
+# Every output is stamped with a fingerprint of the code that decides its numbers, so a results
+# directory assembled from two different builds of the engine can be recognised (stages are skipped
+# when their output exists, which makes that easy to do by accident).
+_ENGINE_FILES = ("engine/kernels.py", "engine/fast.py", "config.py", "data/store.py",
+                 "analysis/metrics.py", "analysis/sweep.py", "analysis/robustness.py", "experiments.py")
+
+
+def engine_fingerprint() -> str:
+    h = hashlib.sha1()
+    root = Path(__file__).resolve().parent
+    for rel in _ENGINE_FILES:
+        h.update((root / rel).read_bytes())
+    return h.hexdigest()[:12]
+
+
+_LIVE_FILES = ("constants.py", "symbols.json", "strategy.py", "indicator.py", "app.py", "mt5_helper.py")
+_LIVE_ROOT: List[Path] = [REPO_ROOT]          # the checkout the current reproduce() call mirrors
+
+
+def live_fingerprint(live_root: Optional[Path] = None) -> str:
+    """Fingerprint of the live rules and settings a result was computed for."""
+    h = hashlib.sha1()
+    root = Path(live_root or _LIVE_ROOT[0])
+    for rel in _LIVE_FILES:
+        f = root / rel
+        h.update(f.read_bytes() if f.exists() else b"-")
+    return h.hexdigest()[:12]
+
+
+def _manifest(out: Path) -> dict:
+    try:
+        return json.loads((Path(out) / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _stamp(out: Path, path: Path) -> None:
+    """Record in ``out/manifest.json`` which engine build and which live settings ``path`` was written with."""
+    data = _manifest(out)
+    data[Path(path).relative_to(out).as_posix()] = {"engine": engine_fingerprint(), "live": live_fingerprint(),
+                                                   "written": time.strftime("%Y-%m-%d %H:%M:%S")}
+    (Path(out) / "manifest.json").write_text(json.dumps(dict(sorted(data.items())), indent=1), encoding="utf-8")
+
+
+def _fresh(out: Path, path: Path, force: bool = False) -> bool:
+    """
+    True when ``path`` exists and was written by this engine build for these live settings, i.e.
+    the stage can be skipped. An output from another build, or for other settings, is stale and
+    is recomputed (a results directory must not silently mix the two).
+    """
+    path = Path(path)
+    if force or not path.exists():
+        return False
+    meta = _manifest(out).get(path.relative_to(out).as_posix())
+    if not meta or meta.get("engine") != engine_fingerprint() or meta.get("live") != live_fingerprint():
+        _log(f"  {path.relative_to(out)}: written by another engine build or for other live settings - recomputing")
+        return False
+    return True
+
+
+def manifest_builds(out: Path) -> Dict[str, List[str]]:
+    """engine fingerprint -> outputs it wrote (more than one key = the directory mixes builds)."""
+    builds: Dict[str, List[str]] = {}
+    for rel, meta in _manifest(out).items():
+        if (Path(out) / rel).exists():
+            builds.setdefault(f'{meta.get("engine", "?")}/{meta.get("live", "?")}', []).append(rel)
+    return builds
+
+
+def stale_outputs(out: Path, live_root: Path = REPO_ROOT) -> List[str]:
+    """Stamped outputs that were not written by the current engine build for the current live settings."""
+    eng, live = engine_fingerprint(), live_fingerprint(live_root)
+    return sorted(rel for rel, meta in _manifest(out).items()
+                  if (Path(out) / rel).exists() and (meta.get("engine") != eng or meta.get("live") != live))
+
+
 def live_config(symbol: str, live_root: Path = REPO_ROOT, **kw) -> BacktestConfig:
     return BacktestConfig.live(symbol, repo_root=live_root, **kw)
 
@@ -92,10 +169,21 @@ def stage_quality(out: Path, symbols: Sequence[str], force: bool = False) -> Non
     d.mkdir(parents=True, exist_ok=True)
     for sym in symbols:
         p = d / f"{sym}.json"
-        if p.exists() and not force:
+        if _fresh(out, p, force):
             continue
         q = quality.quality_report(sym, LONG_WINDOW[0], LONG_WINDOW[1])
-        p.write_text(json.dumps(q, indent=2, default=str))
+        # what one round trip cost in each quarter (the spread is a large part of a $1 target)
+        from .data import store
+        q["windows"] = {}
+        for name, (a, z) in ALL_WINDOWS.items():
+            sec = store.load_sec(sym, a, z)
+            sp = sec["ask"] - sec["bid"]
+            q["windows"][name] = {"start": a, "end": z, "spread_median": float(pd.Series(sp).median()),
+                                  "spread_mean": float(sp.mean()),
+                                  "price_first": float(sec["bid"][0]), "price_last": float(sec["bid"][-1]),
+                                  "price_low": float(sec["bid"].min()), "price_high": float(sec["bid"].max())}
+        p.write_text(json.dumps(q, indent=2, default=str), encoding="utf-8")
+        _stamp(out, p)
         _log("quality\n" + quality.format_quality(q))
 
 
@@ -106,7 +194,7 @@ def stage_baseline(out: Path, symbols: Sequence[str], live_root: Path, force: bo
     ensure_plotly_js(out / "assets")
     for sym in symbols:
         d = out / name / sym
-        if (d / "summary.json").exists() and not force:
+        if _fresh(out, d / "summary.json", force):
             continue
         cfg = live_config(sym, live_root, start=window[0], end=window[1])
         if mode == "ticks":
@@ -121,7 +209,8 @@ def stage_baseline(out: Path, symbols: Sequence[str], live_root: Path, force: bo
                      tfs=("M15", "H1", "H4") if name == "baseline" else ("H1", "H4"))
         # the same run (same data resolution, same loop cadence) without the balance auto-step
         r1 = run(cfg.replace(fixed_units=1), mode=mode, light=True)
-        (d / "fixed_unit.json").write_text(json.dumps(score_row(r1), indent=2))
+        (d / "fixed_unit.json").write_text(json.dumps(score_row(r1), indent=2), encoding="utf-8")
+        _stamp(out, d / "summary.json")
 
 
 def stage_signal(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False) -> None:
@@ -131,14 +220,15 @@ def stage_signal(out: Path, symbols: Sequence[str], live_root: Path, force: bool
     d.mkdir(parents=True, exist_ok=True)
     for sym in symbols:
         p = d / f"{sym}.json"
-        if p.exists() and not force:
+        if _fresh(out, p, force):
             continue
         cfg = live_config(sym, live_root)
         tfs = sorted(set(cfg.open_weights) | set(cfg.fc_weights), key=lambda tf: cfg.timeframes().index(tf)
                      if tf in cfg.timeframes() else 0)
         res = {name: vote_study(sym, a, z, live_root=live_root, tfs=tfs)
                for name, (a, z) in {**ALL_WINDOWS, "ALL": LONG_WINDOW}.items()}
-        p.write_text(json.dumps(res, indent=2))
+        p.write_text(json.dumps(res, indent=2), encoding="utf-8")
+        _stamp(out, p)
         _log(f"signal {cfg.variant} {sym}: votes on {', '.join(tfs)} over {len(res)} periods")
 
 
@@ -164,16 +254,17 @@ def stage_sweeps(out: Path, symbols: Sequence[str], live_root: Path, force: bool
             plans["book_joint"] = _book_joint_grid()
         for kind, (grid, labels) in plans.items():
             p = d / f"{sym}_{kind}.csv"
-            if p.exists() and not force:
+            if _fresh(out, p, force):
                 continue
             _log(f"sweep {variant} {sym} {kind}: {len(grid)} configurations x {len(windows)} windows")
             t0 = time.time()
             df = robustness.across_windows(base, grid, labels, windows, n_jobs=n_jobs,
                                            progress=_progress(f"{sym} {kind}"))
             df.to_csv(p, index=False)
+            _stamp(out, p)
             agree = {f"{a}->{b}": robustness.rank_agreement(df, a, b)
                      for a in windows for b in windows if a != b}
-            (d / f"{sym}_{kind}_agreement.json").write_text(json.dumps(agree, indent=2))
+            (d / f"{sym}_{kind}_agreement.json").write_text(json.dumps(agree, indent=2), encoding="utf-8")
             _log(f"  done in {time.time() - t0:.0f}s -> {p.name}")
 
 
@@ -194,10 +285,13 @@ def lever_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
     xau = base.symbol.startswith("XAU")
     gap_unit = 1.0 if xau else 100.0          # $1 of gold / $100 of BTC = $1 P/L on 0.01 lot
     params: Dict[str, list] = {
-        "entry_s": [1, 2, 3, 4],
+        # With one weight per timeframe and grey-fill the OPEN score only takes even values, so
+        # entry_s 1 = 2 and 3 = 4; ladder_s 1 = 2, and 3 = 4 = "never" (an OPEN score of -4 needs
+        # M15 fully against, which has already force-closed). Only the distinct rules are run.
+        "entry_s": [2, 4],
         "entry_agree_s": [0, 1, 2],
         "force_close_s": [1, 2],
-        "ladder_s": [1, 2, 3, 4, 99],
+        "ladder_s": [2, 4],
         "rsi_oversold": [20, 25, 30, 35, 40],
         "rsi_overbought": [60, 65, 70, 75, 80],
         "rsi_length": [7, 9, 14, 21, 28],
@@ -228,7 +322,7 @@ def lever_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
             {"name": "all five on M15", "set": dict(ladder_tfs=["M15"] * 5)},
             {"name": "all five on H1", "set": dict(ladder_tfs=["H1"] * 5)},
         ],
-        "@ladder_min_gap": [{"name": f"${g:g} per 0.01 lot", "set": dict(ladder_min_gap=g * gap_unit)}
+        "@ladder_min_gap": [{"name": f"${g * gap_unit:,.0f} in price", "set": dict(ladder_min_gap=g * gap_unit)}
                             for g in (0, 1, 2, 3, 5, 8)],
         "@signals_on": [
             {"name": "forming bar (live)", "set": dict()},
@@ -264,8 +358,9 @@ def lever_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
         ]
     else:
         params["target_usd_per_unit"] = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0]
+        # ("target + slope book" would be the live rule again: the book needs profit > $1 x unit,
+        #  and the target, tested first, has already closed on that)
         params["@exit_mix"] += [
-            {"name": "target + slope book (netting exit too)", "set": dict(book_enabled=True)},
             {"name": "slope book only (netting exit)", "set": dict(book_enabled=True, target_usd_per_unit=None)},
         ]
     return sweep.grid_one_at_a_time(params)
@@ -277,13 +372,14 @@ def stage_levers(out: Path, symbols: Sequence[str], live_root: Path, force: bool
     d.mkdir(parents=True, exist_ok=True)
     for sym in symbols:
         p = d / f"{sym}.csv"
-        if p.exists() and not force:
+        if _fresh(out, p, force):
             continue
         base = live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE)
         grid, labels = lever_grid(base)
         _log(f"levers {base.variant} {sym}: {len(grid)} configurations x {len(windows)} windows")
         df = robustness.across_windows(base, grid, labels, windows, n_jobs=n_jobs, progress=_progress(f"{sym} levers"))
         df.to_csv(p, index=False)
+        _stamp(out, p)
 
 
 def stage_robust(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False,
@@ -292,36 +388,43 @@ def stage_robust(out: Path, symbols: Sequence[str], live_root: Path, force: bool
         d = out / "robustness" / sym
         d.mkdir(parents=True, exist_ok=True)
         cfg = live_config(sym, live_root, start=window[0], end=window[1])
+        quarters = dict(sorted(ALL_WINDOWS.items(), key=lambda kv: kv[1][0]))
+        tick_jobs = max(1, min(n_jobs or 2, 3))        # raw-tick workers each hold a quarter of ticks in memory
         todo = {
-            "costs.csv": lambda: robustness.cost_grid(cfg, n_jobs=n_jobs),
-            "start_shift.csv": lambda: robustness.start_shift(cfg, n_jobs=n_jobs),
+            # every quarter under eight loop timings: how much of a quarter's result is timing luck
+            "quarters_timing.csv": lambda: robustness.timing_ensemble(live_config(sym, live_root), quarters, n_jobs=tick_jobs),
+            # the same at the sweeps' sizing (one fixed 0.01-lot unit, no stop-out): the noise in one sweep cell
+            "quarters_timing_fixed_unit.csv": lambda: robustness.timing_ensemble(
+                live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE), quarters, n_jobs=tick_jobs),
+            "timing.csv": lambda: robustness.timing_grid(cfg, n_jobs=tick_jobs),
+            "costs.csv": lambda: robustness.cost_grid(cfg, n_jobs=tick_jobs),
+            "start_shift.csv": lambda: robustness.start_shift(cfg, n_jobs=tick_jobs),
             "segments_monthly.csv": lambda: robustness.segments(
                 live_config(sym, live_root, start=LONG_WINDOW[0], end=LONG_WINDOW[1]), n_jobs=n_jobs),
             "segments_weekly.csv": lambda: robustness.segments(cfg, fixed_days=7, n_jobs=n_jobs),
             "segments_quarterly.csv": lambda: _quarters(live_config(sym, live_root), n_jobs),
-            "timing.csv": lambda: robustness.timing_grid(cfg, n_jobs=2),
-            # every quarter under eight loop timings: how much of a quarter's result is timing luck
-            "quarters_timing.csv": lambda: robustness.timing_ensemble(
-                live_config(sym, live_root), dict(sorted(ALL_WINDOWS.items(), key=lambda kv: kv[1][0])), n_jobs=2),
-            # the same at the sweeps' sizing (one fixed 0.01-lot unit, no stop-out): the noise in one sweep cell
-            "quarters_timing_fixed_unit.csv": lambda: robustness.timing_ensemble(
-                live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE),
-                dict(sorted(ALL_WINDOWS.items(), key=lambda kv: kv[1][0])), n_jobs=2),
         }
         for name, fn in todo.items():
             p = d / name
-            if p.exists() and not force:
+            if _fresh(out, p, force):
                 continue
             t0 = time.time()
             df = fn()
+            if len(df) == 0:                 # e.g. a window too short to cut into weeks or months
+                continue
             df.to_csv(p, index=False)
+            _stamp(out, p)
             _log(f"robust {cfg.variant} {sym} {name} ({time.time() - t0:.0f}s)")
         p = d / "bootstrap.json"
-        if not p.exists() or force:
-            res = run(cfg, light=True)
-            r1 = run(cfg.replace(fixed_units=1), light=True)
-            p.write_text(json.dumps({"live_units": robustness.bootstrap(res.baskets, cfg.initial_balance),
-                                     "fixed_unit_1": robustness.bootstrap(r1.baskets, cfg.initial_balance)}, indent=2))
+        if not _fresh(out, p, force):
+            # the baskets of the published baseline run itself (raw ticks, live cadence), not of another path
+            res = run(cfg.replace(open_order_delay_ms=100), mode="ticks", light=True)
+            b = res.baskets
+            p.write_text(json.dumps({
+                "source": "the baseline run (raw ticks, live cadence)", "baskets": int(len(b)),
+                "live_units": robustness.bootstrap(b, cfg.initial_balance, cfg.step_up_balance, cfg.unit_max_limit),
+                "fixed_unit_1": robustness.bootstrap(b, cfg.initial_balance, 0.0, 1)}, indent=2), encoding="utf-8")
+            _stamp(out, p)
             _log(f"robust {cfg.variant} {sym} bootstrap")
 
 
@@ -334,17 +437,21 @@ def package_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
     xau = base.symbol.startswith("XAU")
     px = 1.0 if xau else 100.0     # price move worth $1 on a 0.01 lot
     hedging = not base.book_enabled
+
+    def apart(n: float) -> str:      # a ladder gap as the price distance it is on this symbol
+        return f"${n * px:,.0f} apart"
+
     P: List[Tuple[str, dict]] = [
         ("live settings", {}),
         ("no ladder", dict(max_adds=0)),
         ("ladder: 1 add only", dict(max_adds=1)),
         ("ladder: 2 adds only", dict(max_adds=2)),
-        ("ladder: adds >= $3 apart", dict(ladder_min_gap=3 * px)),
-        ("ladder: adds >= $5 apart", dict(ladder_min_gap=5 * px)),
+        (f"ladder: adds >= {apart(3)}", dict(ladder_min_gap=3 * px)),
+        (f"ladder: adds >= {apart(5)}", dict(ladder_min_gap=5 * px)),
         ("ladder: adds >= 15 min apart", dict(ladder_min_interval_s=900.0)),
-        ("ladder: adds >= $3 and >= 5 min apart", dict(ladder_min_gap=3 * px, ladder_min_interval_s=300.0)),
+        (f"ladder: adds >= {apart(3)} and >= 5 min apart", dict(ladder_min_gap=3 * px, ladder_min_interval_s=300.0)),
         ("ladder: flat lots 1,1,1,1,1,1", dict(ladder_multipliers=[1] * 12)),
-        ("ladder: flat lots, adds >= $3 apart", dict(ladder_multipliers=[1] * 12, ladder_min_gap=3 * px)),
+        (f"ladder: flat lots, adds >= {apart(3)}", dict(ladder_multipliers=[1] * 12, ladder_min_gap=3 * px)),
         ("stop: $10 per unit", dict(stop_loss_usd_per_unit=10.0)),
         ("stop: $20 per unit", dict(stop_loss_usd_per_unit=20.0)),
         ("stop: $40 per unit", dict(stop_loss_usd_per_unit=40.0)),
@@ -354,10 +461,10 @@ def package_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
         ("no ladder + stop $5", dict(max_adds=0, stop_loss_usd_per_unit=5.0)),
         ("no ladder + stop $10", dict(max_adds=0, stop_loss_usd_per_unit=10.0)),
         ("no ladder + stop $20", dict(max_adds=0, stop_loss_usd_per_unit=20.0)),
-        ("2 adds >= $3 apart + stop $20", dict(max_adds=2, ladder_min_gap=3 * px, stop_loss_usd_per_unit=20.0)),
-        ("adds >= $3 apart + stop $40", dict(ladder_min_gap=3 * px, stop_loss_usd_per_unit=40.0)),
-        ("adds >= $5 apart + stop $80", dict(ladder_min_gap=5 * px, stop_loss_usd_per_unit=80.0)),
-        ("flat lots, >= $3 apart + stop $20", dict(ladder_multipliers=[1] * 12, ladder_min_gap=3 * px,
+        (f"2 adds >= {apart(3)} + stop $20", dict(max_adds=2, ladder_min_gap=3 * px, stop_loss_usd_per_unit=20.0)),
+        (f"adds >= {apart(3)} + stop $40", dict(ladder_min_gap=3 * px, stop_loss_usd_per_unit=40.0)),
+        (f"adds >= {apart(5)} + stop $80", dict(ladder_min_gap=5 * px, stop_loss_usd_per_unit=80.0)),
+        (f"flat lots, >= {apart(3)} + stop $20", dict(ladder_multipliers=[1] * 12, ladder_min_gap=3 * px,
                                                    stop_loss_usd_per_unit=20.0)),
         ("signals on closed bars", dict(slope_on_closed_bars=True, ladder_on_closed_bars=True)),
         ("closed bars + no ladder", dict(slope_on_closed_bars=True, ladder_on_closed_bars=True, max_adds=0)),
@@ -369,8 +476,8 @@ def package_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
     if hedging:
         P += [
             ("target: $1 per 0.01 lot held", dict(target_per_lot=True)),
-            ("target per lot + adds >= $3 apart", dict(target_per_lot=True, ladder_min_gap=3 * px)),
-            ("target per lot + adds >= $3 apart + stop $40", dict(target_per_lot=True, ladder_min_gap=3 * px,
+            (f"target per lot + adds >= {apart(3)}", dict(target_per_lot=True, ladder_min_gap=3 * px)),
+            (f"target per lot + adds >= {apart(3)} + stop $40", dict(target_per_lot=True, ladder_min_gap=3 * px,
                                                                   stop_loss_usd_per_unit=40.0)),
             ("no ladder, target $2", dict(max_adds=0, target_usd_per_unit=2.0)),
             ("no ladder, target $3, stop $10", dict(max_adds=0, target_usd_per_unit=3.0, stop_loss_usd_per_unit=10.0)),
@@ -394,13 +501,14 @@ def stage_improve(out: Path, symbols: Sequence[str], live_root: Path, force: boo
     d.mkdir(parents=True, exist_ok=True)
     for sym in symbols:
         p = d / f"{sym}.csv"
-        if p.exists() and not force:
+        if _fresh(out, p, force):
             continue
         base = live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE)
         grid, labels = package_grid(base)
         _log(f"packages {base.variant} {sym}: {len(grid)} configurations x {len(windows)} windows")
         df = robustness.across_windows(base, grid, labels, windows, n_jobs=n_jobs, progress=_progress(f"{sym} packages"))
         df.to_csv(p, index=False)
+        _stamp(out, p)
 
 
 def _quarters(cfg: BacktestConfig, n_jobs: Optional[int]) -> pd.DataFrame:
@@ -419,22 +527,24 @@ def stage_holdout(out: Path, symbols: Sequence[str], live_root: Path, force: boo
     d.mkdir(parents=True, exist_ok=True)
     for sym in symbols:
         p = d / f"{sym}_timeframes_holdout.csv"
-        if p.exists() and not force:
+        if _fresh(out, p, force):
             continue
         base = live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE)
         grid, labels = joint_grid(base.variant)
         _log(f"holdout {base.variant} {sym}: {len(grid)} configurations x {len(HOLDOUT)} windows")
         df = robustness.across_windows(base, grid, labels, HOLDOUT, n_jobs=n_jobs, progress=_progress(f"{sym} holdout"))
         df.to_csv(p, index=False)
+        _stamp(out, p)
 
 
 def candidate_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
     """
-    A short list of settings to take to a demo account: the timeframe families that held up
-    best in the sweeps, each with and without the fixes for the ladder.
+    A short list of settings to look at closely: five hand-picked timeframe families, the same
+    for both symbols, each with the live ladder, with no ladder and with a short spaced one.
 
-    They were chosen AFTER looking at the three analysed windows, so those windows flatter
-    them. The two hold-out quarters are the honest test.
+    The families were chosen by eye from an earlier sweep of the three analysed quarters (they
+    put H4 into the decision in different ways), so those quarters flatter them and they are
+    not "the best of the sweep" on either symbol. The two hold-out quarters are the honest test.
     """
     xau = base.symbol.startswith("XAU")
     px = 1.0 if xau else 100.0
@@ -456,7 +566,7 @@ def candidate_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
     risk: List[Tuple[str, dict]] = [
         ("live ladder", {}),
         ("no ladder", dict(max_adds=0)),
-        ("2 adds, >= $3 apart", dict(max_adds=2, ladder_min_gap=3 * px)),
+        (f"2 adds, >= ${3 * px:,.0f} apart", dict(max_adds=2, ladder_min_gap=3 * px)),
     ]
     grid, labels = [], []
     for tname, tov in tf_sets:
@@ -479,23 +589,25 @@ def stage_candidates(out: Path, symbols: Sequence[str], live_root: Path, force: 
     d.mkdir(parents=True, exist_ok=True)
     for sym in symbols:
         p = d / f"{sym}.csv"
-        if not p.exists() or force:
+        if not _fresh(out, p, force):
             base = live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE)
             grid, labels = candidate_grid(base)
             _log(f"candidates {base.variant} {sym}: {len(grid)} configurations x {len(ALL_WINDOWS)} windows")
             df = robustness.across_windows(base, grid, labels, ALL_WINDOWS, n_jobs=n_jobs,
                                            progress=_progress(f"{sym} candidates"))
             df.to_csv(p, index=False)
+            _stamp(out, p)
         p = d / f"{sym}_account.csv"
-        if not p.exists() or force:
+        if not _fresh(out, p, force):
             # the same settings on the real account: $2,000, unit auto-step, all fifteen months in one go
             acct = live_config(sym, live_root, start=LONG_WINDOW[0], end=LONG_WINDOW[1])
             grid, labels = candidate_grid(acct)
             df = sweep.run_grid(acct, grid, n_jobs=n_jobs, labels=labels)
             df.to_csv(p, index=False)
+            _stamp(out, p)
             _log(f"candidates {acct.variant} {sym}: real-account runs over {LONG_WINDOW[0]} → {LONG_WINDOW[1]}")
         p = d / f"{sym}_timing.csv"
-        if not p.exists() or force:
+        if not _fresh(out, p, force):
             # every candidate, every quarter, eight loop timings, raw ticks, a fresh $2,000 with the unit auto-step:
             # a single run of a quarter is one path, the spread over timings is what a setting is worth
             acct = live_config(sym, live_root)
@@ -504,6 +616,7 @@ def stage_candidates(out: Path, symbols: Sequence[str], live_root: Path, force: 
             df = robustness.timing_ensemble(acct, dict(sorted(ALL_WINDOWS.items(), key=lambda kv: kv[1][0])),
                                             n_jobs=max(1, min(n_jobs or 4, 5)), overrides=grid, override_labels=labels)
             df.to_csv(p, index=False)
+            _stamp(out, p)
             _log(f"candidates {acct.variant} {sym}: {len(df)} timing runs ({time.time() - t0:.0f}s)")
 
 
@@ -514,6 +627,8 @@ def reproduce(out: Path, symbols: Sequence[str] = SYMBOLS, live_root: Path = REP
               only: Optional[Sequence[str]] = None, force: bool = False, n_jobs: Optional[int] = None) -> None:
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
+    _LIVE_ROOT[0] = Path(live_root)
+    _log(f"engine build {engine_fingerprint()} · live settings {live_fingerprint()} ({live_root})")
     stages = [s for s in STAGES if not only or s in only]
     t0 = time.time()
     for st in stages:
@@ -521,21 +636,21 @@ def reproduce(out: Path, symbols: Sequence[str] = SYMBOLS, live_root: Path = REP
         if st == "quality":
             stage_quality(out, symbols, force)
         elif st == "baseline":
-            stage_baseline(out, symbols, live_root, force)
+            stage_baseline(out, symbols, live_root, force, window=WINDOWS["IS"])
         elif st == "long":
             stage_baseline(out, symbols, live_root, force, window=LONG_WINDOW, name="long", mode="sec", closeups=False)
         elif st == "signal":
             stage_signal(out, symbols, live_root, force)
         elif st == "sweeps":
-            stage_sweeps(out, symbols, live_root, force, n_jobs)
+            stage_sweeps(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
         elif st == "levers":
-            stage_levers(out, symbols, live_root, force, n_jobs)
+            stage_levers(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
         elif st == "improve":
-            stage_improve(out, symbols, live_root, force, n_jobs)
+            stage_improve(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
         elif st == "holdout":
             stage_holdout(out, symbols, live_root, force, n_jobs)
         elif st == "candidates":
             stage_candidates(out, symbols, live_root, force, n_jobs)
         elif st == "robust":
-            stage_robust(out, symbols, live_root, force, n_jobs)
+            stage_robust(out, symbols, live_root, force, n_jobs, window=WINDOWS["IS"])
     _log(f"all stages done in {(time.time() - t0) / 60:.1f} min -> {out}")

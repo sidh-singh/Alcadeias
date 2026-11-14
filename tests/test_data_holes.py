@@ -46,7 +46,7 @@ def holed(plain, fixture_store, tmp_path_factory, windows):
     cfg, res = plain
     a, z = (_ms(x) for x in windows[SYMBOL])
     b = res.baskets
-    ok = b[(b["duration_s"] >= 60) & (b["open_time"].astype("int64") // 1_000_000 <= z - (HOLE_S + 900 + 300) * 1000)]
+    ok = b[(b["duration_s"] >= 60) & (b["open_time"].dt.as_unit("ns").astype("int64") // 1_000_000 <= z - (HOLE_S + 900 + 300) * 1000)]
     assert len(ok), "the fixture hour has no basket early and long enough to cut a hole into"
     hole_a = int(ok.iloc[0]["open_time"].value // 1_000_000) + 20_000
     hole_b = hole_a + HOLE_S * 1000
@@ -84,8 +84,8 @@ def test_the_open_basket_is_closed_at_the_last_quote_before_the_hole(plain, hole
     res = fast.run(cfg, _prep(cfg, holed["store"]))
     f, b = res.fills, res.baskets
     # everything before the hole is untouched
-    t = f["time"].astype("int64") // 1_000_000
-    tf = full.fills["time"].astype("int64") // 1_000_000
+    t = f["time"].dt.as_unit("ns").astype("int64") // 1_000_000
+    tf = full.fills["time"].dt.as_unit("ns").astype("int64") // 1_000_000
     pd.testing.assert_frame_equal(f[t < holed["a"]][COLS].reset_index(drop=True),
                                   full.fills[tf < holed["a"]][COLS].reset_index(drop=True))
     gone = b[b["reason"] == "data_hole"]
@@ -97,7 +97,7 @@ def test_the_open_basket_is_closed_at_the_last_quote_before_the_hole(plain, hole
     # at the last quote that exists: a long is sold at the bid, a short bought back at the ask
     want = holed["last_bid"] if g["side"] == "BUY" else holed["last_ask"]
     assert np.allclose(closes["price"].to_numpy(), want, rtol=0, atol=1e-9)
-    assert (closes["fill_time"].astype("int64") // 1_000_000 == holed["last_t"]).all()
+    assert (closes["fill_time"].dt.as_unit("ns").astype("int64") // 1_000_000 == holed["last_t"]).all()
     # decided on the first poll the market counts as not live, not later: more than three minutes after that
     # quote's whole second (MT5 reports tick.time in seconds, and that is what the liveness rule reads)
     waited = (g["close_time"].value // 1_000_000) - (holed["last_t"] // 1000) * 1000
@@ -109,12 +109,12 @@ def test_the_open_basket_is_closed_at_the_last_quote_before_the_hole(plain, hole
 def test_no_fresh_entry_during_the_quarantine(plain, holed):
     cfg, _ = plain
     res = fast.run(cfg, _prep(cfg, holed["store"]))
-    opens = res.fills[res.fills["action"] == "open"]["time"].astype("int64") // 1_000_000
+    opens = res.fills[res.fills["action"] == "open"]["time"].dt.as_unit("ns").astype("int64") // 1_000_000
     resume = holed["first_after"]
     assert not ((opens > holed["a"]) & (opens < resume + 600_000)).any()
     # with the quarantine switched off (but the hole still recognised) the bot may trade again at once
     free = fast.run(cfg.replace(data_hole_quarantine_s=0.0), _prep(cfg, holed["store"]))
-    o2 = free.fills[free.fills["action"] == "open"]["time"].astype("int64") // 1_000_000
+    o2 = free.fills[free.fills["action"] == "open"]["time"].dt.as_unit("ns").astype("int64") // 1_000_000
     if ((o2 >= resume) & (o2 < resume + 600_000)).any():
         assert res.counters["polls_entry_blocked_data_hole"] > 0
 
@@ -138,10 +138,10 @@ def test_a_run_that_starts_just_after_a_hole_still_waits(plain, holed):
     prep = _prep(c, holed["store"])
     assert any((z - a) >= 600_000 and z <= store.to_ms(start) for a, z in prep.gaps), prep.gaps
     res = fast.run(c, prep)
-    opens = res.fills[res.fills["action"] == "open"]["time"].astype("int64") // 1_000_000
+    opens = res.fills[res.fills["action"] == "open"]["time"].dt.as_unit("ns").astype("int64") // 1_000_000
     assert not (opens < holed["first_after"] + 600_000).any()
     off = fast.run(c.replace(data_hole_s=0.0), prep)
-    o2 = off.fills[off.fills["action"] == "open"]["time"].astype("int64") // 1_000_000
+    o2 = off.fills[off.fills["action"] == "open"]["time"].dt.as_unit("ns").astype("int64") // 1_000_000
     if (o2 < holed["first_after"] + 600_000).any():
         assert res.counters["polls_entry_blocked_data_hole"] > 0
 

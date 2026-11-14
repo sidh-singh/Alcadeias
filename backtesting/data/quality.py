@@ -65,7 +65,7 @@ def quality_report(symbol: str, start, end, store_dir: Path = store.DEFAULT_STOR
     for (y, m) in month_range(date(s.year, s.month, 1), date(e.year, e.month, 1)):
         p = store.month_dir(store_dir, symbol, y, m) / "meta.json"
         if p.exists():
-            meta = json.loads(p.read_text())
+            meta = json.loads(p.read_text(encoding="utf-8"))
             months.append({k: meta.get(k) for k in (
                 "year", "month", "ticks", "seconds", "m1_bars", "rows_dropped_invalid",
                 "rows_out_of_order", "spread_median", "spread_mean", "spread_p99", "first", "last")})

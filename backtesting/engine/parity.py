@@ -48,6 +48,9 @@ class ParityReport:
     signals_ref: dict = field(default_factory=dict)
     first_differences: List[str] = field(default_factory=list)
     ref_errors: List[str] = field(default_factory=list)
+    # orders the simulated broker refused while the live code ran, by reason: shows whether a window
+    # exercised the broker-side rules (market closed, close-only after a reopen, margin) at all
+    refused_ref: dict = field(default_factory=dict)
 
     def __str__(self) -> str:
         head = "PARITY OK" if self.ok else "PARITY FAILED"
@@ -58,6 +61,7 @@ class ParityReport:
             f"  fills ref {self.fills_ref} / fast {self.fills_fast}, mismatched {self.fill_mismatches}; "
             f"balance ref {self.balance_ref:.2f} / fast {self.balance_fast:.2f}",
             f"  signals seen by the live code: {self.signals_ref}",
+            f"  orders the broker refused in the live run: {self.refused_ref or 'none'}",
         ]
         lines += [f"  ! {d}" for d in self.first_differences[:12]]
         lines += [f"  live-code error: {e}" for e in self.ref_errors[:5]]
@@ -65,9 +69,14 @@ class ParityReport:
 
 
 def fast_config_for_parity(cfg: BacktestConfig) -> BacktestConfig:
-    # SimMT5 accepts every order, so the broker's close-only windows are switched off here
-    return cfg.replace(open_order_delay_ms=LIVE_OPEN_ORDER_DELAY_MS,
-                       close_only_after_break_s=0.0, close_only_after_weekend_s=0.0, data_hole_s=0.0)
+    """
+    The fast-engine configuration that corresponds to a reference run of ``cfg``: the 0.1 s the
+    live helper sleeps after an order, and no data-hole handling (that is hygiene for the
+    backtest's own data; the live code never meets a hole, it just sees a silent market).
+    The broker-side rules (market closed, close-only after a reopen, margin) stay as in ``cfg``:
+    the simulated terminal applies the same ones.
+    """
+    return cfg.replace(open_order_delay_ms=LIVE_OPEN_ORDER_DELAY_MS, data_hole_s=0.0)
 
 
 def compare(cfg: BacktestConfig, ref: ReferenceResult, fast: Result,
@@ -139,7 +148,7 @@ def compare(cfg: BacktestConfig, ref: ReferenceResult, fast: Result,
         fill_bad += abs(len(d) - len(f))
     m = min(len(d), len(f))
     if m:
-        f_t = (f["time"].astype("int64") // 1_000_000).to_numpy()[:m]
+        f_t = (f["time"].dt.as_unit("ns").astype("int64") // 1_000_000).to_numpy()[:m]
         f_side = np.where(f["side"].to_numpy()[:m] == "BUY", 0, 1)
         f_out = (f["action"].to_numpy()[:m] == "close")
         d_out = (d["entry"].to_numpy()[:m] == "out")
@@ -172,7 +181,8 @@ def compare(cfg: BacktestConfig, ref: ReferenceResult, fast: Result,
         fills_ref=int(len(d)), fills_fast=int(len(f)), fill_mismatches=int(fill_bad),
         balance_ref=float(ref.final_balance), balance_fast=float(fast.scalars["final_balance"]),
         signals_ref={names[int(v)]: int(c) for v, c in zip(vals, cnts)},
-        first_differences=diffs, ref_errors=list(ref.errors))
+        first_differences=diffs, ref_errors=list(ref.errors),
+        refused_ref={k: int(v) for k, v in (getattr(ref, "refused", None) or {}).items() if v})
 
 
 def check_parity(cfg: BacktestConfig, live_root: Path = REPO_ROOT, mode: str = "ticks",
@@ -181,5 +191,7 @@ def check_parity(cfg: BacktestConfig, live_root: Path = REPO_ROOT, mode: str = "
     ref = run_reference(cfg, live_root=live_root, mode=mode, store_dir=store_dir, progress=progress)
     fcfg = fast_config_for_parity(cfg)
     prep = prepare(fcfg.symbol, fcfg.start, fcfg.end, fcfg.timeframes(), mode=mode, store_dir=store_dir)
-    fast = run(fcfg, prep, trace=True)
+    # (in 'sec' mode both engines are fed the same per-second rows, so the 0.1 s order sleep is applied
+    #  to that series on purpose: no warning about off-grid timing)
+    fast = run(fcfg, prep, trace=True, warn_off_grid=False)
     return compare(cfg, ref, fast)

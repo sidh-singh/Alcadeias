@@ -95,7 +95,7 @@ def test_restart_forgets_the_reentry_cooldown(trace, live_root, fixture_store):
     """
     cfg, res = trace
     tr = res.trace
-    closes = (res.baskets["close_time"].astype("int64") // 1_000_000).to_numpy()
+    closes = (res.baskets["close_time"].dt.as_unit("ns").astype("int64") // 1_000_000).to_numpy()
     t_restart = last_close = None
     for row in tr:
         if (row[K.T_NPOS] == 0 and row[K.T_ENTRY_ALLOWED] == 0 and row[K.T_BRAKE] == 0

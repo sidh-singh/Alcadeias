@@ -183,6 +183,11 @@ def grid_split_indicator(universe: Sequence[str], variant: str,
 
     open_score = rsi_sign[TF_rsi] + macd_sign[TF_macd]; opens at |score| = 2 (both agree).
     The force-close (and book) stay on one timeframe each, swept over ``fc_tfs``.
+
+    Grey-fill (a grey vote borrowing the other indicator's sign) only exists when both
+    indicators sit on the same timeframe, so it is switched off for the whole grid: every
+    cell, the diagonal included, needs both votes to point the same way. The diagonal is
+    therefore stricter than the live OPEN score, which grey-fills.
     """
     fc_tfs = list(fc_tfs or universe)
     grid, labels = [], []
@@ -197,7 +202,7 @@ def grid_split_indicator(universe: Sequence[str], variant: str,
                     else:
                         ow[r_tf] = (1, 0)
                         ow[m_tf] = (0, 1)
-                    ov = dict(open_weights=ow, fc_weights={f: 1}, entry_s=2.0, entry_agree_s=2.0,
+                    ov = dict(open_weights=ow, open_grey_fill=False, fc_weights={f: 1}, entry_s=2.0, entry_agree_s=2.0,
                               ladder_s=2.0, force_close_s=1.0)
                     lab = dict(open_rsi=r_tf, open_macd=m_tf, fc=f)
                     if variant == "netting":
@@ -209,7 +214,11 @@ def grid_split_indicator(universe: Sequence[str], variant: str,
 
 
 def grid_split_exit(universe: Sequence[str], variant: str, section: str = "fc") -> Tuple[List[dict], List[dict]]:
-    """RSI and MACD on different timeframes for one EXIT section (``fc`` or ``book``), open as live."""
+    """
+    RSI and MACD on different timeframes for one EXIT section (``fc`` or ``book``), open as live.
+    No grey-fill anywhere in the grid (the live force-close has none; for a one-timeframe book
+    at threshold 1 it changes no decision), so every cell is scored the same way.
+    """
     grid, labels = [], []
     for r_tf in universe:
         for m_tf in universe:
@@ -222,7 +231,7 @@ def grid_split_exit(universe: Sequence[str], variant: str, section: str = "fc") 
             if section == "fc":
                 ov = dict(fc_weights=w, entry_agree_s=2.0, force_close_s=1.0)
             else:
-                ov = dict(book_weights=w, book_s=1.0)
+                ov = dict(book_weights=w, book_grey_fill=False, book_s=1.0)
             grid.append(ov)
             labels.append({f"{section}_rsi": r_tf, f"{section}_macd": m_tf})
     return grid, labels
