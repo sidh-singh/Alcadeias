@@ -158,7 +158,7 @@ class SimMT5:
     def __init__(self, symbol: str, t_ms: np.ndarray, bid: np.ndarray, ask: np.ndarray,
                  clock: SimClock, warm_m1: Dict[str, np.ndarray], contract_size: float,
                  leverage: float, balance: float, warm_bars: int = 600,
-                 close_only_break_ms: int = 0, close_only_weekend_ms: int = 0):
+                 close_only_break_ms: int = 0, close_only_weekend_ms: int = 0, after_ms: Optional[int] = None):
         """
         Broker-side rules, the same ones the fast engine applies, so that the live code is
         exercised against them and the two engines can be compared with them switched on:
@@ -181,6 +181,9 @@ class SimMT5:
         self._ticket = 1000
         self.rejects = 0
         self.refused = {"market_closed": 0, "close_only": 0, "no_money": 0}
+        # time of the first quote after the replayed rows: rows that stop half an hour or more before it
+        # stopped with a closed market (None: nothing is known to follow, the last quote stays tradable)
+        self.after_ms = int(after_ms) if after_ms is not None else (int(t_ms[-1]) if len(t_ms) else 0)
         self.close_only_break_ms = int(close_only_break_ms)
         self.close_only_weekend_ms = int(close_only_weekend_ms)
         self.reopen_until = -(1 << 60)
@@ -322,8 +325,8 @@ class SimMT5:
         b, a = float(self.bid[i]), float(self.ask[i])
         now = self.clock.now_ms
         refuse = lambda code: types.SimpleNamespace(retcode=code, price=0.0, volume=0.0, order=0, deal=0)
-        if (i + 1 < len(self.t_ms) and int(self.t_ms[i + 1] - self.t_ms[i]) >= K.SESSION_BREAK_MS
-                and now - int(self.t_ms[i]) > K.SESSION_CLOSE_GRACE_MS):
+        next_t = int(self.t_ms[i + 1]) if i + 1 < len(self.t_ms) else self.after_ms
+        if next_t - int(self.t_ms[i]) >= K.SESSION_BREAK_MS and now - int(self.t_ms[i]) > K.SESSION_CLOSE_GRACE_MS:
             self.rejects += 1
             self.refused["market_closed"] += 1
             return refuse(self.TRADE_RETCODE_MARKET_CLOSED)
@@ -508,14 +511,16 @@ def run_reference(cfg: BacktestConfig, live_root: Path = REPO_ROOT, mode: str = 
     first_tick = int(rows["t_ms"][0])
     if first_tick > start_ms:
         clock.now_ms = start_ms + -(-(first_tick - start_ms) // cfg.poll_interval_ms) * cfg.poll_interval_ms
+    from .fast import _PRE_MS, _next_quote_ms, _silences
     sim = SimMT5(cfg.symbol, rows["t_ms"], rows["bid"], rows["ask"], clock, warm_m1,
                  cfg.spec.contract_size, cfg.effective_leverage, cfg.initial_balance, warm_bars,
                  close_only_break_ms=int(round(cfg.close_only_after_break_s * 1000)),
-                 close_only_weekend_ms=int(round(cfg.close_only_after_weekend_s * 1000)))
+                 close_only_weekend_ms=int(round(cfg.close_only_after_weekend_s * 1000)),
+                 after_ms=_next_quote_ms(cfg.symbol, end_ms, store_dir))
     # a run that starts just after a session break inherits the broker's close-only window, as in the fast engine
-    from .fast import _PRE_MS, _silences
     pre = store.load_sec(cfg.symbol, start_ms - _PRE_MS, start_ms, store_dir) if warm_from < start_ms else {}
-    gaps = _silences(warm_m1, rows["t_ms"], np.asarray(pre["t_ms"], np.int64) if pre else None)
+    pre_t = np.asarray(pre["t_ms"], np.int64) if pre and len(pre["t_ms"]) else np.zeros(0, np.int64)
+    gaps = _silences(warm_m1, rows["t_ms"], np.concatenate([pre_t, np.asarray(rows["t_ms"][:1], np.int64)]))
     past = gaps[gaps[:, 1] <= max(start_ms, first_tick)] if len(gaps) else gaps
     if len(past):
         length = int(past[-1][1] - past[-1][0])

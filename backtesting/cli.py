@@ -161,7 +161,13 @@ def cmd_parity(args) -> int:
     print(rep)
     if args.out:
         import dataclasses
-        _write_json(args.out, dataclasses.asdict(rep))
+        from . import experiments
+        # everything the results page needs to list the window, and what the report vouches for
+        _write_json(args.out, {**dataclasses.asdict(rep), "name": Path(args.out).stem, "variant": cfg.variant,
+                               "symbol": cfg.symbol, "start": cfg.start, "end": cfg.end,
+                               "scores": cfg.describe_scores(), "elapsed_s": round(time.time() - t0, 1),
+                               "stamp": {"engine": experiments.parity_fingerprint(),
+                                         "live": experiments.live_fingerprint(_live_root(args))}})
     return 0 if rep.ok else 1
 
 
@@ -216,10 +222,17 @@ def cmd_robust(args) -> int:
             df = robustness.timing_grid(cfg, n_jobs=tick_jobs)
             df.to_csv(out / "timing.csv", index=False)
             show("timing (raw ticks)", df)
-    res = run(cfg)
-    bs = robustness.bootstrap(res.baskets, cfg.initial_balance)
+    # the baskets of one run of the window: raw ticks at the live cadence as in the pipeline, unless --no-ticks
+    if args.no_ticks:
+        res, source = run(cfg, light=True), "per-second replay"
+    else:
+        res, source = run(cfg.replace(open_order_delay_ms=100), mode="ticks", light=True), "raw ticks, live cadence"
+    bs = {"source": source, "baskets": int(len(res.baskets)),
+          "live_units": robustness.bootstrap(res.baskets, cfg.initial_balance, cfg.step_up_balance, cfg.unit_max_limit),
+          "fixed_unit_1": robustness.bootstrap(res.baskets, cfg.initial_balance, 0.0, 1)}
     _write_json(out / "bootstrap.json", bs)
-    print("\n== bootstrap of whole days\n" + json.dumps(bs, indent=2))
+    print("\n== whole days drawn with replacement; live_units = baskets re-sized by the bot's unit rule, "
+          "fixed_unit_1 = one unit throughout\n" + json.dumps(bs, indent=2))
     return 0
 
 

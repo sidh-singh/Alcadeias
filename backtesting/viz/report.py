@@ -506,6 +506,8 @@ def risk_blocks(res: Result) -> List[str]:
 
 def _observe_scores(cfg: BacktestConfig, start_ms: int, end_ms: int, store_dir) -> pd.DataFrame:
     """Per-second section scores over a short window (scores do not depend on positions)."""
+    start_ms -= start_ms % 1000          # the per-second series is read on whole seconds
+    end_ms += -end_ms % 1000
     c = cfg.replace(start=str(store.ms_to_dt(start_ms).tz_localize(None)),
                     end=str(store.ms_to_dt(end_ms).tz_localize(None)),
                     allow_long=False, allow_short=False, record_interval_s=1, window_enabled=False,

@@ -46,12 +46,6 @@ def dip(df: pd.DataFrame, w: str) -> pd.Series:
     return df[c] if c in df.columns else df[f"max_loss_from_start@{w}"].clip(upper=ACCOUNT)
 
 
-def acct_net(df: pd.DataFrame, w: str) -> pd.Series:
-    """Net result of the replayed $2,000 account in window ``w`` (falls back to the fixed-unit net)."""
-    c = f"acct_net@{w}"
-    return df[c] if c in df.columns else df[f"net_profit@{w}"]
-
-
 def merged_timeframes(out: Path, sym: str) -> Optional[pd.DataFrame]:
     a, b = Path(out) / "sweeps" / f"{sym}_timeframes.csv", Path(out) / "sweeps" / f"{sym}_timeframes_holdout.csv"
     if not (a.exists() and b.exists()):
@@ -71,13 +65,13 @@ def merged_timeframes(out: Path, sym: str) -> Optional[pd.DataFrame]:
 
 def _group(m: pd.DataFrame) -> pd.Series:
     g = np.where((m["a_pos"] == 3) & (m["a_ruin"] == 0), "3 of 3 profitable, account never wiped",
-        np.where(m["a_pos"] == 3, "3 of 3 profitable, but the account wiped in one",
+        np.where(m["a_pos"] == 3, "3 of 3 profitable, but the account wiped in at least one",
         np.where(m["a_pos"] == 2, "2 of 3 profitable",
         np.where(m["a_pos"] == 1, "1 of 3 profitable", "0 of 3 profitable"))))
     return pd.Series(g, index=m.index)
 
 
-GROUP_ORDER = ["3 of 3 profitable, account never wiped", "3 of 3 profitable, but the account wiped in one",
+GROUP_ORDER = ["3 of 3 profitable, account never wiped", "3 of 3 profitable, but the account wiped in at least one",
                "2 of 3 profitable", "1 of 3 profitable", "0 of 3 profitable"]
 
 

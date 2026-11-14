@@ -5,20 +5,22 @@ The experiment pipeline behind the committed results.
     python -m backtesting reproduce --only baseline sweeps
 
 Stages (each writes plain CSV / JSON under ``backtest_results/`` and is skipped when its
-output already exists, unless ``--force``):
+output is there and was written by this build of the backtester, for these live settings,
+from this tick data; ``--force`` recomputes regardless):
 
   quality     data-quality report per symbol
   baseline    the live configuration, raw-tick replay with the live loop cadence, HTML report
-  long        the same configuration over the longest history available
+  long        the same configuration over all fifteen months in one run (per-second replay)
   signal      what the RSI / MACD slope votes are made of and what followed them (closed bars)
   sweeps      which timeframes should drive OPEN / FORCE-CLOSE / BOOK -- RSI and MACD together
               and separately -- on three disjoint three-month windows
   levers      one-at-a-time sensitivity of every other parameter + structural what-ifs
   improve     hypothesis-driven what-if packages aimed at the flaws the baseline exposed
   holdout     the whole timeframe grid again on the two hold-out quarters
-  candidates  a short list of settings (timeframes x risk fixes) on all five quarters, and on
-              a real $2,000 account over the whole fifteen months
-  robust      loop timing, order latency, costs, start date, sub-periods, bootstrap
+  candidates  a short list of settings (timeframes x ladder fixes): every quarter under eight
+              loop timings on a real $2,000 account, and one run of all fifteen months
+  robust      every quarter under eight loop timings; a slower loop, order latency and costs,
+              each level under several timings; start date, sub-periods, a day bootstrap
 
 Windows. ``IS`` is the three months the owner asked for. ``OOS1`` and ``OOS2`` are the two
 three-month blocks before it. A setting is only interesting if it holds up on windows it
@@ -29,15 +31,19 @@ Sweeps run with a fixed unit of 1 (0.01 lot entry, no balance auto-step) on a ba
 large to be stopped out. The auto-step doubles every lot once the balance passes $2,500,
 which makes results path-dependent and would bury the effect of the parameter being
 studied; and a stop-out would hide everything after it. Each row therefore reports the
-P/L of one 0.01-lot unit over the whole window plus ``max_loss_from_start`` -- if that
-reaches $2,000 the owner's account would have been wiped out in that window. Baseline /
-long runs use the live auto-step and the real $2,000 exactly as deployed.
+P/L of one 0.01-lot unit over the whole window, and next to it what the same baskets do to
+a real $2,000 account that steps its unit as the bot does (``acct_net``, ``acct_wiped``,
+``acct_dip``: ``metrics.replay_account``). The baseline, the fifteen-month run, the timing
+ensembles of the live settings and of the candidates, and the cost / latency tables use the
+live auto-step and the real $2,000 directly; the five-quarter candidate table and the
+fixed-unit ensemble are fixed-unit runs with the replay.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -66,10 +72,9 @@ LONG_WINDOW = ("2025-08-13", "2026-11-13")          # all five quarters in one r
 SYMBOLS = ("XAUUSDm", "BTCUSDm")
 # Sweeps, levers and packages run a fixed 0.01-lot unit on a balance too large to be stopped
 # out, so every configuration is measured over the *whole* window (a stop-out would hide
-# whatever came after it). Whether the owner's $2,000 account would have survived is then
-# read off the deepest dip below the starting balance: ``max_loss_from_start >= ACCOUNT``.
+# whatever came after it). Whether the owner's $2,000 account would have survived is read off
+# the account replay that every row carries (metrics.replay_account, ACCOUNT in metrics.py).
 SWEEP_BALANCE = 1_000_000.0
-ACCOUNT = 2000.0
 UNIVERSE = ["M1", "M5", "M15", "M30", "H1", "H4"]
 
 
@@ -77,33 +82,104 @@ def _log(msg: str) -> None:
     print(time.strftime("%H:%M:%S"), msg, flush=True)
 
 
-# Every output is stamped with a fingerprint of the code that decides its numbers, so a results
-# directory assembled from two different builds of the engine can be recognised (stages are skipped
-# when their output exists, which makes that easy to do by accident).
-_ENGINE_FILES = ("engine/kernels.py", "engine/fast.py", "config.py", "data/store.py",
-                 "analysis/metrics.py", "analysis/sweep.py", "analysis/robustness.py", "experiments.py")
+# ───────────────────────────── which build wrote what ─────────────────────────────
+# Every output is stamped in manifest.json with three fingerprints: of the code that decides its
+# numbers, of the live rules it was computed for, and of the tick data it read. A stage is skipped
+# only when its output carries the current three; anything else is stale and is recomputed, and
+# the pages warn about stale or unstamped files. (Stages are skipped when their output exists,
+# which makes it easy to assemble a directory from two builds by accident.)
+_ENGINE_FILES = ("engine/kernels.py", "engine/fast.py", "config.py", "data/store.py", "data/quality.py",
+                 "analysis/metrics.py", "analysis/diagnostics.py", "analysis/signal.py", "analysis/sweep.py",
+                 "analysis/robustness.py", "viz/report.py", "experiments.py")
+_PARITY_FILES = _ENGINE_FILES[:4] + ("engine/reference.py", "engine/parity.py")
+_LIVE_FILES = ("constants.py", "symbols.json", "strategy.py", "indicator.py", "app.py", "mt5_helper.py")
+_LIVE_ROOT: List[Path] = [REPO_ROOT]          # the checkout the current reproduce() call mirrors
+_RUN: Dict[str, str] = {}                     # fingerprints taken when reproduce() started
+# result files the pipeline writes (relative to the results directory); used to notice unstamped ones
+_OUTPUT_PATTERNS = ("data_quality/*.json", "baseline/*/summary.json", "long/*/summary.json", "signal/*.json",
+                    "sweeps/*.csv", "levers/*.csv", "packages/*.csv", "candidates/*.csv",
+                    "robustness/*/*.csv", "robustness/*/bootstrap.json")
 
 
-def engine_fingerprint() -> str:
+def _hash(files) -> str:
+    """One fingerprint over several files. Line endings are normalised so a CRLF checkout gives the same value."""
     h = hashlib.sha1()
-    root = Path(__file__).resolve().parent
-    for rel in _ENGINE_FILES:
-        h.update((root / rel).read_bytes())
+    for f in files:
+        f = Path(f)
+        h.update(f.name.encode())
+        h.update(f.read_bytes().replace(b"\r\n", b"\n") if f.exists() else b"-")
     return h.hexdigest()[:12]
 
 
-_LIVE_FILES = ("constants.py", "symbols.json", "strategy.py", "indicator.py", "app.py", "mt5_helper.py")
-_LIVE_ROOT: List[Path] = [REPO_ROOT]          # the checkout the current reproduce() call mirrors
+def engine_fingerprint() -> str:
+    root = Path(__file__).resolve().parent
+    return _hash(root / rel for rel in _ENGINE_FILES)
+
+
+def parity_fingerprint() -> str:
+    """The two engines and the comparison itself: what a parity report vouches for."""
+    root = Path(__file__).resolve().parent
+    return _hash(root / rel for rel in _PARITY_FILES)
 
 
 def live_fingerprint(live_root: Optional[Path] = None) -> str:
     """Fingerprint of the live rules and settings a result was computed for."""
-    h = hashlib.sha1()
     root = Path(live_root or _LIVE_ROOT[0])
-    for rel in _LIVE_FILES:
-        f = root / rel
-        h.update(f.read_bytes() if f.exists() else b"-")
+    return _hash(root / rel for rel in _LIVE_FILES)
+
+
+_META_KEYS = ("store_version", "ticks", "seconds", "m1_bars", "rows_raw", "rows_kept", "first", "last", "bid_min", "bid_max")
+
+
+def data_fingerprint(symbol: str) -> str:
+    """
+    Fingerprint of the tick history of ``symbol`` that the pipeline reads: for every month before
+    the one the last window ends in, what the store recorded when it built it (tick counts, first
+    and last quote, price range: all fixed by the archive, none by when it was downloaded); for the
+    last month, the quotes themselves up to the end of the window, so that a month's archive
+    which has grown since does not look like other data. '' when the store holds nothing for the
+    symbol (a checkout without the history can build the pages but cannot judge the data).
+    """
+    from .data import store
+    end_ms = store.to_ms(LONG_WINDOW[1])
+    end = store.ms_to_dt(max(end_ms - 1, 0))
+    months = [(y, m) for (y, m) in store.available_months(symbol) if (y, m) <= (end.year, end.month)]
+    if not months:
+        return ""
+    h = hashlib.sha1()
+    for (y, m) in months:
+        h.update(f"{symbol} {y:04d}-{m:02d}".encode())
+        if (y, m) < (end.year, end.month):
+            try:
+                meta = json.loads((store.month_dir(store.DEFAULT_STORE_DIR, symbol, y, m) / "meta.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                meta = {}
+            h.update(json.dumps([meta.get(k) for k in _META_KEYS]).encode())
+        else:
+            sec = store.load_sec(symbol, store.to_ms(f"{y:04d}-{m:02d}-01"), end_ms)
+            for k in ("t_ms", "bid", "ask"):
+                h.update(sec[k].tobytes() if sec else b"-")
     return h.hexdigest()[:12]
+
+
+def _symbol_of(rel: str) -> Optional[str]:
+    return next((sym for sym in SYMBOLS if sym in rel), None)
+
+
+def _current(rel: str, live_root: Optional[Path] = None, frozen: bool = False, cache: Optional[dict] = None) -> Dict[str, str]:
+    """
+    The fingerprints an output at ``rel`` should carry now (``frozen``: as they were when the
+    running reproduce() started). ``cache`` lets a caller that asks about many files hash once.
+    """
+    sym = _symbol_of(rel)
+    if frozen and _RUN:
+        return {"engine": _RUN["engine"], "live": _RUN["live"], "data": _RUN.get(f"data:{sym}", "")}
+    cache = {} if cache is None else cache
+    if "engine" not in cache:
+        cache.update(engine=engine_fingerprint(), live=live_fingerprint(live_root))
+    if sym and f"data:{sym}" not in cache:
+        cache[f"data:{sym}"] = data_fingerprint(sym)
+    return {"engine": cache["engine"], "live": cache["live"], "data": cache.get(f"data:{sym}", "")}
 
 
 def _manifest(out: Path) -> dict:
@@ -114,31 +190,53 @@ def _manifest(out: Path) -> dict:
 
 
 def _stamp(out: Path, path: Path) -> None:
-    """Record in ``out/manifest.json`` which engine build and which live settings ``path`` was written with."""
+    """
+    Record in ``out/manifest.json`` what ``path`` was computed with. The code in memory is the
+    code as it was when the run started, so the stamp uses the fingerprints taken then, and the
+    run stops if the files have changed since: a result computed now could mix two builds
+    (worker processes import whatever is on disk when they start).
+    """
+    rel = Path(path).relative_to(out).as_posix()
+    stamp = _current(rel, frozen=True)
     data = _manifest(out)
-    data[Path(path).relative_to(out).as_posix()] = {"engine": engine_fingerprint(), "live": live_fingerprint(),
-                                                   "written": time.strftime("%Y-%m-%d %H:%M:%S")}
-    (Path(out) / "manifest.json").write_text(json.dumps(dict(sorted(data.items())), indent=1), encoding="utf-8")
+    if _RUN and (engine_fingerprint() != _RUN["engine"] or live_fingerprint() != _RUN["live"]):
+        if data.pop(rel, None) is not None:    # the file was just rewritten: an earlier stamp no longer describes it
+            _write_manifest(out, data)
+        raise RuntimeError("the backtester or the live rules changed on disk while the pipeline was running; "
+                           f"{rel} was not stamped. Start `reproduce` again: it recomputes what is stale.")
+    data[rel] = {**stamp, "written": time.strftime("%Y-%m-%d %H:%M:%S")}
+    _write_manifest(out, data)
+
+
+def _write_manifest(out: Path, data: dict) -> None:
+    mf = Path(out) / "manifest.json"
+    tmp = mf.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(dict(sorted(data.items())), indent=1), encoding="utf-8")
+    os.replace(tmp, mf)                        # never leaves a half-written manifest behind
+
+
+def _matches(meta: Optional[dict], want: Dict[str, str]) -> bool:
+    """A stamp carries every fingerprint wanted (a wanted value of '' = cannot be judged here, not compared)."""
+    return isinstance(meta, dict) and bool(meta) and all(meta.get(k) == v for k, v in want.items() if v != "")
 
 
 def _fresh(out: Path, path: Path, force: bool = False) -> bool:
     """
-    True when ``path`` exists and was written by this engine build for these live settings, i.e.
-    the stage can be skipped. An output from another build, or for other settings, is stale and
-    is recomputed (a results directory must not silently mix the two).
+    True when ``path`` exists and was written by this build, for these live settings, from this
+    tick data, i.e. the stage can be skipped. Anything else is stale and is recomputed.
     """
     path = Path(path)
     if force or not path.exists():
         return False
-    meta = _manifest(out).get(path.relative_to(out).as_posix())
-    if not meta or meta.get("engine") != engine_fingerprint() or meta.get("live") != live_fingerprint():
-        _log(f"  {path.relative_to(out)}: written by another engine build or for other live settings - recomputing")
+    rel = path.relative_to(out).as_posix()
+    if not _matches(_manifest(out).get(rel), _current(rel, frozen=True)):
+        _log(f"  {rel}: written by another build, for other live settings or from other tick data - recomputing")
         return False
     return True
 
 
 def manifest_builds(out: Path) -> Dict[str, List[str]]:
-    """engine fingerprint -> outputs it wrote (more than one key = the directory mixes builds)."""
+    """'engine/live' fingerprint pair -> outputs it wrote (more than one key = the directory mixes builds)."""
     builds: Dict[str, List[str]] = {}
     for rel, meta in _manifest(out).items():
         if (Path(out) / rel).exists():
@@ -147,10 +245,29 @@ def manifest_builds(out: Path) -> Dict[str, List[str]]:
 
 
 def stale_outputs(out: Path, live_root: Path = REPO_ROOT) -> List[str]:
-    """Stamped outputs that were not written by the current engine build for the current live settings."""
-    eng, live = engine_fingerprint(), live_fingerprint(live_root)
-    return sorted(rel for rel, meta in _manifest(out).items()
-                  if (Path(out) / rel).exists() and (meta.get("engine") != eng or meta.get("live") != live))
+    """
+    Result files that cannot be vouched for: written by another build of the engine, for other
+    live settings or from other tick data than this checkout has now; pipeline outputs that carry
+    no stamp at all (written before stamps existed, or the manifest is missing or damaged); and
+    parity reports made with other engines or other live rules.
+    """
+    out = Path(out)
+    mf = _manifest(out)
+    stale = set()
+    cache: dict = {}
+    files = {p.relative_to(out).as_posix() for pat in _OUTPUT_PATTERNS for p in out.glob(pat)}
+    for rel in sorted(files | {r for r in mf if (out / r).exists()}):
+        if not _matches(mf.get(rel), _current(rel, live_root, cache=cache)):
+            stale.add(rel)
+    want = {"engine": parity_fingerprint(), "live": live_fingerprint(live_root)}
+    for p in sorted((out / "parity").glob("*.json")) if (out / "parity").exists() else []:
+        try:
+            j = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            j = {}
+        if not _matches(j.get("stamp"), want):
+            stale.add(p.relative_to(out).as_posix())
+    return sorted(stale)
 
 
 def live_config(symbol: str, live_root: Path = REPO_ROOT, **kw) -> BacktestConfig:
@@ -348,10 +465,12 @@ def lever_grid(base: BacktestConfig) -> Tuple[List[dict], List[dict]]:
         ],
     }
     if base.book_enabled:
-        params["book_s"] = [1, 2]
-        params["profit_protect_usd_per_unit"] = [0.0, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
+        # book_s 1 and 2 are one rule (the grey-filled one-timeframe score is -2, 0 or +2), so it is not swept.
+        # The protect threshold is kept although, with BOOK and FORCE-CLOSE on the same timeframe, it only
+        # changes the label of an exit, never a fill: the flat line in the table is the evidence of that.
+        # ("book + $1 target" would be the hedging exit again: the target, tested first, closes before the book can.)
+        params["profit_protect_usd_per_unit"] = [0.0, 1.0, 3.0, 10.0]
         params["@exit_mix"] += [
-            {"name": "book + $1 target", "set": dict(target_usd_per_unit=1.0)},
             {"name": "book + $3 target", "set": dict(target_usd_per_unit=3.0)},
             {"name": "book + $10 target", "set": dict(target_usd_per_unit=10.0)},
             {"name": "target $1 only (hedging exit)", "set": dict(target_usd_per_unit=1.0, book_enabled=False)},
@@ -628,29 +747,36 @@ def reproduce(out: Path, symbols: Sequence[str] = SYMBOLS, live_root: Path = REP
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     _LIVE_ROOT[0] = Path(live_root)
-    _log(f"engine build {engine_fingerprint()} · live settings {live_fingerprint()} ({live_root})")
+    # what this run computes with: taken once, because the code in memory is the code as it is now
+    _RUN.clear()
+    _RUN.update(engine=engine_fingerprint(), live=live_fingerprint(), **{f"data:{sym}": data_fingerprint(sym) for sym in symbols})
+    _log(f"engine build {_RUN['engine']} · live settings {_RUN['live']} ({live_root}) · tick data "
+         + ", ".join(f"{sym} {_RUN[f'data:{sym}']}" for sym in symbols))
     stages = [s for s in STAGES if not only or s in only]
     t0 = time.time()
-    for st in stages:
-        _log(f"== stage {st}")
-        if st == "quality":
-            stage_quality(out, symbols, force)
-        elif st == "baseline":
-            stage_baseline(out, symbols, live_root, force, window=WINDOWS["IS"])
-        elif st == "long":
-            stage_baseline(out, symbols, live_root, force, window=LONG_WINDOW, name="long", mode="sec", closeups=False)
-        elif st == "signal":
-            stage_signal(out, symbols, live_root, force)
-        elif st == "sweeps":
-            stage_sweeps(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
-        elif st == "levers":
-            stage_levers(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
-        elif st == "improve":
-            stage_improve(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
-        elif st == "holdout":
-            stage_holdout(out, symbols, live_root, force, n_jobs)
-        elif st == "candidates":
-            stage_candidates(out, symbols, live_root, force, n_jobs)
-        elif st == "robust":
-            stage_robust(out, symbols, live_root, force, n_jobs, window=WINDOWS["IS"])
+    try:
+        for st in stages:
+            _log(f"== stage {st}")
+            if st == "quality":
+                stage_quality(out, symbols, force)
+            elif st == "baseline":
+                stage_baseline(out, symbols, live_root, force, window=WINDOWS["IS"])
+            elif st == "long":
+                stage_baseline(out, symbols, live_root, force, window=LONG_WINDOW, name="long", mode="sec", closeups=False)
+            elif st == "signal":
+                stage_signal(out, symbols, live_root, force)
+            elif st == "sweeps":
+                stage_sweeps(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
+            elif st == "levers":
+                stage_levers(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
+            elif st == "improve":
+                stage_improve(out, symbols, live_root, force, n_jobs, windows=WINDOWS)
+            elif st == "holdout":
+                stage_holdout(out, symbols, live_root, force, n_jobs)
+            elif st == "candidates":
+                stage_candidates(out, symbols, live_root, force, n_jobs)
+            elif st == "robust":
+                stage_robust(out, symbols, live_root, force, n_jobs, window=WINDOWS["IS"])
+    finally:
+        _RUN.clear()          # the frozen fingerprints belong to this run only
     _log(f"all stages done in {(time.time() - t0) / 60:.1f} min -> {out}")

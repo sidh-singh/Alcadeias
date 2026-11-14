@@ -291,12 +291,12 @@ def test_bootstrap_is_deterministic_and_bounded():
     t = pd.date_range("2026-01-01", periods=400, freq="3h", tz="UTC")
     win = rng.random(400) < 0.9
     b = pd.DataFrame({"close_time": t, "pnl": np.where(win, 1.0, -8.0), "mae": np.where(win, -0.5, -9.0), "units": 1})
-    x = robustness.bootstrap(b, 2000.0, n=300, seed=1)
-    y = robustness.bootstrap(b, 2000.0, n=300, seed=1)
+    x = robustness.bootstrap(b, 2000.0, 0.0, 1, n=300, seed=1)
+    y = robustness.bootstrap(b, 2000.0, 0.0, 1, n=300, seed=1)
     assert x == y
     assert 0.0 <= x["prob_loss"] <= 1.0 and x["final_p05"] <= x["final_p50"] <= x["final_p95"]
     assert x["dip_p50"] <= x["dip_p95"] and x["prob_wiped"] == 0.0
-    assert robustness.bootstrap(b.iloc[:0], 2000.0) == {}
+    assert robustness.bootstrap(b.iloc[:0], 2000.0, 0.0, 1) == {}
 
 
 def test_bootstrap_resizes_baskets_and_stops_at_a_wiped_account():

@@ -130,8 +130,10 @@ def section_equity(out: Path, symbols: Sequence[str]) -> str:
         ttl = f"{sym} · {'3 months' if name == 'baseline' else LONG_LABEL}"
         j = _read_json(out / name / sym / "summary.json") or {}
         note = ""
-        if (j.get("summary") or {}).get("stopped_out"):
-            note = f'<p class="cap">Account stopped out on {last.index[-1]:%d %b %Y}; the run ends there.</p>'
+        s = j.get("summary") or {}
+        if s.get("stopped_out"):
+            when = pd.Timestamp(s["stopped_out_at"]) if s.get("stopped_out_at") else e.index[-1]
+            note = f'<p class="cap">Account stopped out on {when:%d %b %Y}; the run ends there.</p>'
         blocks.append(f'<div class="card"><h3>{ttl}</h3>{note}{_fig(fig, f"eq_{name}_{sym}")}</div>')
     return ('<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px">'
             f'{"".join(blocks)}</div>')
@@ -147,7 +149,7 @@ def section_fidelity(out: Path, symbols: Sequence[str]) -> str:
             if not j:
                 continue
             rows.append({
-                "Window": f'{j.get("symbol", "")} {j.get("start", "")} → {j.get("end", "")}',
+                "Window": (f'{j["symbol"]} {j["start"]} → {j.get("end", "")}' if j.get("symbol") and j.get("start") else p.stem),
                 "Settings": j.get("scores", "") + (" · other periods and thresholds" if j.get("config_overrides", {}).get("rsi_length") else "")
                             + (f' · start ${j["config_overrides"]["initial_balance"]:,.0f}'
                                if j.get("config_overrides", {}).get("initial_balance") else ""),
@@ -314,13 +316,14 @@ def section_timeframes(out: Path, sym: str, base: BacktestConfig) -> str:
         fig.update_xaxes(**T.axis(title_text=f"Net P/L in {WIN_LABEL.get(a, a)}", zeroline=True, zerolinecolor=T.AXIS))
         fig.update_yaxes(**T.axis(title_text=f"Net P/L in {WIN_LABEL.get(b, b)}", zeroline=True, zerolinecolor=T.AXIS))
         k = ag.get(f"{a}->{b}", {})
-        rho = k.get("spearman", float("nan"))
-        cap = (f'Each dot is one timeframe combination: what it made in the asked-for window (across) against what it made in the '
-               f'three months before (up). Rank correlation {rho:+.2f}. The top 10% picked on {WIN_SHORT.get(a, a)} averaged '
-               f'{_money(k.get(f"top_decile_mean_{a}", float("nan")), signed=True)} there and '
-               f'{_money(k.get(f"top_decile_mean_{b}", float("nan")), signed=True)} in {WIN_SHORT.get(b, b)}; the single best one went from '
-               f'{_money(k.get(f"best_{a}", float("nan")), signed=True)} to '
-               f'{_money(k.get(f"best_{a}_then_{b}", float("nan")), signed=True)}.')
+        cap = ('Each dot is one timeframe combination: what it made in the asked-for window (across) against what it made in the '
+               'three months before (up).')
+        if "spearman" in k:          # (too few settings with enough baskets in both windows give no statistics)
+            cap += (f' Rank correlation {k["spearman"]:+.2f}. The top 10% picked on {WIN_SHORT.get(a, a)} averaged '
+                    f'{_money(k.get(f"top_decile_mean_{a}", float("nan")), signed=True)} there and '
+                    f'{_money(k.get(f"top_decile_mean_{b}", float("nan")), signed=True)} in {WIN_SHORT.get(b, b)}; the single best one went from '
+                    f'{_money(k.get(f"best_{a}", float("nan")), signed=True)} to '
+                    f'{_money(k.get(f"best_{a}_then_{b}", float("nan")), signed=True)}.')
         blocks.append(f'<div class="card" style="margin-top:14px"><h3>Does picking the best timeframes on one period work on another?</h3>'
                       f'<p class="cap">{cap}</p>{_fig(fig, f"tf_scatter_{sym}")}</div>')
     return "".join(blocks)
@@ -352,11 +355,18 @@ def section_split(out: Path, sym: str, kind: str, base: BacktestConfig) -> str:
         ttl = "All windows added up" if w == "sum" else WIN_LABEL.get(w, w)
         cards.append(f'<div class="card"><h3>{ttl}</h3>{_fig(fig, f"{kind}_{sym}_{w}")}</div>')
     name = {"open": "OPEN", "fc": "FORCE-CLOSE", "book": "BOOK"}[sec]
+    # the grid has no grey-fill in any cell; whether its diagonal is the live rule depends on what the live section does
+    live_fill = {"open": base.open_grey_fill, "fc": base.fc_grey_fill, "book": base.book_grey_fill}[sec]
+    if live_fill:
+        strict = "no grey-fill anywhere in this grid, so the diagonal is a little stricter than the live score"
+        frame = "Gold frame = the live timeframe (the live score also fills a grey vote from the other indicator)."
+    else:
+        strict = "no grey-fill anywhere in this grid; on the diagonal that is the live rule"
+        frame = "Gold frame = the live setting."
     return (f'<h3 style="margin:22px 0 4px;font-size:13.5px">{name}: RSI on one timeframe, MACD on another</h3>'
             f'<p class="lede" style="margin:0 0 10px;color:var(--ink-2)">On the diagonal both indicators read the same timeframe. '
-            f'Every cell needs both votes to agree (no grey-fill anywhere in this grid, so the diagonal is a little stricter than '
-            f'the live score). Net P/L of one fixed 0.01-lot unit, USD; ✕ = wipes a real $2,000 account; everything else as live. '
-            f'{"Gold frame = the live setting." if mark else ""}</p>'
+            f'Every cell needs both votes to agree ({strict}). Net P/L of one fixed 0.01-lot unit, USD; ✕ = wipes a real '
+            f'$2,000 account; everything else as live. {frame if mark else ""}</p>'
             f'<div class="grid2">{"".join(cards)}</div>')
 
 
@@ -674,8 +684,14 @@ def section_robust(out: Path, sym: str) -> str:
         for c in keep:
             if c in money:
                 t[c] = t[c].map(lambda v: _money(v, signed=(c != "max_dd_usd")))
+        for c, nd in (("win_rate_pct", 1), ("profit_factor", 2)):
+            if c in t.columns:
+                t[c] = t[c].map(lambda v, nd=nd: _num(float(v), nd))        # no closed basket / no losing basket: a dash
+        if "start_shift_days" in t.columns:
+            t["start_shift_days"] = t["start_shift_days"].astype(int)
         return t.rename(columns={"net_profit": "Net P/L", "max_dd_usd": "Max DD", "baskets": "Baskets",
-                                 "win_rate_pct": "Win %", "profit_factor": "PF", "largest_loss": "Worst basket"})
+                                 "win_rate_pct": "Win %", "profit_factor": "PF", "largest_loss": "Worst basket",
+                                 "start_shift_days": "Started N days later", "segment": "Period"})
 
     from ..analysis.robustness import spread_of
 
@@ -719,7 +735,7 @@ def section_robust(out: Path, sym: str) -> str:
         card("Start date", f"Same settings, same end, started N days later (raw ticks, one path each; starts in a closed market "
              f"repeat the next open and are left out). Net P/L ranged {_money(t['net_profit'].min(), signed=True)} … "
              f"{_money(t['net_profit'].max(), signed=True)}.",
-             fmt(t, ["start_shift_days", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor"]), ["start_shift_days"])
+             fmt(t, ["start_shift_days", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor"]), ["Started N days later"])
     p = d / "segments_quarterly.csv"
     if p.exists():
         t = pd.read_csv(p)
@@ -729,7 +745,7 @@ def section_robust(out: Path, sym: str) -> str:
         tq.insert(3, "Stopped out", t["stopped_out"].map(lambda v: "YES" if bool(v) else "no"))
         card("Five quarters, each on a fresh $2,000", f"The live settings with the unit auto-step (per-second replay, one path "
              f"each; the table at the top of the page gives eight paths per quarter). {pos} of {len(t)} quarters ended positive; "
-             f"{so} ended in a stop-out.", tq.rename(columns={"segment": "Quarter", "role": "Used for"}), ["Quarter", "Used for"])
+             f"{so} ended in a stop-out.", tq.rename(columns={"Period": "Quarter", "role": "Used for"}), ["Quarter", "Used for"])
     for fn, ttl, cap in (("segments_monthly.csv", "Month by month, each on a fresh $2,000", "Calendar months over all fifteen months."),
                          ("segments_weekly.csv", "Week by week, each on a fresh $2,000", "Seven-day slices of the asked-for window.")):
         p = d / fn
@@ -740,9 +756,9 @@ def section_robust(out: Path, sym: str) -> str:
             so = int(whole["stopped_out"].astype(bool).sum())
             tt = fmt(t, ["segment", "net_profit", "max_dd_usd", "baskets", "win_rate_pct", "profit_factor", "largest_loss"])
             if "partial" in t.columns:
-                tt["segment"] = [x + (" (part)" if bool(pp) else "") for x, pp in zip(t["segment"], t["partial"])]
+                tt["Period"] = [x + (" (part)" if bool(pp) else "") for x, pp in zip(t["segment"], t["partial"])]
             card(ttl, f"{cap} Per-second replay, one path each. {pos} of {len(whole)} whole periods ended positive, {so} in a "
-                 f"stop-out.", tt, ["segment"])
+                 f"stop-out.", tt, ["Period"])
     b = _read_json(d / "bootstrap.json")
     if b:
         rows = []
@@ -784,8 +800,11 @@ def build_index(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), live
     if stale:
         banner = (f'<div class="card" style="border-color:{T.DOWN};margin-bottom:18px"><h3>Some results on this page are stale</h3>'
                   f'<p class="cap">{len(stale)} result file{"s were" if len(stale) != 1 else " was"} written by another build of the '
-                  f'engine, or for other live settings than this checkout has now (for example {html.escape(stale[0])}). Run '
-                  f'<code>python -m backtesting reproduce</code> to recompute them before reading the numbers.</p></div>')
+                  f'engine, for other live settings or from other tick data than this checkout has now, or '
+                  f'{"carry" if len(stale) != 1 else "carries"} no build stamp (for example {html.escape(stale[0])}). Run '
+                  f'<code>python -m backtesting reproduce</code> to recompute them before reading the numbers'
+                  + (" (the fidelity windows are re-checked with <code>python -m backtesting parity</code>)"
+                     if any(x.startswith("parity/") for x in stale) else "") + '.</p></div>')
     stack = '<div style="display:grid;gap:14px">'       # full-width cards, one under the other
     agree_tf = max(base[symbols[0]].fc_weights, key=lambda k: TF_SECONDS.get(k, 0))
 

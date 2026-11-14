@@ -64,7 +64,7 @@ def test_groups_are_formed_on_the_analysed_quarters_only(results):
     assert clean["one_or_more_pct"] == 100.0
     assert clean["wiped_in_holdout_pct"] == 50.0
     assert clean["mean_holdout_net_per_quarter"] == pytest.approx((10 + -45) / 2 / 2)
-    assert g.loc["3 of 3 profitable, but the account wiped in one", "settings"] == 1
+    assert g.loc["3 of 3 profitable, but the account wiped in at least one", "settings"] == 1
     assert g.loc["2 of 3 profitable", "settings"] == 1
     assert g.loc["0 of 3 profitable", "both_holdout_profitable_pct"] == 100.0
     assert "1 of 3 profitable" not in g.index                    # empty groups are left out
@@ -98,7 +98,7 @@ def test_wipe_out_is_read_from_the_account_replay_when_present(results):
     # hold-out columns have no replay here: the fallback applies to them
     assert list(m["h_ruin"]) == [0, 1, 0, 0, 0]
     g = H.timeframe_carry_over(results, SYM)[0].set_index("group")["settings"]
-    assert g["3 of 3 profitable, account never wiped"] == 2 and g["3 of 3 profitable, but the account wiped in one"] == 1
+    assert g["3 of 3 profitable, account never wiped"] == 2 and g["3 of 3 profitable, but the account wiped in at least one"] == 1
 
 
 def test_a_hold_out_result_never_changes_the_grouping(results):

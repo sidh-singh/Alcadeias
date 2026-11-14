@@ -378,7 +378,7 @@ def sec_candidates(out: Path, sym: str) -> str:
         })
         if "account_net" in df.columns:
             t["One run of all 15 months on $2,000"] = df["account_net"].map(_usd)
-            t["stopped out"] = df["account_stopped_out"].map(lambda v: "**yes**" if bool(v) else "no")
+            t["That run stopped out"] = df["account_stopped_out"].map(lambda v: "**yes**" if bool(v) else "no")
         return _table(t)
     t = pd.DataFrame({
         "Setting": df["candidate"].map(lambda x: f"**{x}**" if x == "live timeframes · live ladder" else x),
@@ -552,7 +552,8 @@ def sec_parity(out: Path) -> str:
             continue
         ref = j.get("refused_ref") or {}
         refused = ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in ref.items() if v) or "none"
-        rows.append({"Window (UTC)": f"{j.get('symbol')} {j.get('start')} → {j.get('end')}",
+        rows.append({"Window (UTC)": (f"{j.get('symbol')} {j.get('start')} → {j.get('end')}" if j.get("symbol") and j.get("start")
+                                      else p.stem),
                      "Settings": j.get("scores", "") + (" + other overrides" if j.get("config_overrides") else ""),
                      "Live polls": f"{j.get('polls_ref', 0):,}",
                      "Signal / score / fill mismatches": f"{j.get('signal_mismatches')} / {j.get('score_mismatches')} / {j.get('fill_mismatches')}",
@@ -604,8 +605,9 @@ def quality_notes(out: Path, symbols: Sequence[str]) -> str:
                             f"({h['minutes'] / 60:.1f} h, price {h['price_jump_pct']:+.1f}% across it)" for h in holes)
             parts.append(f"**{sym} has {len(holes)} hole{'s' if len(holes) != 1 else ''} in the archive** — the market traded, the "
                          f"history is missing: {lst}. The backtest does not pretend to know what happened inside them: a basket "
-                         f"open at the last quote before a hole is closed there, and no basket is opened for 24 hours after the "
-                         f"history resumes (see `data_hole_s` in the README).")
+                         f"open at the last quote before a hole is closed there, and no basket is opened for "
+                         f"{DATA_HOLE_QUARANTINE_S / 86400:.1f} days after the history resumes, whatever the settings (38 H4 "
+                         f"bars: the time the slowest indicator needs to leave the hole behind; see `data_hole_s` in the README).")
         elif q["days"]["missing"]:
             days = ", ".join(f"{d} ({pd.Timestamp(d).day_name()})" for d in q["days"]["missing"])
             other = q["gaps_over_3min"]["by_kind"].get("other", 0)
@@ -640,15 +642,18 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
     stale = stale_outputs(out, live_root)
     if stale:
         A(f"> **Some results below are stale.** {len(stale)} result file{'s were' if len(stale) != 1 else ' was'} written by "
-          f"another build of the engine, or for other live settings than this checkout has now (for example `{stale[0]}`). "
-          f"Run `python -m backtesting reproduce` to recompute them before reading the numbers.\n")
+          f"another build of the engine, for other live settings or from other tick data than this checkout has now, or "
+          f"{'carry' if len(stale) != 1 else 'carries'} no build stamp (for example `{stale[0]}`). "
+          f"Run `python -m backtesting reproduce` to recompute them before reading the numbers"
+          + (" (the fidelity windows are re-checked with `python -m backtesting parity`)" if any(x.startswith("parity/") for x in stale) else "")
+          + ".\n")
     A("- **Results page:** [`backtest_results/index.html`](backtest_results/index.html) (open in a browser; every chart is interactive)")
     A("- **Per-run reports:** linked in the table below — candles with every fill, equity, attribution, second-by-second close-ups")
     A("- **Replay studio:** `python -m backtesting studio` — watch the bot trade the history tick by tick")
     A("- **How it works, how to run it:** [`backtesting/README.md`](backtesting/README.md)\n")
 
     A("## Results with the live settings\n")
-    A("$2,000 start, 1:2000 leverage, unit auto-stepped from the balance exactly as the bot does it "
+    A("$2,000 start, 1:2000 account leverage (BTC margined at 1:400), unit auto-stepped from the balance exactly as the bot does it "
       "(`floor(balance / 2500) + 1`), real bid/ask quotes. The three-month runs replay every tick at the live loop's "
       "cadence (one pass a second, 0.1 s more after an order, 1 s more after a ladder add); the fifteen-month runs use "
       "the per-second series (one pass on every whole second).\n")
@@ -705,13 +710,14 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
                 A(f"### {sym}\n")
                 A(t + "\n")
 
-    A("## Which timeframes for OPEN, FORCE-CLOSE" + (", BOOK" if netting else "") + " — RSI and MACD\n")
-    A("Each setting was run on three separate three-month windows: the one asked for (13 Aug → 13 Nov) and the two before "
-      "it. To compare settings fairly they all trade a fixed 0.01-lot unit on a balance that cannot be stopped out; the "
-      "column \"wiped $2,000\" then says whether the real account would have survived. A timeframe choice is only worth "
-      "anything if it holds up on windows it was not picked on.\n")
-    for sym in symbols:
-        t = sec_timeframes(out, sym, base[sym])
+    tf = [(sym, sec_timeframes(out, sym, base[sym])) for sym in symbols]
+    if any(t for _, t in tf):
+        A("## Which timeframes for OPEN, FORCE-CLOSE" + (", BOOK" if netting else "") + " — RSI and MACD\n")
+        A("Each setting was run on three separate three-month windows: the one asked for (13 Aug → 13 Nov) and the two before "
+          "it. To compare settings fairly they all trade a fixed 0.01-lot unit on a balance that cannot be stopped out; the "
+          "column \"wiped $2,000\" then says whether the real account would have survived. A timeframe choice is only worth "
+          "anything if it holds up on windows it was not picked on.\n")
+    for sym, t in tf:
         if t:
             A(f"### {sym}\n")
             if (out / "img" / f"{sym}_timeframes.png").exists():
@@ -744,19 +750,22 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
     cd = [(sym, sec_candidates(out, sym)) for sym in symbols]
     if any(t for _, t in cd):
         A("## Candidate settings\n")
-        ens = all((out / "candidates" / f"{sym}_timing.csv").exists() for sym in symbols)
+        from .index import candidates_mode
+        from ..analysis import holdout as H
         A("Five hand-picked timeframe families, the same for both symbols, each with the live ladder, without a ladder, and "
           "with a short spaced ladder. They put H4 into the decision in different ways and were chosen by eye from an earlier "
           "sweep of the three 2026 quarters: they are not the best of the sweep on either symbol, those quarters flatter "
-          "them, and the two hold-out columns are the only independent evidence. "
-          + ("Because one run is one path, every setting was run eight times per quarter on raw ticks (eight random loop "
-             "timings, as above), each on a fresh $2,000 with the unit auto-step: 40 quarter-runs per setting. Cells show "
-             "the median of the eight; ✕ = one or more of the eight ended in a stop-out.\n" if ens else
-             "One fixed 0.01-lot unit per quarter, a single path each; ✕ = the same baskets wipe a real $2,000 account in "
-             "that quarter.\n"))
+          "them, and the two hold-out columns are the only independent evidence.\n")
         for sym, t in cd:
             if t:
                 A(f"### {sym}\n")
+                # the sentence follows the table actually printed for this symbol (an ensemble or single paths)
+                if candidates_mode(H.candidate_table(out, sym)) == "ensemble":
+                    A("Because one run is one path, every setting was run eight times per quarter on raw ticks (eight random "
+                      "loop timings, as above), each on a fresh $2,000 with the unit auto-step: 40 quarter-runs per setting. "
+                      "Cells show the median of the eight; ✕ = one or more of the eight ended in a stop-out.\n")
+                else:
+                    A("One fixed 0.01-lot unit per quarter, a single path each; " + _WIPED_NOTE + ".\n")
                 if (out / "img" / f"{sym}_candidates.png").exists():
                     A(f"![{sym}: candidate settings on five quarters](backtest_results/img/{sym}_candidates.png)\n")
                 A(t + "\n")
@@ -765,7 +774,8 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
     if any(t for _, t in pk):
         A("## What-ifs aimed at the flaws\n")
         A("Each row changes the rules in one deliberate way that answers a weakness found above. None was tuned on the data. "
-          "One 0.01-lot unit; ✕ / \"wiped\" as before; sorted by windows survived, then by the three-window total.\n")
+          "One fixed 0.01-lot unit per quarter. \"Wiped $2,000 in\" counts the quarters in which the same baskets wipe a "
+          "real $2,000 account (the bot's own lot sizing applied); sorted by that count, then by the three-quarter total.\n")
         for sym, t in pk:
             if t:
                 A(f"### {sym}\n")
@@ -776,8 +786,8 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
     lv = [(sym, sec_levers(out, sym)) for sym in symbols]
     if any(t for _, t in lv):
         A("## Every other parameter, one at a time\n")
-        A("One parameter changed, everything else at the live value. Net P/L of one 0.01-lot unit per window; ✕ = the loss "
-          "exceeded $2,000 at some point in that window. Charts of the same numbers are on the results page.\n")
+        A("One parameter changed, everything else at the live value. Net P/L of one fixed 0.01-lot unit per quarter; "
+          + _WIPED_NOTE + ". Charts of the same numbers are on the results page.\n")
         for sym, t in lv:
             if t:
                 A(f"<details><summary><b>{sym}</b> — all parameter tables</summary>\n\n{t}\n\n</details>\n")
@@ -805,8 +815,8 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
             A("**The data is the broker's own.** Exness's published tick history for `XAUUSDm` and `BTCUSDm`:\n\n" + qual + "\n")
         A("**What it cannot know.** Real order latency and slippage, requotes, terminal or VPS outages, bot restarts, how "
           "long each pass of the live loop really takes, and whether the live MT5 server's ticks match the archive tick for "
-          "tick. The timing and cost tests above show how sensitive the result is to the first and the last of these; they "
-          "do not bound them. Leverage is taken as 1:2000 on gold and 1:400 on BTC and swaps as zero (Exness accounts are "
+          "tick. The timing and cost tests above show how sensitive the result is to order latency, slippage and the "
+          "duration of a pass; they do not bound them. Leverage is taken as 1:2000 on gold and 1:400 on BTC and swaps as zero (Exness accounts are "
           "swap-free by default); neither was read from a real account. A backtest is a description of the past, not a "
           "forecast.\n")
 

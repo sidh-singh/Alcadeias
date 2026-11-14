@@ -55,6 +55,8 @@ class Prepared:
     start_row: Dict[str, np.ndarray]  # first row of each bar (-1 for warm-up bars)
     # silences of five minutes or more, (from_ms, to_ms), in the warm-up history and inside the window
     gaps: np.ndarray = field(default_factory=lambda: np.zeros((0, 2), np.int64))
+    # time of the first quote the history holds at or after ``end_ms`` (-1: not looked up, the end is used)
+    after_ms: int = -1
     _cache: dict = field(default_factory=dict, repr=False)
 
     @property
@@ -153,10 +155,23 @@ def prepare(symbol: str, start, end, tfs: Sequence[str], mode: str = "sec",
     pre = store.load_sec(symbol, start_ms - _PRE_MS, start_ms, store_dir) if warm_from < start_ms else {}
     pre_t = np.asarray(pre["t_ms"], np.int64) if pre and len(pre["t_ms"]) else np.zeros(0, np.int64)
     return Prepared(symbol, start_ms, end_ms, mode, t_ms, bid, ask, list(tfs),
-                    closes, bar_t, nwarm, start_row, _silences(m1, t_ms, pre_t))
+                    closes, bar_t, nwarm, start_row, _silences(m1, t_ms, np.concatenate([pre_t, t_ms[:1]])),
+                    after_ms=_next_quote_ms(symbol, end_ms, store_dir))
 
 
 _PRE_MS = 600_000      # how far before the window the exact quote times are looked at
+_AFTER_MS = 7 * 86_400_000     # how far past the window the time of the next quote is looked for
+
+
+def _next_quote_ms(symbol: str, end_ms: int, store_dir: Path = store.DEFAULT_STORE_DIR) -> int:
+    """
+    The time of the first quote the history holds at or after the end of a window (to the second),
+    or the end itself when the history stops there. Only this TIME is used, never the price: a
+    window whose last quote is followed by half an hour or more without one ended with the market
+    closed, and an order sent after that quote has to be refused there as it is everywhere else.
+    """
+    nxt = store.load_sec(symbol, end_ms, end_ms + _AFTER_MS, store_dir)
+    return int(nxt["t_ms"][0]) if nxt and len(nxt["t_ms"]) else int(end_ms)
 
 
 def _silences(m1: dict, t_ms: np.ndarray, pre_t: Optional[np.ndarray] = None, at_least_ms: int = 300_000) -> np.ndarray:
@@ -228,6 +243,7 @@ _SCALAR_NAMES = {
     K.S_MIN_MARGIN_LEVEL: "min_margin_level_pct", K.S_OPEN_PROFIT_END: "open_profit_at_end",
     K.S_MAX_MARGIN: "max_margin_used", K.S_BLOWN: "stopped_out", K.S_LAST_T: "last_poll_ms",
     K.S_MAX_FLOAT_LOSS: "max_floating_loss", K.S_OPEN_NPOS_END: "open_positions_at_end",
+    K.S_OPEN_MAE_END: "open_mae_at_end", K.S_OPEN_UNITS_END: "open_units_at_end",
     K.S_OPEN_LOTS_END: "open_lots_at_end",
 }
 
@@ -267,6 +283,7 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
     ci = np.zeros(K.CI_N, np.int64)
     ci[K.CI_START_MS] = max(store.to_ms(cfg.start), prep.start_ms)
     ci[K.CI_END_MS] = min(store.to_ms(cfg.end), prep.end_ms)
+    ci[K.CI_AFTER_MS] = prep.after_ms if prep.after_ms >= 0 else prep.end_ms
     ci[K.CI_POLL_MS] = int(cfg.poll_interval_ms)
     ci[K.CI_LATENCY_MS] = int(cfg.latency_ms)
     ci[K.CI_OPEN_DELAY_MS] = int(cfg.open_order_delay_ms)
@@ -382,8 +399,10 @@ def run(cfg: BacktestConfig, prep: Optional[Prepared] = None, mode: str = "sec",
         off = [name for name, v in (("start", ci[K.CI_START_MS]), ("poll_interval_ms", ci[K.CI_POLL_MS]),
                                     ("open_order_delay_ms", ci[K.CI_OPEN_DELAY_MS]),
                                     ("add_order_delay_ms", ci[K.CI_ADD_DELAY_MS]),
-                                    ("latency_ms", ci[K.CI_LATENCY_MS]), ("poll_jitter_ms", ci[K.CI_JITTER_MS]))
+                                    ("latency_ms", ci[K.CI_LATENCY_MS]))
                if int(v) % 1000]
+        if int(ci[K.CI_JITTER_MS]) > 0:
+            off.append("poll_jitter_ms")          # any jitter moves polls off the whole second
         if off:
             warnings.warn(f"{', '.join(off)} not a whole number of seconds: the per-second series cannot represent "
                           f"that, use mode='ticks'", RuntimeWarning, stacklevel=2)
@@ -430,6 +449,13 @@ def run(cfg: BacktestConfig, prep: Optional[Prepared] = None, mode: str = "sec",
     )
     res.scalars["initial_balance"] = float(cfg.initial_balance)
     res.scalars["rows"] = float(prep.n_rows)
+    if res.scalars["stopped_out"] and len(res.equity):
+        # the kernel stops before it takes another sample: close the series with the account as the stop-out left it
+        last = res.equity.iloc[-1].copy()
+        last["time"] = _ts(np.array([res.scalars["last_poll_ms"]]))[0]
+        last["balance"] = last["equity"] = res.scalars["final_balance"]
+        last["lots"], last["n_pos"] = 0.0, 0
+        res.equity = pd.concat([res.equity, last.to_frame().T], ignore_index=True).astype(res.equity.dtypes.to_dict())
     return res
 
 

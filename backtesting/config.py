@@ -81,6 +81,10 @@ def _norm_weights(w: Optional[Dict[str, Weight]]) -> Dict[str, Tuple[float, floa
     return out
 
 
+# How long fresh entries stay out after a hole in the tick history: 38 H4 bars (see BacktestConfig.data_hole_quarantine_s).
+DATA_HOLE_QUARANTINE_S = 38 * 4 * 3600.0
+
+
 @dataclass
 class BacktestConfig:
     # ── what / when ──────────────────────────────────────────────────────────
@@ -164,12 +168,13 @@ class BacktestConfig:
     #
     # The quarantine exists because the bars straddle the hole: the first bar after it carries the
     # whole price change, and every bar-count window (RSI smoothing, the pivot scan) still reaches
-    # back across it. None = long enough for every indicator THIS configuration reads to have left
-    # the hole behind: peak_lookback + 2 x pivot_width + rsi_length bars of its slowest timeframe
-    # (38 bars with the live settings: 38 h if nothing slower than H1 is read, 6.3 days when H4 is,
-    # as it is by the fifth ladder tier), and never less than a day. A number fixes it instead.
+    # back across it. It is 38 H4 bars (6.3 days): peak_lookback + 2 x pivot_width + rsi_length bars
+    # of the slowest timeframe the strategy family reads, with the live indicator settings. It is
+    # one fixed length on purpose, the same for every configuration, so that the rows of a sweep or
+    # a what-if table are all kept out of the market for the same days. It removes most, not all,
+    # of the distortion.
     data_hole_s: Optional[float] = None
-    data_hole_quarantine_s: Optional[float] = None
+    data_hole_quarantine_s: float = DATA_HOLE_QUARANTINE_S
 
     # ── trading window (symbols.json; server time = UTC) ─────────────────────
     window_enabled: bool = True
@@ -230,11 +235,7 @@ class BacktestConfig:
     @property
     def effective_data_hole_quarantine_s(self) -> float:
         """How long fresh entries stay out after a hole in the tick history (see ``data_hole_quarantine_s``)."""
-        if self.data_hole_quarantine_s is not None:
-            return float(self.data_hole_quarantine_s)
-        slowest = max(TF_SECONDS[tf] for tf in self.timeframes()) if self.timeframes() else 3600
-        bars = int(self.peak_lookback) + 2 * int(self.pivot_width) + int(self.rsi_length)
-        return float(max(86_400, bars * slowest))
+        return float(self.data_hole_quarantine_s)
 
     @property
     def effective_leverage(self) -> float:

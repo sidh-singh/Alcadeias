@@ -107,7 +107,8 @@ def recorded(monkeypatch):
     monkeypatch.setattr(sweep, "run_grid", fake_grid("run_grid"))
     for name in ("cost_grid", "start_shift", "segments", "timing_grid"):
         monkeypatch.setattr(robustness, name, fake_grid(name))
-    monkeypatch.setattr(robustness, "bootstrap", lambda baskets, account, **kw: {"note": SAMPLE})
+    monkeypatch.setattr(robustness, "bootstrap",
+                        lambda baskets, account, step_up, unit_max, **kw: {"note": SAMPLE, "sizing": [step_up, unit_max]})
     return seen
 
 
@@ -207,13 +208,21 @@ def test_robust_writes_its_tables_and_keeps_raw_tick_workers_few(recorded, tmp_p
     assert cli.main(command_line("robust", tmp_path)) == 0
     out = tmp_path / "robust"
     assert {p.name for p in out.iterdir()} == {"costs.csv", "start_shift.csv", "segments.csv", "timing.csv", "bootstrap.json"}
-    assert json.loads((out / "bootstrap.json").read_text(encoding="utf-8")) == {"note": SAMPLE}
+    # the day bootstrap is made twice and says which is which: the account as the bot sizes it, and one fixed unit
+    cfg = recorded["cfg"][-1]
+    assert json.loads((out / "bootstrap.json").read_text(encoding="utf-8")) == {
+        "source": "raw ticks, live cadence", "baskets": 0,
+        "live_units": {"note": SAMPLE, "sizing": [cfg.step_up_balance, cfg.unit_max_limit]},
+        "fixed_unit_1": {"note": SAMPLE, "sizing": [0.0, 1]}}
+    assert recorded["mode"][-1] == "ticks" and cfg.open_order_delay_ms == 100     # the same path the pipeline bootstraps
     # every worker of a raw-tick grid loads the whole window of ticks; the per-second grid may use every core
     jobs = recorded["jobs"]
     assert jobs["cost_grid"] == jobs["start_shift"] == jobs["timing_grid"] == 2 and jobs["segments"] is None
 
     assert cli.main(command_line("robust", tmp_path, "--jobs", "8", "--no-ticks")) == 0
     assert jobs["cost_grid"] == jobs["start_shift"] == 3 and jobs["segments"] == 8
+    assert recorded["mode"][-1] == "sec"
+    assert json.loads((out / "bootstrap.json").read_text(encoding="utf-8"))["source"] == "per-second replay"
 
 
 # ───────────────────────────── run: raw ticks or the per-second series ─────────────────────────────

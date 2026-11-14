@@ -33,7 +33,7 @@ ACCOUNT = 2000.0     # the owner's account: what "wiped" is measured against whe
 
 
 def replay_account(baskets: pd.DataFrame, account: float, step_up: float, unit_max: int,
-                   open_profit: float = 0.0, open_units: int = 1) -> Dict[str, float]:
+                   open_profit: float = 0.0, open_units: int = 1, open_mae: float = 0.0) -> Dict[str, float]:
     """
     The same sequence of baskets on a real account of ``account`` dollars with the bot's own sizing.
 
@@ -44,6 +44,10 @@ def replay_account(baskets: pd.DataFrame, account: float, step_up: float, unit_m
     This replays the baskets in order with that rule: each basket's result and its worst floating
     loss are scaled by (unit the balance implies) / (unit it was run at), and the account is
     wiped when balance plus a basket's worst floating loss reaches zero (stop-out level 0 %).
+
+    A basket still open when the window ends counts like the others: with its worst floating
+    loss so far (``open_mae``) and its floating result at the end (``open_profit``), both at the
+    unit it was run at (``open_units``).
 
     It is the same path re-sized, not a second simulation: the small differences a different lot
     size makes to the decisions themselves (cent rounding at the thresholds) are not in it.
@@ -77,11 +81,14 @@ def replay_account(baskets: pd.DataFrame, account: float, step_up: float, unit_m
                 bal = 0.0
                 break
     final = bal
-    if not wiped and open_profit != 0.0:
-        k = unit_now() / max(float(open_units), 1.0)
+    if not wiped and (open_profit != 0.0 or open_mae != 0.0):
+        u = unit_now()
+        top_unit = max(top_unit, u)
+        k = u / max(float(open_units), 1.0)
+        worst = bal + k * min(open_mae, open_profit, 0.0)
+        low = min(low, worst)
         final = bal + k * open_profit
-        low = min(low, final)
-        if final <= 0.0:
+        if worst <= 0.0 or final <= 0.0:
             wiped, final = True, 0.0
     return {"acct_net": round(final - account, 2), "acct_wiped": bool(wiped),
             "acct_dip": round(min(max(account - low, 0.0), account), 2), "acct_max_units": int(top_unit)}
@@ -202,7 +209,8 @@ def score_row(res, account: float = ACCOUNT) -> Dict[str, float]:
     net = sc["final_equity"] - init
     if cfg.fixed_units > 0 or abs(init - account) > 1e-9:
         acct = replay_account(b, account, cfg.step_up_balance, cfg.unit_max_limit,
-                              open_profit=sc["open_profit_at_end"], open_units=max(cfg.fixed_units, 1))
+                              open_profit=sc["open_profit_at_end"], open_mae=sc.get("open_mae_at_end", 0.0),
+                              open_units=max(int(sc.get("open_units_at_end", 0) or 0), 1))
     else:
         acct = {"acct_net": round(net, 2), "acct_wiped": bool(sc["stopped_out"]),
                 "acct_dip": round(min(max(init - sc["min_equity"], 0.0), init), 2),

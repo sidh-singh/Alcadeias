@@ -10,7 +10,9 @@ the files in between stop agreeing with each other.
 from __future__ import annotations
 
 import json
+import shutil
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -121,3 +123,106 @@ def test_a_second_run_recomputes_nothing_and_a_foreign_build_is_recomputed(resul
     assert "Some results on this page are stale" in build_index(out, symbols=(SYM,), live_root=live_root).read_text(encoding="utf-8")
     E.reproduce(out, symbols=(SYM,), live_root=live_root, only=["sweeps"], n_jobs=1)
     assert target.stat().st_mtime_ns != before and E.stale_outputs(out, live_root) == []
+
+
+def test_unstamped_outputs_and_outdated_parity_reports_count_as_stale(results, live_root):
+    out, _ = results
+    mf = out / "manifest.json"
+    keep = mf.read_text(encoding="utf-8")
+    try:
+        data = json.loads(keep)
+        data.pop("levers/BTCUSDm.csv")                                  # an output nobody vouches for
+        mf.write_text(json.dumps(data), encoding="utf-8")
+        assert E.stale_outputs(out, live_root) == ["levers/BTCUSDm.csv"]
+        mf.unlink()                                                     # no manifest: nothing is vouched for
+        stale = E.stale_outputs(out, live_root)
+        assert {"baseline/BTCUSDm/summary.json", "sweeps/BTCUSDm_timeframes.csv", "robustness/BTCUSDm/bootstrap.json",
+                "candidates/BTCUSDm_timing.csv", "data_quality/BTCUSDm.json"} <= set(stale)
+        mf.write_text(keep[:200], encoding="utf-8")                     # a damaged manifest is no manifest
+        assert E.stale_outputs(out, live_root) == stale
+    finally:
+        mf.write_text(keep, encoding="utf-8")
+    assert E.stale_outputs(out, live_root) == []
+
+    # a parity report says which engines and which live rules it compared; anything else is not the current comparison
+    pdir = out / "parity"
+    pdir.mkdir()
+    try:
+        now = {"engine": E.parity_fingerprint(), "live": E.live_fingerprint(live_root)}
+        (pdir / "current.json").write_text(json.dumps({"ok": True, "stamp": now}), encoding="utf-8")
+        (pdir / "no_stamp.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+        (pdir / "other_rules.json").write_text(json.dumps({"ok": True, "stamp": {**now, "live": "0" * 12}}), encoding="utf-8")
+        (pdir / "other_engine.json").write_text(json.dumps({"ok": True, "stamp": {**now, "engine": "0" * 12}}), encoding="utf-8")
+        assert E.stale_outputs(out, live_root) == ["parity/no_stamp.json", "parity/other_engine.json", "parity/other_rules.json"]
+        from backtesting.viz.index import build_index
+        page = build_index(out, symbols=(SYM,), live_root=live_root).read_text(encoding="utf-8")
+        assert "Some results on this page are stale" in page and "python -m backtesting parity" in page
+    finally:
+        shutil.rmtree(pdir)
+
+
+def test_a_run_stops_rather_than_stamp_a_result_of_code_that_changed_under_it(results, live_root, monkeypatch):
+    out, _ = results
+    real = E.engine_fingerprint
+    calls = {"n": 0}
+
+    def changing():                       # the files on disk "change" once the run has taken its fingerprints
+        calls["n"] += 1
+        return real() if calls["n"] == 1 else "f" * 12
+
+    monkeypatch.setattr(E, "engine_fingerprint", changing)
+    with pytest.raises(RuntimeError, match="changed on disk"):
+        E.reproduce(out, symbols=(SYM,), live_root=live_root, only=["levers"], force=True, n_jobs=1)
+    monkeypatch.undo()
+    assert E._RUN == {}                                                 # the frozen fingerprints do not outlive the run
+    # the table it had just rewritten is left without a stamp, so nothing certifies it and the next run recomputes it
+    assert "levers/BTCUSDm.csv" not in json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert E.stale_outputs(out, live_root) == ["levers/BTCUSDm.csv"]
+    E.reproduce(out, symbols=(SYM,), live_root=live_root, only=["levers"], n_jobs=1)
+    assert E.stale_outputs(out, live_root) == []
+
+
+def test_the_data_fingerprint_follows_the_quotes_the_pipeline_reads(results, fixture_store, tmp_path, monkeypatch):
+    _, _ = results                                                      # (the windows are the miniature ones)
+    root = tmp_path / "store"
+    shutil.copytree(fixture_store / SYM, root / SYM)
+    monkeypatch.setenv("ALCADEIAS_STORE_DIR", str(root))
+    fp = E.data_fingerprint(SYM)
+    assert len(fp) == 12 and fp == E.data_fingerprint(SYM)
+    end_ms = int(pd.Timestamp(E.LONG_WINDOW[1]).value // 1_000_000)
+
+    def edit(month, fn):
+        f = root / SYM / month / "sec.npz"
+        x = dict(np.load(f))
+        np.savez(f, **fn(x))
+
+    # quotes after the end of the last window (a month's archive that has grown since) are not the pipeline's data
+    edit("2026_11", lambda x: {"t_ms": np.append(x["t_ms"], end_ms + 10_000), "bid": np.append(x["bid"], x["bid"][-1]),
+                                "ask": np.append(x["ask"], x["ask"][-1])})
+    assert E.data_fingerprint(SYM) == fp
+    # when the archive was downloaded is not data either
+    meta = root / SYM / "2026_10" / "meta.json"
+    j = json.loads(meta.read_text(encoding="utf-8"))
+    meta.write_text(json.dumps({**j, "source": {"size": 1, "mtime": 123}}), encoding="utf-8")
+    assert E.data_fingerprint(SYM) == fp
+    # another tick count in an earlier month is other data ...
+    meta.write_text(json.dumps({**j, "ticks": int(j.get("ticks") or 0) + 1}), encoding="utf-8")
+    assert E.data_fingerprint(SYM) != fp
+    meta.write_text(json.dumps(j), encoding="utf-8")
+    assert E.data_fingerprint(SYM) == fp
+    # ... and so is one changed quote inside the window
+
+    def bump(x):
+        i = int(np.searchsorted(x["t_ms"], end_ms)) - 1
+        bid = x["bid"].copy()
+        bid[i] += 0.01
+        return {**x, "bid": bid}
+
+    edit("2026_11", bump)
+    assert E.data_fingerprint(SYM) != fp
+    # a checkout without the history cannot judge the data: '' is never compared
+    monkeypatch.setenv("ALCADEIAS_STORE_DIR", str(tmp_path / "empty"))
+    assert E.data_fingerprint(SYM) == ""
+    stamp = {"engine": "a", "live": "b", "data": fp}
+    assert E._matches(stamp, {"engine": "a", "live": "b", "data": ""}) and not E._matches(stamp, {"engine": "a", "live": "b", "data": "x"})
+    assert not E._matches(None, {"engine": "a"}) and not E._matches("garbage", {"engine": "a"})

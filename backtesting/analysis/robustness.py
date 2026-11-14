@@ -216,7 +216,7 @@ def _boot_paths(pnl_u, mae_u, day_start, day_len, picks, account, step_up, unit_
     return finals, dips, wiped
 
 
-def bootstrap(baskets: pd.DataFrame, account: float, step_up: float = 0.0, unit_max: int = 1,
+def bootstrap(baskets: pd.DataFrame, account: float, step_up: float, unit_max: int,
               n: int = 5000, seed: int = 7) -> Dict[str, float]:
     """
     Whole UTC days of baskets drawn WITH replacement (each day's baskets kept together and in
