@@ -10,6 +10,7 @@ output already exists, unless ``--force``):
   quality     data-quality report per symbol
   baseline    the live configuration, raw-tick replay with the live loop cadence, HTML report
   long        the same configuration over the longest history available
+  signal      what the RSI / MACD slope votes are made of and what followed them (closed bars)
   sweeps      which timeframes should drive OPEN / FORCE-CLOSE / BOOK -- RSI and MACD together
               and separately -- on three disjoint three-month windows
   levers      one-at-a-time sensitivity of every other parameter + structural what-ifs
@@ -118,9 +119,27 @@ def stage_baseline(out: Path, symbols: Sequence[str], live_root: Path, force: bo
              f"PF {s.get('profit_factor')}  ({time.time() - t0:.0f}s)")
         build_report(res, d, closeups=closeups, plotly_src="../../assets/plotly.min.js",
                      tfs=("M15", "H1", "H4") if name == "baseline" else ("H1", "H4"))
-        # the same configuration without the balance auto-step, for a like-for-like per-unit read
-        r1 = run(cfg.replace(fixed_units=1), mode="sec", light=True)
+        # the same run (same data resolution, same loop cadence) without the balance auto-step
+        r1 = run(cfg.replace(fixed_units=1), mode=mode, light=True)
         (d / "fixed_unit.json").write_text(json.dumps(score_row(r1), indent=2))
+
+
+def stage_signal(out: Path, symbols: Sequence[str], live_root: Path, force: bool = False) -> None:
+    """The slope votes on closed bars, per quarter and over the whole history (describes the signal, not the trading)."""
+    from .analysis.signal import vote_study
+    d = out / "signal"
+    d.mkdir(parents=True, exist_ok=True)
+    for sym in symbols:
+        p = d / f"{sym}.json"
+        if p.exists() and not force:
+            continue
+        cfg = live_config(sym, live_root)
+        tfs = sorted(set(cfg.open_weights) | set(cfg.fc_weights), key=lambda tf: cfg.timeframes().index(tf)
+                     if tf in cfg.timeframes() else 0)
+        res = {name: vote_study(sym, a, z, live_root=live_root, tfs=tfs)
+               for name, (a, z) in {**ALL_WINDOWS, "ALL": LONG_WINDOW}.items()}
+        p.write_text(json.dumps(res, indent=2))
+        _log(f"signal {cfg.variant} {sym}: votes on {', '.join(tfs)} over {len(res)} periods")
 
 
 def joint_grid(variant: str) -> Tuple[List[dict], List[dict]]:
@@ -281,6 +300,13 @@ def stage_robust(out: Path, symbols: Sequence[str], live_root: Path, force: bool
             "segments_weekly.csv": lambda: robustness.segments(cfg, fixed_days=7, n_jobs=n_jobs),
             "segments_quarterly.csv": lambda: _quarters(live_config(sym, live_root), n_jobs),
             "timing.csv": lambda: robustness.timing_grid(cfg, n_jobs=2),
+            # every quarter under eight loop timings: how much of a quarter's result is timing luck
+            "quarters_timing.csv": lambda: robustness.timing_ensemble(
+                live_config(sym, live_root), dict(sorted(ALL_WINDOWS.items(), key=lambda kv: kv[1][0])), n_jobs=2),
+            # the same at the sweeps' sizing (one fixed 0.01-lot unit, no stop-out): the noise in one sweep cell
+            "quarters_timing_fixed_unit.csv": lambda: robustness.timing_ensemble(
+                live_config(sym, live_root, fixed_units=1, initial_balance=SWEEP_BALANCE),
+                dict(sorted(ALL_WINDOWS.items(), key=lambda kv: kv[1][0])), n_jobs=2),
         }
         for name, fn in todo.items():
             p = d / name
@@ -468,9 +494,20 @@ def stage_candidates(out: Path, symbols: Sequence[str], live_root: Path, force: 
             df = sweep.run_grid(acct, grid, n_jobs=n_jobs, labels=labels)
             df.to_csv(p, index=False)
             _log(f"candidates {acct.variant} {sym}: real-account runs over {LONG_WINDOW[0]} → {LONG_WINDOW[1]}")
+        p = d / f"{sym}_timing.csv"
+        if not p.exists() or force:
+            # every candidate, every quarter, eight loop timings, raw ticks, a fresh $2,000 with the unit auto-step:
+            # a single run of a quarter is one path, the spread over timings is what a setting is worth
+            acct = live_config(sym, live_root)
+            grid, labels = candidate_grid(acct)
+            t0 = time.time()
+            df = robustness.timing_ensemble(acct, dict(sorted(ALL_WINDOWS.items(), key=lambda kv: kv[1][0])),
+                                            n_jobs=max(1, min(n_jobs or 4, 5)), overrides=grid, override_labels=labels)
+            df.to_csv(p, index=False)
+            _log(f"candidates {acct.variant} {sym}: {len(df)} timing runs ({time.time() - t0:.0f}s)")
 
 
-STAGES = ("quality", "baseline", "long", "sweeps", "levers", "improve", "holdout", "candidates", "robust")
+STAGES = ("quality", "baseline", "long", "signal", "sweeps", "levers", "improve", "holdout", "candidates", "robust")
 
 
 def reproduce(out: Path, symbols: Sequence[str] = SYMBOLS, live_root: Path = REPO_ROOT,
@@ -487,6 +524,8 @@ def reproduce(out: Path, symbols: Sequence[str] = SYMBOLS, live_root: Path = REP
             stage_baseline(out, symbols, live_root, force)
         elif st == "long":
             stage_baseline(out, symbols, live_root, force, window=LONG_WINDOW, name="long", mode="sec", closeups=False)
+        elif st == "signal":
+            stage_signal(out, symbols, live_root, force)
         elif st == "sweeps":
             stage_sweeps(out, symbols, live_root, force, n_jobs)
         elif st == "levers":

@@ -115,17 +115,25 @@ unless `--force`; `--only <stage ...>` picks some):
 | `quality` | `data_quality/` | is the tick history complete and sane? |
 | `baseline` | `baseline/<symbol>/` | the live settings on the three months asked for, raw ticks, $2,000 |
 | `long` | `long/<symbol>/` | the same over all fifteen months in one run |
+| `signal` | `signal/` | what the RSI / MACD slope votes are made of, and what price did after they agreed (closed bars, live `indicator.py`) |
 | `sweeps` | `sweeps/` | which timeframes for OPEN / FORCE-CLOSE / BOOK, RSI and MACD together and split |
 | `levers` | `levers/` | every other parameter, one at a time |
 | `improve` | `packages/` | what-ifs aimed at the weaknesses the baseline shows |
 | `holdout` | `sweeps/*_holdout.csv` | the timeframe grid again on two quarters never used to choose anything |
 | `candidates` | `candidates/` | a short list of settings on all five quarters and on the real account |
-| `robust` | `robustness/<symbol>/` | loop timing, latency, costs, start date, sub-periods, bootstrap |
+| `robust` | `robustness/<symbol>/` | loop timing, latency, costs, start date, sub-periods, bootstrap; every quarter under eight loop timings |
 
 Five three-month windows are used. `IS` (13 Aug → 13 Nov 2026) is the period asked for;
 `OOS1` and `OOS2` are the two quarters before it; settings are compared on these three.
 `HO2` and `HO1` (13 Aug 2025 → 13 Feb 2026) are a hold-out: nothing is selected on them,
 they only test what was selected.
+
+**One run is one path.** The result of a quarter rests on a handful of large baskets, and
+whether the bot is inside one when a sharp move starts depends on which tick its poll lands
+on: the same settings on the same ticks can end a quarter up or down when the loop phase
+moves by a quarter of a second. `robustness/<symbol>/quarters_timing.csv` therefore runs
+every quarter under eight loop timings; read single cells of a sweep with that spread in
+mind, and trust only patterns that repeat across windows.
 
 Sweeps trade a fixed 0.01-lot unit on a balance too large to be stopped out, so every
 setting is measured over the whole window; `max_loss_from_start >= 2000` then marks the
@@ -153,7 +161,7 @@ backtesting/
   config.py            BacktestConfig, symbol specs, BacktestConfig.live()
   data/                exness.py (download) · store.py (tick store) · quality.py
   engine/              kernels.py · fast.py · reference.py · parity.py
-  analysis/            metrics.py · diagnostics.py · sweep.py · robustness.py · holdout.py
+  analysis/            metrics.py · diagnostics.py · signal.py · sweep.py · robustness.py · holdout.py
   viz/                 report.py · index.py · markdown.py · studio.py · replay.py · snapshot.py · theme.py
   experiments.py       the pipeline behind backtest_results/
   cli.py               python -m backtesting ...
@@ -175,6 +183,7 @@ BTC ticks and 45 minutes of real gold ticks with their warm-up history.
 | `test_live_fault_injection.py` | three weaknesses of the live loop, demonstrated on the real code: a failed position read, a restart, a rejected order |
 | `test_levers_and_reports.py` | every experimental lever does what it says and is inert when off; reports and diagnostics build |
 | `test_store.py`, `test_config_metrics.py` | tick store and bar building; configuration loading; metrics |
+| `test_holdout_analysis.py` | the hold-out and candidate tables, the signal-vote study, the timing ensemble |
 | `test_studio.py` | the replay shows exactly the fills of the full run and never draws the future |
 
 `python -m pytest tests -q -m slow` adds the longer parity windows. To run the suite against

@@ -2,6 +2,7 @@
 Robustness tests: does a result survive things the bot cannot control?
 
 * ``timing_grid``     loop period, poll phase and order latency (needs raw ticks)
+* ``timing_ensemble`` the same few loop timings on several windows (how much of a result is timing luck?)
 * ``cost_grid``       wider spread, slippage, commission
 * ``start_shift``     the same strategy started a few days later (path dependence)
 * ``segments``        each sub-period on a fresh balance (is the edge stable in time?)
@@ -49,6 +50,50 @@ def timing_grid(cfg: BacktestConfig, periods_ms: Sequence[int] = (1000, 1250, 15
         grid.append(dict(poll_interval_ms=1000, latency_ms=int(lat), open_order_delay_ms=100))
         labels.append(dict(test="latency", poll_ms=1000, phase_ms=0, latency_ms=int(lat)))
     return run_grid(cfg, grid, n_jobs=n_jobs, mode="ticks", labels=labels, store_dir=store_dir)
+
+
+def timing_ensemble(cfg: BacktestConfig, windows: Dict[str, Tuple[str, str]],
+                    periods_ms: Sequence[int] = (1000, 1250), phases_ms: Sequence[int] = (0, 250, 500, 750),
+                    n_jobs: int = 2, store_dir: Optional[str] = None,
+                    overrides: Sequence[dict] = ({},), override_labels: Sequence[dict] = ({},)) -> pd.DataFrame:
+    """
+    ``cfg`` on every window under each (loop period, phase) pair, raw ticks, a fresh balance each time.
+
+    One run of a strategy whose result rests on a handful of large baskets says little: whether
+    the bot happens to be in a basket when a sharp move starts depends on which tick its poll
+    lands on. The spread of outcomes over a few equally plausible loop timings is the honest
+    figure for a window. Rows: (setting x) window x timing; ``overrides`` runs several
+    settings through the same timings (``override_labels`` names them).
+    """
+    out = []
+    for name, (a, z) in windows.items():
+        grid, labels = [], []
+        for ov, lab in zip(overrides, override_labels):
+            for p in periods_ms:
+                for ph in phases_ms:
+                    if ph >= p:
+                        continue
+                    grid.append({**ov, "poll_interval_ms": int(p), "open_order_delay_ms": 100,
+                                 "start": str(_ts(a) + pd.Timedelta(milliseconds=int(ph)))})
+                    labels.append({**lab, "window": name, "segment": f"{a} → {z}", "poll_ms": int(p), "phase_ms": int(ph)})
+        out.append(run_grid(cfg.replace(start=a, end=z), grid, n_jobs=n_jobs, mode="ticks", labels=labels, store_dir=store_dir))
+    return pd.concat(out, ignore_index=True)
+
+
+def ensemble_summary(df: pd.DataFrame, by: Sequence[str] = ()) -> pd.DataFrame:
+    """Per (``by`` ...,) window of a ``timing_ensemble``: median, range, how many timings lost money or were stopped out."""
+    rows = []
+    keys = list(by) + ["window", "segment"]
+    for key, g in df.groupby(keys, sort=False):
+        w, seg = key[-2], key[-1]
+        rows.append({**dict(zip(keys[:-2], key[:-2])), "window": w, "segment": seg, "runs": int(len(g)),
+                     "net_median": float(g["net_profit"].median()), "net_min": float(g["net_profit"].min()),
+                     "net_max": float(g["net_profit"].max()), "losing_runs": int((g["net_profit"] < 0).sum()),
+                     "stopped_out_runs": int(g["stopped_out"].astype(bool).sum()),
+                     "max_dd_pct_median": float(g["max_dd_pct"].median()),
+                     "worst_basket": float(g["largest_loss"].min()),
+                     "baskets_median": float(g["baskets"].median())})
+    return pd.DataFrame(rows)
 
 
 def cost_grid(cfg: BacktestConfig, spread_mults: Sequence[float] = (1.0, 1.25, 1.5, 2.0, 3.0),

@@ -287,7 +287,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("reproduce", help="re-run the whole experiment pipeline behind backtest_results/")
     sp.add_argument("--symbols", nargs="+", default=list(SYMBOLS))
     sp.add_argument("--only", nargs="+", default=None,
-                    choices=["quality", "baseline", "long", "sweeps", "levers", "improve", "holdout", "candidates", "robust"])
+                    choices=["quality", "baseline", "long", "signal", "sweeps", "levers", "improve", "holdout", "candidates", "robust"])
     sp.add_argument("--out", default=None, help="results directory (default backtest_results/)")
     sp.add_argument("--live-root", default=None,
                     help="directory holding the live code to mirror (default: this branch)")

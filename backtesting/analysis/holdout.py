@@ -113,4 +113,36 @@ def candidate_table(out: Path, sym: str) -> Optional[pd.DataFrame]:
         a = pd.read_csv(pa)[["candidate", "net_profit", "max_dd_pct", "stopped_out", "max_lots"]]
         a.columns = ["candidate", "account_net", "account_max_dd_pct", "account_stopped_out", "account_max_lots"]
         df = df.merge(a, on="candidate", how="left")
+    ens = candidate_ensemble(out, sym)
+    if ens is not None:
+        df = df.merge(ens, on="candidate", how="left")
     return df
+
+
+def candidate_ensemble(out: Path, sym: str) -> Optional[pd.DataFrame]:
+    """
+    Per candidate, from ``candidates/<sym>_timing.csv`` (every quarter x eight loop timings on a fresh
+    $2,000 with the unit auto-step): the spread over all quarter-runs and the median per quarter.
+    """
+    p = Path(out) / "candidates" / f"{sym}_timing.csv"
+    if not p.exists():
+        return None
+    t = pd.read_csv(p)
+    t["stopped_out"] = t["stopped_out"].astype(bool)
+    rows = []
+    for cand, g in t.groupby("candidate", sort=False):
+        r = {"candidate": cand, "ens_runs": int(len(g)),
+             "ens_median": float(g["net_profit"].median()), "ens_mean": float(g["net_profit"].mean()),
+             "ens_losing_runs": int((g["net_profit"] < 0).sum()), "ens_stopped_runs": int(g["stopped_out"].sum()),
+             "ens_worst_run": float(g["net_profit"].min()), "ens_best_run": float(g["net_profit"].max()),
+             "ens_worst_basket": float(g["largest_loss"].min()), "ens_max_lots": float(g["max_lots"].max()),
+             "ens_baskets_per_quarter": float(g["baskets"].mean())}
+        for w, gw in g.groupby("window", sort=False):
+            r[f"ens_median@{w}"] = float(gw["net_profit"].median())
+            r[f"ens_min@{w}"] = float(gw["net_profit"].min())
+            r[f"ens_max@{w}"] = float(gw["net_profit"].max())
+            r[f"ens_losing@{w}"] = int((gw["net_profit"] < 0).sum())
+            r[f"ens_stopped@{w}"] = int(gw["stopped_out"].sum())
+            r[f"ens_n@{w}"] = int(len(gw))
+        rows.append(r)
+    return pd.DataFrame(rows)

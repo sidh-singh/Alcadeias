@@ -134,6 +134,21 @@ def _norm(s: str) -> str:
     return "+".join(sorted(str(s).split("+"), key=TF_SECONDS.get, reverse=True))
 
 
+def cell_noise(out: Path, sym: str) -> str:
+    """How far one sweep cell moves with nothing changed but the loop timing (the live setting, fixed unit)."""
+    from ..analysis.robustness import ensemble_summary
+    p = out / "robustness" / sym / "quarters_timing_fixed_unit.csv"
+    if not p.exists():
+        return ""
+    e = ensemble_summary(pd.read_csv(p))
+    spread = e["net_max"] - e["net_min"]
+    parts = "; ".join(f"{WIN_LABEL.get(w, w)} {_usd(a)} to {_usd(b)}" for w, a, b in zip(e["window"], e["net_min"], e["net_max"]))
+    return (f"**How much of one cell is luck.** The live setting itself, at the same fixed 0.01-lot unit, run eight times per "
+            f"quarter on raw ticks with nothing changed but the loop timing: {parts}. The spread inside one quarter was "
+            f"{_usd(float(spread.median()), False)} at the median and {_usd(float(spread.max()), False)} at most. Differences of "
+            f"that size between two settings in the tables below are not evidence; only patterns that repeat across quarters are.")
+
+
 def sec_timeframes(out: Path, sym: str, base: BacktestConfig) -> str:
     p = out / "sweeps" / f"{sym}_timeframes.csv"
     if not p.exists():
@@ -164,6 +179,9 @@ def sec_timeframes(out: Path, sym: str, base: BacktestConfig) -> str:
     out_lines.append(f"\n{len(df)} combinations of OPEN timeframes × FORCE-CLOSE timeframe × threshold convention. "
                      f"**{ok}** made money in all {len(wins)} windows without ever standing $2,000 below the start; "
                      f"{int((df['n_ruin'] > 0).sum())} would have wiped out a $2,000 account in at least one window.")
+    noise = cell_noise(out, sym)
+    if noise:
+        out_lines.append("\n" + noise)
     ag = _j(out / "sweeps" / f"{sym}_timeframes_agreement.json") or {}
     if ag:
         rows = []
@@ -233,6 +251,30 @@ def sec_split(out: Path, sym: str, kind: str) -> str:
             f"diagonal is both indicators on the same timeframe.\n\n" + _table(pd.DataFrame(rows)))
 
 
+def _signal_frame(out: Path, sym: str, tf: str, horizon: int = 4) -> Optional[pd.DataFrame]:
+    from ..analysis.signal import vote_table
+    t = vote_table(out, sym, tf, horizon)
+    if t is None:
+        return None
+    f = lambda v: f"{v:.0f}%"
+    return pd.DataFrame({
+        "Period": t["period"], f"{tf} bars": t["bars"].map(lambda v: f"{v:,}"),
+        "MACD vote against its own trend": t["macd_against_trend_pct"].map(f),
+        "RSI up-votes that follow an oversold low": t["rsi_up_from_oversold_low_pct"].map(f),
+        "Both votes up (share of bars)": t["both_up_share_pct"].map(f),
+        f"… price higher {horizon} bars later": t["higher_after_both_up_pct"].map(lambda v: f"**{v:.1f}%**"),
+        "(any bar)": t["higher_all_bars_pct"].map(lambda v: f"{v:.1f}%"),
+        "Both votes down (share of bars)": t["both_down_share_pct"].map(f),
+        f"… price lower {horizon} bars later": t["lower_after_both_down_pct"].map(lambda v: f"**{v:.1f}%**"),
+        "(any bar) ": t["lower_all_bars_pct"].map(lambda v: f"{v:.1f}%"),
+    })
+
+
+def sec_signal(out: Path, sym: str, tf: str) -> str:
+    t = _signal_frame(out, sym, tf)
+    return _table(t) if t is not None else ""
+
+
 def sec_holdout(out: Path, sym: str) -> str:
     from ..analysis import holdout as H
     r = H.timeframe_carry_over(out, sym)
@@ -273,6 +315,24 @@ def sec_candidates(out: Path, sym: str) -> str:
     if df is None:
         return ""
     wins = [w for w in H.ANALYSED + H.HELD_OUT if f"net_profit@{w}" in df.columns]
+    name = df["candidate"].map(lambda x: f"**{x}**" if x == "live timeframes · live ladder" else x)
+    if all(f"ens_median@{w}" in df.columns for w in wins):
+        chrono = [w for w in ("HO1", "HO2", "OOS2", "OOS1", "IS") if w in wins]
+        n = df["ens_runs"].astype(int).astype(str)
+        t = pd.DataFrame({
+            "Setting": name,
+            **{WIN_LABEL[w] + (" (hold-out)" if w in H.HELD_OUT else ""):
+               [_usd(m) + (" ✕" if k > 0 else "") for m, k in zip(df[f"ens_median@{w}"], df[f"ens_stopped@{w}"])] for w in chrono},
+            "Quarter-runs that lost": df["ens_losing_runs"].astype(int).astype(str) + " of " + n,
+            "Stopped out": df["ens_stopped_runs"].astype(int).astype(str) + " of " + n,
+            "Median quarter-run": df["ens_median"].map(_usd), "Mean": df["ens_mean"].map(_usd),
+            "Worst quarter-run": df["ens_worst_run"].map(_usd), "Worst basket": df["ens_worst_basket"].map(_usd),
+            "Baskets / quarter": df["ens_baskets_per_quarter"].map(lambda v: f"{v:,.0f}"),
+        })
+        if "account_net" in df.columns:
+            t["One run of all 15 months on $2,000"] = df["account_net"].map(_usd)
+            t["stopped out"] = df["account_stopped_out"].map(lambda v: "**yes**" if bool(v) else "no")
+        return _table(t)
     t = pd.DataFrame({
         "Setting": df["candidate"].map(lambda x: f"**{x}**" if x == "live timeframes · live ladder" else x),
         **{WIN_LABEL[w] + (" (hold-out)" if w in H.HELD_OUT else ""):
@@ -331,6 +391,28 @@ def sec_levers(out: Path, sym: str, top: int = 40) -> str:
         })
         blocks.append(_table(t))
     return "\n\n".join(blocks)
+
+
+def sec_quarters(out: Path, sym: str) -> str:
+    """Every quarter under eight loop timings: the honest per-quarter figure for the live settings."""
+    from ..analysis.robustness import ensemble_summary
+    p = out / "robustness" / sym / "quarters_timing.csv"
+    if not p.exists():
+        return ""
+    e = ensemble_summary(pd.read_csv(p))
+    t = pd.DataFrame({
+        "Quarter": e["window"].map(lambda w: WIN_LABEL.get(w, w) + (" (hold-out)" if w in ("HO1", "HO2") else "")),
+        "Median net P/L": e["net_median"].map(_usd),
+        "Worst timing": e["net_min"].map(_usd), "Best timing": e["net_max"].map(_usd),
+        "Timings that lost money": e["losing_runs"].astype(str) + " of " + e["runs"].astype(str),
+        "Timings stopped out": e["stopped_out_runs"].astype(str) + " of " + e["runs"].astype(str),
+        "Median max drawdown": e["max_dd_pct_median"].map(lambda v: f"{v:.0f}%"),
+        "Worst basket": e["worst_basket"].map(_usd),
+        "Baskets (median)": e["baskets_median"].map(lambda v: f"{v:,.0f}"),
+    })
+    tot = len(e) * int(e["runs"].iloc[0]) if len(e) else 0
+    return (_table(t) + f"\n\n{int(e['losing_runs'].sum())} of {tot} quarter-runs lost money; "
+            f"{int(e['stopped_out_runs'].sum())} ended with the account stopped out.")
 
 
 def sec_robust(out: Path, sym: str) -> str:
@@ -468,6 +550,19 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
     A("A *basket* is one fresh entry plus its ladder adds, closed together. \"Fixed 0.01-lot unit\" is the same run with the "
       "balance auto-step switched off.\n")
 
+    qt = [(sym, sec_quarters(out, sym)) for sym in symbols]
+    if any(t for _, t in qt):
+        A("### Quarter by quarter, and how much is timing luck\n")
+        A("One run is one path. Whether the bot happens to be inside a basket when a sharp move starts depends on which tick "
+          "its once-a-second poll lands on, and a few large baskets decide a quarter. So each of the five quarters was run "
+          "eight times on raw ticks, on a fresh $2,000, with the loop period (1.0 s or 1.25 s) and its phase (0 / 0.25 / 0.5 / "
+          "0.75 s) varied — all equally plausible for the live bot. The run in the table above is the first of the eight for "
+          "its quarter.\n")
+        for sym, t in qt:
+            if t:
+                A(f"**{sym}**\n")
+                A(t + "\n")
+
     if findings:
         A("## What the backtest says about the strategy\n")
         for i, f in enumerate(findings, 1):
@@ -484,6 +579,22 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
                 A(diag + "\n")
             if imgs:
                 A(imgs + "\n")
+
+    agree_tf = max(base[symbols[0]].fc_weights, key=lambda k: TF_SECONDS.get(k, 0))
+    sg = [(sym, sec_signal(out, sym, agree_tf)) for sym in symbols]
+    if any(t for _, t in sg):
+        A("## What the entry signal is made of\n")
+        A(f"An entry needs the {agree_tf} RSI vote and the {agree_tf} MACD vote to point the same way. Measured with the live "
+          f"`indicator.py` functions on every closed {agree_tf} bar (no spread, no ladder, no exits — this describes the signal, "
+          f"not the trading). The MACD vote compares the histogram with its last pivot on the side the signal line selects, so "
+          f"in an up-trend it reads \"down\" unless momentum makes a new high; the RSI vote is measured from the last pivot "
+          f"beyond 60 / 40. Both are therefore votes to fade the last extreme. The bold columns are the test of whether that "
+          f"predicts anything: after both votes agreed, how often was price further that way four bars later, against how "
+          f"often that happens on any bar.\n")
+        for sym, t in sg:
+            if t:
+                A(f"### {sym}\n")
+                A(t + "\n")
 
     A("## Which timeframes for OPEN, FORCE-CLOSE" + (", BOOK" if netting else "") + " — RSI and MACD\n")
     A("Each setting was run on three separate three-month windows: the one asked for (13 Aug → 13 Nov) and the two before "
@@ -519,10 +630,11 @@ def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm")
     cd = [(sym, sec_candidates(out, sym)) for sym in symbols]
     if any(t for _, t in cd):
         A("## Candidate settings\n")
-        A("The timeframe families that held up best, each with the live ladder, without a ladder, and with a short spaced "
-          "ladder. One 0.01-lot unit per quarter (✕ = more than $2,000 down at some point); the last columns put the same "
-          "setting on the real $2,000 account with the unit auto-step for all fifteen months in one run. These were chosen "
-          "after looking at the three 2026 quarters; the two hold-out columns are the only independent evidence.\n")
+        A("The timeframe families that held up best in the sweeps, each with the live ladder, without a ladder, and with a "
+          "short spaced ladder. Because one run is one path, every setting was run eight times per quarter on raw ticks (loop "
+          "period 1.0 / 1.25 s × four phases), each on a fresh $2,000 with the unit auto-step: 40 quarter-runs per setting. "
+          "Cells show the median of the eight; ✕ = one or more of the eight ended in a stop-out. The families were chosen after "
+          "looking at the three 2026 quarters, so the two hold-out columns are the only independent evidence.\n")
         for sym, t in cd:
             if t:
                 A(f"### {sym}\n")
