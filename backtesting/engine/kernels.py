@@ -67,7 +67,10 @@ CI_RSI_LEN = 38
 CI_MACD_FAST = 39
 CI_MACD_SLOW = 40
 CI_MACD_SIGNAL = 41
-CI_N = 42
+CI_HOLE_MS = 42            # a silence this long is a hole in the tick history (0 = off)
+CI_HOLE_QUARANTINE_MS = 43
+CI_HOLE_UNTIL0 = 44        # entries blocked until this time because a hole ended shortly before the start
+CI_N = 45
 
 # ── float config slots ──
 CF_BALANCE = 0
@@ -123,6 +126,7 @@ F_N = 21
 
 ACT_OPEN, ACT_ADD, ACT_CLOSE = 1, 2, 3
 R_NONE, R_TARGET, R_BOOK, R_FORCE, R_STOPOUT, R_STOPLOSS, R_END, R_TIME = 0, 1, 2, 3, 4, 5, 6, 7
+R_HOLE = 8     # closed at the last quote before a hole in the tick history (data hygiene, not a bot decision)
 
 # ── basket log columns ──
 B_ID = 0
@@ -186,7 +190,9 @@ K_BLOCK_HOURS = 21
 K_CLOSE_TIME = 22
 K_LADDER_SPACED = 23   # ladder tier hit but held back by the experimental spacing levers
 K_BLOCK_REOPEN = 24     # an open / add was wanted while the broker was in close-only mode after a break
-K_N = 25
+K_CLOSE_HOLE = 25       # baskets closed at the last quote before a hole in the tick history
+K_BLOCK_HOLE = 26       # polls on which an entry was wanted during the quarantine after such a hole
+K_N = 27
 
 # ── scalar outputs ──
 S_FINAL_BALANCE = 0
@@ -557,6 +563,8 @@ def run_kernel(t_ms, bid, ask,
     target_per_lot = ci[CI_TARGET_PER_LOT] != 0
     reopen_daily = ci[CI_REOPEN_DAILY_MS]
     reopen_weekly = ci[CI_REOPEN_WEEKLY_MS]
+    hole_ms = ci[CI_HOLE_MS]
+    hole_quarantine = ci[CI_HOLE_QUARANTINE_MS]
     rsi_len = ci[CI_RSI_LEN]
     mf = ci[CI_MACD_FAST]
     ms = ci[CI_MACD_SLOW]
@@ -642,6 +650,8 @@ def run_kernel(t_ms, bid, ask,
     dir_since = 0
     fc_since = -1
     reopen_until = -(1 << 60)
+    hole_until = ci[CI_HOLE_UNTIL0] if hole_ms > 0 else -(1 << 60)
+    hole_close = 0
     next_rec = start_ms
     ptr = -1
     fptr = -1
@@ -677,17 +687,24 @@ def run_kernel(t_ms, bid, ask,
                 reopen_until = t_ms[ptr + 1] + reopen_weekly
             elif brk >= 1_800_000:
                 reopen_until = t_ms[ptr + 1] + reopen_daily
-            gap = t_ms[ptr + 1] - T
-            steps = gap // poll
-            if gap % poll != 0:
-                steps += 1
-            if steps < 1:
-                steps = 1
-            T += steps * poll
-            prev_dir = 0
-            fc_since = -1
-            counters[K_DEAD_SKIPS] += 1
-            continue
+            # A hole in the history of a market that never closes: the basket is closed on this poll
+            # at the last quote before the hole, and entries stay out for a while after it.
+            if hole_ms > 0 and brk >= hole_ms:
+                hole_until = t_ms[ptr + 1] + hole_quarantine
+                if n_pos > 0:
+                    hole_close = 1
+            if hole_close == 0:
+                gap = t_ms[ptr + 1] - T
+                steps = gap // poll
+                if gap % poll != 0:
+                    steps += 1
+                if steps < 1:
+                    steps = 1
+                T += steps * poll
+                prev_dir = 0
+                fc_since = -1
+                counters[K_DEAD_SKIPS] += 1
+                continue
         counters[K_LIVE] += 1
 
         b = bid[ptr]
@@ -934,6 +951,13 @@ def run_kernel(t_ms, bid, ask,
                 else:
                     counters[K_LADDER_EXHAUSTED] += 1
 
+        if hole_close == 1:
+            # not a decision of the bot: the history stops here, so the basket is taken off at this quote
+            hole_close = 0
+            signal = 3 if side > 0 else 4
+            reason = R_HOLE
+            tier = -1
+
         if n_trace < max_trace:
             trace[n_trace, T_T] = T
             trace[n_trace, T_SIGNAL] = signal
@@ -981,6 +1005,9 @@ def run_kernel(t_ms, bid, ask,
                     ok = False
                 elif T < reopen_until:
                     counters[K_BLOCK_REOPEN] += 1     # the live order is rejected; the bot retries next loop
+                    ok = False
+                elif T < hole_until:
+                    counters[K_BLOCK_HOLE] += 1       # quarantine after a hole in the tick history
                     ok = False
                 elif (want_side > 0 and not allow_long) or (want_side < 0 and not allow_short):
                     ok = False
@@ -1145,6 +1172,8 @@ def run_kernel(t_ms, bid, ask,
                     counters[K_CLOSE_SL] += 1
                 elif reason == R_TIME:
                     counters[K_CLOSE_TIME] += 1
+                elif reason == R_HOLE:
+                    counters[K_CLOSE_HOLE] += 1
                 if n_baskets < max_baskets:
                     baskets[n_baskets, B_ID] = n_baskets
                     baskets[n_baskets, B_SIDE] = side

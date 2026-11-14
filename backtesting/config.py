@@ -50,6 +50,10 @@ class SymbolSpec:
     swap_long: float = 0.0          # USD per 1.00 lot per night (Standard accounts are swap-free here)
     swap_short: float = 0.0
     quote: str = "USD"
+    # A market that trades around the clock has no session breaks, so a silence of hours in its tick
+    # history is a hole in the archive, not a closed market (see BacktestConfig.data_hole_s). 0 = the
+    # instrument has real closures (gold: daily break, weekend, holidays) and silences are left alone.
+    data_hole_s: float = 0.0
 
 
 SYMBOLS: Dict[str, SymbolSpec] = {
@@ -57,7 +61,9 @@ SYMBOLS: Dict[str, SymbolSpec] = {
     "XAUUSDm": SymbolSpec("XAUUSDm", contract_size=100.0, digits=3),
     # 1 lot = 1 BTC. 0.01 lot = 0.01 BTC, so $1.00 of basket P/L = a $100 move in BTC.
     # Exness fixes crypto leverage at 1:400 regardless of the account setting.
-    "BTCUSDm": SymbolSpec("BTCUSDm", contract_size=1.0, digits=2, max_leverage=400.0),
+    # It trades 24/7; the longest real silences in the archive are weekend maintenance windows of
+    # up to ~45 minutes, so three hours without a tick means missing history.
+    "BTCUSDm": SymbolSpec("BTCUSDm", contract_size=1.0, digits=2, max_leverage=400.0, data_hole_s=3 * 3600.0),
 }
 
 
@@ -143,6 +149,16 @@ class BacktestConfig:
     # open. Breaks are read off the tick gaps (>= 30 min / >= 24 h); BTC has none.
     close_only_after_break_s: float = 90.0
     close_only_after_weekend_s: float = 210.0
+    # Holes in the tick history (data hygiene, nothing the live bot ever meets). When a market that
+    # never closes goes silent for this long the archive is missing those hours. Replaying across
+    # such a hole would freeze the bot for the missing time and hand whatever it holds the whole
+    # price change in one jump. Instead the open basket is closed at the last quote before the hole
+    # (reason "data_hole": the P/L of the missing hours is unknown, none of it is booked) and no
+    # fresh basket is opened for ``data_hole_quarantine_s`` after the history resumes, by which time
+    # the indicators have mostly left the artificial jump behind. None = the symbol's own setting
+    # (SymbolSpec.data_hole_s: BTC three hours, gold off); 0 = off.
+    data_hole_s: Optional[float] = None
+    data_hole_quarantine_s: float = 86_400.0
 
     # ── trading window (symbols.json; server time = UTC) ─────────────────────
     window_enabled: bool = True
@@ -189,6 +205,11 @@ class BacktestConfig:
     @property
     def spec(self) -> SymbolSpec:
         return SYMBOLS[self.symbol]
+
+    @property
+    def effective_data_hole_s(self) -> float:
+        """Silence (seconds) treated as a hole in the tick history; 0 = never."""
+        return float(self.spec.data_hole_s if self.data_hole_s is None else self.data_hole_s)
 
     @property
     def effective_leverage(self) -> float:

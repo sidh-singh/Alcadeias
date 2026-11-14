@@ -325,7 +325,7 @@ def _perturbed(cfg: BacktestConfig, f: dataclasses.Field):
         "start": lambda: "2026-01-05", "end": lambda: "2026-12-25", "open_weights": lambda: {"H4": 1},
         "fc_weights": lambda: {"H4": (1, 0)}, "book_weights": lambda: {"M5": 2},
         "ladder_tfs": lambda: ["M5", "H1"], "ladder_multipliers": lambda: [1, 1, 2, 3],
-        "entry_hours_utc": lambda: [1, 2, 3],
+        "entry_hours_utc": lambda: [1, 2, 3], "data_hole_s": lambda: 7200.0,
         "target_usd_per_unit": lambda: None if v is not None else 1.5, "stop_loss_usd_per_unit": lambda: 12.5,
     }
     if f.name in special:

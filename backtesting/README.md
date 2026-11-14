@@ -51,6 +51,12 @@ Exness publishes every tick of every symbol, account-type suffix included, at
 Timestamps are UTC, which is also Exness MT5 server time, so bars bucket on plain UTC
 boundaries exactly as the terminal builds them (from Bid).
 
+`python -m backtesting quality` lists what the feed contains: coverage, every silence over
+three minutes by kind (daily break, weekend, holiday, maintenance pause, hole in the
+archive), spread by hour and the largest one-second moves. The large moves in this history
+are real events (the crypto liquidation of 10 October 2025, gold on US data releases), not
+bad ticks.
+
 `python -m backtesting data` keeps three resolutions per month under `data/store/`:
 
 | File | Content | Used for |
@@ -99,6 +105,7 @@ run on bundled real ticks is part of the test-suite.
 | Margin | lots × contract × open price / leverage (gold follows the account's 1:2000; BTC is held at Exness's former fixed 1:400, the stricter of the two regimes in force during 2026); a rejected order is simply retried next poll, as live |
 | Stop-out | all positions closed when equity ≤ 0 (Exness Standard stop-out level 0 %, balance floored at 0 by negative-balance protection); the run ends there |
 | Sessions | no decisions while the last tick is older than 3 minutes; fresh entries only inside the trading window; after a session break the broker's close-only mode refuses new orders for 90 s (3.5 min after the weekly open), read off the tick gaps |
+| Holes in the history | BTC trades around the clock, so three hours without a tick are missing data, not a closed market (the archive lacks 30 Aug 2025, the evening of 30 Nov 2025 and 30–31 Mar 2026). The open basket is closed at the last quote before the hole (reason `data_hole`; none of the missing hours' P/L is booked) and no basket is opened for 24 h after the history resumes. `data_hole_s=0` switches this off; gold, which has real closures, never uses it |
 
 **Not simulated:** requotes, partial fills and rejections other than margin; terminal or VPS
 outages; bot restarts (which reset the live cooldown and unit); manual intervention; swaps;

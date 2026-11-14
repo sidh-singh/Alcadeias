@@ -46,6 +46,7 @@ REASON_COLOR = {
     "stop_loss": SERIES[3],
     "stop_out": SERIES[4],
     "time_stop": SERIES[6],
+    "data_hole": CONTEXT,
     "": CONTEXT,
 }
 REASON_LABEL = {
@@ -55,11 +56,12 @@ REASON_LABEL = {
     "stop_loss": "Stop-loss",
     "stop_out": "Broker stop-out",
     "time_stop": "Time stop",
+    "data_hole": "Hole in the tick history",
     "": "Open at end",
 }
 # exit markers on the price chart: shape = why it closed, colour = won or lost
 REASON_SYMBOL = {"target": "circle", "book": "diamond", "force_close": "x",
-                 "stop_loss": "square", "stop_out": "star", "time_stop": "hexagon", "": "circle-open"}
+                 "stop_loss": "square", "stop_out": "star", "time_stop": "hexagon", "data_hole": "diamond-open", "": "circle-open"}
 SCORE_COLOR = {"open_score": SERIES[0], "fc_score": SERIES[1], "book_score": SERIES[2]}
 SCORE_LABEL = {"open_score": "OPEN score", "fc_score": "FORCE-CLOSE score", "book_score": "BOOK score"}
 

@@ -167,14 +167,18 @@ def section_fidelity(out: Path, symbols: Sequence[str]) -> str:
             "Ticks": f'{q["ticks_total"]:,}', "Rows dropped": q["rows_dropped_invalid"],
             "Out of order": q["rows_out_of_order"],
             "Spread median": _num(sp["median"], 3), "Spread p99": _num(sp["p99"], 3), "Spread max": _num(sp["max"], 3),
-            "Gaps > 3 min": g["count"], "Unexplained gaps": len(g["unexplained"]),
-            "Missing days": len(q["days"]["missing"]),
+            "Silences > 3 min": g["count"], "Holes in the archive": len(g.get("holes") or []),
+            "Unexplained": len(g["unexplained"]), "Days without ticks": len(q["days"]["missing"]),
             "Largest 1 s move": f'{_num(q["jumps"]["max_1s_move_pct"], 3)}%',
         })
     if qrows:
+        import re
+        from .markdown import quality_notes
+        notes = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", quality_notes(out, symbols)).replace("`", "").replace("  \n", "<br>")
         parts.append('<h3 style="margin-top:18px;font-size:13px">The data</h3><p class="lede" style="margin:0 0 8px;color:var(--ink-2)">'
                      'Exness\'s own published tick history for the exact symbols the bot trades (bid and ask, millisecond stamps).</p>'
-                     f'<div class="card"><div class="scroll">{_table(pd.DataFrame(qrows), left_cols=["Symbol"])}</div></div>')
+                     f'<div class="card"><div class="scroll">{_table(pd.DataFrame(qrows), left_cols=["Symbol"])}</div>'
+                     + (f'<p class="cap" style="margin-top:10px">{notes}</p>' if notes else "") + '</div>')
     return "".join(parts)
 
 

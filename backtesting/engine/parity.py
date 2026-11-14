@@ -67,7 +67,7 @@ class ParityReport:
 def fast_config_for_parity(cfg: BacktestConfig) -> BacktestConfig:
     # SimMT5 accepts every order, so the broker's close-only windows are switched off here
     return cfg.replace(open_order_delay_ms=LIVE_OPEN_ORDER_DELAY_MS,
-                       close_only_after_break_s=0.0, close_only_after_weekend_s=0.0)
+                       close_only_after_break_s=0.0, close_only_after_weekend_s=0.0, data_hole_s=0.0)
 
 
 def compare(cfg: BacktestConfig, ref: ReferenceResult, fast: Result,

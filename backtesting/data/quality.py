@@ -18,17 +18,33 @@ import pandas as pd
 from . import store
 
 
+HOLE = "hole in the archive"
+
+
 def _gap_kind(symbol: str, a_ms: int, b_ms: int) -> str:
-    """Classify a no-tick gap for an instrument with a weekly session (gold)."""
+    """
+    Classify a silence. Gold has a weekly session with a daily break, so most of its silences
+    are the market being shut; BTC trades around the clock, so hours of silence there can only
+    be missing history (``SymbolSpec.data_hole_s``; the engine treats those specially).
+    """
+    from ..config import SYMBOLS
     a, b = store.ms_to_dt(a_ms), store.ms_to_dt(b_ms)
     hours = (b_ms - a_ms) / 3.6e6
-    if symbol.startswith("XAU"):
-        if hours >= 40 and a.dayofweek in (4, 5) and b.dayofweek in (6, 0):
-            return "weekend"
-        if 0.8 <= hours <= 1.3 and a.hour in (20, 21, 22):
-            return "daily break"
-        if hours >= 20:
-            return "holiday / long close"
+    hole_s = SYMBOLS[symbol].data_hole_s if symbol in SYMBOLS else 0.0
+    if hole_s > 0:
+        if hours * 3600.0 >= hole_s:
+            return HOLE
+        return "short pause (maintenance)" if hours <= 1.0 else "other"
+    if hours >= 40 and a.dayofweek in (4, 5) and b.dayofweek in (6, 0):
+        return "weekend"
+    if 0.8 <= hours <= 1.3 and a.hour in (20, 21, 22):
+        return "daily break"
+    if hours >= 20:
+        return "holiday / long close"
+    if 1.3 < hours <= 6 and b.hour in (22, 23) and a.hour >= 16:
+        return "early close before the daily break (holiday)"
+    if hours <= 0.5:
+        return "short pause"
     return "other"
 
 
@@ -67,6 +83,7 @@ def quality_report(symbol: str, start, end, store_dir: Path = store.DEFAULT_STOR
                      "price_jump_pct": round(float(bid[i + 1] / bid[i] - 1.0) * 100.0, 4)})
     kinds = pd.Series([g["kind"] for g in gaps]).value_counts().to_dict() if gaps else {}
     unexplained = [g for g in gaps if g["kind"] == "other"]
+    holes = sorted((g for g in gaps if g["kind"] == HOLE), key=lambda g: g["from"])
 
     # activity per UTC day
     day = pd.to_datetime(t, unit="ms", utc=True).floor("D")
@@ -108,7 +125,7 @@ def quality_report(symbol: str, start, end, store_dir: Path = store.DEFAULT_STOR
         "spread_by_hour_utc": {int(h): {"median": float(r["median"]), "mean": float(r["mean"]), "max": float(r["max"])}
                                for h, r in by_hour.iterrows()},
         "gaps_over_3min": {"count": len(gaps), "by_kind": kinds,
-                           "largest": gaps[:12], "unexplained": unexplained[:25]},
+                           "largest": gaps[:12], "unexplained": unexplained[:25], "holes": holes},
         "days": {"with_ticks": int(len(per_day)), "missing": [d.strftime("%Y-%m-%d") for d in missing],
                  "seconds_per_day_min": int(per_day.min()), "seconds_per_day_median": int(per_day.median()),
                  "seconds_per_day_max": int(per_day.max())},
@@ -131,6 +148,8 @@ def format_quality(q: Dict) -> str:
         f"  spread median {sp['median']:.3f} ({sp['pct_of_price_median']:.4f}% of price) | p99 {sp['p99']:.3f} | "
         f"max {sp['max']:.3f} | non-positive {sp['non_positive']}",
         f"  gaps > 3 min: {g['count']} {g['by_kind']} | unexplained {len(g['unexplained'])}",
+        *[f"  HOLE in the archive: {h['from'][:16]} .. {h['to'][:16]} UTC ({h['minutes'] / 60:.1f} h, price "
+          f"{h['price_jump_pct']:+.2f}% across it)" for h in g.get("holes", [])],
         f"  days with ticks {d['with_ticks']} | unexpected missing days {d['missing'] or 'none'}",
         f"  largest 1 s move {j['max_1s_move_pct']:.3f}% | 1 s moves > 0.1%: {j['moves_over_0p1pct']} | "
         f"M1 range p99 {j['m1_range_p99_pct']:.3f}%",

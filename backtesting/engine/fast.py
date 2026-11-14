@@ -30,7 +30,8 @@ from . import kernels as K
 SIGNAL_NAMES = {0: "DO_NOTHING", 1: "BUY", 2: "SELL", 3: "CLOSE_BUY", 4: "CLOSE_SELL",
                 5: "BUY_MORE", 6: "SELL_MORE"}
 REASON_NAMES = {K.R_NONE: "", K.R_TARGET: "target", K.R_BOOK: "book", K.R_FORCE: "force_close",
-                K.R_STOPOUT: "stop_out", K.R_STOPLOSS: "stop_loss", K.R_END: "end", K.R_TIME: "time_stop"}
+                K.R_STOPOUT: "stop_out", K.R_STOPLOSS: "stop_loss", K.R_END: "end", K.R_TIME: "time_stop",
+                K.R_HOLE: "data_hole"}
 ACTION_NAMES = {K.ACT_OPEN: "open", K.ACT_ADD: "add", K.ACT_CLOSE: "close"}
 
 DEFAULT_WARM_BARS = 600   # the live bot fetches 500 bars per timeframe; this fully converges RSI/MACD
@@ -51,6 +52,8 @@ class Prepared:
     bar_t: Dict[str, np.ndarray]      # bar open time (epoch s), same layout
     nwarm: Dict[str, int]
     start_row: Dict[str, np.ndarray]  # first row of each bar (-1 for warm-up bars)
+    # silences of five minutes or more, (from_ms, to_ms), in the warm-up history and inside the window
+    gaps: np.ndarray = field(default_factory=lambda: np.zeros((0, 2), np.int64))
     _cache: dict = field(default_factory=dict, repr=False)
 
     @property
@@ -146,7 +149,23 @@ def prepare(symbol: str, start, end, tfs: Sequence[str], mode: str = "sec",
         nwarm[tf] = int(len(w_c))
         start_row[tf] = np.concatenate([np.full(len(w_c), -1, np.int64), first])
     return Prepared(symbol, start_ms, end_ms, mode, t_ms, bid, ask, list(tfs),
-                    closes, bar_t, nwarm, start_row)
+                    closes, bar_t, nwarm, start_row, _silences(m1, t_ms))
+
+
+def _silences(m1: dict, t_ms: np.ndarray, at_least_ms: int = 300_000) -> np.ndarray:
+    """(from_ms, to_ms) of every silence of ``at_least_ms`` or more in the warm-up M1 history and the window rows."""
+    out = []
+    if m1 and len(m1["t"]) > 0:
+        mt = np.asarray(m1["t"], np.int64) * 1000
+        # an M1 bar says only that a tick fell inside its minute, so its silence starts at the minute's end
+        for i in np.flatnonzero(np.diff(mt) >= at_least_ms + 60_000):
+            out.append((int(mt[i]) + 60_000, int(mt[i + 1])))
+        if len(t_ms) and int(t_ms[0]) - (int(mt[-1]) + 60_000) >= at_least_ms:
+            out.append((int(mt[-1]) + 60_000, int(t_ms[0])))
+    if len(t_ms) > 1:
+        for i in np.flatnonzero(np.diff(t_ms) >= at_least_ms):
+            out.append((int(t_ms[i]), int(t_ms[i + 1])))
+    return np.array(sorted(out), dtype=np.int64).reshape(-1, 2)
 
 
 @dataclass
@@ -179,6 +198,7 @@ _COUNTER_NAMES = {
     K.K_DEAD_SKIPS: "dead_market_skips", K.K_TRACE_OVERFLOW: "trace_overflow",
     K.K_BLOCK_CONFIRM: "polls_entry_blocked_confirm", K.K_BLOCK_HOURS: "polls_entry_blocked_hours",
     K.K_CLOSE_TIME: "closes_time_stop", K.K_LADDER_SPACED: "polls_ladder_blocked_spacing",
+    K.K_CLOSE_HOLE: "closes_data_hole", K.K_BLOCK_HOLE: "polls_entry_blocked_data_hole",
     K.K_BLOCK_REOPEN: "polls_order_blocked_close_only",
 }
 _SCALAR_NAMES = {
@@ -264,6 +284,15 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
     ci[K.CI_TARGET_PER_LOT] = int(cfg.target_per_lot)
     ci[K.CI_REOPEN_DAILY_MS] = int(round(cfg.close_only_after_break_s * 1000))
     ci[K.CI_REOPEN_WEEKLY_MS] = int(round(cfg.close_only_after_weekend_s * 1000))
+    hole_ms = int(round(cfg.effective_data_hole_s * 1000))
+    ci[K.CI_HOLE_MS] = hole_ms
+    ci[K.CI_HOLE_QUARANTINE_MS] = int(round(cfg.data_hole_quarantine_s * 1000))
+    ci[K.CI_HOLE_UNTIL0] = -(1 << 60)
+    if hole_ms > 0 and len(prep.gaps):
+        # a hole that ended shortly before this run starts: its quarantine still applies
+        g = prep.gaps[(prep.gaps[:, 1] <= ci[K.CI_START_MS]) & ((prep.gaps[:, 1] - prep.gaps[:, 0]) >= hole_ms)]
+        if len(g):
+            ci[K.CI_HOLE_UNTIL0] = int(g[:, 1].max()) + ci[K.CI_HOLE_QUARANTINE_MS]
     ci[K.CI_RSI_LEN] = int(cfg.rsi_length)
     ci[K.CI_MACD_FAST] = int(cfg.macd_fast)
     ci[K.CI_MACD_SLOW] = int(cfg.macd_slow)

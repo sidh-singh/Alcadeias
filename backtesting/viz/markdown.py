@@ -513,9 +513,37 @@ def sec_quality(out: Path, symbols: Sequence[str]) -> str:
         rows.append({"Symbol": sym, "Span": f"{q['first_tick'][:10]} → {q['last_tick'][:10]}", "Ticks": f"{q['ticks_total']:,}",
                      "Dropped / out-of-order rows": f"{q['rows_dropped_invalid']} / {q['rows_out_of_order']}",
                      "Spread median / p99 / max": f"{sp['median']:.2f} / {sp['p99']:.2f} / {sp['max']:.2f}",
-                     "Gaps > 3 min": f"{g['count']} ({', '.join(f'{v} {k}' for k, v in g['by_kind'].items())})",
-                     "Missing days": ", ".join(q["days"]["missing"]) or "none"})
-    return _table(pd.DataFrame(rows)) if rows else ""
+                     "Silences > 3 min": f"{g['count']} ({', '.join(f'{v} {k}' for k, v in g['by_kind'].items())})",
+                     "Days without ticks": ", ".join(q["days"]["missing"]) or "none"})
+    if not rows:
+        return ""
+    notes = quality_notes(out, symbols)
+    return _table(pd.DataFrame(rows)) + ("\n\n" + notes if notes else "")
+
+
+def quality_notes(out: Path, symbols: Sequence[str]) -> str:
+    """Plain sentences about what is missing from the history and how the engine deals with it."""
+    parts = []
+    for sym in symbols:
+        q = _j(out / "data_quality" / f"{sym}.json")
+        if not q:
+            continue
+        holes = q["gaps_over_3min"].get("holes") or []
+        if holes:
+            lst = "; ".join(f"{h['from'][:16].replace('T', ' ')} → {h['to'][:16].replace('T', ' ')} UTC "
+                            f"({h['minutes'] / 60:.1f} h, price {h['price_jump_pct']:+.1f}% across it)" for h in holes)
+            parts.append(f"**{sym} has {len(holes)} hole{'s' if len(holes) != 1 else ''} in the archive** — the market traded, the "
+                         f"history is missing: {lst}. The backtest does not pretend to know what happened inside them: a basket "
+                         f"open at the last quote before a hole is closed there, and no basket is opened for 24 hours after the "
+                         f"history resumes (see `data_hole_s` in the README).")
+        elif q["days"]["missing"]:
+            days = ", ".join(f"{d} ({pd.Timestamp(d).day_name()})" for d in q["days"]["missing"])
+            other = q["gaps_over_3min"]["by_kind"].get("other", 0)
+            parts.append(f"{sym}: days without ticks other than Saturdays: {days}. A Sunday without ticks is a late weekly open; "
+                         f"a weekday is a market holiday (it shows up as a long close in the list of silences). "
+                         f"{other} silence{'s' if other != 1 else ''} fit{'' if other != 1 else 's'} no session pattern "
+                         f"(`data_quality/{sym}.json` lists them).")
+    return "  \n".join(parts)
 
 
 def build_backtest_md(out: Path, symbols: Sequence[str] = ("XAUUSDm", "BTCUSDm"), live_root: Path = REPO_ROOT,
