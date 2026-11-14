@@ -341,3 +341,15 @@ def test_index_page_builds_from_a_results_directory(tmp_path, fixture_store, liv
     path = build_index(out, live_root=live_root)
     page = path.read_text(encoding="utf-8")
     assert "The live settings on real ticks" in page and "XAUUSDm" in page
+
+
+def test_quality_notes_name_the_archive_holes(tmp_path):
+    """Protects: the data note on both pages when the archive has holes (the miniature pipeline's history has none)."""
+    import json
+    from backtesting.viz.markdown import quality_notes
+    q = {"gaps_over_3min": {"holes": [{"from": "2025-08-29T23:59:00", "to": "2025-08-31T00:00:00", "minutes": 1441.0,
+                                       "price_jump_pct": 1.2}], "by_kind": {}}, "days": {"missing": []}}
+    (tmp_path / "data_quality").mkdir()
+    (tmp_path / "data_quality" / "BTCUSDm.json").write_text(json.dumps(q), encoding="utf-8")
+    text = quality_notes(tmp_path, ["BTCUSDm"])
+    assert "BTCUSDm has 1 hole in the archive" in text and "6.3 days after the history resumes" in text

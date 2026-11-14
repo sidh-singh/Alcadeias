@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from ..analysis.holdout import dip as _dip, wiped as _wiped
-from ..config import BacktestConfig, REPO_ROOT, TF_SECONDS
+from ..config import DATA_HOLE_QUARANTINE_S, BacktestConfig, REPO_ROOT, TF_SECONDS
 
 ACCOUNT = 2000.0
 WIN_LABEL = {"IS": "Aug–Nov 2026", "OOS1": "May–Aug 2026", "OOS2": "Feb–May 2026",
