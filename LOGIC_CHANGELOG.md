@@ -56,6 +56,54 @@ replayed, five quarters (13 Aug 2025 → 13 Nov 2026), each run eight times with
 
 ---
 
+## 2026-11-15 · Round 4: best combination of everything researched, and strategies from the internet
+
+**Status:** backtest-only. Nothing changed in the live bot.
+
+**Method.** (1) The optimiser searched 9,216 combinations of every rule that had held up (H1 trend filter, H1 or
+H1 + M15 votes, M15 agreement on / off, stop and target 4-10 volatility units, a dollar cap on the unit, no ladder or one
+MACD-turn add, 1 h / 4 h / 12 h pause after a loss, the owner's RSI-extreme entry block and RSI force-close, M15
+force-close on / off) on 16 quarterly blocks of 2023 - Nov 2026, objective "average month minus its standard error",
+drawdown limit $600. The three best that differ from each other were then run on raw ticks under eight loop timings.
+(2) Two research agents collected ten published strategies (Supertrend, Turtle, Donchian ensemble, time-series momentum,
+long-horizon moving averages, Asian-range / London breakout, intraday momentum, Connors RSI(2), ...) with their own
+default settings, run standalone and combined with the bot's logic; an independent reviewer reproduced the top results.
+(3) 2021-2022 was downloaded and kept untouched; everything above was fixed first, then run once on those two years.
+
+**Our combinations** (average per quarter on a fresh $2,000, eight timings; continuous account and its deepest drawdown):
+
+| Gold | 2023 | 2024-25 | 2025-26 | **2021-22** | One account 2023 – Nov 2026 | One account 2021-22 |
+|---|---|---|---|---|---|---|
+| Live logic | −$666 | −$675 | −$1,480 | **−$1,154** | wiped Mar 2023 | wiped Jun 2021 |
+| V3-lite | +$106 | +$152 | +$404 | **+$16** | +$7,977 (DD 32%) | +$168 (DD 11%) |
+| Top 1: H1 votes, target 10 / stop 8 units, one MACD-turn add, 4 h pause | +$2 | +$133 | +$685 | **$0** | +$10,446 (DD 32%) | −$43 (DD 28%) |
+| Top 2: H1 votes, target 8 / stop 4 units, $12 cap, no ladder, 12 h pause | +$30 | +$158 | +$412 | **−$16** | +$6,889 (DD 15%) | −$119 (DD 13%) |
+| Top 3: as Top 1 with a $12 cap and a 1 h pause | +$23 | +$115 | +$545 | **−$6** | +$5,459 (DD 37%) | −$26 (DD 21%) |
+
+| BTC | 2023 | 2024-25 | 2025-26 | **2021-22** | One account 2023 – Nov 2026 | One account 2021-22 |
+|---|---|---|---|---|---|---|
+| Live logic | −$1,194 | −$1,995 | −$585 | **−$1,767** | wiped Apr 2023 | wiped Jan 2021 |
+| V3-lite | +$7 | +$48 | +$114 | **+$2** | +$907 (DD 15%) | −$25 (DD 18%) |
+| Top 1: H1 votes, 8 / 8 units, $20 cap, no ladder, 4 h pause | +$26 | +$73 | +$164 | **−$39** | +$1,705 (DD 13%) | −$384 (DD 27%) |
+| Top 2: H1 votes, target 10 / stop 8 units, $12 cap, 4 h pause | +$22 | +$145 | +$53 | **−$2** | +$2,039 (DD 16%) | −$29 (DD 17%) |
+| Top 3: H1 + M15 votes, 8 / 8 units, no cap, 4 h pause | +$18 | +$94 | +$160 | **−$6** | +$1,527 (DD 18%) | +$16 (DD 21%) |
+
+None of the six uses the owner's RSI-extreme block, and none uses the M15 force-close; across the 400 sampled
+combinations the M15 force-close made results worse on both symbols.
+
+**Strategies from the internet** (per quarter, one account per period; full table in `external_strategies.md`):
+the most consistent were, on gold, the Asian-range / London breakout (positive in all five periods 2021-2026, deepest
+drawdown 29%); on BTC, Supertrend (10, 3) with the H1 trend filter (positive in all five, drawdown 21%), the daily
+volatility breakout (all five, drawdown 10%) and the Turtle breakout with the bot's votes (all five, drawdown 48%). The
+best gold rule of 2023-2026, Supertrend on H4 (+$1,340 a quarter in 2025-26), lost money in both 2021 and 2022.
+
+**Verdict.** Every design that made money did so mostly in the strong gold trend of 2023-2026. In the range-bound and
+falling markets of 2021-2022 the best of them were flat, and the live logic lost heavily in every period. For the most
+equity with the least drawdown on gold: Top 1 had the highest equity in 2023-2026, Top 2 the lowest drawdown (15%), and
+V3-lite was the only one that also ended 2021-22 in profit. On BTC no rule makes more than a few dollars a quarter.
+
+---
+
 ## 2026-11-15 · Owner's rules on the live hedging logic: RSI-extreme entry block and RSI force-close
 
 **Status:** backtest-only. Nothing changed in the live bot.

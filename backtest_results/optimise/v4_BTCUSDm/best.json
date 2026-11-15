@@ -1,0 +1,309 @@
+{
+  "space": "v4",
+  "symbol": "BTCUSDm",
+  "objective": "lcb",
+  "written": "2026-11-15 07:10:22",
+  "stamp": {
+    "format": 1,
+    "space": "7dac5fb9a287",
+    "symbol": "BTCUSDm",
+    "engine": "c3eac9e556f4",
+    "live": "ff2eb10cc257",
+    "account": 2000.0
+  },
+  "period": {
+    "start": "2023-01-01",
+    "end": "2026-11-13",
+    "block": "3mo",
+    "slice": "1mo",
+    "selection_months": [
+      "2023-01",
+      "2023-02",
+      "2023-03",
+      "2023-04",
+      "2023-05",
+      "2023-06",
+      "2023-07",
+      "2023-08",
+      "2023-09",
+      "2023-10",
+      "2023-11",
+      "2023-12",
+      "2024-01",
+      "2024-02",
+      "2024-03",
+      "2024-04",
+      "2024-05",
+      "2024-06",
+      "2024-07",
+      "2024-08",
+      "2024-09",
+      "2024-10",
+      "2024-11",
+      "2024-12",
+      "2025-01",
+      "2025-02",
+      "2025-03",
+      "2025-04",
+      "2025-05",
+      "2025-06",
+      "2025-07",
+      "2025-08",
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10"
+    ],
+    "holdout_months": []
+  },
+  "constraints": {
+    "allow_wiped": false,
+    "max_dip": 600.0,
+    "account": 2000.0
+  },
+  "settings_run": 490,
+  "settings_eligible": 490,
+  "settings_tried_earlier": 0,
+  "also_tried": 0,
+  "verdict": "Not proven. The best setting passes luck, halves, neighbours; is unclear on walk-forward. Treat the result as a lead, not as an edge.",
+  "evidence": [
+    "On the months it was chosen on. The best setting made +29.6 USD a month on average over 46 months, standard error 10.0: a lower bound of +19.6. 30 of 46 months were positive; 660 baskets closed, the worst at -52.6.",
+    "Luck. It is the best of 490 eligible settings. If none of them had any edge, the one picked the same way would still show about +19.3 a month (below +37.7 in 95% of such searches), and 10% of such searches reach the objective found here. Luck alone rarely does this well.",
+    "Half and half. Over 12,870 ways of splitting the blocks into two halves, the best setting of one half ranked below the median on the other half in 17% of them (0% is ideal, 50% is what noise gives). It averaged +36.2 a month on the half it was chosen on and +15.1 on the other, where it lost money in 11% of the splits.",
+    "Walk-forward. Choosing again after every block from the earlier months only, and trading the next block, made +366.5 over 43 months: +8.5 a month, standard error 10.3, 23 of 43 positive. The settings chosen had averaged +26.8 on the months they were chosen on.",
+    "Neighbours. 13 of the 13 settings one step away were run: they average an objective of +10.0 against its own +19.6, and 11 of them are positive. It sits on a plateau."
+  ],
+  "checks": {
+    "luck": "pass",
+    "halves": "pass",
+    "walk-forward": "unclear",
+    "neighbours": "pass"
+  },
+  "best": {
+    "key": "sbebda41d64c",
+    "values": {
+      "open_weights": "H1",
+      "entry_agree_s": 0,
+      "target_vol": 8,
+      "stop_vol": 8,
+      "vol_cap_usd_per_unit": 20,
+      "max_adds": 0,
+      "loss_cooldown_s": 14400,
+      "entry_rsi_block_tfs": "none",
+      "force_close_enabled": false
+    },
+    "overrides": {
+      "trend_tf": "H1",
+      "vol_tf": "H1",
+      "vol_len": 24,
+      "target_usd_per_unit": null,
+      "stop_loss_usd_per_unit": null,
+      "ladder_trigger": "macd_turn",
+      "ladder_gap_vol": 1.0,
+      "ladder_multipliers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "ladder_tfs": [
+        "M5",
+        "M15",
+        "H1",
+        "H1",
+        "H1"
+      ],
+      "entry_rsi_block_mode": "any",
+      "open_weights": {
+        "H1": 1
+      },
+      "entry_agree_s": 0.0,
+      "target_vol": 8.0,
+      "stop_vol": 8.0,
+      "vol_cap_usd_per_unit": 20.0,
+      "max_adds": 0,
+      "loss_cooldown_s": 14400.0,
+      "entry_rsi_block_tfs": null,
+      "force_close_enabled": false
+    },
+    "origin": "refine",
+    "run": "python -m backtesting run --symbol BTCUSDm --start 2023-01-01 --end 2026-11-13 --set entry_agree_s=0.0 --set 'entry_rsi_block_mode=\"any\"' --set entry_rsi_block_tfs=null --set force_close_enabled=false --set ladder_gap_vol=1.0 --set 'ladder_multipliers=[1.0, 1.0, 1.0, 1.0]' --set 'ladder_tfs=[\"M5\", \"M15\", \"H1\", \"H1\", \"H1\"]' --set 'ladder_trigger=\"macd_turn\"' --set loss_cooldown_s=14400.0 --set max_adds=0 --set 'open_weights={\"H1\": 1}' --set stop_loss_usd_per_unit=null --set stop_vol=8.0 --set target_usd_per_unit=null --set target_vol=8.0 --set 'trend_tf=\"H1\"' --set vol_cap_usd_per_unit=20.0 --set vol_len=24 --set 'vol_tf=\"H1\"'",
+    "run_last_block": "python -m backtesting run --symbol BTCUSDm --start '2026-10-01 00:00:00' --end '2026-11-13 00:00:00' --balance 1000000 --set fixed_units=1 --set entry_agree_s=0.0 --set 'entry_rsi_block_mode=\"any\"' --set entry_rsi_block_tfs=null --set force_close_enabled=false --set ladder_gap_vol=1.0 --set 'ladder_multipliers=[1.0, 1.0, 1.0, 1.0]' --set 'ladder_tfs=[\"M5\", \"M15\", \"H1\", \"H1\", \"H1\"]' --set 'ladder_trigger=\"macd_turn\"' --set loss_cooldown_s=14400.0 --set max_adds=0 --set 'open_weights={\"H1\": 1}' --set stop_loss_usd_per_unit=null --set stop_vol=8.0 --set target_usd_per_unit=null --set target_vol=8.0 --set 'trend_tf=\"H1\"' --set vol_cap_usd_per_unit=20.0 --set vol_len=24 --set 'vol_tf=\"H1\"'",
+    "last_block_net": 98.42,
+    "selection": {
+      "months": 46.0,
+      "objective": 19.592140272,
+      "mean": 29.554565217391303,
+      "se": 9.962424945408655,
+      "lcb": 19.59214027198265,
+      "median": 28.535,
+      "sharpe": 0.437401831,
+      "worst_block": -53.02,
+      "total": 1359.51,
+      "positive": 30.0,
+      "t": 2.96660355077626,
+      "baskets": 660.0,
+      "baskets_per_month": 14.23913043478261,
+      "worst_basket": -52.62,
+      "wiped_blocks": 0.0,
+      "max_dip": 132.72
+    },
+    "holdout": null,
+    "neighbours": {
+      "of": 13.0,
+      "n": 13.0,
+      "objective": 10.03135399976923,
+      "positive": 11.0
+    }
+  },
+  "haircut": {
+    "best": 402,
+    "objective": 19.592140272,
+    "mean": 29.554565217391303,
+    "se": 9.962424945408655,
+    "null_objective": 9.014287243187999,
+    "null_mean": 19.265368260869565,
+    "null_mean_p95": 37.7349347826087,
+    "p": 0.09645177411294353,
+    "p_all": 0.09645177411294359,
+    "pool": 490,
+    "extra": 0,
+    "n_eff": 22.55686686825792,
+    "n_boot": 2000,
+    "independent": 26.674172365451017
+  },
+  "overfitting": {
+    "splits": 12870,
+    "of": 12870,
+    "skipped": 0,
+    "pbo": 0.17156177156177158,
+    "rank_median": 0.83875,
+    "is_mean": 36.19049526735921,
+    "oos_mean": 15.108635951593085,
+    "oos_loss": 0.11328671328671329,
+    "oos_wiped": 0.0
+  },
+  "walk_forward": {
+    "n": 43,
+    "total": 366.53999999999996,
+    "mean": 8.524186046511627,
+    "se": 10.297753500523156,
+    "positive": 23,
+    "train_mean": 26.816465508533334,
+    "wiped_steps": 0,
+    "stayed_out": 0,
+    "hindsight_mean": 29.040930232558143,
+    "average_mean": 1.092816860465116
+  },
+  "references": [
+    {
+      "name": "live",
+      "key": "s5ee4b7cdc31",
+      "overrides": {},
+      "selection": {
+        "months": 46.0,
+        "objective": -617.950998429,
+        "mean": -546.5047826086957,
+        "se": 71.4462158203446,
+        "lcb": -617.9509984290403,
+        "median": -478.345,
+        "sharpe": -1.127809686,
+        "worst_block": -3401.17,
+        "total": -25139.22,
+        "positive": 4.0,
+        "t": -7.649177445351503,
+        "baskets": 34727.0,
+        "baskets_per_month": 747.4782608695652,
+        "worst_basket": -1158.49,
+        "wiped_blocks": 7.0,
+        "max_dip": 2000.0
+      },
+      "holdout": null
+    },
+    {
+      "name": "V3-lite",
+      "key": "sce4a4748cb8",
+      "overrides": {
+        "trend_tf": "H1",
+        "force_close_enabled": false,
+        "loss_cooldown_s": 43200.0,
+        "vol_tf": "H1",
+        "vol_len": 24,
+        "target_usd_per_unit": null,
+        "stop_loss_usd_per_unit": null,
+        "max_adds": 0,
+        "open_weights": {
+          "H1": 1
+        },
+        "entry_agree_s": 2.0,
+        "target_vol": 8.0,
+        "stop_vol": 8.0
+      },
+      "selection": {
+        "months": 46.0,
+        "objective": 3.538636792,
+        "mean": 15.659565217391307,
+        "se": 12.12092842522878,
+        "lcb": 3.538636792162528,
+        "median": 3.405,
+        "sharpe": 0.190486805,
+        "worst_block": -120.51,
+        "total": 720.3400000000001,
+        "positive": 25.0,
+        "t": 1.2919443682875915,
+        "baskets": 554.0,
+        "baskets_per_month": 11.978260869565217,
+        "worst_basket": -50.57,
+        "wiped_blocks": 0.0,
+        "max_dip": 139.67
+      },
+      "holdout": null
+    },
+    {
+      "name": "Owner's rules + H1 trend + 4 h pause",
+      "key": "s63e234ef1c0",
+      "overrides": {
+        "entry_rsi_block_tfs": [
+          "H1",
+          "H4"
+        ],
+        "entry_rsi_block_mode": "any",
+        "fc_rsi_tfs": [
+          "H1",
+          "H4"
+        ],
+        "trend_tf": "H1",
+        "loss_cooldown_s": 14400.0
+      },
+      "selection": {
+        "months": 46.0,
+        "objective": -47.483548386,
+        "mean": -37.86891304347826,
+        "se": 9.614635342834244,
+        "lcb": -47.483548386312506,
+        "median": -37.8,
+        "sharpe": -0.580725781,
+        "worst_block": -394.73,
+        "total": -1741.97,
+        "positive": 16.0,
+        "t": -3.938673875104565,
+        "baskets": 3526.0,
+        "baskets_per_month": 75.78260869565217,
+        "worst_basket": -172.18,
+        "wiped_blocks": 0.0,
+        "max_dip": 438.44
+      },
+      "holdout": null
+    }
+  ]
+}

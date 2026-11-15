@@ -1,5 +1,62 @@
 # Strategies from the literature on gold and BTC, alone and with the bot's logic
 
+## Update: an independent check, and the untouched years 2021-2022
+
+**Independent check.** A second reviewer recomputed the top three gold rows with its own code and got the same
+numbers to the cent, found no look-ahead, and corrected two statements of the first summary (both corrected below):
+on gold only some slow trend rules were positive in all three periods 2023-2026 (Supertrend, the M5 moving-average
+crosses, the 12-month TSMOM and the vol-targeted Donchian ensemble; default TSMOM, the Turtle and the bot-sized
+Donchian lost in 2023); and V3-lite's 39% drawdown fell to 24-25% with the TSMOM, Donchian and 200-day regimes,
+to 34% with the Supertrend regime and to 14% with the long-only Supertrend regime, while the M5 moving-average regime
+raised it to 42%. Two limits it found: an always-in reversal whose fill bar opens after a gap closes the old position
+and waits for the next decision before opening the new one (worth $0.37 in the one period it changed); and the
+truncation tests cannot see a decision taken one minute early.
+
+**2021-2022.** None of these rows had seen 2021 or 2022. The same code, settings and account were then run once on
+those two years (`external_strategies_holdout_2021_22.csv`). Average per quarter, one continuous $2,000 account per period:
+
+**XAUUSDm** (never wiped and drawdown under 50% in all five periods; sorted by periods with a profit, then by the average)
+
+| Strategy | Settings | Variant | Sizing | 2021 | 2022 | 2023 | 2024-25 | 2025-26 | Periods up | Worst DD |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Asian-range / London breakout (gold); daily volatility breakout (BTC) | default | standalone | bot unit rule | +$1 | +$47 | +$11 | +$189 | +$298 | 5 of 5 | 29% |
+| Asian-range / London breakout (gold); daily volatility breakout (BTC) | default | + bot votes | bot unit rule | +$2 | +$45 | +$6 | +$22 | +$64 | 5 of 5 | 28% |
+| Long-horizon moving-average rule (Urquhart et al.; 50-day SMA on BTC) | default | + H1 trend | bot unit rule | +$14 | −$13 | +$6 | +$102 | +$504 | 4 of 5 | 38% |
+| Long-horizon moving-average rule (Urquhart et al.; 50-day SMA on BTC) | alt | + H1 trend | bot unit rule | +$14 | −$12 | +$15 | +$132 | +$421 | 4 of 5 | 41% |
+| Donchian ensemble, vol-targeted (Zarattini-Pagani-Barbon 2025) | default | risk-sized | 25% vol target, 2x cap, 20% rebalance threshold | −$24 | +$25 | +$3 | +$197 | +$203 | 4 of 5 | 23% |
+| Asian-range / London breakout (gold); daily volatility breakout (BTC) | default | + H1 trend | bot unit rule | +$11 | +$50 | −$0 | +$62 | +$258 | 4 of 5 | 16% |
+| Connors RSI(2) pullback with the 200-day trend | alt | V3-lite + regime | bot unit rule | +$2 | +$26 | −$0 | +$177 | +$150 | 4 of 5 | 25% |
+| Connors RSI(2) pullback with the 200-day trend | default | V3-lite + regime | bot unit rule | +$2 | +$26 | −$0 | +$177 | +$150 | 4 of 5 | 25% |
+| Time-series momentum (Moskowitz-Ooi-Pedersen; Hurst-Ooi-Pedersen) | alt | V3-lite + regime | bot unit rule | $0 | +$1 | +$2 | +$177 | +$63 | 4 of 5 | 25% |
+| Noise-area intraday momentum with VWAP trail (Zarattini-Aziz-Barbon 2024) | default | risk-sized | 2% daily vol target, 4x cap | −$73 | +$48 | +$166 | +$30 | +$64 | 4 of 5 | 19% |
+| V3-lite (bar level) | reference | standalone | bot unit rule | −$33 | +$12 | +$22 | +$97 | +$70 | 4 of 5 | 39% |
+
+**BTCUSDm** (never wiped and drawdown under 50% in all five periods; sorted by periods with a profit, then by the average)
+
+| Strategy | Settings | Variant | Sizing | 2021 | 2022 | 2023 | 2024-25 | 2025-26 | Periods up | Worst DD |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Turtle Donchian breakout (Original Turtle Rules) | default | + bot votes | bot unit rule | +$179 | +$88 | +$76 | +$54 | +$98 | 5 of 5 | 48% |
+| Supertrend (ATR 10 x 3) stop and reverse | default | + H1 trend | bot unit rule | +$114 | +$43 | +$4 | +$22 | +$15 | 5 of 5 | 21% |
+| Supertrend (ATR 10 x 3) stop and reverse | default | + bot votes | bot unit rule | +$101 | +$27 | +$7 | +$40 | +$15 | 5 of 5 | 23% |
+| Asian-range / London breakout (gold); daily volatility breakout (BTC) | default | standalone | bot unit rule | +$54 | +$19 | +$17 | +$31 | +$2 | 5 of 5 | 10% |
+| Connors RSI(2) pullback with the 200-day trend | default | + bot votes | bot unit rule | +$3 | +$14 | +$2 | +$16 | +$25 | 5 of 5 | 4% |
+| Turtle Donchian breakout (Original Turtle Rules) | default | risk-sized | 1% of equity per N, 20% cut per 10% drawdown | $0 | +$66 | +$140 | +$282 | +$40 | 4 of 5 | 21% |
+| Turtle Donchian breakout (Original Turtle Rules) | alt | risk-sized | 1% of equity per N, 20% cut per 10% drawdown | $0 | +$22 | +$3 | +$203 | +$39 | 4 of 5 | 24% |
+| Time-series momentum (Moskowitz-Ooi-Pedersen; Hurst-Ooi-Pedersen) | default | standalone | bot unit rule | +$34 | +$74 | −$4 | +$55 | +$70 | 4 of 5 | 14% |
+| Time-series momentum (Moskowitz-Ooi-Pedersen; Hurst-Ooi-Pedersen) | default | + H1 trend | bot unit rule | +$28 | +$74 | −$5 | +$66 | +$61 | 4 of 5 | 14% |
+| Time-series momentum (Moskowitz-Ooi-Pedersen; Hurst-Ooi-Pedersen) | default | + bot votes | bot unit rule | +$10 | +$73 | −$2 | +$58 | +$60 | 4 of 5 | 14% |
+| V3-lite (bar level) | reference | standalone | bot unit rule | −$56 | +$17 | −$0 | +$29 | −$1 | 2 of 5 | 15% |
+
+What the five periods say:
+- **Gold:** the best 2023-2026 rule, Supertrend (10, 3) on H4, lost in both 2021 (−$24 a quarter) and 2022 (−$48):
+  its profit came from the 2025-26 gold trend. The Asian-range / London breakout was positive in all five periods.
+- **BTC:** several rules were positive in all five periods, most of them combined with the bot's logic (Supertrend with
+  the H1 trend or the bot's votes, the Turtle with the bot's votes, the daily volatility breakout), and the Turtle at 1%
+  risk and the 12-month TSMOM in four of five.
+- Profits are small on a $2,000 account with 0.01-lot steps: tens of dollars a quarter for most rows.
+
+---
+
 **The question.** Which published trading strategies give the best equity with the least drawdown on
 XAUUSDm and BTCUSDm, on this account? Do they do better when combined with the bot's own logic?
 

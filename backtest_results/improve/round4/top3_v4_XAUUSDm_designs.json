@@ -1,0 +1,134 @@
+{
+ "Live": {},
+ "V3-lite": {
+  "trend_tf": "H1",
+  "force_close_enabled": false,
+  "loss_cooldown_s": 43200.0,
+  "vol_tf": "H1",
+  "vol_len": 24,
+  "target_usd_per_unit": null,
+  "stop_loss_usd_per_unit": null,
+  "max_adds": 0,
+  "open_weights": {
+   "H1": 1
+  },
+  "entry_agree_s": 2.0,
+  "target_vol": 8.0,
+  "stop_vol": 8.0
+ },
+ "Owner's rules + H1 trend + 4 h pause": {
+  "entry_rsi_block_tfs": [
+   "H1",
+   "H4"
+  ],
+  "entry_rsi_block_mode": "any",
+  "fc_rsi_tfs": [
+   "H1",
+   "H4"
+  ],
+  "trend_tf": "H1",
+  "loss_cooldown_s": 14400.0
+ },
+ "Top 1: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=0.0, max_adds=1.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False": {
+  "entry_agree_s": 0.0,
+  "entry_rsi_block_mode": "any",
+  "entry_rsi_block_tfs": null,
+  "force_close_enabled": false,
+  "ladder_gap_vol": 1.0,
+  "ladder_multipliers": [
+   1.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "ladder_tfs": [
+   "M5",
+   "M15",
+   "H1",
+   "H1",
+   "H1"
+  ],
+  "ladder_trigger": "macd_turn",
+  "loss_cooldown_s": 14400.0,
+  "max_adds": 1,
+  "open_weights": {
+   "H1": 1
+  },
+  "stop_loss_usd_per_unit": null,
+  "stop_vol": 8.0,
+  "target_usd_per_unit": null,
+  "target_vol": 10.0,
+  "trend_tf": "H1",
+  "vol_cap_usd_per_unit": 0.0,
+  "vol_len": 24,
+  "vol_tf": "H1"
+ },
+ "Top 2: open_weights=H1, entry_agree_s=0.0, target_vol=8.0, stop_vol=4.0, vol_cap_usd_per_unit=12.0, max_adds=0.0, loss_cooldown_s=43200.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False": {
+  "entry_agree_s": 0.0,
+  "entry_rsi_block_mode": "any",
+  "entry_rsi_block_tfs": null,
+  "force_close_enabled": false,
+  "ladder_gap_vol": 1.0,
+  "ladder_multipliers": [
+   1.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "ladder_tfs": [
+   "M5",
+   "M15",
+   "H1",
+   "H1",
+   "H1"
+  ],
+  "ladder_trigger": "macd_turn",
+  "loss_cooldown_s": 43200.0,
+  "max_adds": 0,
+  "open_weights": {
+   "H1": 1
+  },
+  "stop_loss_usd_per_unit": null,
+  "stop_vol": 4.0,
+  "target_usd_per_unit": null,
+  "target_vol": 8.0,
+  "trend_tf": "H1",
+  "vol_cap_usd_per_unit": 12.0,
+  "vol_len": 24,
+  "vol_tf": "H1"
+ },
+ "Top 3: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=12.0, max_adds=1.0, loss_cooldown_s=3600.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False": {
+  "entry_agree_s": 0.0,
+  "entry_rsi_block_mode": "any",
+  "entry_rsi_block_tfs": null,
+  "force_close_enabled": false,
+  "ladder_gap_vol": 1.0,
+  "ladder_multipliers": [
+   1.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "ladder_tfs": [
+   "M5",
+   "M15",
+   "H1",
+   "H1",
+   "H1"
+  ],
+  "ladder_trigger": "macd_turn",
+  "loss_cooldown_s": 3600.0,
+  "max_adds": 1,
+  "open_weights": {
+   "H1": 1
+  },
+  "stop_loss_usd_per_unit": null,
+  "stop_vol": 8.0,
+  "target_usd_per_unit": null,
+  "target_vol": 10.0,
+  "trend_tf": "H1",
+  "vol_cap_usd_per_unit": 12.0,
+  "vol_len": 24,
+  "vol_tf": "H1"
+ }
+}

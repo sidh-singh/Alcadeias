@@ -1,0 +1,25 @@
+symbol,window,design,net,max_dd_pct,stopped_out,stopped_at,baskets
+XAUUSDm,2021 – 2022 (untouched),Live,-2000.0,100.2,True,2021-06-17 14:06,2907
+XAUUSDm,2021 – 2022 (untouched),V3-lite,168.29,11.4,False,,208
+XAUUSDm,2021 – 2022 (untouched),Owner's rules + H1 trend + 4 h pause,-975.91,50.8,False,,1314
+XAUUSDm,2021 – 2022 (untouched),"Top 1: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=0.0, max_adds=1.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",-43.3,27.7,False,,301
+XAUUSDm,2021 – 2022 (untouched),"Top 2: open_weights=H1, entry_agree_s=0.0, target_vol=8.0, stop_vol=4.0, vol_cap_usd_per_unit=12.0, max_adds=0.0, loss_cooldown_s=43200.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",-119.11,13.1,False,,322
+XAUUSDm,2021 – 2022 (untouched),"Top 3: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=12.0, max_adds=1.0, loss_cooldown_s=3600.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",-26.27,20.5,False,,329
+XAUUSDm,2023 – Nov 2026,Live,-2000.0,100.1,True,2023-03-17 17:54,1358
+XAUUSDm,2023 – Nov 2026,V3-lite,7976.98,31.9,False,,399
+XAUUSDm,2023 – Nov 2026,Owner's rules + H1 trend + 4 h pause,-65.33,36.1,False,,3501
+XAUUSDm,2023 – Nov 2026,"Top 1: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=0.0, max_adds=1.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",10446.35,31.5,False,,612
+XAUUSDm,2023 – Nov 2026,"Top 2: open_weights=H1, entry_agree_s=0.0, target_vol=8.0, stop_vol=4.0, vol_cap_usd_per_unit=12.0, max_adds=0.0, loss_cooldown_s=43200.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",6889.35,15.3,False,,636
+XAUUSDm,2023 – Nov 2026,"Top 3: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=12.0, max_adds=1.0, loss_cooldown_s=3600.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",5458.87,37.3,False,,654
+BTCUSDm,2021 – 2022 (untouched),Live,-2000.0,100.2,True,2021-01-27 12:14,758
+BTCUSDm,2021 – 2022 (untouched),V3-lite,-24.98,18.4,False,,260
+BTCUSDm,2021 – 2022 (untouched),Owner's rules + H1 trend + 4 h pause,-1657.14,86.3,False,,1404
+BTCUSDm,2021 – 2022 (untouched),"Top 1: open_weights=H1, entry_agree_s=0.0, target_vol=8.0, stop_vol=8.0, vol_cap_usd_per_unit=20.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",-383.78,27.4,False,,305
+BTCUSDm,2021 – 2022 (untouched),"Top 2: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=12.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",-29.29,17.3,False,,255
+BTCUSDm,2021 – 2022 (untouched),"Top 3: open_weights=H1+M15, entry_agree_s=0.0, target_vol=8.0, stop_vol=8.0, vol_cap_usd_per_unit=0.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",16.08,20.9,False,,359
+BTCUSDm,2023 – Nov 2026,Live,-2000.0,100.5,True,2023-04-11 01:53,1380
+BTCUSDm,2023 – Nov 2026,V3-lite,907.43,14.5,False,,553
+BTCUSDm,2023 – Nov 2026,Owner's rules + H1 trend + 4 h pause,-1725.45,91.2,False,,3526
+BTCUSDm,2023 – Nov 2026,"Top 1: open_weights=H1, entry_agree_s=0.0, target_vol=8.0, stop_vol=8.0, vol_cap_usd_per_unit=20.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",1704.51,13.1,False,,662
+BTCUSDm,2023 – Nov 2026,"Top 2: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=12.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",2038.74,15.5,False,,530
+BTCUSDm,2023 – Nov 2026,"Top 3: open_weights=H1+M15, entry_agree_s=0.0, target_vol=8.0, stop_vol=8.0, vol_cap_usd_per_unit=0.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",1527.04,17.9,False,,735
