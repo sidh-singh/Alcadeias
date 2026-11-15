@@ -381,12 +381,25 @@ def design_summary():
 _RECONNECT_AFTER = 5                         # polls in a row without the terminal (terminal_info() None) before the
                                              # bot connects again: mt5.shutdown(), then initialize_mt5()
 _RECONNECT_BACKOFF_S = (5.0, 10.0, 30.0, 60.0)   # waits after a reconnect that failed (the last one repeats)
-_LOG_REPEAT_S = 900.0                        # a problem that lasts (the terminal held by another account) is logged
-                                             # again at most this often
+_LOG_REPEAT_S = 900.0                        # a problem that lasts (reconnects that fail, the terminal held by another
+                                             # account) is logged again at most this often
 _PENDING_FILL_S = 10.0                       # a basket the bot just opened waits this long for the terminal to list
                                              # its position (as the Turtle's legs do)
 _MIN_CLOSED_BARS = 300                       # closed VOL_TF / TREND_TF bars an entry (and a rebuilt basket's unit)
                                              # needs: with fewer the EWMA unit is off by up to 12% (BTC H1, 100 bars)
+
+
+def _why_key(why):
+    """A problem without the terminal's last_error, which can differ from one attempt to the next ('initialize
+    failed: (-10003, ...)' -> 'initialize failed'): whether a repeated problem is a new one to log."""
+    if not why:
+        return why
+    s = str(why)
+    for sep in (' (last_error ', ': ('):
+        i = s.find(sep)
+        if i >= 0:
+            s = s[:i]
+    return s
 
 
 def fill_pending(basket, now):
@@ -434,14 +447,17 @@ class MT5TradingBot:
         self._account_login = None
         self._account_bad = None
         # Polls in a row that could not read the terminal (they decide nothing), and why the last one could not;
-        # those of them without the terminal at all (terminal_info() None), the reconnects that failed since, the
-        # time of the next attempt, and why initialize_mt5 failed last.
+        # those of them without the terminal at all (terminal_info() None) and since when, the reconnects that
+        # failed since, the time of the next attempt, why initialize_mt5 failed last, and the reason and time of the
+        # last RECONNECT_FAILED event.
         self._failed_polls = 0
         self._read_bad = None
         self._ipc_failed = 0
+        self._ipc_lost_at = None
         self._reconnects_failed = 0
         self._reconnect_at = None
         self._init_problem = None
+        self._reconnect_logged = None
         # initialize_mt5 found the terminal logged into another account (it never logs in there): the problem
         # last logged as TERMINAL_IN_USE and when.
         self._in_use_logged = None
@@ -1386,36 +1402,54 @@ class MT5TradingBot:
 
     def _poll_failed(self, symbol, problem, ipc_lost=False):
         """A poll that could not read what it decides on: it syncs, books and decides nothing. A WARNING and an ERROR
-        event TERMINAL_ERROR when such a streak starts or its problem changes. After _RECONNECT_AFTER polls in a
-        row without the terminal the bot connects again (_try_reconnect), and while that fails again after 5, 10,
-        30, then every 60 s."""
+        event TERMINAL_ERROR when such a streak starts or its problem changes (the terminal's last_error aside).
+        After _RECONNECT_AFTER polls in a row without the terminal the bot connects again (_try_reconnect), and while
+        that fails again after 5, 10, 30, then every 60 s."""
         self._failed_polls += 1
-        if problem != self._read_bad:
-            self._read_bad = problem
+        if _why_key(problem) != _why_key(self._read_bad):
             print(f"[{symbol}] WARNING: poll skipped, nothing decided: {problem}")
             self._log_event(symbol, 'TERMINAL_ERROR', 'ERROR', {'problem': problem, 'failed_polls': self._failed_polls})
+        self._read_bad = problem
         if not ipc_lost:
             return
+        if self._ipc_failed == 0:
+            self._ipc_lost_at = time.time()          # the outage starts (TERMINAL_RECONNECTED reports its length)
         self._ipc_failed += 1
         if self._ipc_failed >= _RECONNECT_AFTER and (self._reconnect_at is None or time.time() >= self._reconnect_at):
             self._try_reconnect(symbol)
 
+    def _outage_s(self):
+        return None if self._ipc_lost_at is None else round(time.time() - self._ipc_lost_at, 1)
+
     def _try_reconnect(self, symbol):
+        """One reconnect attempt. Every failed one is printed; the ERROR event RECONNECT_FAILED only on the first
+        failure, when its reason changes (the terminal's last_error aside) and at most every _LOG_REPEAT_S
+        otherwise, so an outage of hours does not fill the 200-entry strategy log; TERMINAL_RECONNECTED reports the
+        attempts and the outage's length."""
         attempt = self._reconnects_failed + 1
         if self._reconnect(symbol):
-            print(f"[{symbol}] note: connected to the terminal again (attempt {attempt})")
+            print(f"[{symbol}] note: connected to the terminal again (attempt {attempt}, after {self._outage_s()} s)")
             self._log_event(symbol, 'TERMINAL_RECONNECTED', 'SIGNAL', {
-                'attempt': attempt, 'failed_polls': self._failed_polls, 'login': self._account_login})
+                'attempt': attempt, 'failed_attempts': attempt - 1, 'outage_s': self._outage_s(),
+                'failed_polls': self._failed_polls, 'login': self._account_login})
             self._ipc_failed = 0
             self._reconnects_failed = 0
             self._reconnect_at = None
+            self._ipc_lost_at = None
+            self._reconnect_logged = None
             return
         wait = _RECONNECT_BACKOFF_S[min(self._reconnects_failed, len(_RECONNECT_BACKOFF_S) - 1)]
         self._reconnects_failed += 1
-        self._reconnect_at = time.time() + wait
+        now = time.time()
+        self._reconnect_at = now + wait
         print(f"[{symbol}] WARNING: reconnect attempt {attempt} failed ({self._init_problem}); next one in {wait:g} s")
-        self._log_event(symbol, 'RECONNECT_FAILED', 'ERROR', {
-            'attempt': attempt, 'why': self._init_problem, 'next_in_s': wait, 'failed_polls': self._failed_polls})
+        why = _why_key(self._init_problem)
+        last = self._reconnect_logged
+        if last is None or last[0] != why or now - last[1] >= _LOG_REPEAT_S:
+            self._reconnect_logged = (why, now)
+            self._log_event(symbol, 'RECONNECT_FAILED', 'ERROR', {
+                'attempt': attempt, 'why': self._init_problem, 'next_in_s': wait, 'failed_polls': self._failed_polls,
+                'outage_s': self._outage_s()})
 
     def _reconnect(self, symbol):
         """mt5.shutdown(), then initialize_mt5() again: the terminal, the login (only on a terminal that holds no
@@ -1444,6 +1478,8 @@ class MT5TradingBot:
         self._ipc_failed = 0
         self._reconnects_failed = 0
         self._reconnect_at = None
+        self._ipc_lost_at = None
+        self._reconnect_logged = None
 
     def process_symbol(self, symbol):
         """
