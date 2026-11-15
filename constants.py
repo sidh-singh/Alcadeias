@@ -277,3 +277,21 @@ VIRTUAL_START_DATE = '2026-11-16'    #   commission of the deals with its MAGIC)
 # VOL_CAP_USD_PER_UNIT = 12.0
 # LOSS_COOLDOWN_S = 14400
 # MAX_ADDS = 0
+
+# ─── Design of this branch (demo_hedging_xauusd6): XAU V3-lite ───
+# The example block 'XAU V3-lite' above, uncommented. Everything not set here stays at the live value.
+DESIGN_NAME = 'xau_v3lite'
+OPEN_SCORE_WEIGHTS = {'H1': 1}
+ENTRY_AGREE_S = 2
+FORCE_CLOSE_ENABLED = False
+TREND_TF = 'H1'
+VOL_TF = 'H1'
+VOL_LEN = 24
+TARGET_USD_PER_UNIT = None
+STOP_LOSS_USD_PER_UNIT = None
+TARGET_VOL = 8.0
+STOP_VOL = 8.0
+VOL_CAP_USD_PER_UNIT = 0.0
+LOSS_COOLDOWN_S = 43200
+MAX_ADDS = 0
+VIRTUAL_START_DATE = '2026-11-15'    # the demo forward test's virtual $2,000 counts this bot's deals from this UTC day
