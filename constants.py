@@ -176,6 +176,11 @@ STOP_LOSS_USD_PER_UNIT = None        # None = no $ stop; a number = close the ba
 TARGET_VOL = 0.0                     # > 0 (needs VOL_TF): target per unit (USD) = TARGET_VOL x unit x contract_size x mtqty,
                                      # fixed at the open; replaces TARGET_USD_PER_UNIT
 STOP_VOL = 0.0                       # > 0 (needs VOL_TF): stop per unit, the same way; replaces STOP_LOSS_USD_PER_UNIT
+BACKSTOP_FACTOR = 2.0                # a design with a stop (STOP_VOL > 0 or a $ stop) sends every fill (entry, add)
+                                     # with a broker-side stop (request sl) this many basket stop distances (STOP_VOL
+                                     # x unit, capped) beyond it, no broker target: it guards the position while the
+                                     # bot or the terminal is down; the bot's own stop, nearer, always closes first.
+                                     # A design without a stop (live) keeps the live request
 VOL_CAP_USD_PER_UNIT = 0.0           # > 0 (needs VOL_TF): the unit is capped at cap / (contract_size x mtqty) price units
                                      # (USD per 0.01 lot: gold $12 = a $12 move, BTC $12 = a $1,200 move); caps target, stop, gap
 LOSS_COOLDOWN_S = 0                  # > 0: after a basket that closed with a net loss (realised P/L from the deal

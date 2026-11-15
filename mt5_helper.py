@@ -512,7 +512,7 @@ class MT5PositionHelper:
                 'message': f'Error checking market status: {str(e)}',
             }
     
-    def _build_request(self, symbol: str, qty: float, order_type, sl: float, tp: float) -> dict:
+    def _build_request(self, symbol: str, qty: float, order_type, sl: float, tp: float, auto_sltp: bool = True) -> dict:
         """
         Build a fresh, thread-safe request dict for an order.
         
@@ -522,6 +522,8 @@ class MT5PositionHelper:
             order_type: MT5 order type constant (ORDER_TYPE_BUY / ORDER_TYPE_SELL)
             sl: Stop loss (0 for auto-calculation)
             tp: Take profit (0 for auto-calculation)
+            auto_sltp: False = sl / tp exactly as given (0 = none): the broker-side backstop of a design with a
+                       stop (app.py), which has no broker target
         
         Returns:
             dict: Ready-to-send request dictionary
@@ -529,6 +531,19 @@ class MT5PositionHelper:
         ask = self.mt5.symbol_info_tick(symbol).ask
         is_buy = (order_type == self.mt5.ORDER_TYPE_BUY)
         
+        if not auto_sltp:
+            return _tag({
+                "action": self._trade_action_deal,
+                "symbol": symbol,
+                "volume": qty,
+                "type": order_type,
+                "price": ask,
+                "type_time": self._order_time_gtc,
+                "type_filling": self._order_filling_ioc,
+                "sl": float(sl or 0.0),
+                "tp": float(tp or 0.0),
+            })
+
         if sl == 0:
             computed_sl = ask - (ask * self.risk_reward_ratio[0]) if is_buy \
                           else ask + (ask * self.risk_reward_ratio[0])
@@ -553,7 +568,7 @@ class MT5PositionHelper:
             "tp": computed_tp,
         })
 
-    def buy(self, symbol: str, qty: float, sl: float = 0, tp: float = 0):
+    def buy(self, symbol: str, qty: float, sl: float = 0, tp: float = 0, auto_sltp: bool = True):
         """
         Place a BUY order (thread-safe — builds a local request dict)
         
@@ -562,16 +577,17 @@ class MT5PositionHelper:
             qty: Order volume/quantity
             sl: Stop loss (0 for auto-calculation based on risk_reward_ratio)
             tp: Take profit (0 for auto-calculation based on risk_reward_ratio)
+            auto_sltp: False = no auto-calculation: sl / tp as given, 0 = none
         
         Returns:
             Order result from MT5
         """
-        request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_BUY, sl, tp)
+        request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_BUY, sl, tp, auto_sltp)
         order_status = self._send(request)
         time.sleep(0.1)
         return order_status
     
-    def sell(self, symbol: str, qty: float, sl: float = 0, tp: float = 0):
+    def sell(self, symbol: str, qty: float, sl: float = 0, tp: float = 0, auto_sltp: bool = True):
         """
         Place a SELL order (thread-safe — builds a local request dict)
         
@@ -580,11 +596,12 @@ class MT5PositionHelper:
             qty: Order volume/quantity
             sl: Stop loss (0 for auto-calculation based on risk_reward_ratio)
             tp: Take profit (0 for auto-calculation based on risk_reward_ratio)
+            auto_sltp: False = no auto-calculation: sl / tp as given, 0 = none
         
         Returns:
             Order result from MT5
         """
-        request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_SELL, sl, tp)
+        request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_SELL, sl, tp, auto_sltp)
         order_status = self._send(request)
         time.sleep(0.1)
         return order_status
