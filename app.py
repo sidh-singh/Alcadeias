@@ -177,7 +177,7 @@ def entry_timeframes():
     return list(dict.fromkeys(keys))
 
 
-def entry_block_reason(want_side, trend_now, vol_now, usd_per_price, no_data=()):
+def entry_block_reason(want_side, trend_now, vol_now, usd_per_price, no_data=(), short_history=()):
     """
     Why a fresh entry the strategy wants is not sent, after the brake (None = send it). The backtester's
     execution-time order (kernels.py L1206-1225): trend, then the volatility unit not known; before them
@@ -186,7 +186,9 @@ def entry_block_reason(want_side, trend_now, vol_now, usd_per_price, no_data=())
                      missing, which the scores would read as 0 -- with ENTRY_AGREE_S = 0 a missing M15 would
                      pass the agreement gate. Exits and stops do not depend on it.
       trend: TREND_TF set and want_side * trend <= 0 (a trend of 0 blocks both sides)
-      volatility unknown: VOL_TF set and the unit of the last closed bar is not > 0
+      volatility unknown: VOL_TF set and the unit of the last closed bar is not > 0, or the terminal gave fewer
+                     than _MIN_CLOSED_BARS closed bars of VOL_TF / TREND_TF this poll (`short_history`: the unit
+                     and the MACD signal line are not settled on a short history)
       contract size unknown: a volatility distance is configured and the USD value of a price move is not known
     """
     if no_data and {_tf_key(t) for t in no_data} & set(entry_timeframes()):
@@ -194,6 +196,8 @@ def entry_block_reason(want_side, trend_now, vol_now, usd_per_price, no_data=())
     if TREND_TF is not None and want_side * trend_now <= 0:
         return 'trend'
     if VOL_TF is not None and not (vol_now is not None and vol_now > 0):
+        return 'volatility unknown'
+    if short_history:
         return 'volatility unknown'
     if VOL_TF is not None and not usd_per_price and (TARGET_VOL > 0 or STOP_VOL > 0 or VOL_CAP_USD_PER_UNIT > 0):
         return 'contract size unknown'
@@ -237,6 +241,9 @@ def design_problems():
         p.append(f'VOL_LEN must be a whole number >= 2, not {VOL_LEN!r}')
     if not _is_number(BACKSTOP_FACTOR) or BACKSTOP_FACTOR <= 1.0:
         p.append(f"BACKSTOP_FACTOR must be a number > 1 (the backstop beyond the bot's own stop), not {BACKSTOP_FACTOR!r}")
+    if (TREND_TF is not None or VOL_TF is not None) and RSI_CANDLE_COUNT - 1 < _MIN_CLOSED_BARS:
+        p.append(f'RSI_CANDLE_COUNT {RSI_CANDLE_COUNT} leaves fewer than {_MIN_CLOSED_BARS} closed bars for TREND_TF / '
+                 f'VOL_TF: no entry could ever be sent')
     vols = {'TARGET_VOL': TARGET_VOL, 'STOP_VOL': STOP_VOL, 'LADDER_GAP_VOL': LADDER_GAP_VOL,
             'VOL_CAP_USD_PER_UNIT': VOL_CAP_USD_PER_UNIT}
     for name, x in vols.items():
@@ -288,6 +295,8 @@ _RECONNECT_AFTER = 5                         # polls in a row without the termin
 _RECONNECT_BACKOFF_S = (5.0, 10.0, 30.0, 60.0)   # waits after a reconnect that failed (the last one repeats)
 _PENDING_FILL_S = 10.0                       # a basket the bot just opened waits this long for the terminal to list
                                              # its position (as the Turtle's legs do)
+_MIN_CLOSED_BARS = 300                       # closed VOL_TF / TREND_TF bars an entry (and a rebuilt basket's unit)
+                                             # needs: with fewer the EWMA unit is off by up to 12% (BTC H1, 100 bars)
 
 
 def fill_pending(basket, now):
@@ -892,8 +901,8 @@ class MT5TradingBot:
         if tf is None:
             return None
         rates = mt5.copy_rates_from(trade_symbol, tf, _utc(int(t_open)), RSI_CANDLE_COUNT)
-        if rates is None or len(rates) < 2:
-            return None
+        if rates is None or len(rates) - 1 < _MIN_CLOSED_BARS:
+            return None                 # too short a history: the basket waits for the unit of a full one
         v = Indicator.vol_unit(rates['close'][:-1], VOL_LEN)
         return v if v > 0 else None
 
@@ -1405,6 +1414,7 @@ class MT5TradingBot:
                 trend_signal = None
                 vol_now = None             # VOL_TF volatility unit, last closed bar (price units)
                 _no_data = []              # timeframes the terminal returned no bars for this poll (their votes unknown)
+                _short = []                # TREND_TF / VOL_TF with fewer than _MIN_CLOSED_BARS closed bars this poll
 
                 if not has_candle_data:
                     print(f"[{symbol}] WARNING: No candle data returned by MT5")
@@ -1532,8 +1542,11 @@ class MT5TradingBot:
                                     )
                                 trend_signal = float(macd_df['signal'].iloc[-2]) if len(macd_df) >= 2 else float('nan')
                                 trend_now = 1 if trend_signal > 0 else (-1 if trend_signal < 0 else 0)
+                            # Both need a full history: fewer than _MIN_CLOSED_BARS closed bars send no entry.
+                            if tf_name in (_trend_name, _vol_name) and len(tf_df) - 1 < _MIN_CLOSED_BARS:
+                                _short.append(_tf_key(tf_name))
                             # Volatility unit on the CLOSED bars (the forming row -1 excluded).
-                            if tf_name == _vol_name:
+                            if tf_name == _vol_name and len(tf_df) - 1 >= _MIN_CLOSED_BARS:
                                 vol_now = Indicator.vol_unit(tf_df['close'].to_numpy()[:-1], VOL_LEN)
                         else:
                             rsi_mtf[tf_name] = 50.0
@@ -1612,6 +1625,7 @@ class MT5TradingBot:
                     analysis_data['trend_signal'] = trend_signal if trend_signal == trend_signal else None
                     analysis_data['vol_unit_now'] = vol_now
                     analysis_data['no_data'] = list(_no_data)
+                    analysis_data['short_history'] = list(_short)
                     analysis_data['loss_pause_s'] = _pause
                     analysis_data['pause_left_s'] = max(0.0, round(_pause - (time.time() - _last_close_time), 1))
                     analysis_data['last_close_lost'] = _lc.get('lost')
@@ -1701,7 +1715,8 @@ class MT5TradingBot:
                 close_response = None
                 if has_candle_data and candle_is_fresh and buy_signal == Signal.BUY:
                     if not brake:
-                        _why = entry_block_reason(1, trend_now, vol_now, _usd_per_price, no_data=_no_data)
+                        _why = entry_block_reason(1, trend_now, vol_now, _usd_per_price, no_data=_no_data,
+                                                  short_history=_short)
                         if _why is None:
                             _levels = basket_levels(vol_now, _usd_per_price)   # fixed for this basket's life
                             order_response, _backstop = self._open_leg(1, trade_symbol, units * mtqty,
@@ -1725,7 +1740,7 @@ class MT5TradingBot:
                             self._log_event(symbol, 'BUY_SIGNAL', 'SIGNAL', {
                                 'note': f'Entry blocked: {_why} — order skipped',
                                 'trend_signal': analysis_data.get('trend_signal'), 'vol_unit': vol_now,
-                                'no_data': list(_no_data),
+                                'no_data': list(_no_data), 'short_history': list(_short),
                             }, server_time=server_time)
                     else:
                         self._log_event(symbol, 'BUY_SIGNAL', 'SIGNAL', {
@@ -1769,7 +1784,8 @@ class MT5TradingBot:
                 # Execute sell signal
                 if has_candle_data and candle_is_fresh and sell_signal == Signal.SELL:
                     if not brake:
-                        _why = entry_block_reason(-1, trend_now, vol_now, _usd_per_price, no_data=_no_data)
+                        _why = entry_block_reason(-1, trend_now, vol_now, _usd_per_price, no_data=_no_data,
+                                                  short_history=_short)
                         if _why is None:
                             _levels = basket_levels(vol_now, _usd_per_price)   # fixed for this basket's life
                             order_response, _backstop = self._open_leg(-1, trade_symbol, units * mtqty,
@@ -1793,7 +1809,7 @@ class MT5TradingBot:
                             self._log_event(symbol, 'SELL_SIGNAL', 'SIGNAL', {
                                 'note': f'Entry blocked: {_why} — order skipped',
                                 'trend_signal': analysis_data.get('trend_signal'), 'vol_unit': vol_now,
-                                'no_data': list(_no_data),
+                                'no_data': list(_no_data), 'short_history': list(_short),
                             }, server_time=server_time)
                     else:
                         self._log_event(symbol, 'SELL_SIGNAL', 'SIGNAL', {

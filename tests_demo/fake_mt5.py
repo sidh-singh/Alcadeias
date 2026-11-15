@@ -606,6 +606,7 @@ def make_bot(mods, fake, symbol, run, state_dir=None, step_up=2500, max_limit=10
             'ladder_armed': an.get('ladder_armed'), 'trend': an.get('trend'), 'vol': an.get('vol_unit_now'),
             'levels': an.get('basket_levels'), 'pause_left': an.get('pause_left_s'),
             'virtual_balance': an.get('virtual_balance'), 'no_data': an.get('no_data'),
+            'short_history': an.get('short_history'),
             'votes': {tf: ((v or {}).get('rsi', {}).get('sign'), (v or {}).get('macd', {}).get('sign'))
                       for tf, v in (an.get('slopes') or {}).items()},
         })
