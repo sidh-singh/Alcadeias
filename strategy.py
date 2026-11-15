@@ -1,3 +1,4 @@
+import math
 from enum import Enum
 from constants import (
     STRATEGY_HEDGE,
@@ -5,7 +6,28 @@ from constants import (
     RSI_OVERSOLD, RSI_OVERBOUGHT,
     ENTRY_S, ENTRY_AGREE_S, LADDER_S, FORCE_CLOSE_S,
     OPEN_SCORE_WEIGHTS, FORCE_CLOSE_SCORE_WEIGHTS,
+    # design levers (constants.py; the defaults are the live bot). Read at call time, like the names above.
+    FORCE_CLOSE_ENABLED, MAX_ADDS, LADDER_TRIGGER, LADDER_TFS, LADDER_MULTIPLIERS,
 )
+
+LADDER_TRIGGERS = ('rsi_level', 'macd_turn')
+
+
+def _tf_key(tf):
+    """'TIMEFRAME_H1' or 'H1' -> 'H1'."""
+    s = str(tf).strip().upper()
+    return s[len('TIMEFRAME_'):] if s.startswith('TIMEFRAME_') else s
+
+
+def _round2(x):
+    """Round to cents, half away from zero (the backtester's _round2, used for its ladder lots)."""
+    if x >= 0.0:
+        return math.floor(x * 100.0 + 0.5) / 100.0
+    return -math.floor(-x * 100.0 + 0.5) / 100.0
+
+
+def _is_number(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and x == x and abs(x) != float('inf')
 
 
 class Signal(Enum):
@@ -63,6 +85,99 @@ class Strategy:
                 except IndexError:
                     return round(0.01 * times, 2)
         return round(0.01 * times, 2)
+
+    # ── design levers: which timeframes the strategy reads, the ladder's tiers and sizes ──
+    @staticmethod
+    def ladder_tiers():
+        """Tier timeframe (short key) of each ladder add: add n uses ladder_tiers()[n-1].
+        min(len(LADDER_TFS), MAX_ADDS) tiers (the backtester's n_ladder_adds); [] = no ladder.
+        Live: M1, M5, M15, H1, H4 (5 adds, at most 6 positions)."""
+        n = max(0, min(len(LADDER_TFS), int(MAX_ADDS)))
+        return [_tf_key(t) for t in list(LADDER_TFS)[:n]]
+
+    @staticmethod
+    def slope_timeframes():
+        """'TIMEFRAME_<key>' of every timeframe whose RSI + MACD pivot votes this strategy reads: the OPEN and
+        FORCE-CLOSE section timeframes (the force-close section is also the entry-agreement section, so it is
+        read even with FORCE_CLOSE_ENABLED off) plus, for a 'macd_turn' ladder, the tier timeframes (their
+        votes carry no weight in any score). app.py computes votes for these on top of SLOPE_TIMEFRAMES."""
+        keys = [_tf_key(k) for k in list(OPEN_SCORE_WEIGHTS) + list(FORCE_CLOSE_SCORE_WEIGHTS)]
+        if LADDER_TRIGGER == 'macd_turn':
+            keys += Strategy.ladder_tiers()
+        return ['TIMEFRAME_' + k for k in dict.fromkeys(keys)]
+
+    @staticmethod
+    def rsi_timeframes():
+        """'TIMEFRAME_<key>' of the ladder tiers, whose forming-bar RSI the 'rsi_level' ladder reads."""
+        return ['TIMEFRAME_' + k for k in dict.fromkeys(Strategy.ladder_tiers())]
+
+    def next_add_volume(self, total_volume, count, times, mtqty=0.01):
+        """Lots of the next ladder add, `count` positions being open already.
+        LADDER_MULTIPLIERS None: the live Fibonacci size (_get_next_fibo_volume, bit-for-bit).
+        A list: LADDER_MULTIPLIERS[count] units (padded with its last element), rounded to cents half away
+        from zero as the backtester does (kernels.py: _round2(ladder_mult[n_pos] * basket_units * mtqty))."""
+        if LADDER_MULTIPLIERS is None:
+            return self._get_next_fibo_volume(total_volume, times)
+        mult = list(LADDER_MULTIPLIERS)
+        m = mult[count] if count < len(mult) else mult[-1]
+        return _round2(float(m) * times * mtqty)
+
+    @staticmethod
+    def design_problems():
+        """Why the strategy's design levers cannot run (empty list = fine). Mirrors BacktestConfig's checks."""
+        problems = []
+        if not isinstance(FORCE_CLOSE_ENABLED, bool):
+            problems.append(f'FORCE_CLOSE_ENABLED must be True or False, not {FORCE_CLOSE_ENABLED!r}')
+        if not isinstance(MAX_ADDS, int) or isinstance(MAX_ADDS, bool) or MAX_ADDS < 0:
+            problems.append(f'MAX_ADDS must be a whole number >= 0, not {MAX_ADDS!r}')
+        if LADDER_TRIGGER not in LADDER_TRIGGERS:
+            problems.append(f'LADDER_TRIGGER {LADDER_TRIGGER!r} is not one of {LADDER_TRIGGERS}')
+        if not isinstance(LADDER_TFS, (list, tuple)) or not all(isinstance(t, str) and t for t in LADDER_TFS):
+            problems.append(f'LADDER_TFS must be a list of timeframe names, not {LADDER_TFS!r}')
+        if LADDER_MULTIPLIERS is not None:
+            m = LADDER_MULTIPLIERS
+            if (not isinstance(m, (list, tuple)) or not m or not all(_is_number(x) and x > 0 for x in m)):
+                problems.append(f'LADDER_MULTIPLIERS must be None or a list of positive numbers, not {m!r}')
+            elif float(m[0]) != 1.0:
+                problems.append('LADDER_MULTIPLIERS[0] is the entry and must be 1 (the adds are elements 1, 2, ...)')
+        for name, w in (('OPEN_SCORE_WEIGHTS', OPEN_SCORE_WEIGHTS), ('FORCE_CLOSE_SCORE_WEIGHTS', FORCE_CLOSE_SCORE_WEIGHTS)):
+            if not isinstance(w, dict) or not all(_is_number(v) for v in w.values()):
+                problems.append(f'{name} must be a {{timeframe: weight}} dict, not {w!r}')
+        return problems
+
+    def _ladder_add(self, side, count, add_ok, rsi_mtf, slopes, armed, gap, last_fill, bid, ask):
+        """The ladder branch of an open basket (reached only when no exit fired), as the backtester runs it
+        (kernels.py L1093-1147): tier -> trigger (and arming) -> open-score gate -> price gap.
+        Returns (add?, armed, tier timeframe or None).
+          tier:      positions `count` -> LADDER_TFS[count-1]; no tier left -> no add (and no arming).
+          trigger:   'rsi_level' the tier's forming-bar RSI <= RSI_OVERSOLD (buy) / >= RSI_OVERBOUGHT (sell);
+                     'macd_turn' the tier's MACD vote not with the basket (<= 0 for a buy) ARMS the ladder,
+                     which then stays armed (also through polls the gate or the gap refuse) until an add
+                     fills; it fires on a later poll with the vote with the basket.
+          gate:      add_ok (OPEN score not fully against the basket).
+          gap:       gap > 0: buy needs last fill - ask >= gap, sell needs bid - last fill >= gap."""
+        tiers = self.ladder_tiers()
+        if count < 1 or count > len(tiers):
+            return False, armed, None
+        tf = tiers[count - 1]
+        if LADDER_TRIGGER == 'macd_turn':
+            vote = self._slope_sign(slopes, tf, 'macd')
+            if vote * side <= 0:
+                armed = True
+            hit = armed and vote * side > 0
+        else:
+            r = rsi_mtf.get('TIMEFRAME_' + tf, 50.0) if rsi_mtf else 50.0
+            hit = (r <= RSI_OVERSOLD) if side > 0 else (r >= RSI_OVERBOUGHT)
+        if not hit or not add_ok:
+            return False, armed, tf
+        if gap and gap > 0.0:
+            quote = ask if side > 0 else bid
+            if last_fill is None or quote is None:
+                return False, armed, tf
+            gap_ok = (last_fill - ask) >= gap if side > 0 else (bid - last_fill) >= gap
+            if not gap_ok:
+                return False, armed, tf
+        return True, armed, tf
 
     @staticmethod
     def _slope_sign(slopes, tf, ind):
@@ -164,8 +279,20 @@ class Strategy:
                          buy_positions, sell_positions, times,
                          close_threshold=2,
                          rsi_value=None, rsi_mtf=None, slopes=None,
-                         entry_allowed=True):
+                         entry_allowed=True,
+                         stop_threshold=None, ladder_armed=False, ladder_gap=0.0,
+                         last_fill_price=None, bid=None, ask=None):
         """
+        Design levers (constants.py; their defaults are the live rules, so these arguments at their
+        defaults reproduce live v3.9.2 exactly):
+          close_threshold  basket target, USD for the whole basket (strict >); None = no target.
+          stop_threshold   basket stop, USD for the whole basket: close at profit <= -stop_threshold.
+                           Checked BEFORE the target. None = no stop (live).
+          FORCE_CLOSE_ENABLED False: the force-close never fires; fc_score still gates the entry.
+          ladder           tiers LADDER_TFS[:MAX_ADDS], trigger LADDER_TRIGGER ('macd_turn' reads and
+                           updates `ladder_armed`, returned as analysis_data['ladder_armed']), the gap
+                           `ladder_gap` (price units) from `last_fill_price` judged on `ask` (buy) / `bid`.
+
         RSI+MACD slope entry + RSI Fibo ladder; exits are the +$unit target or the force-close
         (variant B). Per-section weighted scores, each from its OWN configurable timeframe set
         (constants.py OPEN/FORCE_CLOSE_SCORE_WEIGHTS; 2026-10-30), each normalised to -20..+20 so its
@@ -216,12 +343,8 @@ class Strategy:
         sell_status = Signal.DO_NOTHING
         exit_reason = None
 
-        # Per-timeframe RSI for the DCA ladder tiers (1->M1 ... 5->H4)
-        rsi_1m = rsi_mtf.get('TIMEFRAME_M1', 50.0) if rsi_mtf else 50.0
-        rsi_5m = rsi_mtf.get('TIMEFRAME_M5', 50.0) if rsi_mtf else 50.0
-        rsi_15m = rsi_mtf.get('TIMEFRAME_M15', 50.0) if rsi_mtf else 50.0
-        rsi_1h = rsi_mtf.get('TIMEFRAME_H1', 50.0) if rsi_mtf else 50.0
-        rsi_4h = rsi_mtf.get('TIMEFRAME_H4', 50.0) if rsi_mtf else 50.0
+        # The DCA ladder reads its tier timeframes' RSI from rsi_mtf (see _ladder_add; live tiers
+        # 1->M1 ... 5->H4 = LADDER_TFS).
 
         slope_direction = self._slope_direction(slopes)   # structural 4H/1H/15M read (dashboard/compare only; entry uses the score)
 
@@ -257,6 +380,8 @@ class Strategy:
         buy_fc_reason = 'force_close'
         sell_fc = fc_score >= FORCE_CLOSE_S
         sell_fc_reason = 'force_close'
+        fc_enabled = bool(FORCE_CLOSE_ENABLED)   # off: fc_score still gates the entry (above), it never closes
+        ladder_tier = None
 
         if buy_count == 0 and sell_count == 0:
             # Fresh entry (single position; opens on the weighted score), cooldown-gated.
@@ -266,47 +391,45 @@ class Strategy:
                 sell_status = Signal.SELL
 
         elif buy_count > 0 and sell_count == 0:
-            # Open BUY: close first (+$unit target, then slope force-close), then the
-            # RSI DCA ladder adds -- closing has priority over taking new positions.
-            if buy_profit > close_threshold:
+            # Open BUY: close first (stop, then target, then slope force-close), then the
+            # ladder adds -- closing has priority over taking new positions.
+            if stop_threshold is not None and buy_profit <= -stop_threshold:
+                buy_status = Signal.CLOSE_BUY
+                exit_reason = 'stop_loss'
+            elif close_threshold is not None and buy_profit > close_threshold:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = 'target'
-            elif buy_fc:
+            elif fc_enabled and buy_fc:
                 buy_status = Signal.CLOSE_BUY
                 exit_reason = buy_fc_reason
-            elif buy_add_ok:
+            else:
                 # DCA add - gated: averages into the long only when the score is not against it.
-                if rsi_1m <= RSI_OVERSOLD and buy_count == 1:
-                    buy_status = Signal.BUY_MORE
-                elif rsi_5m <= RSI_OVERSOLD and buy_count == 2:
-                    buy_status = Signal.BUY_MORE
-                elif rsi_15m <= RSI_OVERSOLD and buy_count == 3:
-                    buy_status = Signal.BUY_MORE
-                elif rsi_1h <= RSI_OVERSOLD and buy_count == 4:
-                    buy_status = Signal.BUY_MORE
-                elif rsi_4h <= RSI_OVERSOLD and buy_count == 5:
+                # Live: one RSI tier per count (1->M1 ... 5->H4) at RSI <= RSI_OVERSOLD.
+                add, ladder_armed, ladder_tier = self._ladder_add(
+                    1, buy_count, buy_add_ok, rsi_mtf, slopes, ladder_armed, ladder_gap,
+                    last_fill_price, bid, ask)
+                if add:
                     buy_status = Signal.BUY_MORE
 
         elif buy_count == 0 and sell_count > 0:
-            # Open SELL (mirror): close first (+$unit target, then slope force-close),
-            # then the RSI DCA ladder adds.
-            if sell_profit > close_threshold:
+            # Open SELL (mirror): close first (stop, then target, then slope force-close),
+            # then the ladder adds.
+            if stop_threshold is not None and sell_profit <= -stop_threshold:
+                sell_status = Signal.CLOSE_SELL
+                exit_reason = 'stop_loss'
+            elif close_threshold is not None and sell_profit > close_threshold:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = 'target'
-            elif sell_fc:
+            elif fc_enabled and sell_fc:
                 sell_status = Signal.CLOSE_SELL
                 exit_reason = sell_fc_reason
-            elif sell_add_ok:
+            else:
                 # DCA add - gated: averages into the short only when the score is not against it.
-                if rsi_1m >= RSI_OVERBOUGHT and sell_count == 1:
-                    sell_status = Signal.SELL_MORE
-                elif rsi_5m >= RSI_OVERBOUGHT and sell_count == 2:
-                    sell_status = Signal.SELL_MORE
-                elif rsi_15m >= RSI_OVERBOUGHT and sell_count == 3:
-                    sell_status = Signal.SELL_MORE
-                elif rsi_1h >= RSI_OVERBOUGHT and sell_count == 4:
-                    sell_status = Signal.SELL_MORE
-                elif rsi_4h >= RSI_OVERBOUGHT and sell_count == 5:
+                # Live: one RSI tier per count (1->M1 ... 5->H4) at RSI >= RSI_OVERBOUGHT.
+                add, ladder_armed, ladder_tier = self._ladder_add(
+                    -1, sell_count, sell_add_ok, rsi_mtf, slopes, ladder_armed, ladder_gap,
+                    last_fill_price, bid, ask)
+                if add:
                     sell_status = Signal.SELL_MORE
 
         analysis_data = {
@@ -322,6 +445,11 @@ class Strategy:
             'entry_allowed': bool(entry_allowed),
             'entry_chop_block': bool(entry_chop_block),
             'exit_reason': exit_reason,
+            'force_close_enabled': fc_enabled,
+            'close_threshold': close_threshold,
+            'stop_threshold': stop_threshold,
+            'ladder_armed': bool(ladder_armed),
+            'ladder_tier': ladder_tier,
         }
 
         return buy_status, sell_status, analysis_data
