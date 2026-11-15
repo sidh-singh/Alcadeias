@@ -13,11 +13,10 @@ import sys
 
 import pytest
 
-from conftest import F, SCALED, START, market, run_bot
+from conftest import NO_LADDER, F, booked_outside, deals_of, market, quiet_window, recording_states, run_bot
 
 CREDS = {'terminal_path': r'C:\fake\terminal64.exe', 'login_id': 1, 'login_pass': 'not-a-password',
          'server': 'Fake-Demo'}
-NO_LADDER = dict(SCALED, MAX_ADDS=0)      # no arming state: polls that decide nothing can be skipped exactly
 
 
 def _bot(mods, seconds=60):
@@ -107,46 +106,6 @@ def test_no_order_is_sent_while_the_terminal_holds_another_account(mods):
     assert res['closed_count'] == 1 and not fake.positions and len(fake.orders) == 2
 
 
-def _quiet_window(run, fake, seconds):
-    """Start (terminal seconds) of a stretch of `seconds` inside a basket in which the reference run decided
-    nothing: every poll DO_NOTHING in a basket, no order sent."""
-    order_t = [o['_t_ms'] for o in fake.orders]
-    polls = run.polls
-    for i, p in enumerate(polls):
-        if p['t'] < (START + 120) * 1000 or p['nb'] + p['ns'] == 0:
-            continue
-        t0, t1 = p['t'], p['t'] + seconds * 1000
-        window = [q for q in polls[i:] if q['t'] <= t1 + 1000]
-        if window[-1]['t'] < t1:
-            break
-        if (all(q['buy'] == q['sell'] == 'DO_NOTHING' and q['nb'] + q['ns'] > 0 for q in window)
-                and not any(t0 - 1000 <= t <= t1 + 1000 for t in order_t)):
-            return t0 / 1000.0
-    raise AssertionError('no quiet window')
-
-
-def _deals(fake):
-    return [(d.time_msc, d.type, d.entry, d.volume, d.price, d.profit) for d in fake.deals]
-
-
-def recording_states(saved):
-    """on_new_bot hook: every state the bot saves, as JSON, into `saved`."""
-    def on_new_bot(bot, n):
-        save = bot._save_state
-
-        def rec(symbol, state):
-            saved.append(json.loads(json.dumps(state, default=str)))
-            save(symbol, state)
-        bot._save_state = rec
-    return on_new_bot
-
-
-def booked_outside(saved):
-    """The states that book a basket as closed outside the bot or take one over from the terminal."""
-    return [s for s in saved if (s.get('last_close') or {}).get('reason') == 'closed_outside'
-            or (s.get('basket') or {}).get('opened_by') == 'rebuild']
-
-
 @pytest.mark.slow
 def test_a_switch_to_another_account_mid_basket_changes_nothing(tmp_path):
     """A live bot logs the shared terminal into the real account for a minute while this bot holds a basket; that
@@ -155,7 +114,7 @@ def test_a_switch_to_another_account_mid_basket_changes_nothing(tmp_path):
     fake0, clock0 = market(1800, seed=21)
     ref = run_bot(fake0, clock0, overrides=NO_LADDER, state_dir=tmp_path / 'ref')
     assert not ref.errors, ref.errors[:3]
-    t0 = _quiet_window(ref, fake0, 60)
+    t0 = quiet_window(ref, fake0, 60)
 
     fake, clock = market(1800, seed=21)
     stash = {}
@@ -172,7 +131,7 @@ def test_a_switch_to_another_account_mid_basket_changes_nothing(tmp_path):
     saved = []
     run = run_bot(fake, clock, overrides=NO_LADDER, state_dir=tmp_path / 'run', on_new_bot=recording_states(saved))
     assert saved and not booked_outside(saved)     # (unguarded: a phantom 'closed_outside', then a rebuilt basket)
-    assert _deals(fake) == _deals(fake0)
+    assert deals_of(fake) == deals_of(fake0)
     assert not any((t0 + 0.5) * 1000 <= o['_t_ms'] <= (t0 + 60.5) * 1000 for o in fake.orders)
     assert not any((t0 + 0.5) * 1000 < p['t'] < (t0 + 60.5) * 1000 for p in run.polls)   # no poll decided
     events = [e['event'] for e in run.events]

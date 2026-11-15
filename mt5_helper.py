@@ -23,6 +23,12 @@ def is_own(item):
     return getattr(item, 'magic', MAGIC) == MAGIC
 
 
+class TerminalReadError(RuntimeError):
+    """The terminal answered None to a read the bot decides on: positions_get() failed. That is an error, not "no
+    positions" -- read as flat it would book this bot's open basket as closed outside the bot, start a pause and
+    rebuild the basket. app.py skips the poll that meets it (no sync, no bookkeeping, no decision)."""
+
+
 def _tag(request):
     """Add this bot's magic number and comment to an order request."""
     if MAGIC is not None:
@@ -85,6 +91,7 @@ class MT5PositionHelper:
                 - last_profit: Profit of last BUY position
                 - last_volume: Volume of last BUY position
             Returns None if no positions found
+        Raises TerminalReadError when the terminal does not answer (positions_get() returned None).
         """
         positions = self._own_positions(symbol)
         
@@ -135,6 +142,7 @@ class MT5PositionHelper:
                 - last_profit: Profit of last SELL position
                 - last_volume: Volume of last SELL position
             Returns None if no positions found
+        Raises TerminalReadError when the terminal does not answer (positions_get() returned None).
         """
         positions = self._own_positions(symbol)
         
@@ -168,11 +176,15 @@ class MT5PositionHelper:
         }
 
     def _own_positions(self, symbol: str):
-        """This bot's open positions on `symbol` (those carrying MAGIC), in the terminal's order; None when
-        the terminal returns nothing."""
+        """This bot's open positions on `symbol` (those carrying MAGIC), in the terminal's order ([] = none).
+        Raises TerminalReadError when the terminal answers None (an error: the positions are not known)."""
         positions = self.mt5.positions_get(symbol=symbol)
         if positions is None:
-            return None
+            try:
+                err = self.mt5.last_error()
+            except Exception as e:
+                err = repr(e)
+            raise TerminalReadError(f'positions_get({symbol}) returned None (last_error {err})')
         return [pos for pos in positions if is_own(pos)]
     
     def get_account_info(self) -> Optional[Dict]:
@@ -624,10 +636,13 @@ class MT5PositionHelper:
             'errors': [],
         }
         
-        positions = self._own_positions(symbol)   # this bot's positions only (MAGIC)
-        if positions is None:
-            result['message'] = f"No positions found for {symbol}"
-            result['success'] = True  # No positions is not an error
+        try:
+            positions = self._own_positions(symbol)   # this bot's positions only (MAGIC)
+        except TerminalReadError as e:
+            # the positions are not known: nothing is closed, and it is a failure (the caller closes again)
+            result['message'] = str(e)
+            result['errors'].append(str(e))
+            result['failed_count'] = 1
             return result
         
         result['total_positions'] = len(positions)
