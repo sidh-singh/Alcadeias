@@ -101,7 +101,9 @@
     "polls_entry_blocked_spread": 0,
     "polls_entry_blocked_no_volatility": 0,
     "polls_entry_blocked_daily_loss": 0,
-    "closes_trailing": 0
+    "closes_trailing": 0,
+    "polls_entry_blocked_rsi": 0,
+    "closes_force_rsi": 0
   },
   "scalars": {
     "final_balance": 1211.7600000000293,
@@ -167,6 +169,7 @@
         1.0
       ]
     },
+    "agree_weights": null,
     "open_grey_fill": true,
     "book_grey_fill": true,
     "fc_grey_fill": false,
@@ -253,12 +256,15 @@
     "trail_gap_vol": 0.0,
     "trail_start_usd_per_unit": 0.0,
     "trail_gap_usd_per_unit": 0.0,
+    "entry_rsi_block_tfs": null,
+    "entry_rsi_block_mode": "directional",
+    "fc_rsi_tfs": null,
     "daily_loss_limit_usd_per_unit": 0.0,
     "record_interval_s": 60
   },
   "engine": {
     "mode": "ticks",
-    "runtime_s": 3.069,
+    "runtime_s": 3.172,
     "warm_bars": {
       "M1": 600,
       "M5": 600,
