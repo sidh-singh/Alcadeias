@@ -24,7 +24,227 @@ from constants import (
     STRATEGY_LOG_FILENAME, STRATEGY_LOG_MAX_ENTRIES,
     ORDER_COOLDOWN_SECONDS,
     ACTIVE_CONFIG_FILENAME,
+    STRATEGY_HEDGE,
+    # design levers (constants.py; the defaults are the live bot). Read at call time, like the names above.
+    DESIGN_NAME, STRATEGY,
+    TREND_TF, VOL_TF, VOL_LEN,
+    TARGET_USD_PER_UNIT, STOP_LOSS_USD_PER_UNIT,
+    TARGET_VOL, STOP_VOL, VOL_CAP_USD_PER_UNIT, LADDER_GAP_VOL,
+    LOSS_COOLDOWN_S,
+    CONTRACT_SIZE_FALLBACK, STATE_SUBDIR,
+    # demo isolation
+    MAGIC, DEMO_BRANCH, VIRTUAL_START_BALANCE, VIRTUAL_START_DATE,
 )
+
+_TF_PREFIX = 'TIMEFRAME_'
+_STATE_VERSION = 1
+_RESOLVE_ATTEMPTS = 30           # polls spent looking for a closed basket's deals before its P/L at the close decision stands
+
+
+def _tf_key(tf):
+    """'TIMEFRAME_H1' or 'H1' -> 'H1' (None stays None)."""
+    if tf is None:
+        return None
+    s = str(tf).strip().upper()
+    return s[len(_TF_PREFIX):] if s.startswith(_TF_PREFIX) else s
+
+
+def _tf_name(tf):
+    """'H1' or 'TIMEFRAME_H1' -> 'TIMEFRAME_H1' (None stays None)."""
+    k = _tf_key(tf)
+    return None if k is None else _TF_PREFIX + k
+
+
+def _is_number(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and x == x and abs(x) != float('inf')
+
+
+def _utc(ts):
+    """Epoch seconds -> aware UTC datetime (what the terminal's time arguments expect)."""
+    from datetime import datetime
+    return datetime.fromtimestamp(float(ts), tz=timezone.utc)
+
+
+def _virtual_start_ts():
+    """VIRTUAL_START_DATE ('YYYY-MM-DD' or an ISO time, UTC) as epoch seconds; None when it is None."""
+    if VIRTUAL_START_DATE is None:
+        return None
+    from datetime import datetime
+    dt = datetime.fromisoformat(str(VIRTUAL_START_DATE).strip())
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+def _pos_time(pos):
+    """Open time of a position in seconds (time_msc when the terminal has it)."""
+    msc = getattr(pos, 'time_msc', None)
+    return msc / 1000.0 if msc else float(pos.time)
+
+
+def _pos_id(pos):
+    """The identifier the deal history knows a position by (position_id of its deals)."""
+    ident = getattr(pos, 'identifier', None)
+    return int(ident) if ident else int(pos.ticket)
+
+
+def _sorted_positions(positions):
+    """Positions oldest first (open time, then ticket)."""
+    return sorted(positions or [], key=lambda p: (_pos_time(p), int(p.ticket)))
+
+
+def _deal_time(deal):
+    msc = getattr(deal, 'time_msc', None)
+    return msc / 1000.0 if msc else float(deal.time)
+
+
+def _deal_net(deal):
+    """Realised money of a deal: profit + swap + commission + fee."""
+    return (float(getattr(deal, 'profit', 0.0) or 0.0) + float(getattr(deal, 'swap', 0.0) or 0.0)
+            + float(getattr(deal, 'commission', 0.0) or 0.0) + float(getattr(deal, 'fee', 0.0) or 0.0))
+
+
+def _is_out_deal(deal):
+    """A deal that closes (part of) a position: DEAL_ENTRY_OUT (1) or DEAL_ENTRY_OUT_BY (3)."""
+    e = getattr(deal, 'entry', None)
+    return e in (1, 3) or e == 'out'
+
+
+def virtual_balance_enabled():
+    """Units come from the virtual balance (VIRTUAL_START_BALANCE + this bot's own closed P/L) when a start
+    date is set and the bot has a MAGIC to find its deals by; otherwise from the account balance (live)."""
+    return VIRTUAL_START_DATE is not None and MAGIC is not None
+
+
+def usd_target_per_unit():
+    """The configured $ target per unit: STRATEGY_HEDGE for 'live', the number, or None (no $ target)."""
+    if TARGET_USD_PER_UNIT is None:
+        return None
+    if isinstance(TARGET_USD_PER_UNIT, str) and TARGET_USD_PER_UNIT == 'live':
+        return STRATEGY_HEDGE
+    return TARGET_USD_PER_UNIT
+
+
+def basket_levels(vol_unit, usd_per_price):
+    """
+    A basket's distances, fixed when it opens (the backtester's kernels.py L1266-1289):
+      target_usd_per_unit  USD per unit (None = no target): the $ target, or TARGET_VOL x unit x usd_per_price
+      stop_usd_per_unit    USD per unit (None = no stop):   the $ stop,   or STOP_VOL x unit x usd_per_price
+      gap_px               price units an add needs against the last fill: LADDER_GAP_VOL x unit (0 = none)
+    with unit = `vol_unit` (price units, the last closed VOL_TF bar), first capped at
+    VOL_CAP_USD_PER_UNIT / usd_per_price, and usd_per_price = contract_size x mtqty (gold 1.0, BTC 0.01).
+    The volatility multiples apply only with VOL_TF set and a known unit (> 0); the basket's USD levels
+    are these per-unit values times the basket's unit count.
+    """
+    tgt = usd_target_per_unit()
+    sl = STOP_LOSS_USD_PER_UNIT
+    gap = 0.0
+    v = None
+    if VOL_TF is not None and vol_unit is not None and vol_unit > 0:
+        # (an unknown usd_per_price cannot reach here with a USD distance configured: entry_block_reason
+        # refuses the entry, and a rebuilt basket waits for it, see levels_complete)
+        v = vol_unit
+        if VOL_CAP_USD_PER_UNIT > 0.0 and usd_per_price and v * usd_per_price > VOL_CAP_USD_PER_UNIT:
+            v = VOL_CAP_USD_PER_UNIT / usd_per_price
+        if TARGET_VOL > 0.0 and usd_per_price:
+            tgt = TARGET_VOL * v * usd_per_price
+        if STOP_VOL > 0.0 and usd_per_price:
+            sl = STOP_VOL * v * usd_per_price
+        if LADDER_GAP_VOL > 0.0:
+            gap = LADDER_GAP_VOL * v
+    return {
+        'target_usd_per_unit': tgt,
+        'stop_usd_per_unit': sl,
+        'gap_px': gap,
+        'vol_unit_raw': vol_unit if VOL_TF is not None else None,
+        'vol_unit': v,
+    }
+
+
+def levels_complete(vol_unit, usd_per_price):
+    """True when basket_levels() can give the design's distances (always without VOL_TF)."""
+    if VOL_TF is None:
+        return True
+    if not (vol_unit is not None and vol_unit > 0):
+        return False
+    return bool(usd_per_price) or not (TARGET_VOL > 0 or STOP_VOL > 0 or VOL_CAP_USD_PER_UNIT > 0)
+
+
+def entry_block_reason(want_side, trend_now, vol_now, usd_per_price):
+    """
+    Why a fresh entry the strategy wants is not sent, after the brake (None = send it). The backtester's
+    execution-time order (kernels.py L1206-1225): trend, then the volatility unit not known.
+      trend: TREND_TF set and want_side * trend <= 0 (a trend of 0 blocks both sides)
+      volatility unknown: VOL_TF set and the unit of the last closed bar is not > 0
+      contract size unknown: a volatility distance is configured and the USD value of a price move is not known
+    """
+    if TREND_TF is not None and want_side * trend_now <= 0:
+        return 'trend'
+    if VOL_TF is not None and not (vol_now is not None and vol_now > 0):
+        return 'volatility unknown'
+    if VOL_TF is not None and not usd_per_price and (TARGET_VOL > 0 or STOP_VOL > 0 or VOL_CAP_USD_PER_UNIT > 0):
+        return 'contract size unknown'
+    return None
+
+
+def design_problems():
+    """Why the design in constants.py cannot run (empty = fine). The backtester's BacktestConfig checks."""
+    p = list(Strategy.design_problems())
+    if STRATEGY not in ('basket', 'turtle'):
+        p.append(f"STRATEGY {STRATEGY!r} is not 'basket' or 'turtle'")
+    elif STRATEGY == 'turtle':
+        p.append("STRATEGY 'turtle': the Turtle module is not part of this code; this bot runs only 'basket'")
+    for name, tf in (('TREND_TF', TREND_TF), ('VOL_TF', VOL_TF)):
+        if tf is not None and not hasattr(mt5, _tf_name(tf)):
+            p.append(f'{name} {tf!r} is not an MT5 timeframe')
+    for tf in Strategy.ladder_tiers():
+        if not hasattr(mt5, _TF_PREFIX + tf):
+            p.append(f'LADDER_TFS entry {tf!r} is not an MT5 timeframe')
+    if not isinstance(VOL_LEN, int) or isinstance(VOL_LEN, bool) or VOL_LEN < 2:
+        p.append(f'VOL_LEN must be a whole number >= 2, not {VOL_LEN!r}')
+    vols = {'TARGET_VOL': TARGET_VOL, 'STOP_VOL': STOP_VOL, 'LADDER_GAP_VOL': LADDER_GAP_VOL,
+            'VOL_CAP_USD_PER_UNIT': VOL_CAP_USD_PER_UNIT}
+    for name, x in vols.items():
+        if not _is_number(x) or x < 0:
+            p.append(f'{name} must be a number >= 0, not {x!r}')
+        elif x > 0 and VOL_TF is None:
+            p.append(f'{name} > 0 needs VOL_TF, the timeframe whose volatility is the unit')
+    t = TARGET_USD_PER_UNIT
+    if not (t is None or (isinstance(t, str) and t == 'live') or (_is_number(t) and t >= 0)):
+        p.append(f"TARGET_USD_PER_UNIT must be 'live', None or a number >= 0, not {t!r}")
+    if not (STOP_LOSS_USD_PER_UNIT is None or (_is_number(STOP_LOSS_USD_PER_UNIT) and STOP_LOSS_USD_PER_UNIT >= 0)):
+        p.append(f'STOP_LOSS_USD_PER_UNIT must be None or a number >= 0, not {STOP_LOSS_USD_PER_UNIT!r}')
+    if not _is_number(LOSS_COOLDOWN_S) or LOSS_COOLDOWN_S < 0:
+        p.append(f'LOSS_COOLDOWN_S must be a number of seconds >= 0, not {LOSS_COOLDOWN_S!r}')
+    if MAGIC is not None and (not isinstance(MAGIC, int) or isinstance(MAGIC, bool) or MAGIC < 0):
+        p.append(f'MAGIC must be None or a whole number >= 0, not {MAGIC!r}')
+    if VIRTUAL_START_DATE is not None:
+        try:
+            _virtual_start_ts()
+        except (TypeError, ValueError):
+            p.append(f"VIRTUAL_START_DATE must be None or a date 'YYYY-MM-DD', not {VIRTUAL_START_DATE!r}")
+        if not _is_number(VIRTUAL_START_BALANCE) or VIRTUAL_START_BALANCE <= 0:
+            p.append(f'VIRTUAL_START_BALANCE must be a number > 0, not {VIRTUAL_START_BALANCE!r}')
+    return p
+
+
+def design_summary():
+    """One line describing the design in effect (startup print)."""
+    from strategy import (FORCE_CLOSE_ENABLED as _fc, MAX_ADDS as _ma, LADDER_TRIGGER as _lt,
+                          LADDER_MULTIPLIERS as _lm)
+    bits = [f'design {DESIGN_NAME!r}', f'force-close {"on" if _fc else "off"}',
+            f'trend {TREND_TF or "off"}', f'vol {VOL_TF + "/" + str(VOL_LEN) if VOL_TF else "off"}']
+    if VOL_TF:
+        bits.append(f'target {TARGET_VOL:g}u stop {STOP_VOL:g}u cap ${VOL_CAP_USD_PER_UNIT:g}')
+    else:
+        bits.append(f'target ${usd_target_per_unit()}/unit stop {STOP_LOSS_USD_PER_UNIT}')
+    bits.append(f'loss pause {LOSS_COOLDOWN_S:g}s' if LOSS_COOLDOWN_S else 'loss pause off')
+    tiers = Strategy.ladder_tiers()
+    bits.append(f'ladder {len(tiers)} x {_lt} {tiers} {"fibo" if _lm is None else list(_lm)}' if tiers else 'no ladder')
+    bits.append(f'magic {MAGIC}')
+    bits.append(f'virtual ${VIRTUAL_START_BALANCE:g} from {VIRTUAL_START_DATE}' if virtual_balance_enabled()
+                else 'units from the account balance')
+    return ' | '.join(bits)
 
 
 class MT5TradingBot:
@@ -53,6 +273,12 @@ class MT5TradingBot:
         self.indicator = Indicator()
         self.strategy = Strategy()
         self._stop_event = threading.Event()     # Signal workers to stop
+        # Per-basket state (fixed distances, ladder arming) and the loss pause live in
+        # <state_dir>/<symbol>_state.json; None = OUTPUT_DIR/STATE_SUBDIR. A replay may point it elsewhere
+        # or replace _load_state / _save_state.
+        self.state_dir = None
+        self._usd_per_price = {}                 # trade symbol -> contract_size x mtqty (USD per unit per 1.0 of price)
+        self._virtual_balance_last = None        # last virtual balance read from the deal history
 
     # ── Day-of-week mapping for trading_window config ──
     _DAY_NAME_TO_NUM = {
@@ -437,16 +663,286 @@ class MT5TradingBot:
             with open(log_path, 'w') as f:
                 json.dump(log_data, f, indent=2, default=str)
     
+    # ───────────────────── per-basket state, loss pause, virtual balance ─────────────────────
+    def _state_path(self, symbol):
+        base = self.state_dir or os.path.join(OUTPUT_DIR, STATE_SUBDIR)
+        return os.path.join(base, f'{symbol}_state.json')
+
+    def _load_state(self, symbol):
+        """The persisted state ({'basket': ..., 'last_close': ...}) or None: no file, unreadable, or written
+        for another symbol / magic number (then it is rebuilt from the terminal)."""
+        path = self._state_path(symbol)
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError) as e:
+            print(f"[{symbol}] note: state file {path} unreadable ({e}); rebuilding it from the terminal")
+            return None
+        if not isinstance(data, dict) or data.get('symbol') != symbol or data.get('magic') != MAGIC:
+            print(f"[{symbol}] note: state file {path} is not this bot's (symbol/magic); rebuilding it from the terminal")
+            return None
+        return {'basket': data.get('basket'), 'last_close': data.get('last_close')}
+
+    def _save_state(self, symbol, state):
+        """Write the state atomically (a crash mid-write leaves the previous file)."""
+        path = self._state_path(symbol)
+        data = {'version': _STATE_VERSION, 'symbol': symbol, 'magic': MAGIC, 'design': DESIGN_NAME,
+                'saved_at': time.time(), 'basket': state.get('basket'), 'last_close': state.get('last_close')}
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + '.tmp'
+            with self.thread_lock:
+                with open(tmp, 'w') as f:
+                    json.dump(data, f, indent=2, default=str)
+                os.replace(tmp, path)
+        except OSError as e:
+            print(f"[{symbol}] Error: could not write the state file {path}: {e}")
+
+    def _usd_per_price_of(self, symbol, trade_symbol, mtqty):
+        """USD per unit (mtqty lots) for a move of 1.0 in price = contract_size x mtqty (gold 100 x 0.01 = 1.0,
+        BTC 1 x 0.01 = 0.01). The contract size is the terminal's symbol_info().trade_contract_size, else
+        CONTRACT_SIZE_FALLBACK by symbol prefix. Read once; None when unknown."""
+        if trade_symbol in self._usd_per_price:
+            return self._usd_per_price[trade_symbol]
+        info = mt5.symbol_info(trade_symbol)
+        size, source = None, None
+        try:
+            raw = getattr(info, 'trade_contract_size', None) if info is not None else None
+            size = float(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            size = None
+        if size is not None and size > 0:
+            source = 'terminal'
+        else:
+            size = None
+            for prefix, value in CONTRACT_SIZE_FALLBACK.items():
+                if str(trade_symbol).upper().startswith(str(prefix).upper()):
+                    size, source = float(value), 'CONTRACT_SIZE_FALLBACK'
+                    break
+        if size is None:
+            if info is not None:
+                self._usd_per_price[trade_symbol] = None
+            return None
+        usd = size * mtqty
+        if info is not None:          # a missing symbol_info may be transient: ask again next time
+            self._usd_per_price[trade_symbol] = usd
+            print(f"[{symbol}] contract size {size:g} ({source}): {usd:g} USD per unit for a 1.0 price move")
+        return usd
+
+    def _virtual_balance(self, now):
+        """VIRTUAL_START_BALANCE + profit + swap + commission + fee of this bot's deals since VIRTUAL_START_DATE,
+        added up in time order (the backtester's balance of a fresh account). When the terminal gives no
+        history, the last value read (or the start balance): the smaller, safe unit."""
+        start = _virtual_start_ts()
+        deals = self.position_helper.get_bot_deals(_utc(start), _utc(now + 86400))
+        if deals is None:
+            return self._virtual_balance_last if self._virtual_balance_last is not None else float(VIRTUAL_START_BALANCE)
+        bal = float(VIRTUAL_START_BALANCE)
+        for d in sorted(deals, key=lambda d: (_deal_time(d), int(getattr(d, 'ticket', 0) or 0))):
+            if _deal_time(d) >= start:
+                bal += _deal_net(d)
+        self._virtual_balance_last = bal
+        return bal
+
+    def _basket_pnl(self, ids, since, now):
+        """Realised P/L of the positions `ids` (profit + swap + commission + fee of all their deals, rounded to
+        cents) once the history holds a closing deal for every one of them, else None. Also returns the time
+        of the last closing deal."""
+        if not ids:
+            return None, None
+        frm = (since if since else now) - 2 * 86400
+        deals = self.position_helper.get_bot_deals(_utc(frm), _utc(now + 86400))
+        if deals is None:
+            return None, None
+        idset = {int(i) for i in ids}
+        mine = [d for d in deals if getattr(d, 'position_id', None) in idset]
+        outs = [d for d in mine if _is_out_deal(d)]
+        if not idset <= {getattr(d, 'position_id', None) for d in outs}:
+            return None, None
+        pnl = 0.0
+        for d in sorted(mine, key=lambda d: (_deal_time(d), int(getattr(d, 'ticket', 0) or 0))):
+            pnl += _deal_net(d)
+        return round(pnl, 2), max(_deal_time(d) for d in outs)
+
+    def _resolve_last_close(self, state, now):
+        """Replace the provisional result of the last closed basket (its P/L at the close decision) by the
+        realised one from the deal history; True when the state changed. Gives up after _RESOLVE_ATTEMPTS
+        polls (the decision-time P/L then stands)."""
+        lc = state.get('last_close')
+        if not lc or lc.get('resolved'):
+            return False
+        lc['attempts'] = int(lc.get('attempts', 0)) + 1
+        pnl, t_out = self._basket_pnl(lc.get('ids') or [], lc.get('open_time'), now)
+        if pnl is not None:
+            lc.update(pnl=pnl, lost=bool(pnl < 0), resolved=True, source='history')
+            if lc.get('time_from_history') and t_out is not None:
+                lc['time'] = float(t_out)   # closed outside the bot: the pause runs from its closing deal
+            return True
+        if lc['attempts'] >= _RESOLVE_ATTEMPTS:
+            lc['resolved'] = True
+            return True
+        return False
+
+    def _last_close_from_history(self, now):
+        """The last basket this bot closed, from the deal history (used when there is no state file): the
+        time of its last closing deal and its realised P/L. None when there is none in the look-back."""
+        look = max(float(LOSS_COOLDOWN_S or 0), float(REENTRY_COOLDOWN_SECONDS)) + 86400.0
+        deals = self.position_helper.get_bot_deals(_utc(now - look), _utc(now + 86400))
+        if not deals:
+            return None
+        outs = [d for d in deals if _is_out_deal(d)]
+        if not outs:
+            return None
+        t_last = max(_deal_time(d) for d in outs)
+        last = [d for d in outs if t_last - _deal_time(d) <= 60.0]
+        ids = {getattr(d, 'position_id', None) for d in last} - {None, 0}
+        group = [d for d in deals if getattr(d, 'position_id', None) in ids] if ids else last
+        pnl = round(sum(_deal_net(d) for d in sorted(group, key=_deal_time)), 2)
+        return {'time': float(t_last), 'pnl': pnl, 'lost': bool(pnl < 0), 'resolved': True,
+                'source': 'history_rebuild', 'reason': None, 'side': None, 'ids': sorted(int(i) for i in ids),
+                'open_time': None, 'attempts': 0}
+
+    def _vol_unit_at(self, trade_symbol, t_open):
+        """The volatility unit a basket opened at `t_open` (seconds) saw: the unit of the last VOL_TF bar
+        closed before the bar that was forming at that time."""
+        tf = getattr(mt5, _tf_name(VOL_TF), None)
+        if tf is None:
+            return None
+        rates = mt5.copy_rates_from(trade_symbol, tf, _utc(int(t_open)), RSI_CANDLE_COUNT)
+        if rates is None or len(rates) < 2:
+            return None
+        v = Indicator.vol_unit(rates['close'][:-1], VOL_LEN)
+        return v if v > 0 else None
+
+    def _new_basket(self, side, units, levels, opened_at, opened_by='bot'):
+        return dict(levels, side=side, units=int(units), ids=[], first_time=None, opened_at=float(opened_at),
+                    opened_by=opened_by, ladder_armed=False, close_pending=False,
+                    levels_pending=False, vol_source='open' if levels.get('vol_unit') is not None else None,
+                    last_profit=0.0)
+
+    def _rebuild_basket(self, trade_symbol, side, plist, mtqty, usd_per_price, now):
+        """A basket found open without its state (first start, lost file, another basket): the unit from the
+        oldest position's volume, the volatility unit from the bars at its open time. The ladder starts
+        disarmed (its arming is a path of votes that cannot be read back)."""
+        first = plist[0]
+        units = max(1, int(round(float(first.volume) / float(mtqty)))) if mtqty else 1
+        v_raw = self._vol_unit_at(trade_symbol, _pos_time(first)) if VOL_TF is not None else None
+        complete = levels_complete(v_raw, usd_per_price)
+        levels = basket_levels(v_raw if complete else None, usd_per_price)
+        b = self._new_basket(side, units, levels, now, opened_by='rebuild')
+        b.update(ids=[_pos_id(p) for p in plist], first_time=_pos_time(first),
+                 levels_pending=not complete, vol_source='bars_at_open' if complete and VOL_TF is not None else None)
+        return b
+
+    def _finish_outside_close(self, state, basket, now):
+        """A basket whose positions are gone without a close of this bot (closed from the terminal, by the
+        broker, or while the bot was down): book it as closed now; the P/L and the time of its closing deals
+        replace that when the history has them."""
+        profit = basket.get('last_profit') or 0.0
+        state['last_close'] = {
+            'time': float(now), 'pnl': profit, 'lost': bool(profit < 0), 'resolved': False, 'source': 'last_seen',
+            'reason': 'closed_outside', 'side': basket.get('side'), 'ids': list(basket.get('ids') or []),
+            'open_time': basket.get('first_time'), 'attempts': 0, 'time_from_history': True}
+        state['basket'] = None
+
+    def _sync_basket(self, symbol, trade_symbol, state, buy_positions, sell_positions, mtqty, usd_per_price, now):
+        """Match the state's basket with this bot's open positions. True when the state changed."""
+        nb = buy_positions['count'] if buy_positions else 0
+        ns = sell_positions['count'] if sell_positions else 0
+        basket = state.get('basket')
+        if nb and ns:
+            return False        # both sides open: the strategy holds still; the books stay as they are
+        if not nb and not ns:
+            if basket is None:
+                return False
+            if basket.get('ids'):
+                self._finish_outside_close(state, basket, now)
+                print(f"[{symbol}] note: the {basket.get('side')} basket was closed outside the bot")
+            else:
+                state['basket'] = None      # an open that never showed up as a position
+            return True
+        side = 'BUY' if nb else 'SELL'
+        plist = _sorted_positions((buy_positions if nb else sell_positions).get('positions'))
+        if not plist:
+            return False
+        ids = [_pos_id(p) for p in plist]
+        known = list(basket.get('ids') or []) if basket is not None else []
+        if basket is not None and basket.get('side') == side and (not known or set(ids) & set(known)):
+            new = [i for i in ids if i not in known]
+            if known and not new:
+                return False
+            if not known:
+                basket['first_time'] = _pos_time(plist[0])
+            basket['ids'] = known + new
+            return True
+        if basket is not None and basket.get('ids'):
+            self._finish_outside_close(state, basket, now)
+        state['basket'] = self._rebuild_basket(trade_symbol, side, plist, mtqty, usd_per_price, now)
+        b = state['basket']
+        print(f"[{symbol}] note: {side} basket of {len(plist)} position(s) taken over from the terminal: "
+              f"unit {b['units']}, volatility unit {b.get('vol_unit')}, target/unit {b.get('target_usd_per_unit')}, "
+              f"stop/unit {b.get('stop_usd_per_unit')}, gap {b.get('gap_px')}")
+        return True
+
+    def _after_close(self, symbol, state, side, close_response, positions, reason, now):
+        """Book this bot's close of the basket: the loss pause starts at this close decision. A close that
+        closed nothing changes nothing (it is decided again next poll, as the backtester does); a partial one
+        keeps the basket and closes the rest on the next polls. Returns the new last_close or None."""
+        closed = int((close_response or {}).get('closed_count', 0) or 0)
+        failed = int((close_response or {}).get('failed_count', 0) or 0)
+        basket = state.get('basket')
+        if closed <= 0:
+            return None
+        if failed > 0:
+            if basket is not None:
+                basket['close_pending'] = True
+                self._save_state(symbol, state)
+            return None
+        ids = list(basket.get('ids') or []) if basket is not None else []
+        if not ids and positions and positions.get('positions'):
+            ids = [_pos_id(p) for p in positions['positions']]
+        profit = positions['total_profit'] if positions else 0.0
+        lc = {'time': float(now), 'pnl': profit, 'lost': bool(profit < 0), 'resolved': False, 'source': 'decision',
+              'reason': reason, 'side': side, 'ids': ids,
+              'open_time': basket.get('first_time') if basket is not None else None, 'attempts': 0}
+        state['last_close'] = lc
+        state['basket'] = None
+        with self.mt5_lock:
+            self._resolve_last_close(state, now)
+        self._save_state(symbol, state)
+        return lc
+
+    @staticmethod
+    def _order_done(response):
+        """True when the terminal reports the market order as filled."""
+        if response is None:
+            return False
+        done = (getattr(mt5, 'TRADE_RETCODE_DONE', 10009), getattr(mt5, 'TRADE_RETCODE_DONE_PARTIAL', 10010))
+        return getattr(response, 'retcode', None) in done
+
     def process_symbol(self, symbol):
         """
         Process a single symbol (will be called in separate threads)
         Lightweight and optimized - runs in infinite loop
-        
+
+        One poll, in the backtester's order (kernels.py run_kernel; map: scratchpad map_levers.md §2):
+          market data + this bot's positions (MAGIC) -> the basket's state matched with them ->
+          unit (only while flat, from the virtual balance) -> brake -> liveness (a dead poll decides nothing)
+          -> forming-bar votes, H1 trend (last closed bar), volatility unit (closed bars) -> pause
+          (loss pause) -> strategy (stop, target, force-close, ladder) -> execution (entry gates after the
+          brake: trend, volatility known) -> bookkeeping (distances fixed at a fill, arming, pause start).
+
         Args:
             symbol (str): Symbol to process (e.g., 'XAUUSD', 'XAUUSD')
         """
         from datetime import datetime
-        
+
+        _problems = design_problems()
+        if _problems:
+            raise ValueError(f"design {DESIGN_NAME!r} refused: " + '; '.join(_problems))
+
         # Get configuration once before loop (per-symbol config from array)
         sym_cfg = self.symbol_configs.get(symbol, {})
         brake_manual = self.symbols_config.get('brake', 0)
@@ -463,6 +959,9 @@ class MT5TradingBot:
         # synchronized (unit N → target $N). It is re-derived below, but ONLY
         # while the symbol is flat — an open Fibo basket keeps the unit it was
         # opened with (rescaling mid-basket would corrupt the ladder maths).
+        # Demo: the balance is the virtual one (VIRTUAL_START_BALANCE + this bot's own
+        # closed P/L) and an open basket keeps the unit recorded at its open (after a
+        # restart: its oldest position's volume / mtqty).
         step_up_balance = sym_cfg.get('step_up_balance', 0)
         max_limit = sym_cfg.get('unit_max_limit', 1)
         units = 1
@@ -474,7 +973,16 @@ class MT5TradingBot:
         _last_hist_save = 0.0
         _DAILY_SAVE_INTERVAL = 60       # seconds between daily-trade saves
         _HIST_SAVE_INTERVAL = 300       # seconds between historical-summary saves
-        _last_close_time = 0.0          # for the post-close re-entry cooldown
+
+        # The open basket's fixed distances and ladder arming, and the post-close pause
+        # (time, and whether that basket lost), persisted so a restart keeps them.
+        state = self._load_state(symbol)
+        _rebuild_pause = state is None          # no file: the pause comes back from the deal history
+        state = state or {}
+        state.setdefault('basket', None)
+        state.setdefault('last_close', None)
+        _block_logged = None                    # last entry-gate block written to the log (logged on change)
+        _virtual_balance = None
 
         while True:
             try:
@@ -495,20 +1003,57 @@ class MT5TradingBot:
                     sell_positions = self.position_helper.get_sell_positions(trade_symbol)
                     account_info = self.position_helper.get_account_info()
                     server_time = self.position_helper._get_server_time(trade_symbol)
+                    _tick = mt5.symbol_info_tick(trade_symbol)     # the decision quote (add gap)
+                _now = time.time()
+                _bid = float(_tick.bid) if _tick is not None else None
+                _ask = float(_tick.ask) if _tick is not None else None
+
+                _buy_ct = buy_positions['count'] if buy_positions else 0
+                _sell_ct = sell_positions['count'] if sell_positions else 0
+
+                # ── This bot's basket: match the persisted state with its open positions ──
+                with self.mt5_lock:
+                    _usd_per_price = self._usd_per_price_of(symbol, trade_symbol, mtqty)
+                    _changed = self._sync_basket(symbol, trade_symbol, state, buy_positions, sell_positions,
+                                                 mtqty, _usd_per_price, _now)
+                    if _rebuild_pause:
+                        _rebuild_pause = False
+                        if state.get('last_close') is None:
+                            _lc = self._last_close_from_history(_now)
+                            if _lc is not None:
+                                state['last_close'] = _lc
+                                _changed = True
+                    if self._resolve_last_close(state, _now):
+                        _changed = True
+                if _changed:
+                    self._save_state(symbol, state)
+                basket = state.get('basket')
+                _in_basket = basket is not None and (
+                    (basket.get('side') == 'BUY' and _buy_ct > 0 and _sell_ct == 0)
+                    or (basket.get('side') == 'SELL' and _sell_ct > 0 and _buy_ct == 0))
+                if _in_basket:
+                    basket['last_profit'] = (buy_positions if _buy_ct else sell_positions)['total_profit']
 
                 # ── Auto-step the running unit from live balance (only when flat) ──
                 # Re-derive only while no positions are open so an active basket
                 # stays on the unit it was opened with; the new tier applies to
                 # the next basket. Balance is unavailable → keep the current unit.
-                _buy_ct = buy_positions['count'] if buy_positions else 0
-                _sell_ct = sell_positions['count'] if sell_positions else 0
-                if _buy_ct == 0 and _sell_ct == 0 and account_info:
-                    balance = account_info.get('balance', 0)
-                    if step_up_balance and step_up_balance > 0:
-                        units = int(balance // step_up_balance) + 1
-                    else:
-                        units = 1
-                    units = max(1, min(units, max_limit))
+                if _buy_ct == 0 and _sell_ct == 0:
+                    balance = None
+                    if virtual_balance_enabled():
+                        with self.mt5_lock:
+                            _virtual_balance = self._virtual_balance(_now)
+                        balance = _virtual_balance
+                    elif account_info:
+                        balance = account_info.get('balance', 0)
+                    if balance is not None:
+                        if step_up_balance and step_up_balance > 0:
+                            units = int(balance // step_up_balance) + 1
+                        else:
+                            units = 1
+                        units = max(1, min(units, max_limit))
+                elif _in_basket:
+                    units = int(basket['units'])
 
                 # ── Effective brake: manual override OR outside trading window ──
                 # brake_manual=1 → always braked; else brake when outside the
@@ -527,6 +1072,9 @@ class MT5TradingBot:
                 has_candle_data = source_df is not None and len(source_df) > 0
                 candle_is_fresh = False
                 candle_age_min = None
+                trend_now = 0              # sign of the TREND_TF MACD signal line, last closed bar
+                trend_signal = None
+                vol_now = None             # VOL_TF volatility unit, last closed bar (price units)
 
                 if not has_candle_data:
                     print(f"[{symbol}] WARNING: No candle data returned by MT5")
@@ -570,11 +1118,18 @@ class MT5TradingBot:
                     slopes = {}   # D1/H4/H1/15M latest-pivot slopes (RSI+MACD) -> the weighted score
                     rsi_graphs = {}  # per-TF RSI series + pivot for the dashboard mini-charts
                     macd_graphs = {}  # per-TF MACD-histogram series + pivot for the mini-charts
+                    # Votes for SLOPE_TIMEFRAMES plus every timeframe the strategy reads votes from
+                    # (the section weights as they finally are, and a 'macd_turn' ladder's tiers).
+                    slope_tfs = list(dict.fromkeys(list(SLOPE_TIMEFRAMES) + self.strategy.slope_timeframes()))
+                    _trend_name = _tf_name(TREND_TF)
+                    _vol_name = _tf_name(VOL_TF)
                     rsi_tf_list = []
                     for tf_name in (list(RSI_MTF_TIMEFRAMES)
                                     + list(RSI_DCA_LADDER_TIMEFRAMES)
-                                    + list(SLOPE_TIMEFRAMES)
-                                    + [RSI_FINAL_CLOSE_TIMEFRAME]):
+                                    + slope_tfs
+                                    + [RSI_FINAL_CLOSE_TIMEFRAME]
+                                    + self.strategy.rsi_timeframes()
+                                    + [n for n in (_trend_name, _vol_name) if n]):
                         if tf_name not in rsi_tf_list:
                             rsi_tf_list.append(tf_name)
                     for tf_name in rsi_tf_list:
@@ -587,10 +1142,11 @@ class MT5TradingBot:
                                 tf_df['close'], length=RSI_LENGTH, ma_type=RSI_MA_TYPE
                             )
                             rsi_mtf[tf_name] = float(rsi_s.iloc[-1]) if len(rsi_s) > 0 else 50.0
+                            macd_df = None
                             # RSI + MACD-histogram latest-pivot slopes on the slope timeframes
                             # (D1/H4/H1/15M -> the weighted score). Reuses this TF's RSI fetch -
                             # no extra call beyond the per-TF rates already pulled.
-                            if tf_name in SLOPE_TIMEFRAMES:
+                            if tf_name in slope_tfs:
                                 macd_df = self.indicator.calculate_macd(
                                     tf_df['close'], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL
                                 )
@@ -609,13 +1165,13 @@ class MT5TradingBot:
                                     macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
                                     side=_macd_side
                                 )
-                                _tf_key = tf_name.replace('TIMEFRAME_', '')
-                                slopes[_tf_key] = {
+                                _tf_key_ = tf_name.replace('TIMEFRAME_', '')
+                                slopes[_tf_key_] = {
                                     'rsi': rsi_slope, 'macd': macd_slope,
                                 }
                                 # RSI mini-chart: RSI line + latest (OB/OS-band) pivot +
                                 # peak->current line coloured by the RSI slope sign.
-                                rsi_graphs[_tf_key] = {
+                                rsi_graphs[_tf_key_] = {
                                     'series': [round(float(v), 2) for v in rsi_s.tail(RSI_GRAPH_BARS).tolist()],
                                     'current': round(float(rsi_s.iloc[-1]), 2),
                                     'pivot_bars_ago': rsi_slope.get('bars_ago'),
@@ -627,7 +1183,7 @@ class MT5TradingBot:
                                 }
                                 # MACD-histogram mini-chart: hist line + latest (signal-
                                 # side) pivot + peak->current line coloured by its slope.
-                                macd_graphs[_tf_key] = {
+                                macd_graphs[_tf_key_] = {
                                     'series': [round(float(v), 5) for v in macd_df['hist'].tail(RSI_GRAPH_BARS).tolist()],
                                     'current': round(float(macd_df['hist'].iloc[-1]), 5),
                                     'pivot_bars_ago': macd_slope.get('bars_ago'),
@@ -636,26 +1192,88 @@ class MT5TradingBot:
                                     'sign': macd_slope.get('sign', 0),
                                     'bands': [0], 'clamp': None, 'name': 'MACD',
                                 }
+                            # H1 trend: the MACD SIGNAL line of the last CLOSED bar (row -2; row -1 is
+                            # the forming bar, whose signal line only picks the MACD vote's pivot side).
+                            # 0 or NaN -> no trend -> no entry on either side.
+                            if tf_name == _trend_name:
+                                if macd_df is None:
+                                    macd_df = self.indicator.calculate_macd(
+                                        tf_df['close'], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL
+                                    )
+                                trend_signal = float(macd_df['signal'].iloc[-2]) if len(macd_df) >= 2 else float('nan')
+                                trend_now = 1 if trend_signal > 0 else (-1 if trend_signal < 0 else 0)
+                            # Volatility unit on the CLOSED bars (the forming row -1 excluded).
+                            if tf_name == _vol_name:
+                                vol_now = Indicator.vol_unit(tf_df['close'].to_numpy()[:-1], VOL_LEN)
                         else:
                             rsi_mtf[tf_name] = 50.0
                     current_rsi = rsi_mtf.get('TIMEFRAME_M1', 50.0)
+
+                    # A basket taken over without the bars of its open (levels pending) takes the
+                    # volatility unit measured now.
+                    if _in_basket and basket.get('levels_pending') and levels_complete(vol_now, _usd_per_price):
+                        basket.update(basket_levels(vol_now, _usd_per_price))
+                        basket['levels_pending'] = False
+                        basket['vol_source'] = 'current'
+                        self._save_state(symbol, state)
                     
                     # Calculate signal. `units` (effective, capped by max_limit) drives
                     # the lot size and the USD close target. `entry_allowed` is False
-                    # while the post-close re-entry cooldown is still active.
-                    entry_allowed = (time.time() - _last_close_time) >= REENTRY_COOLDOWN_SECONDS
+                    # while the post-close re-entry cooldown is still active: after a basket
+                    # that lost, LOSS_COOLDOWN_S (if set) instead of REENTRY_COOLDOWN_SECONDS.
+                    _lc = state.get('last_close') or {}
+                    _last_close_time = float(_lc.get('time') or 0.0)
+                    _pause = LOSS_COOLDOWN_S if (_lc.get('lost') and LOSS_COOLDOWN_S > 0) else REENTRY_COOLDOWN_SECONDS
+                    entry_allowed = (time.time() - _last_close_time) >= _pause
+                    # The basket's distances, fixed at its open; flat: the configured ones (unused).
+                    if _in_basket:
+                        _tgt_u = basket.get('target_usd_per_unit')
+                        _sl_u = basket.get('stop_usd_per_unit')
+                        _gap = float(basket.get('gap_px') or 0.0)
+                        _armed = bool(basket.get('ladder_armed'))
+                        _plist = _sorted_positions((buy_positions if _buy_ct else sell_positions).get('positions'))
+                        _last_fill = float(_plist[-1].price_open) if _plist else None
+                    else:
+                        _flat_levels = basket_levels(None, _usd_per_price)
+                        _tgt_u = _flat_levels['target_usd_per_unit']
+                        _sl_u = _flat_levels['stop_usd_per_unit']
+                        _gap, _armed, _last_fill = 0.0, False, None
+                    close_threshold = None if _tgt_u is None else _tgt_u * units
+                    stop_threshold = None if _sl_u is None else _sl_u * units
                     buy_signal, sell_signal, analysis_data = self.strategy.calculate_signal(
                         source_df,
                         buy_positions, sell_positions, units,
-                        close_threshold=units,
+                        close_threshold=close_threshold,
                         rsi_value=current_rsi,
                         rsi_mtf=rsi_mtf,
                         slopes=slopes,
                         entry_allowed=entry_allowed,
+                        stop_threshold=stop_threshold,
+                        ladder_armed=_armed,
+                        ladder_gap=_gap,
+                        last_fill_price=_last_fill,
+                        bid=_bid, ask=_ask,
                     )
+                    # The macd_turn ladder's arming is a fact of this poll's votes: keep it.
+                    if _in_basket and bool(analysis_data.get('ladder_armed')) != _armed:
+                        basket['ladder_armed'] = bool(analysis_data.get('ladder_armed'))
+                        self._save_state(symbol, state)
+                    # A close that left positions behind is finished first.
+                    if _in_basket and basket.get('close_pending'):
+                        if basket['side'] == 'BUY':
+                            buy_signal = Signal.CLOSE_BUY
+                        else:
+                            sell_signal = Signal.CLOSE_SELL
+                        analysis_data['exit_reason'] = 'close_retry'
                     analysis_data['rsi_graphs'] = rsi_graphs
                     analysis_data['macd_graphs'] = macd_graphs
                     analysis_data['candle_fresh'] = True
+                    analysis_data['trend'] = trend_now if TREND_TF is not None else None
+                    analysis_data['trend_signal'] = trend_signal if trend_signal == trend_signal else None
+                    analysis_data['vol_unit_now'] = vol_now
+                    analysis_data['loss_pause_s'] = _pause
+                    analysis_data['pause_left_s'] = max(0.0, round(_pause - (time.time() - _last_close_time), 1))
+                    analysis_data['last_close_lost'] = _lc.get('lost')
                 else:
                     analysis_data['candle_fresh'] = False
 
@@ -682,6 +1300,18 @@ class MT5TradingBot:
                 analysis_data['unit_times'] = units
                 analysis_data['step_up_balance'] = step_up_balance
                 analysis_data['unit_max_limit'] = max_limit
+                analysis_data['design'] = DESIGN_NAME
+                analysis_data['virtual_balance'] = _virtual_balance if virtual_balance_enabled() else None
+                analysis_data['basket_levels'] = ({
+                    'units': basket.get('units'),
+                    'target_usd': (None if basket.get('target_usd_per_unit') is None
+                                   else round(basket['target_usd_per_unit'] * basket['units'], 2)),
+                    'stop_usd': (None if basket.get('stop_usd_per_unit') is None
+                                 else round(basket['stop_usd_per_unit'] * basket['units'], 2)),
+                    'gap_px': basket.get('gap_px'),
+                    'vol_unit': basket.get('vol_unit'),
+                    'ladder_armed': basket.get('ladder_armed'),
+                } if _in_basket else None)
 
                 # ── Build JSON data (always saved so dashboard stays current) ──
                 symbol_data = {
@@ -717,6 +1347,11 @@ class MT5TradingBot:
                     },
                     'analysis': analysis_data,
                     'order_response': None,
+                    'demo': {
+                        'branch': DEMO_BRANCH, 'magic': MAGIC, 'design': DESIGN_NAME,
+                        'virtual_balance': analysis_data.get('virtual_balance'),
+                        'basket': state.get('basket'), 'last_close': state.get('last_close'),
+                    },
                 }
                 
                 # Execute buy signal
@@ -724,21 +1359,40 @@ class MT5TradingBot:
                 close_response = None
                 if has_candle_data and candle_is_fresh and buy_signal == Signal.BUY:
                     if not brake:
-                        with self.mt5_lock:
-                            order_response = self.position_helper.buy(trade_symbol, units * mtqty)
-                        self._log_event(symbol, 'BUY_EXECUTED', 'ENTRY', {
-                            'mt5_symbol': trade_symbol,
-                            'qty': units * mtqty,
-                            'response': str(order_response),
-                        }, server_time=server_time)
+                        _why = entry_block_reason(1, trend_now, vol_now, _usd_per_price)
+                        if _why is None:
+                            _levels = basket_levels(vol_now, _usd_per_price)   # fixed for this basket's life
+                            with self.mt5_lock:
+                                order_response = self.position_helper.buy(trade_symbol, units * mtqty)
+                            if self._order_done(order_response):
+                                state['basket'] = self._new_basket('BUY', units, _levels, time.time())
+                                self._save_state(symbol, state)
+                            _block_logged = None
+                            self._log_event(symbol, 'BUY_EXECUTED', 'ENTRY', {
+                                'mt5_symbol': trade_symbol,
+                                'qty': units * mtqty,
+                                'target_usd': None if _levels['target_usd_per_unit'] is None else round(_levels['target_usd_per_unit'] * units, 2),
+                                'stop_usd': None if _levels['stop_usd_per_unit'] is None else round(_levels['stop_usd_per_unit'] * units, 2),
+                                'vol_unit': _levels['vol_unit'],
+                                'response': str(order_response),
+                            }, server_time=server_time)
+                        elif _block_logged != ('BUY', _why):
+                            _block_logged = ('BUY', _why)
+                            self._log_event(symbol, 'BUY_SIGNAL', 'SIGNAL', {
+                                'note': f'Entry blocked: {_why} — order skipped',
+                                'trend_signal': analysis_data.get('trend_signal'), 'vol_unit': vol_now,
+                            }, server_time=server_time)
                     else:
                         self._log_event(symbol, 'BUY_SIGNAL', 'SIGNAL', {
                             'note': 'Brake active — order skipped',
                         }, server_time=server_time)
                 elif buy_signal == Signal.BUY_MORE:
-                    vol = self.strategy._get_next_fibo_volume(buy_positions['total_volume'], units)
+                    vol = self.strategy.next_add_volume(buy_positions['total_volume'], buy_positions['count'], units, mtqty)
                     with self.mt5_lock:
                         order_response = self.position_helper.buy(trade_symbol, vol)
+                    if _in_basket and self._order_done(order_response):
+                        basket['ladder_armed'] = False      # the next add needs a new turn
+                        self._save_state(symbol, state)
                     self._log_event(symbol, 'BUY_MORE_EXECUTED', 'ENTRY', {
                         'mt5_symbol': trade_symbol,
                         'qty': vol,
@@ -752,33 +1406,56 @@ class MT5TradingBot:
                 elif buy_signal == Signal.CLOSE_BUY:
                     with self.mt5_lock:
                         close_response = self.position_helper.close_by_type(trade_symbol, 0)
-                    _last_close_time = time.time()   # start the re-entry cooldown
+                    # start the re-entry cooldown (only once the basket is really closed)
+                    _closed = self._after_close(symbol, state, 'BUY', close_response, buy_positions,
+                                                analysis_data.get('exit_reason'), time.time())
                     self._log_event(symbol, 'CLOSE_BUY', 'EXIT', {
                         'mt5_symbol': trade_symbol,
                         'positions_closed': close_response.get('closed_count', 0),
                         'total_profit': buy_positions['total_profit'] if buy_positions else 0,
                         'reason': analysis_data.get('exit_reason'),
+                        'realised_pnl': _closed.get('pnl') if _closed else None,
+                        'lost': _closed.get('lost') if _closed else None,
                         'response': close_response,
                     }, server_time=server_time)
                 
                 # Execute sell signal
                 if has_candle_data and candle_is_fresh and sell_signal == Signal.SELL:
                     if not brake:
-                        with self.mt5_lock:
-                            order_response = self.position_helper.sell(trade_symbol, units * mtqty)
-                        self._log_event(symbol, 'SELL_EXECUTED', 'ENTRY', {
-                            'mt5_symbol': trade_symbol,
-                            'qty': units * mtqty,
-                            'response': str(order_response),
-                        }, server_time=server_time)
+                        _why = entry_block_reason(-1, trend_now, vol_now, _usd_per_price)
+                        if _why is None:
+                            _levels = basket_levels(vol_now, _usd_per_price)   # fixed for this basket's life
+                            with self.mt5_lock:
+                                order_response = self.position_helper.sell(trade_symbol, units * mtqty)
+                            if self._order_done(order_response):
+                                state['basket'] = self._new_basket('SELL', units, _levels, time.time())
+                                self._save_state(symbol, state)
+                            _block_logged = None
+                            self._log_event(symbol, 'SELL_EXECUTED', 'ENTRY', {
+                                'mt5_symbol': trade_symbol,
+                                'qty': units * mtqty,
+                                'target_usd': None if _levels['target_usd_per_unit'] is None else round(_levels['target_usd_per_unit'] * units, 2),
+                                'stop_usd': None if _levels['stop_usd_per_unit'] is None else round(_levels['stop_usd_per_unit'] * units, 2),
+                                'vol_unit': _levels['vol_unit'],
+                                'response': str(order_response),
+                            }, server_time=server_time)
+                        elif _block_logged != ('SELL', _why):
+                            _block_logged = ('SELL', _why)
+                            self._log_event(symbol, 'SELL_SIGNAL', 'SIGNAL', {
+                                'note': f'Entry blocked: {_why} — order skipped',
+                                'trend_signal': analysis_data.get('trend_signal'), 'vol_unit': vol_now,
+                            }, server_time=server_time)
                     else:
                         self._log_event(symbol, 'SELL_SIGNAL', 'SIGNAL', {
                             'note': 'Brake active — order skipped',
                         }, server_time=server_time)
                 elif sell_signal == Signal.SELL_MORE:
-                    vol = self.strategy._get_next_fibo_volume(sell_positions['total_volume'], units)
+                    vol = self.strategy.next_add_volume(sell_positions['total_volume'], sell_positions['count'], units, mtqty)
                     with self.mt5_lock:
                         order_response = self.position_helper.sell(trade_symbol, vol)
+                    if _in_basket and self._order_done(order_response):
+                        basket['ladder_armed'] = False      # the next add needs a new turn
+                        self._save_state(symbol, state)
                     self._log_event(symbol, 'SELL_MORE_EXECUTED', 'ENTRY', {
                         'mt5_symbol': trade_symbol,
                         'qty': vol,
@@ -792,12 +1469,16 @@ class MT5TradingBot:
                 elif sell_signal == Signal.CLOSE_SELL:
                     with self.mt5_lock:
                         close_response = self.position_helper.close_by_type(trade_symbol, 1)
-                    _last_close_time = time.time()   # start the re-entry cooldown
+                    # start the re-entry cooldown (only once the basket is really closed)
+                    _closed = self._after_close(symbol, state, 'SELL', close_response, sell_positions,
+                                                analysis_data.get('exit_reason'), time.time())
                     self._log_event(symbol, 'CLOSE_SELL', 'EXIT', {
                         'mt5_symbol': trade_symbol,
                         'positions_closed': close_response.get('closed_count', 0),
                         'total_profit': sell_positions['total_profit'] if sell_positions else 0,
                         'reason': analysis_data.get('exit_reason'),
+                        'realised_pnl': _closed.get('pnl') if _closed else None,
+                        'lost': _closed.get('lost') if _closed else None,
                         'response': close_response,
                     }, server_time=server_time)
                 
@@ -929,6 +1610,7 @@ class MT5TradingBot:
         print(f"\n{'#'*60}")
         print(f"#  JOB STARTED - {self.mode.upper()} MODE")
         print(f"{'#'*60}\n")
+        print(f"✓ {design_summary()}")
 
         # Step 1: Load Credentials
         if not self.load_credentials():
@@ -954,6 +1636,14 @@ class MT5TradingBot:
         Mode is fixed from the command line — use start_job.bat to switch.
         """
         try:
+            # ── The design in constants.py must be one this bot can run (checked once, before connecting) ──
+            _problems = design_problems()
+            if _problems:
+                for _p in _problems:
+                    print(f"✗ Design: {_p}")
+                print("\n✗ Job Failed: the design in constants.py is refused (see above)")
+                return False
+
             # ── Initialise (retry up to 3 times) ──
             for _attempt in range(1, 4):
                 if self._init_cycle():

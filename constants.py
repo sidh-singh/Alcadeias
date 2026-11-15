@@ -19,7 +19,8 @@ MARKET_STATUS_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe used to check market open
 MARKET_LOOKBACK_MINUTES = 3                # Max minutes since last candle → still "open"
 
 # ─── Strategy Parameters ───
-STRATEGY_HEDGE = 1                  # Hedge / profit target multiplier
+STRATEGY_HEDGE = 1                  # the live basket target: $ per unit (close when basket profit > STRATEGY_HEDGE x unit;
+                                    # used while TARGET_USD_PER_UNIT = 'live', see the design levers below)
 FIBO_SEQUENCE_LENGTH = 25           # Fibonacci sequence length (first 2 dropped)
 
 # ─── RSI Indicator ───
@@ -97,6 +98,10 @@ FORCE_CLOSE_SCORE_WEIGHTS = {'M15': 1}  # 2026-11-12: M15-only reversal (was M15
 # Order-preserving union, mapped short-key -> 'TIMEFRAME_<key>'.
 # NOTE: D1 is not fetched elsewhere, so including it costs +1 MT5 rates call per loop; M5/M15/H1/H4
 # are already fetched for the RSI ladder, so they are free.
+# This list is derived from the live weights above. A design block at the END of this file may change
+# the weights afterwards; app.py therefore adds, on every poll, each timeframe the strategy reads votes
+# from (Strategy.slope_timeframes(): the section weights as they finally are, plus the tier timeframes of
+# a 'macd_turn' ladder), so a stale list here never drops a timeframe.
 SLOPE_TIMEFRAMES = ['TIMEFRAME_' + _tf for _tf in dict.fromkeys(
     _k for _d in (OPEN_SCORE_WEIGHTS, FORCE_CLOSE_SCORE_WEIGHTS) for _k in _d
 )]
@@ -146,6 +151,129 @@ STRATEGY_LOG_MAX_ENTRIES = 200                   # Max log entries kept per symb
 # ─── Active Config (Dashboard ↔ Bot) ───
 ACTIVE_CONFIG_FILENAME = 'active_config.json'   # Dashboard writes, bot reads on startup
 
+# ─── Design levers (demo branches, 2026-11-15) ───
+# Every lever below defaults to the live bot v3.9.2 exactly. A demo branch sets its design in a block at
+# the END of this file (one commented example per design there). Their meaning is the backtester's
+# (backtesting/engine/kernels.py on backtest_hedging), which the demo forward test is meant to reproduce:
+#   * every exit / add is decided on the poll's forming-bar votes, as live;
+#   * the trend and the volatility unit are read on the last CLOSED bar of their timeframe;
+#   * a basket's target, stop and add gap are fixed when it opens and kept for its life (persisted in
+#     OUTPUT_DIR/state, so a restart keeps them);
+#   * in a basket the stop is checked first, then the target, then the force-close, then the ladder.
+DESIGN_NAME = 'live'                 # a label only (startup print, dashboard JSON, state file)
+STRATEGY = 'basket'                  # 'basket' = this bot's logic with the levers below; 'turtle' = the Turtle
+                                     # module (BTC 6/7), which is NOT part of this code: the bot refuses to start
+FORCE_CLOSE_ENABLED = True           # False: the M15 force-close never fires; the M15 votes (FORCE_CLOSE_SCORE_WEIGHTS)
+                                     # still feed the ENTRY_AGREE_S agreement gate, so keep that dict as it is
+TREND_TF = None                      # 'H1': a fresh entry only if sign(MACD signal line of the last CLOSED H1 bar)
+                                     # equals the side; a signal of exactly 0 (or NaN) blocks both sides. None = off
+VOL_TF = None                        # 'H1': the volatility unit = EWMA(alpha=1/VOL_LEN, adjust=False) of |delta close|
+                                     # of the CLOSED bars (bid closes), read when a basket opens. None = off
+VOL_LEN = 24
+TARGET_USD_PER_UNIT = 'live'         # 'live' = STRATEGY_HEDGE $ per unit (the live $1 x unit target, strict >);
+                                     # a number = that many $ per unit; None = no $ target
+STOP_LOSS_USD_PER_UNIT = None        # None = no $ stop; a number = close the basket at profit <= -(that x unit)
+TARGET_VOL = 0.0                     # > 0 (needs VOL_TF): target per unit (USD) = TARGET_VOL x unit x contract_size x mtqty,
+                                     # fixed at the open; replaces TARGET_USD_PER_UNIT
+STOP_VOL = 0.0                       # > 0 (needs VOL_TF): stop per unit, the same way; replaces STOP_LOSS_USD_PER_UNIT
+VOL_CAP_USD_PER_UNIT = 0.0           # > 0 (needs VOL_TF): the unit is capped at cap / (contract_size x mtqty) price units
+                                     # (USD per 0.01 lot: gold $12 = a $12 move, BTC $12 = a $1,200 move); caps target, stop, gap
+LOSS_COOLDOWN_S = 0                  # > 0: after a basket that closed with a net loss (realised P/L from the deal
+                                     # history) the next entry waits this long INSTEAD of REENTRY_COOLDOWN_SECONDS,
+                                     # counted from the close decision (wall clock, through weekends)
+MAX_ADDS = 99                        # ladder adds = min(len(LADDER_TFS), MAX_ADDS); 0 = no ladder
+LADDER_TRIGGER = 'rsi_level'         # 'rsi_level' (live): the tier timeframe's forming-bar RSI is at/beyond
+                                     #   RSI_OVERSOLD (buy) / RSI_OVERBOUGHT (sell);
+                                     # 'macd_turn': the tier timeframe's MACD vote was not with the basket on some
+                                     #   poll since the last fill (armed) and now is
+LADDER_TFS = ['M1', 'M5', 'M15', 'H1', 'H4']   # tier timeframe of add n = LADDER_TFS[n-1]
+LADDER_GAP_VOL = 0.0                 # > 0 (needs VOL_TF): an add also needs the price >= LADDER_GAP_VOL x unit (price
+                                     # units, fixed at the open) worse than the last fill (buy: last fill - ask)
+LADDER_MULTIPLIERS = None            # None = the live Fibonacci sizes; a list = units per position (index n for add n;
+                                     # index 0 is the entry and must be 1; padded with its last value)
+# Contract size (units of the asset per 1.00 lot) when the terminal's symbol_info() has none: the volatility
+# levers convert price moves to USD with contract_size x mtqty (gold 100 x 0.01 = $1, BTC 1 x 0.01 = $0.01).
+CONTRACT_SIZE_FALLBACK = {'XAU': 100.0, 'BTC': 1.0}
+STATE_SUBDIR = 'state'               # OUTPUT_DIR/state/<symbol>_state.json: the open basket's fixed distances, its
+                                     # ladder arming and the loss pause (a sub-folder: the dashboard lists every
+                                     # top-level JSON of OUTPUT_DIR as a symbol)
+
 # ── demo deployment (this branch only) ──
 DEMO_BRANCH = 'demo_hedging_xauusd8'                     # demo account only: live mode is refused
 MAGIC = 26118                              # this bot's orders and positions carry this magic number
+ORDER_COMMENT = None                 # None -> DEMO_BRANCH cut to 31 characters (the MT5 limit)
+VIRTUAL_START_BALANCE = 2000.0       # units are sized from this + this bot's own closed P/L (profit + swap +
+VIRTUAL_START_DATE = '2026-11-16'    #   commission of the deals with its MAGIC) since this UTC date;
+                                     #   None = the account balance (as live)
+
+# ─── Design examples ───
+# Copy ONE block below to the very end of this file and remove the leading '# '. Everything not listed
+# stays at the live value above. Effective parameters from the backtester's top3_v4 designs.
+#
+# ── XAU V3-lite ──
+# DESIGN_NAME = 'xau_v3lite'
+# OPEN_SCORE_WEIGHTS = {'H1': 1}
+# ENTRY_AGREE_S = 2
+# FORCE_CLOSE_ENABLED = False
+# TREND_TF = 'H1'
+# VOL_TF = 'H1'
+# VOL_LEN = 24
+# TARGET_USD_PER_UNIT = None
+# STOP_LOSS_USD_PER_UNIT = None
+# TARGET_VOL = 8.0
+# STOP_VOL = 8.0
+# VOL_CAP_USD_PER_UNIT = 0.0
+# LOSS_COOLDOWN_S = 43200
+# MAX_ADDS = 0
+#
+# ── XAU Top 2 ──
+# DESIGN_NAME = 'xau_top2'
+# OPEN_SCORE_WEIGHTS = {'H1': 1}
+# ENTRY_AGREE_S = 0
+# FORCE_CLOSE_ENABLED = False
+# TREND_TF = 'H1'
+# VOL_TF = 'H1'
+# VOL_LEN = 24
+# TARGET_USD_PER_UNIT = None
+# STOP_LOSS_USD_PER_UNIT = None
+# TARGET_VOL = 8.0
+# STOP_VOL = 4.0
+# VOL_CAP_USD_PER_UNIT = 12.0
+# LOSS_COOLDOWN_S = 43200
+# MAX_ADDS = 0
+#
+# ── XAU Top 1 ──
+# DESIGN_NAME = 'xau_top1'
+# OPEN_SCORE_WEIGHTS = {'H1': 1}
+# ENTRY_AGREE_S = 0
+# FORCE_CLOSE_ENABLED = False
+# TREND_TF = 'H1'
+# VOL_TF = 'H1'
+# VOL_LEN = 24
+# TARGET_USD_PER_UNIT = None
+# STOP_LOSS_USD_PER_UNIT = None
+# TARGET_VOL = 10.0
+# STOP_VOL = 8.0
+# VOL_CAP_USD_PER_UNIT = 0.0
+# LOSS_COOLDOWN_S = 14400
+# MAX_ADDS = 1
+# LADDER_TRIGGER = 'macd_turn'
+# LADDER_TFS = ['M5', 'M15', 'H1', 'H1', 'H1']
+# LADDER_GAP_VOL = 1.0
+# LADDER_MULTIPLIERS = [1, 1, 1, 1]
+#
+# ── BTC Top 2 ──
+# DESIGN_NAME = 'btc_top2'
+# OPEN_SCORE_WEIGHTS = {'H1': 1}
+# ENTRY_AGREE_S = 0
+# FORCE_CLOSE_ENABLED = False
+# TREND_TF = 'H1'
+# VOL_TF = 'H1'
+# VOL_LEN = 24
+# TARGET_USD_PER_UNIT = None
+# STOP_LOSS_USD_PER_UNIT = None
+# TARGET_VOL = 10.0
+# STOP_VOL = 8.0
+# VOL_CAP_USD_PER_UNIT = 12.0
+# LOSS_COOLDOWN_S = 14400
+# MAX_ADDS = 0

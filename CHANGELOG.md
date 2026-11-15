@@ -17,6 +17,68 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2-demo.1] — 2026-11-15 — Demo branches: the backtester's design levers, demo isolation, restart recovery [demo only]
+
+**Branches:** `demo_hedging_xauusd6` (the port; the other `demo_hedging_*` branches take the same code).
+**NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** `app.py`, `strategy.py`,
+`indicator.py`, `mt5_helper.py`, `constants.py`, `dashboard.py`, new `tests_demo/` (+ this `CHANGELOG.md`).
+**Baseline:** the branch's `demo: ...` commit (live v3.9.2 + the demo plumbing).
+
+**Why.** The demo forward test runs the designs the backtester ranked best (XAU V3-lite / Top 1 / Top 2,
+BTC Top 2) on demo accounts. Each design is a set of constants; every new constant defaults to the live
+bot, so with the defaults the bot takes the live decisions poll for poll (tests_demo/test_live_equivalence.py
+replays the code before and after on the same market). Semantics are the backtester's
+(`backtesting/engine/kernels.py`).
+
+### Added: design levers (constants.py, read at call time like the existing names)
+- `FORCE_CLOSE_ENABLED` (True): False = the M15 force-close never fires; the M15 votes still feed `ENTRY_AGREE_S`.
+- `TREND_TF` (None): `'H1'` = a fresh entry only if the sign of the H1 MACD **signal line of the last closed
+  bar** (row -2, not the forming bar) is the side; 0 / NaN blocks both. Applied after the brake.
+- `VOL_TF` / `VOL_LEN` (None / 24): the volatility unit = EWMA(1/VOL_LEN) of |delta close| of the **closed**
+  bars, measured on the poll that sends the entry; no entry while it is unknown.
+- `TARGET_USD_PER_UNIT` ('live' = `STRATEGY_HEDGE` $/unit), `STOP_LOSS_USD_PER_UNIT` (None), `TARGET_VOL`,
+  `STOP_VOL`, `VOL_CAP_USD_PER_UNIT` (0): per-unit USD = multiple x unit x contract_size x mtqty, the unit
+  capped at cap / (contract_size x mtqty); fixed at the open for the basket's life. In a basket the **stop is
+  checked first** (profit <= -stop), then the target (profit > target), then the force-close, then the ladder.
+- `LOSS_COOLDOWN_S` (0): after a basket whose **realised** P/L (deal history, by MAGIC) is below zero the next
+  entry waits this long instead of `REENTRY_COOLDOWN_SECONDS`, from the close decision.
+- `MAX_ADDS` (99), `LADDER_TRIGGER` ('rsi_level' | 'macd_turn'), `LADDER_TFS` (M1..H4), `LADDER_GAP_VOL` (0),
+  `LADDER_MULTIPLIERS` (None = Fibonacci): ladder adds = min(len(LADDER_TFS), MAX_ADDS); 'macd_turn' arms on any
+  poll whose tier MACD vote is not with the basket and fires on a later poll with it, gated by the OPEN score
+  and the gap (price units, fixed at the open); the arming persists.
+- `DESIGN_NAME`, `STRATEGY` ('basket'; 'turtle' is refused: the Turtle module is not in this code),
+  `CONTRACT_SIZE_FALLBACK`, `STATE_SUBDIR`. Commented example blocks for the four designs at the end of the file.
+
+### Added: demo isolation
+- Every order (open, add, close) carries `MAGIC` and `ORDER_COMMENT` (None -> `DEMO_BRANCH`[:31]); position reads,
+  counts, profit and closes keep only this MAGIC; the dashboard's deal history shows this bot's deals.
+- Units from the virtual balance `VIRTUAL_START_BALANCE` + this bot's closed P/L since `VIRTUAL_START_DATE`
+  (None = the account balance, as live), with the live unit rule, re-derived only while flat.
+
+### Added: restart recovery
+- `OUTPUT_DIR/state/<symbol>_state.json` keeps the open basket (unit, volatility unit, target / stop / gap,
+  ladder arming) and the last close (time, lost). Without the file: the unit from the oldest position's volume,
+  the volatility unit from the bars at its open time, the pause from the deal history. An open basket keeps its
+  unit after a restart (live restarted at 1).
+
+### Files
+- `constants.py`: the levers, demo isolation constants, examples; `STRATEGY_HEDGE` comment.
+- `strategy.py`: stop before target; `FORCE_CLOSE_ENABLED`; `_ladder_add` (tiers, triggers, arming, gap);
+  `next_add_volume`; `ladder_tiers` / `slope_timeframes` / `rsi_timeframes`; `design_problems`.
+- `indicator.py`: `Indicator.vol_unit`.
+- `mt5_helper.py`: `order_comment`, `is_own`, magic + comment on every request, `_own_positions`,
+  `get_bot_deals`; `get_*_positions` also return the position objects.
+- `app.py`: design checks at start; basket state sync / persistence; virtual balance; trend and volatility
+  read; levels fixed at the fill; entry gates after the brake; arming and close bookkeeping.
+- `dashboard.py`: status line shows design, trend, the basket's stop / target, the pause and the virtual
+  balance; the FORCE-CLOSE meter is labelled when switched off.
+- `tests_demo/`: a fake MetaTrader5 and 69 tests (`python3 -m pytest tests_demo -q -p no:cacheprovider`).
+
+### Rollback
+`git revert` this commit (it is self-contained); delete `OUTPUT_DIR/state/` afterwards.
+
+---
+
 ## [v3.9.2] — 2026-11-13 — Dashboard: show the entry-agreement threshold on the FORCE-CLOSE meter [netting/hedging deploy]
 
 **Branches:** all 40 `netting_`/`hedging_` deployment branches. **Files touched:** `dashboard.py` (+ this
