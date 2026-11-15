@@ -5,11 +5,16 @@ answers and holds this bot's demo account (findings 1 and 4), and a positions re
 is not ended as "closed outside the bot"; polls in which the reference run decided nothing are skipped exactly: the
 trade is the same. Every leg carries a broker-side backstop 1 N beyond the trade's stop at its fill (finding 3); a
 leg it closes is handled as one closed outside the bot.
+
+The re-review: the account is read again right after the positions (finding 2), and a leg closed outside the bot
+at or beyond the trade's stop -- its backstop -- ends the trade at once, also when the price is back inside the
+stop by the time the bot sees it (finding 3, checked: with the price still beyond it the bot's own stop already
+closed the other legs right after); a leg closed by hand inside the stop leaves the trade on (test_turtle_bot.py).
 """
 import pytest
 
-from conftest import START
-from test_turtle_bot import LV, _closes, _long_trip, _market, _opens, _run
+from conftest import MAGIC, START, F
+from test_turtle_bot import LV, SYMBOL, TURTLE, _closes, _long_trip, _market, _opens, _run
 
 CREDS = {'terminal_path': r'C:\fake\terminal64.exe', 'login_id': 1, 'login_pass': 'not-a-password',
          'server': 'Fake-Demo'}
@@ -118,3 +123,85 @@ def test_a_gap_through_every_backstop_ends_the_trade_as_closed_outside_the_bot(t
     events = [e['event'] for e in run.events]
     assert events.count('TURTLE_CLOSED_OUTSIDE') == 1 and 'CLOSE_BUY' not in events
     assert books[-1]['side'] == 0 and books[-1]['armed'] is False and books[-1]['last_exit_time'] is not None
+
+
+def _backstops(ref):
+    """The broker-side backstop (request sl) of each of the long trip's four legs, oldest first."""
+    sl = [o['sl'] for o in _opens(ref)]
+    assert len(sl) == 4 and sl == sorted(sl)            # a later leg's backstop is nearer (the stop only rises)
+    return sl
+
+
+@pytest.mark.slow
+def test_a_gap_through_the_newest_legs_backstop_ends_the_trade_at_its_stop(reference, tmp_path):
+    """The price gaps to between the fourth leg's backstop and the third's and stays there (finding 3 of the
+    re-review, checked): the broker closes the fourth leg; on its next poll the bot finds the price beyond the
+    trade's stop -- a leg's backstop always lies beyond it -- and closes the other three at once, at its own stop."""
+    sl = _backstops(reference)
+    fake, clock = _market(_long_trip())
+    i = int((fake.t_ms >= (START + 1600) * 1000).argmax())          # after the fourth leg (1435 s), before the stop
+    shift = fake.bid[i] - (sl[3] + sl[2]) / 2.0
+    fake.bid[i:] -= shift
+    fake.ask[i:] -= shift
+    books = []
+    run = _run(fake, clock, tmp_path, books=books)
+    by_broker = [d for d in fake.deals if d.reason == fake.DEAL_REASON_SL]
+    fourth = [d for d in fake.deals if d.entry == 0][3].position_id
+    assert len(by_broker) == 1 and by_broker[0].position_id == fourth and by_broker[0].time_msc == fake.t_ms[i]
+    closes = _closes(fake)
+    assert len(closes) == 3 and len({c['_t_ms'] for c in closes}) == 1 and closes[0]['_t_ms'] <= fake.t_ms[i] + 1500
+    assert fourth not in {c['position'] for c in closes} and len(_opens(fake)) == 4 and not fake.positions
+    events = [e for e in run.events if e['event'] in ('TURTLE_LEG_CLOSED_OUTSIDE', 'CLOSE_BUY', 'TURTLE_CLOSED_OUTSIDE')]
+    assert [e['event'] for e in events] == ['TURTLE_LEG_CLOSED_OUTSIDE', 'CLOSE_BUY']
+    assert events[0]['details']['tickets'] == [fourth] and events[1]['details']['positions_closed'] == 3
+    assert books[-1]['side'] == 0 and books[-1]['armed'] is False
+
+
+@pytest.mark.slow
+def test_a_backstop_that_closes_a_leg_while_the_terminal_is_down_ends_the_trade(reference, tmp_path):
+    """The terminal is gone for 8 s; meanwhile one tick spikes through the fourth leg's backstop and the price comes
+    back above the trade's stop. Connected again, the bot finds three legs, and the deal history shows the fourth
+    closed beyond the trade's stop: the stop was passed while the bot could not look, so the other three are closed
+    at once (before: they were kept, the stop 600 s away, as after a leg closed by hand inside the stop)."""
+    sl = _backstops(reference)
+    fake, clock = _market(_long_trip())
+    a = START + 1590.0
+    i = int((fake.t_ms >= (a + 4.0) * 1000).argmax())
+    spike = (sl[3] + sl[2]) / 2.0
+    fake.bid[i], fake.ask[i] = spike, spike + (fake.ask[i] - fake.bid[i])
+    fake.down(a, a + 8.0)
+
+    def creds(bot, n):
+        bot.credentials = dict(CREDS)
+    run = _run(fake, clock, tmp_path, on_bot=creds)
+    by_broker = [d for d in fake.deals if d.reason == fake.DEAL_REASON_SL]
+    fourth = [d for d in fake.deals if d.entry == 0][3].position_id
+    assert len(by_broker) == 1 and by_broker[0].position_id == fourth and by_broker[0].time_msc == fake.t_ms[i]
+    closes = _closes(fake)
+    assert len(closes) == 3 and len({c['_t_ms'] for c in closes}) == 1 and closes[0]['_t_ms'] <= (a + 20.0) * 1000
+    assert len(_opens(fake)) == 4 and not fake.positions                    # no add in place of the fourth leg
+    leg = next(e['details'] for e in run.events if e['event'] == 'TURTLE_LEG_CLOSED_OUTSIDE')
+    assert leg['tickets'] == [fourth] and leg['beyond_stop'] is True
+    close = next(e['details'] for e in run.events if e['event'] == 'CLOSE_BUY')
+    assert close['reason'] == 'stop_passed_outside' and close['positions_closed'] == 3
+
+
+def test_where_a_leg_closed_outside_the_bot_is_read_from_the_deal_history(mods):
+    """True: closed at or beyond the trade's stop; False: closed inside it; None: the history does not show it (the
+    bot then closes the other legs too: it cannot tell the stop was not passed)."""
+    fake, clock = _market(_long_trip())
+    m = mods(fake=fake, clock=clock, **TURTLE)
+    bot = F.make_bot(m, fake, SYMBOL, F.Run())
+    now = clock.time()
+    bid, ask = fake.quote()
+    inside = fake.add_position(0, 0.01, bid + 500.0, now - 600, magic=MAGIC)
+    beyond = fake.add_position(0, 0.01, bid + 900.0, now - 300, magic=MAGIC)
+    fake.close_by_broker(inside)
+    fake.close_by_broker(beyond)
+    stop = bid + 0.5                                                         # the bid now is just below it
+    assert bot._turtle_closed_beyond_stop([inside], 1, bid - 1.0, now - 600, now) is False
+    assert bot._turtle_closed_beyond_stop([inside, beyond], 1, stop, now - 600, now) is True
+    assert bot._turtle_closed_beyond_stop([inside], -1, bid - 1.0, now - 600, now) is True    # a short's stop
+    assert bot._turtle_closed_beyond_stop([inside, 12345], 1, bid - 1.0, now - 600, now) is None   # not all there
+    fake.history_none = True
+    assert bot._turtle_closed_beyond_stop([inside], 1, bid - 1.0, now - 600, now) is None
