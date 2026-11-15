@@ -1,8 +1,9 @@
 """
-The bot trades on this branch's demo account only (finding 1 of the demo review). All demo bots attach to one
-terminal, and a live bot may log that terminal into the real account at any time, so:
+The bot trades on this branch's demo account only (finding 1 of the demo review). Another process attached to the
+terminal (a live bot, the bot of another slot) may log it into another account at any time, so:
   * initialize_mt5 refuses an account that is not a demo account, not a hedging account, or not the login of
-    the credentials, and remembers the login;
+    the credentials, and remembers the login (it logs in only on a terminal that holds no account:
+    test_terminal_in_use.py);
   * the command line and load_credentials refuse mode 'live' (before the credentials file is opened);
   * every poll and every order_send read account_info() first: another account -> nothing is synced, decided
     or sent, an ERROR event, until the demo account is back.
@@ -28,26 +29,44 @@ def _bot(mods, seconds=60):
     return m, fake, bot, run
 
 
-@pytest.mark.parametrize('trade_mode, margin_mode, login, needle', [
-    (0, 2, 1, None),                                    # demo, hedging, the login of the credentials
-    (2, 2, 1, 'is not a demo account'),                 # a real account
-    (1, 2, 1, 'is not a demo account'),                 # a contest account
-    (0, 0, 1, 'is not a hedging account'),              # netting
-    (0, 2, 7, 'not the login of the credentials'),      # another process switched the terminal meanwhile
+@pytest.mark.parametrize('logged_in, trade_mode, margin_mode, needle', [
+    (True, 0, 2, None),                                 # the terminal holds it already: demo, hedging, this login
+    (False, 0, 2, None),                                # no account yet: the bot logs in
+    (True, 2, 2, 'is not a demo account'),              # a real account
+    (False, 1, 2, 'is not a demo account'),             # a contest account
+    (True, 0, 0, 'is not a hedging account'),           # netting
 ])
-def test_initialize_accepts_only_the_demo_hedging_login(mods, capsys, trade_mode, margin_mode, login, needle):
+def test_initialize_accepts_only_the_demo_hedging_login(mods, capsys, logged_in, trade_mode, margin_mode, needle):
     m, fake, bot, run = _bot(mods)
     bot.mt5_initialized, bot.position_helper = False, None
-    fake.trade_mode, fake.margin_mode, fake.account_login = trade_mode, margin_mode, login
+    fake.logged_in, fake.trade_mode, fake.margin_mode = logged_in, trade_mode, margin_mode
     ok = bot.initialize_mt5()
     names = [c[0] for c in fake.calls]
+    login = [] if logged_in else ['login']               # a login only on a terminal without an account
     if needle is None:
-        assert ok and bot.mt5_initialized and bot._account_login == 1 and 'shutdown' not in names
+        assert ok and bot.mt5_initialized and bot._account_login == 1 and names == ['initialize'] + login
         assert bot.position_helper.order_guard == bot._order_guard        # every order behind the guard
     else:
         assert not ok and not bot.mt5_initialized and bot._account_login is None
-        assert names == ['initialize', 'login', 'shutdown'] and bot.position_helper is None
+        assert names == ['initialize'] + login + ['shutdown'] and bot.position_helper is None
         assert needle in capsys.readouterr().out
+
+
+def test_a_login_that_lands_on_another_account_is_refused(mods, capsys):
+    """The terminal held no account; between the bot's login and its account read another process logged it into
+    account 7: refused (the login of the credentials), nothing initialised."""
+    m, fake, bot, run = _bot(mods)
+    bot.mt5_initialized, bot.position_helper = False, None
+    fake.logged_in = False
+    login = fake.login
+
+    def raced(**k):
+        login(**k)
+        fake.account_login = 7
+        return True
+    fake.login = raced
+    assert bot.initialize_mt5() is False and not bot.mt5_initialized and bot.position_helper is None
+    assert 'not the login of the credentials' in capsys.readouterr().out
 
 
 def test_load_credentials_refuses_live_before_opening_the_file(mods):
