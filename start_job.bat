@@ -14,6 +14,12 @@ REM === Get mode from parameter (default to demo if not provided) ===
 set "MODE=%~1"
 if "%MODE%"=="" set "MODE=demo"
 
+REM === DEMO branch: live mode is disabled ===
+if /i "%MODE%"=="live" (
+    echo This is a DEMO branch ^(demo_hedging_xauusd7^): live mode is disabled.
+    exit /b 1
+)
+
 REM === Define Python installation path based on mode ===
 if /i "%MODE%"=="live" (
     set "PYTHON_ROOT=C:\Users\Administrator\AppData\Local\Programs\Python\Python311"

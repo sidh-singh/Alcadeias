@@ -121,7 +121,7 @@ PROFIT_PROTECT_MIN_USD = 0.0
 RISK_REWARD_RATIO = [1, 1]          # [risk, reward] multiplier for auto SL/TP calculation
 
 # ─── File System / Output ───
-OUTPUT_DIR = r'C:\Alcadeias'                    # Root directory for JSON data files
+OUTPUT_DIR = r'C:\Alcadeias\demo_hedging_xauusd7'                    # Root directory for JSON data files
 DAILY_TRADE_SUBDIR = 'daily_trade'              # Sub-folder for per-symbol daily trade logs
 HISTORICAL_SUMMARY_DAYS = 3650                  # Days of deal history (≈ 10 years)
 HISTORICAL_SUMMARY_FILENAME = 'historical_summary.json'
@@ -129,7 +129,7 @@ HISTORICAL_SUMMARY_FILENAME = 'historical_summary.json'
 # ─── Dashboard ───
 DASHBOARD_REFRESH_INTERVAL = 5000   # Auto-refresh interval in milliseconds
 DASHBOARD_HOST = '0.0.0.0'
-DASHBOARD_PORT = 8050
+DASHBOARD_PORT = 8062
 DASHBOARD_MAX_HEIGHT_JSON = 300     # Max-height (px) for raw JSON viewer
 
 # ─── Daily Trade Graph ───
@@ -145,3 +145,7 @@ STRATEGY_LOG_MAX_ENTRIES = 200                   # Max log entries kept per symb
 
 # ─── Active Config (Dashboard ↔ Bot) ───
 ACTIVE_CONFIG_FILENAME = 'active_config.json'   # Dashboard writes, bot reads on startup
+
+# ── demo deployment (this branch only) ──
+DEMO_BRANCH = 'demo_hedging_xauusd7'                     # demo account only: live mode is refused
+MAGIC = 26117                              # this bot's orders and positions carry this magic number
