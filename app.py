@@ -2254,8 +2254,10 @@ class MT5TradingBot:
         Match the book with this bot's open positions. The positions are the truth for the legs (fill price, open
         time, ticket); a leg the bot has just filled is kept _TURTLE_PENDING_S seconds until the terminal lists it.
         Positions the book does not hold (a start without the state file): the trade is rebuilt from them (turtle.py
-        rebuild). A book whose positions are all gone: closed (the bot's exit finished, or closed outside it).
-        Returns (changed, hold, pending): hold = make no decision this poll, pending = a fill not listed yet.
+        rebuild). A book whose positions are all gone: closed (the bot's exit finished, or closed outside it). Some
+        legs gone outside the bot: closed at or beyond the trade's stop (their backstop, as the deal history shows)
+        -> the other legs are closed at once (closing); closed by hand inside the stop -> the trade goes on, its stop
+        kept. Returns (changed, hold, pending): hold = make no decision this poll, pending = a fill not listed yet.
         """
         nb = buy_positions['count'] if buy_positions else 0
         ns = sell_positions['count'] if sell_positions else 0
@@ -2273,6 +2275,7 @@ class MT5TradingBot:
                 outside = not st['closing']
                 was = 'BUY' if st['side'] == 1 else 'SELL'
                 T.on_exit(st, now)
+                self._turtle_stop_passed = False
                 if outside:
                     print(f"[{symbol}] note: the Turtle's {was} trade was closed outside the bot")
                     self._log_event(symbol, 'TURTLE_CLOSED_OUTSIDE', 'EXIT', {'side': was}, server_time=server_time)
@@ -2281,12 +2284,22 @@ class MT5TradingBot:
                       [(round(a['price'], 8), a.get('ticket')) for a in st['legs']]
             if changed:
                 gone = sorted({a.get('ticket') for a in st['legs']} - {a['ticket'] for a in merged} - {None})
+                stop_was = st['stop']
                 T.set_legs(st, merged)
                 if gone and not st['closing']:          # (while the bot closes them itself, they go one by one)
-                    print(f"[{symbol}] note: Turtle leg(s) {gone} closed outside the bot; the stop stays at {st['stop']}")
+                    beyond = self._turtle_closed_beyond_stop(gone, st['side'], stop_was, st['entry_time'], now)
+                    if beyond is not False:
+                        # Closed at or beyond the trade's stop (a leg's backstop always lies beyond it), or the history
+                        # cannot say: the stop was passed while the bot did not look -- the other legs go at once,
+                        # whatever the price does now. A leg closed by hand inside the stop leaves the trade on.
+                        st['closing'] = True
+                        self._turtle_stop_passed = True
+                    print(f"[{symbol}] note: Turtle leg(s) {gone} closed outside the bot"
+                          + ("; beyond the trade's stop: closing the others" if beyond is not False
+                             else f"; the stop stays at {st['stop']}"))
                     self._log_event(symbol, 'TURTLE_LEG_CLOSED_OUTSIDE', 'EXIT', {
                         'tickets': gone, 'legs': len(st['legs']), 'stop': st['stop'],
-                        'stop_origin': T.stop_origin(st)}, server_time=server_time)
+                        'stop_origin': T.stop_origin(st), 'beyond_stop': beyond}, server_time=server_time)
             return changed, False, bool(young)
         if side == 0:
             return False, False, False
@@ -2294,6 +2307,7 @@ class MT5TradingBot:
         if st['side'] != 0:
             print(f"[{symbol}] note: the Turtle's open trade was replaced outside the bot; taking the positions over")
             T.on_exit(st, now)
+            self._turtle_stop_passed = False
         units = max(1, int(round(float(plist[0].volume) / float(mtqty)))) if mtqty else 1
         new = T.rebuild(side, legs, units, rows, rows_t)
         if new is None:
@@ -2309,6 +2323,24 @@ class MT5TradingBot:
             'side': 'BUY' if side == 1 else 'SELL', 'legs': len(legs), 'units': units, 'n_entry': st['n_entry'],
             'stop': st['stop'], 'entry_d1_bar': _iso(st['entry_row'])}, server_time=server_time)
         return True, False, False
+
+    def _turtle_closed_beyond_stop(self, gone, side, stop, since, now):
+        """Legs closed outside the bot (`gone`, position ids): True when the deal history shows one of them closed at
+        or beyond the trade's stop `stop` (a long's at or below it, a short's at or above), False when every one of
+        them closed inside it (by hand), None when the history does not show them all (yet)."""
+        if not _is_number(stop):
+            return None
+        frm = (float(since) if since else now) - 86400.0
+        with self.mt5_lock:
+            deals = self.position_helper.get_bot_deals(_utc(frm), _utc(now + 86400.0))
+        if deals is None:
+            return None
+        outs = [d for d in deals if getattr(d, 'position_id', None) in set(gone) and _is_out_deal(d)]
+        for d in outs:
+            px = float(getattr(d, 'price', 0.0) or 0.0)
+            if px > 0 and (px <= stop if side == 1 else px >= stop):
+                return True
+        return False if set(gone) <= {getattr(d, 'position_id', None) for d in outs} else None
 
     def _turtle_note(self, symbol, key, text, server_time, details=None):
         """Print and log a repeated note at most every _TURTLE_NOTE_S seconds (per key)."""
@@ -2339,8 +2371,9 @@ class MT5TradingBot:
         tighter of 2N from the newest fill and the exit channel, never looser than before) -- minus (a long) / plus
         (a short) TURTLE_BACKSTOP_N x N_entry, rounded to the symbol's digits; never moved afterwards. The bot's own
         stop only ever tightens and closes every leg at market, so it is always met first; the backstop acts only
-        while the bot or the terminal is down, and a leg it closes is handled as one closed outside the bot (the
-        stop is kept). 0.0 (none) when it cannot be known.
+        while the bot or the terminal is down. A leg it closes was closed beyond the trade's stop: the bot closes the
+        other legs at once (_turtle_sync), or, all of them gone, ends the trade as closed outside it. 0.0 (none) when
+        it cannot be known.
         """
         trial = copy.deepcopy(st)
         if trial['side'] == 0:
@@ -2504,7 +2537,11 @@ class MT5TradingBot:
                             close_response = self.position_helper.close_by_type(trade_symbol, 0 if side == 1 else 1)
                         closed = int(close_response.get('closed_count', 0) or 0)
                         failed = int(close_response.get('failed_count', 0) or 0)
-                        exit_reason = 'stop' if not st['closing'] else 'close_retry'
+                        if getattr(self, '_turtle_stop_passed', False):
+                            exit_reason = 'stop_passed_outside'       # a leg closed beyond the stop (_turtle_sync)
+                            self._turtle_stop_passed = False
+                        else:
+                            exit_reason = 'stop' if not st['closing'] else 'close_retry'
                         details = {'mt5_symbol': trade_symbol, 'positions_closed': closed, 'failed': failed,
                                    'reason': exit_reason, 'stop': stop, 'stop_origin': origin,
                                    'bid': bid, 'ask': ask, 'legs': len(st['legs']),
