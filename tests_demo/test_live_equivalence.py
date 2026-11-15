@@ -36,6 +36,8 @@ def _assert_same(out):
             assert p[k] == q[k], f'poll {i} {k}: ported {p[k]!r} != baseline {q[k]!r}'
     assert _deals(fnew) == _deals(fold)
     assert fnew.balance == fold.balance
+    # the same broker sl / tp on every request (no stop: the live auto sl / tp, no backstop)
+    assert [(o.get('sl'), o.get('tp')) for o in fnew.orders] == [(o.get('sl'), o.get('tp')) for o in fold.orders]
 
 
 @pytest.mark.slow

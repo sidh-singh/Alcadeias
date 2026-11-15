@@ -522,8 +522,8 @@ class MT5PositionHelper:
             order_type: MT5 order type constant (ORDER_TYPE_BUY / ORDER_TYPE_SELL)
             sl: Stop loss (0 for auto-calculation)
             tp: Take profit (0 for auto-calculation)
-            auto_sltp: False = sl / tp exactly as given (0 = none): the Turtle, whose stop is held by the bot
-                       and which has no target
+            auto_sltp: False = sl / tp exactly as given (0 = none): the orders of the Turtle and of a basket
+                       design with a stop (app.py: their broker-side backstop), neither has a broker target
         
         Returns:
             dict: Ready-to-send request dictionary
