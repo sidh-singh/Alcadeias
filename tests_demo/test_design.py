@@ -90,7 +90,7 @@ def test_each_example_design_is_accepted_and_reads_the_votes_it_needs(mods, tmp_
 
 
 @pytest.mark.parametrize('ov, needle', [
-    ({'STRATEGY': 'turtle'}, 'Turtle'),
+    ({'STRATEGY': 'turtle', 'TURTLE_SYSTEM': 3}, 'TURTLE_SYSTEM'),     # the Turtle runs (test_turtle_bot.py)
     ({'STRATEGY': 'grid'}, 'STRATEGY'),
     ({'TARGET_VOL': 8.0}, 'needs VOL_TF'),
     ({'VOL_CAP_USD_PER_UNIT': 12.0}, 'needs VOL_TF'),
@@ -112,7 +112,7 @@ def test_designs_the_bot_cannot_run_are_refused(mods, tmp_path, ov, needle):
 
 
 def test_a_refused_design_stops_the_job_before_it_connects(mods):
-    m = mods(STRATEGY='turtle')
+    m = mods(STRATEGY='turtle', TURTLE_SYSTEM=3)
     called = []
     m.fake.initialize = lambda *a, **k: called.append('initialize') or True
     m.fake.login = lambda *a, **k: called.append('login') or True
