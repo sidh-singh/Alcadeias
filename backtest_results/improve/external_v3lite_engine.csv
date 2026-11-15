@@ -1,0 +1,91 @@
+symbol,period,start,end,run,net,trades,win_rate
+XAUUSDm,2023,2023-02-01,2023-05-01,"engine, votes on the forming bar (live)",74.49,26,57.7
+XAUUSDm,2023,2023-02-01,2023-05-01,"engine, votes on closed bars",-22.88,17,47.1
+XAUUSDm,2023,2023-02-01,2023-05-01,"bar level, closed bars (this study)",-19.64,17,47.1
+XAUUSDm,2023,2023-05-01,2023-08-01,"engine, votes on the forming bar (live)",70.08,25,56.0
+XAUUSDm,2023,2023-05-01,2023-08-01,"engine, votes on closed bars",17.24,16,56.2
+XAUUSDm,2023,2023-05-01,2023-08-01,"bar level, closed bars (this study)",-4.63,16,50.0
+XAUUSDm,2023,2023-08-01,2023-11-01,"engine, votes on the forming bar (live)",128.61,31,64.5
+XAUUSDm,2023,2023-08-01,2023-11-01,"engine, votes on closed bars",53.39,19,63.2
+XAUUSDm,2023,2023-08-01,2023-11-01,"bar level, closed bars (this study)",40.04,20,60.0
+XAUUSDm,2023,2023-11-01,2024-01-01,"engine, votes on the forming bar (live)",137.13,21,71.4
+XAUUSDm,2023,2023-11-01,2024-01-01,"engine, votes on closed bars",93.92,15,73.3
+XAUUSDm,2023,2023-11-01,2024-01-01,"bar level, closed bars (this study)",70.6,17,64.7
+XAUUSDm,2024-25,2024-01-01,2024-04-01,"engine, votes on the forming bar (live)",96.63,25,60.0
+XAUUSDm,2024-25,2024-01-01,2024-04-01,"engine, votes on closed bars",105.31,20,65.0
+XAUUSDm,2024-25,2024-01-01,2024-04-01,"bar level, closed bars (this study)",104.76,20,65.0
+XAUUSDm,2024-25,2024-04-01,2024-07-01,"engine, votes on the forming bar (live)",74.4,24,54.2
+XAUUSDm,2024-25,2024-04-01,2024-07-01,"engine, votes on closed bars",20.6,14,50.0
+XAUUSDm,2024-25,2024-04-01,2024-07-01,"bar level, closed bars (this study)",-16.19,13,46.2
+XAUUSDm,2024-25,2024-07-01,2024-10-01,"engine, votes on the forming bar (live)",-10.27,31,51.6
+XAUUSDm,2024-25,2024-07-01,2024-10-01,"engine, votes on closed bars",33.72,22,59.1
+XAUUSDm,2024-25,2024-07-01,2024-10-01,"bar level, closed bars (this study)",39.02,23,60.9
+XAUUSDm,2024-25,2024-10-01,2025-01-01,"engine, votes on the forming bar (live)",235.54,23,69.6
+XAUUSDm,2024-25,2024-10-01,2025-01-01,"engine, votes on closed bars",209.27,13,76.9
+XAUUSDm,2024-25,2024-10-01,2025-01-01,"bar level, closed bars (this study)",206.75,13,76.9
+XAUUSDm,2024-25,2025-01-01,2025-04-01,"engine, votes on the forming bar (live)",50.33,27,55.6
+XAUUSDm,2024-25,2025-01-01,2025-04-01,"engine, votes on closed bars",2.31,21,52.4
+XAUUSDm,2024-25,2025-01-01,2025-04-01,"bar level, closed bars (this study)",16.79,20,55.0
+XAUUSDm,2024-25,2025-04-01,2025-07-01,"engine, votes on the forming bar (live)",404.41,24,66.7
+XAUUSDm,2024-25,2025-04-01,2025-07-01,"engine, votes on closed bars",186.46,12,66.7
+XAUUSDm,2024-25,2025-04-01,2025-07-01,"bar level, closed bars (this study)",185.03,12,66.7
+XAUUSDm,2025-26,2025-08-13,2025-11-13,"engine, votes on the forming bar (live)",520.57,20,75.0
+XAUUSDm,2025-26,2025-08-13,2025-11-13,"engine, votes on closed bars",346.04,15,66.7
+XAUUSDm,2025-26,2025-08-13,2025-11-13,"bar level, closed bars (this study)",363.35,14,71.4
+XAUUSDm,2025-26,2025-11-13,2026-02-13,"engine, votes on the forming bar (live)",-50.36,23,65.2
+XAUUSDm,2025-26,2025-11-13,2026-02-13,"engine, votes on closed bars",-627.97,16,43.8
+XAUUSDm,2025-26,2025-11-13,2026-02-13,"bar level, closed bars (this study)",-618.49,16,43.8
+XAUUSDm,2025-26,2026-02-13,2026-05-13,"engine, votes on the forming bar (live)",1112.93,25,68.0
+XAUUSDm,2025-26,2026-02-13,2026-05-13,"engine, votes on closed bars",195.57,20,55.0
+XAUUSDm,2025-26,2026-02-13,2026-05-13,"bar level, closed bars (this study)",141.35,21,52.4
+XAUUSDm,2025-26,2026-05-13,2026-08-13,"engine, votes on the forming bar (live)",181.81,28,53.6
+XAUUSDm,2025-26,2026-05-13,2026-08-13,"engine, votes on closed bars",65.91,19,52.6
+XAUUSDm,2025-26,2026-05-13,2026-08-13,"bar level, closed bars (this study)",188.27,18,61.1
+XAUUSDm,2025-26,2026-08-13,2026-11-13,"engine, votes on the forming bar (live)",157.71,24,54.2
+XAUUSDm,2025-26,2026-08-13,2026-11-13,"engine, votes on closed bars",407.29,17,64.7
+XAUUSDm,2025-26,2026-08-13,2026-11-13,"bar level, closed bars (this study)",393.49,16,62.5
+BTCUSDm,2023,2023-02-01,2023-05-01,"engine, votes on the forming bar (live)",55.31,38,55.3
+BTCUSDm,2023,2023-02-01,2023-05-01,"engine, votes on closed bars",-2.05,26,46.2
+BTCUSDm,2023,2023-02-01,2023-05-01,"bar level, closed bars (this study)",-17.65,25,40.0
+BTCUSDm,2023,2023-05-01,2023-08-01,"engine, votes on the forming bar (live)",-0.68,41,51.2
+BTCUSDm,2023,2023-05-01,2023-08-01,"engine, votes on closed bars",-34.45,23,39.1
+BTCUSDm,2023,2023-05-01,2023-08-01,"bar level, closed bars (this study)",-44.61,23,34.8
+BTCUSDm,2023,2023-08-01,2023-11-01,"engine, votes on the forming bar (live)",34.91,43,60.5
+BTCUSDm,2023,2023-08-01,2023-11-01,"engine, votes on closed bars",12.63,25,52.0
+BTCUSDm,2023,2023-08-01,2023-11-01,"bar level, closed bars (this study)",21.88,26,53.8
+BTCUSDm,2023,2023-11-01,2024-01-01,"engine, votes on the forming bar (live)",-52.14,26,42.3
+BTCUSDm,2023,2023-11-01,2024-01-01,"engine, votes on closed bars",8.4,20,55.0
+BTCUSDm,2023,2023-11-01,2024-01-01,"bar level, closed bars (this study)",33.06,22,59.1
+BTCUSDm,2024-25,2024-01-01,2024-04-01,"engine, votes on the forming bar (live)",170.31,38,60.5
+BTCUSDm,2024-25,2024-01-01,2024-04-01,"engine, votes on closed bars",194.17,37,67.6
+BTCUSDm,2024-25,2024-01-01,2024-04-01,"bar level, closed bars (this study)",251.84,35,74.3
+BTCUSDm,2024-25,2024-04-01,2024-07-01,"engine, votes on the forming bar (live)",-45.72,23,47.8
+BTCUSDm,2024-25,2024-04-01,2024-07-01,"engine, votes on closed bars",4.02,18,50.0
+BTCUSDm,2024-25,2024-04-01,2024-07-01,"bar level, closed bars (this study)",-83.84,24,37.5
+BTCUSDm,2024-25,2024-07-01,2024-10-01,"engine, votes on the forming bar (live)",-7.8,45,51.1
+BTCUSDm,2024-25,2024-07-01,2024-10-01,"engine, votes on closed bars",-29.13,35,51.4
+BTCUSDm,2024-25,2024-07-01,2024-10-01,"bar level, closed bars (this study)",-52.34,34,50.0
+BTCUSDm,2024-25,2024-10-01,2025-01-01,"engine, votes on the forming bar (live)",240.07,39,64.1
+BTCUSDm,2024-25,2024-10-01,2025-01-01,"engine, votes on closed bars",-85.01,29,48.3
+BTCUSDm,2024-25,2024-10-01,2025-01-01,"bar level, closed bars (this study)",-81.29,29,48.3
+BTCUSDm,2024-25,2025-01-01,2025-04-01,"engine, votes on the forming bar (live)",38.16,24,50.0
+BTCUSDm,2024-25,2025-01-01,2025-04-01,"engine, votes on closed bars",-12.78,32,46.9
+BTCUSDm,2024-25,2025-01-01,2025-04-01,"bar level, closed bars (this study)",32.88,32,50.0
+BTCUSDm,2024-25,2025-04-01,2025-07-01,"engine, votes on the forming bar (live)",-126.96,31,41.9
+BTCUSDm,2024-25,2025-04-01,2025-07-01,"engine, votes on closed bars",138.2,22,63.6
+BTCUSDm,2024-25,2025-04-01,2025-07-01,"bar level, closed bars (this study)",162.17,24,66.7
+BTCUSDm,2025-26,2025-08-13,2025-11-13,"engine, votes on the forming bar (live)",353.66,41,68.3
+BTCUSDm,2025-26,2025-08-13,2025-11-13,"engine, votes on closed bars",-53.61,24,54.2
+BTCUSDm,2025-26,2025-08-13,2025-11-13,"bar level, closed bars (this study)",-6.57,26,57.7
+BTCUSDm,2025-26,2025-11-13,2026-02-13,"engine, votes on the forming bar (live)",123.72,31,58.1
+BTCUSDm,2025-26,2025-11-13,2026-02-13,"engine, votes on closed bars",178.85,31,64.5
+BTCUSDm,2025-26,2025-11-13,2026-02-13,"bar level, closed bars (this study)",36.14,33,54.5
+BTCUSDm,2025-26,2026-02-13,2026-05-13,"engine, votes on the forming bar (live)",-49.97,32,46.9
+BTCUSDm,2025-26,2026-02-13,2026-05-13,"engine, votes on closed bars",42.06,20,50.0
+BTCUSDm,2025-26,2026-02-13,2026-05-13,"bar level, closed bars (this study)",42.22,25,52.0
+BTCUSDm,2025-26,2026-05-13,2026-08-13,"engine, votes on the forming bar (live)",55.25,27,55.6
+BTCUSDm,2025-26,2026-05-13,2026-08-13,"engine, votes on closed bars",-23.91,21,42.9
+BTCUSDm,2025-26,2026-05-13,2026-08-13,"bar level, closed bars (this study)",-22.73,22,45.5
+BTCUSDm,2025-26,2026-08-13,2026-11-13,"engine, votes on the forming bar (live)",22.16,37,51.4
+BTCUSDm,2025-26,2026-08-13,2026-11-13,"engine, votes on closed bars",13.24,24,54.2
+BTCUSDm,2025-26,2026-08-13,2026-11-13,"bar level, closed bars (this study)",-5.75,27,51.9
