@@ -103,7 +103,8 @@
     "polls_entry_blocked_daily_loss": 0,
     "closes_trailing": 0,
     "polls_entry_blocked_rsi": 0,
-    "closes_force_rsi": 0
+    "closes_force_rsi": 0,
+    "polls_entry_blocked_regime": 0
   },
   "scalars": {
     "final_balance": 1211.7600000000293,
@@ -264,7 +265,7 @@
   },
   "engine": {
     "mode": "ticks",
-    "runtime_s": 3.172,
+    "runtime_s": 3.281,
     "warm_bars": {
       "M1": 600,
       "M5": 600,

@@ -1,0 +1,37 @@
+symbol,label,rank,kind,engine,window,start,end,year,start_equity,end_equity,pnl,return_pct
+BTCUSDm,Turtle [alt] + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2018,2000.0,2027.33,27.33,1.4
+BTCUSDm,Turtle [alt] + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2019,2027.33,2214.57,187.24,9.2
+BTCUSDm,Turtle [alt] + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2020,2214.57,2857.89,643.32,29.0
+BTCUSDm,Turtle [alt] + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2021,2857.89,3880.75,1022.86,35.8
+BTCUSDm,Turtle [alt] + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2022,3880.75,3764.89,-115.86,-3.0
+BTCUSDm,Turtle [alt] + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2023,3764.89,4492.97,728.08,19.3
+BTCUSDm,Turtle [alt] + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2024,4492.97,6468.98,1976.01,44.0
+BTCUSDm,Turtle [alt] + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2025,6468.98,5484.45,-984.53,-15.2
+BTCUSDm,Turtle [alt] + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2026,5484.45,7814.72,2330.28,42.5
+BTCUSDm,TSMOM [alt] (risk-sized),,warm,bars,8y,2018-11-13,2026-11-13,2018,2000.0,2000.0,0.0,0.0
+BTCUSDm,TSMOM [alt] (risk-sized),,warm,bars,8y,2018-11-13,2026-11-13,2019,2000.0,760.75,-1239.25,-62.0
+BTCUSDm,TSMOM [alt] (risk-sized),,warm,bars,8y,2018-11-13,2026-11-13,2020,760.75,1505.63,744.88,97.9
+BTCUSDm,TSMOM [alt] (risk-sized),,warm,bars,8y,2018-11-13,2026-11-13,2021,1505.63,1890.86,385.23,25.6
+BTCUSDm,TSMOM [alt] (risk-sized),,warm,bars,8y,2018-11-13,2026-11-13,2022,1890.86,2906.16,1015.3,53.7
+BTCUSDm,TSMOM [alt] (risk-sized),,warm,bars,8y,2018-11-13,2026-11-13,2023,2906.16,2173.01,-733.16,-25.2
+BTCUSDm,TSMOM [alt] (risk-sized),,warm,bars,8y,2018-11-13,2026-11-13,2024,2173.01,4329.67,2156.66,99.2
+BTCUSDm,TSMOM [alt] (risk-sized),,warm,bars,8y,2018-11-13,2026-11-13,2025,4329.67,3960.57,-369.1,-8.5
+BTCUSDm,TSMOM [alt] (risk-sized),,warm,bars,8y,2018-11-13,2026-11-13,2026,3960.57,4129.83,169.26,4.3
+BTCUSDm,V3-lite + 12-month momentum filter,,warm,bars,8y,2018-11-13,2026-11-13,2018,2000.0,2000.0,0.0,0.0
+BTCUSDm,V3-lite + 12-month momentum filter,,warm,bars,8y,2018-11-13,2026-11-13,2019,2000.0,1989.78,-10.22,-0.5
+BTCUSDm,V3-lite + 12-month momentum filter,,warm,bars,8y,2018-11-13,2026-11-13,2020,1989.78,2101.64,111.86,5.6
+BTCUSDm,V3-lite + 12-month momentum filter,,warm,bars,8y,2018-11-13,2026-11-13,2021,2101.64,2272.42,170.79,8.1
+BTCUSDm,V3-lite + 12-month momentum filter,,warm,bars,8y,2018-11-13,2026-11-13,2022,2272.42,2356.63,84.2,3.7
+BTCUSDm,V3-lite + 12-month momentum filter,,warm,bars,8y,2018-11-13,2026-11-13,2023,2356.63,2424.56,67.93,2.9
+BTCUSDm,V3-lite + 12-month momentum filter,,warm,bars,8y,2018-11-13,2026-11-13,2024,2424.56,2640.73,216.17,8.9
+BTCUSDm,V3-lite + 12-month momentum filter,,warm,bars,8y,2018-11-13,2026-11-13,2025,2640.73,3091.16,450.43,17.1
+BTCUSDm,V3-lite + 12-month momentum filter,,warm,bars,8y,2018-11-13,2026-11-13,2026,3091.16,3103.02,11.86,0.4
+BTCUSDm,Supertrend + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2018,2000.0,2021.62,21.62,1.1
+BTCUSDm,Supertrend + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2019,2021.62,2042.23,20.62,1.0
+BTCUSDm,Supertrend + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2020,2042.23,2142.24,100.0,4.9
+BTCUSDm,Supertrend + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2021,2142.24,2489.34,347.1,16.2
+BTCUSDm,Supertrend + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2022,2489.34,2462.39,-26.94,-1.1
+BTCUSDm,Supertrend + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2023,2462.39,2469.65,7.25,0.3
+BTCUSDm,Supertrend + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2024,2469.65,3273.37,803.72,32.5
+BTCUSDm,Supertrend + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2025,3273.37,3349.27,75.9,2.3
+BTCUSDm,Supertrend + bot votes,,warm,bars,8y,2018-11-13,2026-11-13,2026,3349.27,3056.3,-292.98,-8.7

@@ -239,6 +239,7 @@ _COUNTER_NAMES = {
     K.K_BLOCK_NOVOL: "polls_entry_blocked_no_volatility", K.K_BLOCK_DAYLOSS: "polls_entry_blocked_daily_loss",
     K.K_CLOSE_TRAIL: "closes_trailing",
     K.K_BLOCK_RSI: "polls_entry_blocked_rsi", K.K_CLOSE_RSI_FC: "closes_force_rsi",
+    K.K_BLOCK_REGIME: "polls_entry_blocked_regime",
 }
 _SCALAR_NAMES = {
     K.S_FINAL_BALANCE: "final_balance", K.S_FINAL_EQUITY: "final_equity",
@@ -419,7 +420,8 @@ def _kernel_inputs(cfg: BacktestConfig, prep: Prepared):
 
 def run(cfg: BacktestConfig, prep: Optional[Prepared] = None, mode: str = "sec",
         trace: bool = False, light: bool = False, max_fills: int = 200_000,
-        store_dir: Path = store.DEFAULT_STORE_DIR, warn_off_grid: bool = True) -> Result:
+        store_dir: Path = store.DEFAULT_STORE_DIR, warn_off_grid: bool = True,
+        regime: Optional[Tuple[np.ndarray, np.ndarray]] = None) -> Result:
     """
     Run one backtest.
 
@@ -427,8 +429,22 @@ def run(cfg: BacktestConfig, prep: Optional[Prepared] = None, mode: str = "sec",
            seconds); 'ticks' = every tick (needed for sub-second poll phase / latency).
     trace  record every live poll's signal + scores (parity testing; small windows only).
     light  skip the per-minute equity series and the DataFrames' extras (sweeps).
+    regime (times_ms, values): backtest-only entry filter. From times_ms[i] on the regime is values[i]
+           (+1 long, -1 short, 0 neither); a new basket opens only in the regime's direction. The series
+           must be known at those times (computed from closed bars). None = off, the live rules.
     """
     t0 = time.time()
+    if regime is None:
+        reg_t, reg_v = np.zeros(0, np.int64), np.zeros(0, np.int64)
+    else:
+        reg_t = np.ascontiguousarray(regime[0], np.int64)
+        reg_v = np.ascontiguousarray(regime[1], np.int64)
+        if reg_t.shape != reg_v.shape or reg_t.ndim != 1:
+            raise ValueError("regime: times and values must be 1-D arrays of the same length")
+        if len(reg_t) > 1 and bool(np.any(np.diff(reg_t) < 0)):
+            raise ValueError("regime: times must be in ascending order")
+        if len(reg_v) and not set(np.unique(reg_v)) <= {-1, 0, 1}:
+            raise ValueError("regime: values must be +1, -1 or 0")
     if prep is None:
         prep = prepare(cfg.symbol, cfg.start, cfg.end, cfg.timeframes(), mode=mode, store_dir=store_dir)
     flat = prep.flat(cfg)
@@ -468,7 +484,7 @@ def run(cfg: BacktestConfig, prep: Optional[Prepared] = None, mode: str = "sec",
                      flat["M_PH"], flat["M_PL"], flat["M_CH"], flat["M_CL"],
                      need_rsi, need_slope,
                      w["or"], w["om"], w["fr"], w["fm"], w["br"], w["bm"], w["ar"], w["am"],
-                     ladder_tf, mult, hour_ok, ci, cf,
+                     ladder_tf, mult, hour_ok, reg_t, reg_v, ci, cf,
                      fills, baskets, eq, tr, counters, scal)
         if counters[K.K_FILL_OVERFLOW] == 0 and counters[K.K_BASKET_OVERFLOW] == 0:
             break

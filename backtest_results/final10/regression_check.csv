@@ -1,0 +1,103 @@
+symbol,label,history_from,period,runner,simulator,published,runner_equals_simulator,equals_published
+XAUUSDm,London breakout + H1 trend,2022-12-01,2023,1999.48,1999.48,1999.48,True,True
+XAUUSDm,London breakout + H1 trend,2022-12-01,2024-25,2373.14,2373.14,2373.14,True,True
+XAUUSDm,London breakout + H1 trend,2022-12-01,2025-26,3414.85,3414.85,3414.85,True,True
+XAUUSDm,London breakout (risk-sized),2022-12-01,2023,1973.47,1973.47,1973.47,True,True
+XAUUSDm,London breakout (risk-sized),2022-12-01,2024-25,2958.68,2958.68,2958.68,True,True
+XAUUSDm,London breakout (risk-sized),2022-12-01,2025-26,2056.94,2056.94,2056.94,True,True
+XAUUSDm,V3-lite + 200-day trend filter,2022-12-01,2023,1999.89,1999.89,1999.89,True,True
+XAUUSDm,V3-lite + 200-day trend filter,2022-12-01,2024-25,3060.07,3060.07,3060.07,True,True
+XAUUSDm,V3-lite + 200-day trend filter,2022-12-01,2025-26,2820.78,2820.78,2820.78,True,True
+XAUUSDm,V3-lite + 12-month momentum filter,2022-12-01,2023,2008.54,2008.54,2008.54,True,True
+XAUUSDm,V3-lite + 12-month momentum filter,2022-12-01,2024-25,3060.07,3060.07,3060.07,True,True
+XAUUSDm,V3-lite + 12-month momentum filter,2022-12-01,2025-26,2345.75,2345.75,2345.75,True,True
+XAUUSDm,Long moving average + H1 trend,2022-12-01,2023,2021.11,2021.11,2021.11,True,True
+XAUUSDm,Long moving average + H1 trend,2022-12-01,2024-25,2608.01,2608.01,2608.01,True,True
+XAUUSDm,Long moving average + H1 trend,2022-12-01,2025-26,4758.58,4758.58,4758.58,True,True
+XAUUSDm,Noise-area momentum (risk-sized),2022-12-01,2023,2605.61,2605.61,2605.61,True,True
+XAUUSDm,Noise-area momentum (risk-sized),2022-12-01,2024-25,2182.62,2182.62,2182.62,True,True
+XAUUSDm,Noise-area momentum (risk-sized),2022-12-01,2025-26,2349.66,2349.66,2349.66,True,True
+XAUUSDm,Long moving average [alt] + H1 trend,2022-12-01,2023,2053.72,2053.72,2053.72,True,True
+XAUUSDm,Long moving average [alt] + H1 trend,2022-12-01,2024-25,2788.51,2788.51,2788.51,True,True
+XAUUSDm,Long moving average [alt] + H1 trend,2022-12-01,2025-26,4303.98,4303.98,4303.98,True,True
+XAUUSDm,V3-lite + H4 Supertrend filter,2022-12-01,2023,2013.56,2013.56,2013.56,True,True
+XAUUSDm,V3-lite + H4 Supertrend filter,2022-12-01,2024-25,2579.59,2579.59,2579.59,True,True
+XAUUSDm,V3-lite + H4 Supertrend filter,2022-12-01,2025-26,2394.95,2394.95,2394.95,True,True
+XAUUSDm,V3-lite (bar level),2022-12-01,2023,2081.04,2081.04,2081.04,True,True
+XAUUSDm,V3-lite (bar level),2022-12-01,2024-25,2580.89,2580.89,2580.89,True,True
+XAUUSDm,V3-lite (bar level),2022-12-01,2025-26,2380.93,2380.93,2380.93,True,True
+XAUUSDm,London breakout + H1 trend,2017-01-01,2023,1999.48,1999.48,1999.48,True,True
+XAUUSDm,London breakout + H1 trend,2017-01-01,2024-25,2373.14,2373.14,2373.14,True,True
+XAUUSDm,London breakout + H1 trend,2017-01-01,2025-26,3414.85,3414.85,3414.85,True,True
+XAUUSDm,London breakout (risk-sized),2017-01-01,2023,1973.47,1973.47,1973.47,True,True
+XAUUSDm,London breakout (risk-sized),2017-01-01,2024-25,2958.68,2958.68,2958.68,True,True
+XAUUSDm,London breakout (risk-sized),2017-01-01,2025-26,2056.94,2056.94,2056.94,True,True
+XAUUSDm,V3-lite + 200-day trend filter,2017-01-01,2023,1943.65,1943.65,1999.89,True,False
+XAUUSDm,V3-lite + 200-day trend filter,2017-01-01,2024-25,3060.07,3060.07,3060.07,True,True
+XAUUSDm,V3-lite + 200-day trend filter,2017-01-01,2025-26,2820.78,2820.78,2820.78,True,True
+XAUUSDm,V3-lite + 12-month momentum filter,2017-01-01,2023,1867.44,1867.44,2008.54,True,False
+XAUUSDm,V3-lite + 12-month momentum filter,2017-01-01,2024-25,3060.07,3060.07,3060.07,True,True
+XAUUSDm,V3-lite + 12-month momentum filter,2017-01-01,2025-26,2345.75,2345.75,2345.75,True,True
+XAUUSDm,Long moving average + H1 trend,2017-01-01,2023,2021.11,2021.11,2021.11,True,True
+XAUUSDm,Long moving average + H1 trend,2017-01-01,2024-25,2608.01,2608.01,2608.01,True,True
+XAUUSDm,Long moving average + H1 trend,2017-01-01,2025-26,4758.58,4758.58,4758.58,True,True
+XAUUSDm,Noise-area momentum (risk-sized),2017-01-01,2023,2605.61,2605.61,2605.61,True,True
+XAUUSDm,Noise-area momentum (risk-sized),2017-01-01,2024-25,2182.62,2182.62,2182.62,True,True
+XAUUSDm,Noise-area momentum (risk-sized),2017-01-01,2025-26,2349.66,2349.66,2349.66,True,True
+XAUUSDm,Long moving average [alt] + H1 trend,2017-01-01,2023,2053.72,2053.72,2053.72,True,True
+XAUUSDm,Long moving average [alt] + H1 trend,2017-01-01,2024-25,2788.51,2788.51,2788.51,True,True
+XAUUSDm,Long moving average [alt] + H1 trend,2017-01-01,2025-26,4303.98,4303.98,4303.98,True,True
+XAUUSDm,V3-lite + H4 Supertrend filter,2017-01-01,2023,2013.56,2013.56,2013.56,True,True
+XAUUSDm,V3-lite + H4 Supertrend filter,2017-01-01,2024-25,2579.59,2579.59,2579.59,True,True
+XAUUSDm,V3-lite + H4 Supertrend filter,2017-01-01,2025-26,2394.95,2394.95,2394.95,True,True
+XAUUSDm,V3-lite (bar level),2017-01-01,2023,2081.04,2081.04,2081.04,True,True
+XAUUSDm,V3-lite (bar level),2017-01-01,2024-25,2580.89,2580.89,2580.89,True,True
+XAUUSDm,V3-lite (bar level),2017-01-01,2025-26,2380.93,2380.93,2380.93,True,True
+BTCUSDm,Turtle + bot votes,2022-12-01,2023,2279.32,2279.32,2279.32,True,True
+BTCUSDm,Turtle + bot votes,2022-12-01,2024-25,2325.95,2325.95,2325.95,True,True
+BTCUSDm,Turtle + bot votes,2022-12-01,2025-26,2538.01,2538.01,2538.01,True,True
+BTCUSDm,V3-lite + 1/3/12-month momentum filter,2022-12-01,2023,1971.95,1971.95,1971.95,True,True
+BTCUSDm,V3-lite + 1/3/12-month momentum filter,2022-12-01,2024-25,2222.16,2222.16,2222.16,True,True
+BTCUSDm,V3-lite + 1/3/12-month momentum filter,2022-12-01,2025-26,2222.45,2222.45,2222.45,True,True
+BTCUSDm,Turtle (risk-sized),2022-12-01,2023,2511.74,2511.74,2511.74,True,True
+BTCUSDm,Turtle (risk-sized),2022-12-01,2024-25,3692.17,3692.17,3692.17,True,True
+BTCUSDm,Turtle (risk-sized),2022-12-01,2025-26,2220.87,2220.87,2220.87,True,True
+BTCUSDm,Daily volatility breakout + bot votes,2022-12-01,2023,2023.97,2023.97,2023.97,True,True
+BTCUSDm,Daily volatility breakout + bot votes,2022-12-01,2024-25,2163.67,2163.67,2163.67,True,True
+BTCUSDm,Daily volatility breakout + bot votes,2022-12-01,2025-26,1976.75,1976.75,1976.75,True,True
+BTCUSDm,Daily volatility breakout,2022-12-01,2023,2061.36,2061.36,2061.36,True,True
+BTCUSDm,Daily volatility breakout,2022-12-01,2024-25,2184.23,2184.23,2184.23,True,True
+BTCUSDm,Daily volatility breakout,2022-12-01,2025-26,2010.5,2010.5,2010.5,True,True
+BTCUSDm,Connors RSI(2) + bot votes,2022-12-01,2023,2005.74,2005.74,2005.74,True,True
+BTCUSDm,Connors RSI(2) + bot votes,2022-12-01,2024-25,2098.66,2098.66,2098.66,True,True
+BTCUSDm,Connors RSI(2) + bot votes,2022-12-01,2025-26,2134.19,2134.19,2134.19,True,True
+BTCUSDm,TSMOM,2022-12-01,2023,1987.14,1987.14,1987.14,True,True
+BTCUSDm,TSMOM,2022-12-01,2024-25,2327.49,2327.49,2327.49,True,True
+BTCUSDm,TSMOM,2022-12-01,2025-26,2382.16,2382.16,2382.16,True,True
+BTCUSDm,V3-lite (bar level),2022-12-01,2023,1999.58,1999.58,1999.58,True,True
+BTCUSDm,V3-lite (bar level),2022-12-01,2024-25,2175.3,2175.3,2175.3,True,True
+BTCUSDm,V3-lite (bar level),2022-12-01,2025-26,1995.69,1995.69,1995.69,True,True
+BTCUSDm,Turtle + bot votes,2018-01-01,2023,2278.67,2278.67,2279.32,True,False
+BTCUSDm,Turtle + bot votes,2018-01-01,2024-25,2325.95,2325.95,2325.95,True,True
+BTCUSDm,Turtle + bot votes,2018-01-01,2025-26,2538.01,2538.01,2538.01,True,True
+BTCUSDm,V3-lite + 1/3/12-month momentum filter,2018-01-01,2023,2008.4,2008.4,1971.95,True,False
+BTCUSDm,V3-lite + 1/3/12-month momentum filter,2018-01-01,2024-25,2222.16,2222.16,2222.16,True,True
+BTCUSDm,V3-lite + 1/3/12-month momentum filter,2018-01-01,2025-26,2222.45,2222.45,2222.45,True,True
+BTCUSDm,Turtle (risk-sized),2018-01-01,2023,2543.43,2543.43,2511.74,True,False
+BTCUSDm,Turtle (risk-sized),2018-01-01,2024-25,3692.17,3692.17,3692.17,True,True
+BTCUSDm,Turtle (risk-sized),2018-01-01,2025-26,2220.87,2220.87,2220.87,True,True
+BTCUSDm,Daily volatility breakout + bot votes,2018-01-01,2023,2023.97,2023.97,2023.97,True,True
+BTCUSDm,Daily volatility breakout + bot votes,2018-01-01,2024-25,2163.67,2163.67,2163.67,True,True
+BTCUSDm,Daily volatility breakout + bot votes,2018-01-01,2025-26,1976.75,1976.75,1976.75,True,True
+BTCUSDm,Daily volatility breakout,2018-01-01,2023,2061.36,2061.36,2061.36,True,True
+BTCUSDm,Daily volatility breakout,2018-01-01,2024-25,2184.23,2184.23,2184.23,True,True
+BTCUSDm,Daily volatility breakout,2018-01-01,2025-26,2010.5,2010.5,2010.5,True,True
+BTCUSDm,Connors RSI(2) + bot votes,2018-01-01,2023,2039.56,2039.56,2005.74,True,False
+BTCUSDm,Connors RSI(2) + bot votes,2018-01-01,2024-25,2098.66,2098.66,2098.66,True,True
+BTCUSDm,Connors RSI(2) + bot votes,2018-01-01,2025-26,2134.19,2134.19,2134.19,True,True
+BTCUSDm,TSMOM,2018-01-01,2023,1998.42,1998.42,1987.14,True,False
+BTCUSDm,TSMOM,2018-01-01,2024-25,2327.49,2327.49,2327.49,True,True
+BTCUSDm,TSMOM,2018-01-01,2025-26,2382.16,2382.16,2382.16,True,True
+BTCUSDm,V3-lite (bar level),2018-01-01,2023,1999.58,1999.58,1999.58,True,True
+BTCUSDm,V3-lite (bar level),2018-01-01,2024-25,2175.3,2175.3,2175.3,True,True
+BTCUSDm,V3-lite (bar level),2018-01-01,2025-26,1995.69,1995.69,1995.69,True,True

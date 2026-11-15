@@ -56,9 +56,38 @@ replayed, five quarters (13 Aug 2025 → 13 Nov 2026), each run eight times with
 
 ---
 
-## 2026-11-15 · The final ten: pre-registration (before any 2018-2020 data is read)
+## 2026-11-15 · The final ten: 8 years, 5 years, the last year, and the never-read 2018 – 2020
 
-**Status:** *in progress*. Results will be added to this entry; nothing about the selection or the test changes after this commit.
+**Status:** *done* (backtest only; the live files are unchanged). Full write-up: `backtest_results/final10/FINAL10.md`. The selection and protocol below were pre-registered in commit `5d1e10e`, before any 2018 – 2020 data was read.
+
+**Results** (one fresh $2,000 account per strategy and window; max DD = deepest fall from an equity peak)
+
+| | Gold | BTC |
+|---|---|---|
+| Highest equity, 8 years | V3-lite $11,957 (+25.0% a year), DD 33.0% | Turtle, 1% risk, $113,722 (+65.7% a year), DD 42.3%, growing with the account from a 2018 start. On the bot's unit sizing: Turtle + bot votes $6,977 (+16.9% a year), DD 46.0% |
+| Lowest drawdown, 8 years | London breakout + H1 trend, DD 18.5% ($3,924) | Connors RSI(2) + bot votes, DD 8.2% ($2,291) |
+| Best growth ÷ drawdown, 8 years | V3-lite 0.76 | Turtle, 1% risk 1.55; Top 2 0.57 ($4,149, DD 16.6%) |
+| Fair test, Nov 2018 – Dec 2020 | V3-lite +17.0% in total, DD 8.5%, the best finalist. London breakout lost in both forms | Turtle, 1% risk ×12; Turtle + bot votes +37.1%, DD 10.7%; our designs +0.3% to +4.1% |
+| Last year (in-sample) | most equity: Top 3 +127% (DD 43%, median of 8 timings); smoothest of the rows that traded normally: London breakout + H1 trend +44% and V3-lite + 12-month momentum filter +17%, both DD 17.5% | most equity: Turtle + bot votes +71% (DD 26%); smoothest: Connors RSI(2) + bot votes +4.8% (DD 2.0%) |
+| Live logic | wiped in every window | wiped in every window |
+
+**Added after the pre-registration: the V3-lite hybrids as the bot would run them.** The hybrids were selected and tested on the M1-bar simulator, which reads the bot's votes on closed bars. The bot reads them on the forming bar. The tick engine gained a *backtest-only* entry filter (`fast.run(..., regime=(times, values))`), off by default and tested in `tests/test_regime_filter.py`, so each hybrid could run as the bot would.
+- On gold, V3-lite with closed-bar votes on the tick engine lands near the simulator: $2,300 against $2,480 over 8 years. The gap there is the vote timing. On BTC the engines also differ: $2,044 against $2,205 over the last year.
+- Run as the bot would, the hybrids did better:
+  - gold V3-lite + 200-day trend filter: $7,101, DD 22.3% over 8 years (growth ÷ DD 0.77 against V3-lite's 0.76), +16.5% with DD 6.5% on the fair test;
+  - gold + 12-month momentum filter: $5,868, DD 21.1%, and +17.8% with DD 6.6% on the fair test, level with V3-lite's +17.0%;
+  - BTC + 1/3/12-month momentum filter: $3,240, DD 16.6%.
+- With the filter off, the engine reproduces the main run exactly (`identity_check.csv`). The 7 hedging live-fidelity windows still match `app.py` poll for poll (373,614 polls), as do the 7 netting ones rechecked on this engine. The pipeline outputs were re-stamped; no number changed.
+
+**Found by the independent review, after the results: the selection evidence was partly cold.** The study the rule read gave slow filters too little history: nothing before Jan 2021 for its 2021-22 test and nothing before Dec 2022 for 2023 – 2026. Until a filter was defined, its row did not trade, and that counted in its favour.
+- **The re-check:** every published row was re-run on the same five periods with history from 2017 / 2018, and the same rule applied (`selection_warm.json`).
+- **Gold:** the two slow-filter hybrids (#3 and #4) lose in 2021 and 2023 and drop out.
+- **BTC:** four rows change. The new **Turtle System 2 + bot votes** made $7,815 over 8 years with DD 32.5%, and +42.9% with DD 9.4% on the fair test. That is the best BTC result on the bot's unit sizing.
+
+**Conclusions.**
+- **Gold:** V3-lite as the bot runs it is the most dependable design. It has the highest equity of the ten over 8 and 5 years, the best fair-test result, and a profit in every full calendar year except 2022. More than half its 8-year profit came in 2026. The trend filters lower its drawdown (33% → about 22%) but gave up 2021 and 2023 – 2024, and would not have qualified on warm data.
+- **BTC:** only the Turtle trend follower made real money, with drawdowns of 33 – 46% on the unit sizing. The 1% risk Turtle's $113,722 is a start-date effect: started in Nov 2021 it made about what the unit-sized Turtle made. Our Top 2 has the lowest drawdown of our designs, but almost all its profit came in 2024 – 2025.
+- **Hold-out data:** 2018 – 2020 has now been used once. The next honest test of any design is a demo-account forward run.
 
 **What.** Every design and published strategy tested so far is narrowed to ten per symbol by one fixed rule. The ten are then run on three windows, each on a fresh $2,000 account: eight years (13 Nov 2018 → 13 Nov 2026), five years (13 Nov 2021 → 13 Nov 2026) and the last year (13 Nov 2025 → 13 Nov 2026). The eight-year window also gets its own account for the part no study had read: 13 Nov 2018 → 31 Dec 2020, downloaded for this test (BTC's archive starts in January 2018, gold's in 2016).
 
@@ -69,19 +98,19 @@ replayed, five quarters (13 Aug 2025 → 13 Nov 2026), each run eight times with
 - Ranked by profit per unit of drawdown: the average profit per quarter divided by the worst quarter's drawdown in %.
 - At most two rows of any one published strategy; each of our designs counts on its own.
 
-**The finalists** (average profit per quarter 2021 / 2022 / 2023 / 2024-25 / 2025-26, worst quarter's drawdown)
+**The finalists** (average profit per quarter 2021 / 2022 / 2023 / 2024-25 / 2025-26, worst quarter's drawdown; four cells corrected after the review for a double-rounding slip, the selection is unchanged)
 
 | # | Gold | Evidence | DD | BTC | Evidence | DD |
 |---|---|---|---|---|---|---|
-| 1 | London breakout + H1 trend | +10 / +50 / −0 / +62 / +179 | 11% | Top 2 (ours) | −24 / +20 / +21 / +148 / +56 | 10% |
-| 2 | London breakout, 1% risk per trade | +2 / +52 / −2 / +170 / +7 | 9% | Top 3 (ours) | −61 / +43 / +18 / +102 / +157 | 12% |
+| 1 | London breakout + H1 trend | +10 / +49 / −0 / +62 / +179 | 11% | Top 2 (ours) | −24 / +20 / +21 / +148 / +56 | 10% |
+| 2 | London breakout, 1% risk per trade | +1 / +52 / −2 / +170 / +7 | 9% | Top 3 (ours) | −61 / +43 / +18 / +102 / +157 | 12% |
 | 3 | V3-lite + 200-day trend filter | +2 / +26 / +1 / +121 / +244 | 16% | Turtle + bot votes | +189 / +116 / +58 / +139 / +163 | 33% |
-| 4 | V3-lite + 12-month momentum filter | +0 / +0 / +2 / +121 / +206 | 16% | V3-lite + 1/3/12-month momentum filter | +35 / +39 / −4 / +45 / +38 | 8% |
+| 4 | V3-lite + 12-month momentum filter | no trades / +1 / +2 / +121 / +206 | 16% | V3-lite + 1/3/12-month momentum filter | +35 / +39 / −4 / +45 / +38 | 8% |
 | 5 | Top 3 (ours) | +28 / −38 / +26 / +111 / +555 | 40% | Turtle, 1% of equity per N | +0 / +103 / +95 / +87 / +44 | 17% |
 | 6 | 41 / 356 moving average (M5) + H1 trend | +13 / −13 / +5 / +112 / +450 | 35% | Daily volatility breakout + bot votes | +37 / +14 / +6 / +27 / +6 | 6% |
 | 7 | V3-lite (ours) | +28 / +3 / +105 / +154 / +409 | 45% | Daily volatility breakout | +49 / +19 / +15 / +30 / +6 | 8% |
 | 8 | Noise-area momentum, vol-targeted | −76 / +51 / +135 / +19 / +53 | 12% | Connors RSI(2) + bot votes | +2 / +14 / +1 / +16 / +28 | 4% |
-| 9 | 34 / 339 moving average (M5) + H1 trend | +13 / −12 / +13 / +133 / +402 | 39% | V3-lite (ours) | −26 / +25 / +8 / +48 / +121 | 12% |
+| 9 | 34 / 339 moving average (M5) + H1 trend | +13 / −12 / +13 / +133 / +402 | 39% | V3-lite (ours) | −26 / +25 / +7 / +48 / +121 | 12% |
 | 10 | V3-lite + H4 Supertrend filter | −37 / +14 / +5 / +76 / +105 | 30% | TSMOM (1/3/12-month) | +31 / +74 / −3 / +54 / +50 | 17% |
 
 References, run alongside but not ranked: the live logic, the owner's rules design (round 3), our designs that missed the cut (gold: Top 1 and Top 2, which lost in 2 of the 5 periods; BTC: Top 1) and the bar-level V3-lite (to compare the two engines).

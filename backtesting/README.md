@@ -235,6 +235,14 @@ The improvement search built on these levers (which designs were tried, how they
 what they did on five quarters) is in [`IMPROVEMENT.md`](../IMPROVEMENT.md); its code is
 `backtesting/research/` (`python -m backtesting.research.improve report XAUUSDm`).
 
+`fast.run(cfg, prep, regime=(times_ms, values))` adds a backtest-only entry filter that is not a
+`BacktestConfig` field: a direction series computed outside the kernel from closed bars. From
+`times_ms[i]` on, new baskets open only in the direction `values[i]` (+1 long, -1 short, 0 neither).
+It is off by default (`tests/test_regime_filter.py`). The final ten
+([`backtest_results/final10/FINAL10.md`](../backtest_results/final10/FINAL10.md),
+`python -m backtesting.research.final10`) uses it to run V3-lite with a published strategy's trend
+as its filter.
+
 ## Layout
 
 ```

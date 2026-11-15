@@ -1,0 +1,37 @@
+symbol,label,rank,kind,engine,window,start,end,year,start_equity,end_equity,pnl,return_pct
+XAUUSDm,"V3-lite, votes on closed bars",,supplement,ticks,8y,2018-11-13,2026-11-13,2018,2000.0,1995.5,-4.5,-0.2
+XAUUSDm,"V3-lite, votes on closed bars",,supplement,ticks,8y,2018-11-13,2026-11-13,2019,1995.5,1856.33,-139.17,-7.0
+XAUUSDm,"V3-lite, votes on closed bars",,supplement,ticks,8y,2018-11-13,2026-11-13,2020,1856.33,1926.65,70.32,3.8
+XAUUSDm,"V3-lite, votes on closed bars",,supplement,ticks,8y,2018-11-13,2026-11-13,2021,1926.65,1797.11,-129.54,-6.7
+XAUUSDm,"V3-lite, votes on closed bars",,supplement,ticks,8y,2018-11-13,2026-11-13,2022,1797.11,1828.39,31.28,1.7
+XAUUSDm,"V3-lite, votes on closed bars",,supplement,ticks,8y,2018-11-13,2026-11-13,2023,1828.39,1924.34,95.95,5.2
+XAUUSDm,"V3-lite, votes on closed bars",,supplement,ticks,8y,2018-11-13,2026-11-13,2024,1924.34,2252.6,328.26,17.1
+XAUUSDm,"V3-lite, votes on closed bars",,supplement,ticks,8y,2018-11-13,2026-11-13,2025,2252.6,2493.44,240.84,10.7
+XAUUSDm,"V3-lite, votes on closed bars",,supplement,ticks,8y,2018-11-13,2026-11-13,2026,2493.44,2300.29,-193.15,-7.7
+XAUUSDm,"V3-lite + 200-day trend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2018,2000.0,1991.5,-8.5,-0.4
+XAUUSDm,"V3-lite + 200-day trend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2019,1991.5,1972.51,-18.99,-1.0
+XAUUSDm,"V3-lite + 200-day trend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2020,1972.51,2344.41,371.9,18.9
+XAUUSDm,"V3-lite + 200-day trend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2021,2344.41,2119.7,-224.71,-9.6
+XAUUSDm,"V3-lite + 200-day trend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2022,2119.7,2175.17,55.47,2.6
+XAUUSDm,"V3-lite + 200-day trend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2023,2175.17,2222.46,47.29,2.2
+XAUUSDm,"V3-lite + 200-day trend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2024,2222.46,2491.63,269.17,12.1
+XAUUSDm,"V3-lite + 200-day trend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2025,2491.63,4104.86,1613.23,64.7
+XAUUSDm,"V3-lite + 200-day trend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2026,4104.86,7100.85,2995.99,73.0
+XAUUSDm,"V3-lite + 12-month momentum filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2018,2000.0,1984.55,-15.45,-0.8
+XAUUSDm,"V3-lite + 12-month momentum filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2019,1984.55,1951.44,-33.11,-1.7
+XAUUSDm,"V3-lite + 12-month momentum filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2020,1951.44,2370.65,419.21,21.5
+XAUUSDm,"V3-lite + 12-month momentum filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2021,2370.65,2240.21,-130.44,-5.5
+XAUUSDm,"V3-lite + 12-month momentum filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2022,2240.21,2165.52,-74.69,-3.3
+XAUUSDm,"V3-lite + 12-month momentum filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2023,2165.52,2133.57,-31.95,-1.5
+XAUUSDm,"V3-lite + 12-month momentum filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2024,2133.57,2462.78,329.21,15.4
+XAUUSDm,"V3-lite + 12-month momentum filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2025,2462.78,3980.18,1517.4,61.6
+XAUUSDm,"V3-lite + 12-month momentum filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2026,3980.18,5867.91,1887.73,47.4
+XAUUSDm,"V3-lite + H4 Supertrend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2018,2000.0,1994.44,-5.56,-0.3
+XAUUSDm,"V3-lite + H4 Supertrend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2019,1994.44,1975.99,-18.45,-0.9
+XAUUSDm,"V3-lite + H4 Supertrend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2020,1975.99,2279.55,303.56,15.4
+XAUUSDm,"V3-lite + H4 Supertrend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2021,2279.55,2113.95,-165.6,-7.3
+XAUUSDm,"V3-lite + H4 Supertrend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2022,2113.95,2116.71,2.76,0.1
+XAUUSDm,"V3-lite + H4 Supertrend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2023,2116.71,2468.87,352.16,16.6
+XAUUSDm,"V3-lite + H4 Supertrend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2024,2468.87,2898.95,430.08,17.4
+XAUUSDm,"V3-lite + H4 Supertrend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2025,2898.95,3991.87,1092.92,37.7
+XAUUSDm,"V3-lite + H4 Supertrend filter, as the bot runs it",,supplement,ticks,8y,2018-11-13,2026-11-13,2026,3991.87,5165.16,1173.29,29.4

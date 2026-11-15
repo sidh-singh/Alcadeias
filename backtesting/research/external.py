@@ -163,10 +163,12 @@ class Market:
         return int(np.searchsorted(self.t, store.to_ms(when) // 1000, side="left"))
 
 
-def load_market(symbol: str, store_dir: Path = store.DEFAULT_STORE_DIR) -> Market:
-    m1 = store.load_m1(symbol, EARLIEST, DATA_END, store_dir)
+def load_market(symbol: str, store_dir: Path = store.DEFAULT_STORE_DIR, earliest: str = EARLIEST,
+                end: str = DATA_END) -> Market:
+    """M1 bars [earliest, end). The defaults are this study's span; ``final10.py`` reads a longer history."""
+    m1 = store.load_m1(symbol, earliest, end, store_dir)
     if not m1 or len(m1["t"]) == 0:
-        raise FileNotFoundError(f"no M1 bars for {symbol} from {EARLIEST} in the store")
+        raise FileNotFoundError(f"no M1 bars for {symbol} from {earliest} in the store")
     return Market(symbol, m1)
 
 

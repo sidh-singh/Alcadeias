@@ -1,0 +1,82 @@
+symbol,label,rank,kind,engine,window,start,end,year,start_equity,end_equity,pnl,return_pct
+XAUUSDm,London breakout + H1 trend,1.0,published,bars,8y,2018-11-13,2026-11-13,2018,2000.0,1995.34,-4.66,-0.2
+XAUUSDm,London breakout + H1 trend,1.0,published,bars,8y,2018-11-13,2026-11-13,2019,1995.34,1954.61,-40.73,-2.0
+XAUUSDm,London breakout + H1 trend,1.0,published,bars,8y,2018-11-13,2026-11-13,2020,1954.61,1968.62,14.01,0.7
+XAUUSDm,London breakout + H1 trend,1.0,published,bars,8y,2018-11-13,2026-11-13,2021,1968.62,2012.93,44.32,2.3
+XAUUSDm,London breakout + H1 trend,1.0,published,bars,8y,2018-11-13,2026-11-13,2022,2012.93,2210.78,197.85,9.8
+XAUUSDm,London breakout + H1 trend,1.0,published,bars,8y,2018-11-13,2026-11-13,2023,2210.78,2132.02,-78.76,-3.6
+XAUUSDm,London breakout + H1 trend,1.0,published,bars,8y,2018-11-13,2026-11-13,2024,2132.02,2226.59,94.58,4.4
+XAUUSDm,London breakout + H1 trend,1.0,published,bars,8y,2018-11-13,2026-11-13,2025,2226.59,2460.04,233.45,10.5
+XAUUSDm,London breakout + H1 trend,1.0,published,bars,8y,2018-11-13,2026-11-13,2026,2460.04,3923.71,1463.67,59.5
+XAUUSDm,London breakout (risk-sized),2.0,published,bars,8y,2018-11-13,2026-11-13,2018,2000.0,1935.16,-64.84,-3.2
+XAUUSDm,London breakout (risk-sized),2.0,published,bars,8y,2018-11-13,2026-11-13,2019,1935.16,1851.88,-83.28,-4.3
+XAUUSDm,London breakout (risk-sized),2.0,published,bars,8y,2018-11-13,2026-11-13,2020,1851.88,1624.85,-227.04,-12.3
+XAUUSDm,London breakout (risk-sized),2.0,published,bars,8y,2018-11-13,2026-11-13,2021,1624.85,1691.42,66.57,4.1
+XAUUSDm,London breakout (risk-sized),2.0,published,bars,8y,2018-11-13,2026-11-13,2022,1691.42,1897.02,205.6,12.2
+XAUUSDm,London breakout (risk-sized),2.0,published,bars,8y,2018-11-13,2026-11-13,2023,1897.02,1927.65,30.63,1.6
+XAUUSDm,London breakout (risk-sized),2.0,published,bars,8y,2018-11-13,2026-11-13,2024,1927.65,2415.8,488.15,25.3
+XAUUSDm,London breakout (risk-sized),2.0,published,bars,8y,2018-11-13,2026-11-13,2025,2415.8,2921.87,506.07,20.9
+XAUUSDm,London breakout (risk-sized),2.0,published,bars,8y,2018-11-13,2026-11-13,2026,2921.87,3781.28,859.41,29.4
+XAUUSDm,V3-lite + 200-day trend filter,3.0,published,bars,8y,2018-11-13,2026-11-13,2018,2000.0,1989.39,-10.61,-0.5
+XAUUSDm,V3-lite + 200-day trend filter,3.0,published,bars,8y,2018-11-13,2026-11-13,2019,1989.39,1901.16,-88.24,-4.4
+XAUUSDm,V3-lite + 200-day trend filter,3.0,published,bars,8y,2018-11-13,2026-11-13,2020,1901.16,2204.85,303.69,16.0
+XAUUSDm,V3-lite + 200-day trend filter,3.0,published,bars,8y,2018-11-13,2026-11-13,2021,2204.85,1991.17,-213.68,-9.7
+XAUUSDm,V3-lite + 200-day trend filter,3.0,published,bars,8y,2018-11-13,2026-11-13,2022,1991.17,2082.23,91.06,4.6
+XAUUSDm,V3-lite + 200-day trend filter,3.0,published,bars,8y,2018-11-13,2026-11-13,2023,2082.23,2002.84,-79.4,-3.8
+XAUUSDm,V3-lite + 200-day trend filter,3.0,published,bars,8y,2018-11-13,2026-11-13,2024,2002.84,2411.64,408.8,20.4
+XAUUSDm,V3-lite + 200-day trend filter,3.0,published,bars,8y,2018-11-13,2026-11-13,2025,2411.64,3279.29,867.65,36.0
+XAUUSDm,V3-lite + 200-day trend filter,3.0,published,bars,8y,2018-11-13,2026-11-13,2026,3279.29,4925.51,1646.22,50.2
+XAUUSDm,V3-lite + 12-month momentum filter,4.0,published,bars,8y,2018-11-13,2026-11-13,2018,2000.0,1985.28,-14.72,-0.7
+XAUUSDm,V3-lite + 12-month momentum filter,4.0,published,bars,8y,2018-11-13,2026-11-13,2019,1985.28,1935.68,-49.6,-2.5
+XAUUSDm,V3-lite + 12-month momentum filter,4.0,published,bars,8y,2018-11-13,2026-11-13,2020,1935.68,2297.38,361.71,18.7
+XAUUSDm,V3-lite + 12-month momentum filter,4.0,published,bars,8y,2018-11-13,2026-11-13,2021,2297.38,2212.56,-84.82,-3.7
+XAUUSDm,V3-lite + 12-month momentum filter,4.0,published,bars,8y,2018-11-13,2026-11-13,2022,2212.56,2214.74,2.17,0.1
+XAUUSDm,V3-lite + 12-month momentum filter,4.0,published,bars,8y,2018-11-13,2026-11-13,2023,2214.74,2059.13,-155.61,-7.0
+XAUUSDm,V3-lite + 12-month momentum filter,4.0,published,bars,8y,2018-11-13,2026-11-13,2024,2059.13,2467.93,408.8,19.9
+XAUUSDm,V3-lite + 12-month momentum filter,4.0,published,bars,8y,2018-11-13,2026-11-13,2025,2467.93,3382.26,914.33,37.0
+XAUUSDm,V3-lite + 12-month momentum filter,4.0,published,bars,8y,2018-11-13,2026-11-13,2026,3382.26,4571.07,1188.81,35.1
+XAUUSDm,Long moving average + H1 trend,6.0,published,bars,8y,2018-11-13,2026-11-13,2018,2000.0,1975.21,-24.79,-1.2
+XAUUSDm,Long moving average + H1 trend,6.0,published,bars,8y,2018-11-13,2026-11-13,2019,1975.21,1936.58,-38.63,-2.0
+XAUUSDm,Long moving average + H1 trend,6.0,published,bars,8y,2018-11-13,2026-11-13,2020,1936.58,2237.2,300.62,15.5
+XAUUSDm,Long moving average + H1 trend,6.0,published,bars,8y,2018-11-13,2026-11-13,2021,2237.2,2319.21,82.01,3.7
+XAUUSDm,Long moving average + H1 trend,6.0,published,bars,8y,2018-11-13,2026-11-13,2022,2319.21,2270.06,-49.15,-2.1
+XAUUSDm,Long moving average + H1 trend,6.0,published,bars,8y,2018-11-13,2026-11-13,2023,2270.06,2255.04,-15.02,-0.7
+XAUUSDm,Long moving average + H1 trend,6.0,published,bars,8y,2018-11-13,2026-11-13,2024,2255.04,2473.89,218.85,9.7
+XAUUSDm,Long moving average + H1 trend,6.0,published,bars,8y,2018-11-13,2026-11-13,2025,2473.89,4043.35,1569.46,63.4
+XAUUSDm,Long moving average + H1 trend,6.0,published,bars,8y,2018-11-13,2026-11-13,2026,4043.35,7130.59,3087.24,76.4
+XAUUSDm,Noise-area momentum (risk-sized),8.0,published,bars,8y,2018-11-13,2026-11-13,2018,2000.0,2055.35,55.35,2.8
+XAUUSDm,Noise-area momentum (risk-sized),8.0,published,bars,8y,2018-11-13,2026-11-13,2019,2055.35,2054.52,-0.83,-0.0
+XAUUSDm,Noise-area momentum (risk-sized),8.0,published,bars,8y,2018-11-13,2026-11-13,2020,2054.52,2117.8,63.28,3.1
+XAUUSDm,Noise-area momentum (risk-sized),8.0,published,bars,8y,2018-11-13,2026-11-13,2021,2117.8,1974.52,-143.28,-6.8
+XAUUSDm,Noise-area momentum (risk-sized),8.0,published,bars,8y,2018-11-13,2026-11-13,2022,1974.52,2169.53,195.01,9.9
+XAUUSDm,Noise-area momentum (risk-sized),8.0,published,bars,8y,2018-11-13,2026-11-13,2023,2169.53,2704.78,535.25,24.7
+XAUUSDm,Noise-area momentum (risk-sized),8.0,published,bars,8y,2018-11-13,2026-11-13,2024,2704.78,2952.04,247.26,9.1
+XAUUSDm,Noise-area momentum (risk-sized),8.0,published,bars,8y,2018-11-13,2026-11-13,2025,2952.04,3357.29,405.26,13.7
+XAUUSDm,Noise-area momentum (risk-sized),8.0,published,bars,8y,2018-11-13,2026-11-13,2026,3357.29,3216.89,-140.41,-4.2
+XAUUSDm,Long moving average [alt] + H1 trend,9.0,published,bars,8y,2018-11-13,2026-11-13,2018,2000.0,1979.48,-20.52,-1.0
+XAUUSDm,Long moving average [alt] + H1 trend,9.0,published,bars,8y,2018-11-13,2026-11-13,2019,1979.48,1913.03,-66.45,-3.4
+XAUUSDm,Long moving average [alt] + H1 trend,9.0,published,bars,8y,2018-11-13,2026-11-13,2020,1913.03,2242.53,329.5,17.2
+XAUUSDm,Long moving average [alt] + H1 trend,9.0,published,bars,8y,2018-11-13,2026-11-13,2021,2242.53,2329.81,87.28,3.9
+XAUUSDm,Long moving average [alt] + H1 trend,9.0,published,bars,8y,2018-11-13,2026-11-13,2022,2329.81,2259.11,-70.69,-3.0
+XAUUSDm,Long moving average [alt] + H1 trend,9.0,published,bars,8y,2018-11-13,2026-11-13,2023,2259.11,2270.63,11.52,0.5
+XAUUSDm,Long moving average [alt] + H1 trend,9.0,published,bars,8y,2018-11-13,2026-11-13,2024,2270.63,2484.81,214.18,9.4
+XAUUSDm,Long moving average [alt] + H1 trend,9.0,published,bars,8y,2018-11-13,2026-11-13,2025,2484.81,4115.39,1630.57,65.6
+XAUUSDm,Long moving average [alt] + H1 trend,9.0,published,bars,8y,2018-11-13,2026-11-13,2026,4115.39,6465.4,2350.02,57.1
+XAUUSDm,V3-lite + H4 Supertrend filter,10.0,published,bars,8y,2018-11-13,2026-11-13,2018,2000.0,1996.67,-3.33,-0.2
+XAUUSDm,V3-lite + H4 Supertrend filter,10.0,published,bars,8y,2018-11-13,2026-11-13,2019,1996.67,1819.68,-176.99,-8.9
+XAUUSDm,V3-lite + H4 Supertrend filter,10.0,published,bars,8y,2018-11-13,2026-11-13,2020,1819.68,1740.92,-78.77,-4.3
+XAUUSDm,V3-lite + H4 Supertrend filter,10.0,published,bars,8y,2018-11-13,2026-11-13,2021,1740.92,1575.97,-164.95,-9.5
+XAUUSDm,V3-lite + H4 Supertrend filter,10.0,published,bars,8y,2018-11-13,2026-11-13,2022,1575.97,1626.05,50.08,3.2
+XAUUSDm,V3-lite + H4 Supertrend filter,10.0,published,bars,8y,2018-11-13,2026-11-13,2023,1626.05,1600.27,-25.78,-1.6
+XAUUSDm,V3-lite + H4 Supertrend filter,10.0,published,bars,8y,2018-11-13,2026-11-13,2024,1600.27,1964.51,364.24,22.8
+XAUUSDm,V3-lite + H4 Supertrend filter,10.0,published,bars,8y,2018-11-13,2026-11-13,2025,1964.51,2297.12,332.62,16.9
+XAUUSDm,V3-lite + H4 Supertrend filter,10.0,published,bars,8y,2018-11-13,2026-11-13,2026,2297.12,2485.76,188.64,8.2
+XAUUSDm,V3-lite (bar level),,published,bars,8y,2018-11-13,2026-11-13,2018,2000.0,1995.55,-4.45,-0.2
+XAUUSDm,V3-lite (bar level),,published,bars,8y,2018-11-13,2026-11-13,2019,1995.55,1859.62,-135.92,-6.8
+XAUUSDm,V3-lite (bar level),,published,bars,8y,2018-11-13,2026-11-13,2020,1859.62,1940.87,81.24,4.4
+XAUUSDm,V3-lite (bar level),,published,bars,8y,2018-11-13,2026-11-13,2021,1940.87,1861.77,-79.1,-4.1
+XAUUSDm,V3-lite (bar level),,published,bars,8y,2018-11-13,2026-11-13,2022,1861.77,1898.19,36.42,2.0
+XAUUSDm,V3-lite (bar level),,published,bars,8y,2018-11-13,2026-11-13,2023,1898.19,1959.51,61.32,3.2
+XAUUSDm,V3-lite (bar level),,published,bars,8y,2018-11-13,2026-11-13,2024,1959.51,2249.87,290.36,14.8
+XAUUSDm,V3-lite (bar level),,published,bars,8y,2018-11-13,2026-11-13,2025,2249.87,2754.55,504.68,22.4
+XAUUSDm,V3-lite (bar level),,published,bars,8y,2018-11-13,2026-11-13,2026,2754.55,2480.01,-274.54,-10.0

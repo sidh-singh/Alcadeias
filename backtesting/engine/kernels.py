@@ -228,7 +228,8 @@ K_BLOCK_DAYLOSS = 31    # an entry was wanted after the day's loss limit had bee
 K_CLOSE_TRAIL = 32
 K_BLOCK_RSI = 33        # an entry was wanted while a higher timeframe's RSI was beyond its level
 K_CLOSE_RSI_FC = 34     # baskets force-closed because every listed RSI was beyond the level against them
-K_N = 35
+K_BLOCK_REGIME = 35     # an entry was wanted against the direction of the regime series passed to the run
+K_N = 36
 
 # A session ends with its last quote. For three more minutes the bot still counts the market as
 # live (its liveness rule) and may send orders; the server answers "market closed". An order is
@@ -597,11 +598,16 @@ def run_kernel(t_ms, bid, ask,
                R_PH, R_PL, R_CH, R_CL, M_PH, M_PL, M_CH, M_CL,
                need_rsi, need_slope,
                w_or, w_om, w_fr, w_fm, w_br, w_bm, w_ar, w_am,
-               ladder_tf, ladder_mult, hour_ok,
+               ladder_tf, ladder_mult, hour_ok, reg_t, reg_v,
                ci, cf,
                fills, baskets, eq, trace, counters, scal):
     n = t_ms.shape[0]
     n_tf = off.shape[0]
+    # regime series (backtest-only, empty = off): from reg_t[i] (ms) on the regime is reg_v[i] (+1 / -1 / 0), a
+    # direction computed outside the kernel from closed bars; new baskets are opened only in its direction
+    reg_n = reg_t.shape[0]
+    reg_i = -1
+    reg_now = 0
 
     start_ms = ci[CI_START_MS]
     end_ms = ci[CI_END_MS]
@@ -1014,6 +1020,10 @@ def run_kernel(t_ms, bid, ask,
                 trend_now = 1
             elif sgt < 0.0:
                 trend_now = -1
+        if reg_n > 0:
+            while reg_i + 1 < reg_n and reg_t[reg_i + 1] <= T:
+                reg_i += 1
+            reg_now = reg_v[reg_i] if reg_i >= 0 else 0
 
         signal = 0
         reason = R_NONE
@@ -1200,6 +1210,9 @@ def run_kernel(t_ms, bid, ask,
                     counters[K_BLOCK_HOLE] += 1       # quarantine after a hole in the tick history
                     ok = False
                 elif (want_side > 0 and not allow_long) or (want_side < 0 and not allow_short):
+                    ok = False
+                elif reg_n > 0 and want_side != reg_now:
+                    counters[K_BLOCK_REGIME] += 1
                     ok = False
                 elif trend_f >= 0 and want_side * trend_now * trend_mode <= 0:
                     counters[K_BLOCK_TREND] += 1
