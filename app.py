@@ -251,6 +251,15 @@ def design_summary():
 _RECONNECT_AFTER = 5                         # polls in a row without the terminal (terminal_info() None) before the
                                              # bot connects again: mt5.shutdown(), then initialize_mt5()
 _RECONNECT_BACKOFF_S = (5.0, 10.0, 30.0, 60.0)   # waits after a reconnect that failed (the last one repeats)
+_PENDING_FILL_S = 10.0                       # a basket the bot just opened waits this long for the terminal to list
+                                             # its position (as the Turtle's legs do)
+
+
+def fill_pending(basket, now):
+    """True while a basket the bot opened has no position listed yet and was opened under _PENDING_FILL_S ago: its
+    side counts as in a basket (no second entry)."""
+    return (basket is not None and not basket.get('ids')
+            and now - float(basket.get('opened_at') or 0.0) < _PENDING_FILL_S)
 
 
 class MT5TradingBot:
@@ -884,7 +893,9 @@ class MT5TradingBot:
         state['basket'] = None
 
     def _sync_basket(self, symbol, trade_symbol, state, buy_positions, sell_positions, mtqty, usd_per_price, now):
-        """Match the state's basket with this bot's open positions. True when the state changed."""
+        """Match the state's basket with this bot's open positions. True when the state changed. A basket the bot
+        has just opened is kept _PENDING_FILL_S seconds while the terminal does not list its position yet (the
+        terminal answers asynchronously; dropped at once, the next poll saw "flat" and opened a second basket)."""
         nb = buy_positions['count'] if buy_positions else 0
         ns = sell_positions['count'] if sell_positions else 0
         basket = state.get('basket')
@@ -896,7 +907,11 @@ class MT5TradingBot:
             if basket.get('ids'):
                 self._finish_outside_close(state, basket, now)
                 print(f"[{symbol}] note: the {basket.get('side')} basket was closed outside the bot")
+            elif fill_pending(basket, now):
+                return False                # filled, not listed yet: it is still this bot's open basket
             else:
+                print(f"[{symbol}] note: the {basket.get('side')} fill of {basket.get('opened_at')} never showed up "
+                      f"as a position in {_PENDING_FILL_S:g} s; the basket is dropped")
                 state['basket'] = None      # an open that never showed up as a position
             return True
         side = 'BUY' if nb else 'SELL'
@@ -1276,12 +1291,16 @@ class MT5TradingBot:
                     or (basket.get('side') == 'SELL' and _sell_ct > 0 and _buy_ct == 0))
                 if _in_basket:
                     basket['last_profit'] = (buy_positions if _buy_ct else sell_positions)['total_profit']
+                # A fill the terminal does not list yet: its side is in a basket (no entry), on the basket's unit.
+                _fill_pending = _buy_ct == 0 and _sell_ct == 0 and fill_pending(basket, _now)
 
                 # ── Auto-step the running unit from live balance (only when flat) ──
                 # Re-derive only while no positions are open so an active basket
                 # stays on the unit it was opened with; the new tier applies to
                 # the next basket. Balance is unavailable → keep the current unit.
-                if _buy_ct == 0 and _sell_ct == 0:
+                if _fill_pending:
+                    units = int(basket['units'])
+                elif _buy_ct == 0 and _sell_ct == 0:
                     balance = None
                     if virtual_balance_enabled():
                         with self.mt5_lock:
@@ -1467,7 +1486,7 @@ class MT5TradingBot:
                     _lc = state.get('last_close') or {}
                     _last_close_time = float(_lc.get('time') or 0.0)
                     _pause = LOSS_COOLDOWN_S if (_lc.get('lost') and LOSS_COOLDOWN_S > 0) else REENTRY_COOLDOWN_SECONDS
-                    entry_allowed = (time.time() - _last_close_time) >= _pause
+                    entry_allowed = (time.time() - _last_close_time) >= _pause and not _fill_pending
                     # The basket's distances, fixed at its open; flat: the configured ones (unused).
                     if _in_basket:
                         _tgt_u = basket.get('target_usd_per_unit')
@@ -1544,6 +1563,7 @@ class MT5TradingBot:
                 analysis_data['step_up_balance'] = step_up_balance
                 analysis_data['unit_max_limit'] = max_limit
                 analysis_data['design'] = DESIGN_NAME
+                analysis_data['fill_pending'] = bool(_fill_pending)
                 analysis_data['virtual_balance'] = _virtual_balance if virtual_balance_enabled() else None
                 analysis_data['basket_levels'] = ({
                     'units': basket.get('units'),
