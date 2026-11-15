@@ -1067,7 +1067,9 @@ class MT5TradingBot:
     def _sync_basket(self, symbol, trade_symbol, state, buy_positions, sell_positions, mtqty, usd_per_price, now):
         """Match the state's basket with this bot's open positions. True when the state changed. A basket the bot
         has just opened is kept _PENDING_FILL_S seconds while the terminal does not list its position yet (the
-        terminal answers asynchronously; dropped at once, the next poll saw "flat" and opened a second basket)."""
+        terminal answers asynchronously; dropped at once, the next poll saw "flat" and opened a second basket).
+        A basket some of whose legs are gone without a close of this bot is marked to close the rest at once
+        (close_pending, outside_ids); _after_close then books the whole basket as closed outside the bot."""
         nb = buy_positions['count'] if buy_positions else 0
         ns = sell_positions['count'] if sell_positions else 0
         basket = state.get('basket')
@@ -1094,6 +1096,20 @@ class MT5TradingBot:
         known = list(basket.get('ids') or []) if basket is not None else []
         if basket is not None and basket.get('side') == side and (not known or set(ids) & set(known)):
             new = [i for i in ids if i not in known]
+            gone = [i for i in known if i not in ids]
+            if gone and not basket.get('close_pending'):
+                # A leg closed outside the bot (its broker-side backstop while the bot or the terminal was down, a
+                # stop-out, by hand): what is left is not the basket the design holds -- its stop would judge the
+                # listed legs only and the ladder could add again. The other legs are closed at once (this poll's
+                # decision, as a close to finish) and the whole basket is booked as closed outside the bot.
+                basket['ids'] = known + new
+                basket['close_pending'] = True
+                basket['outside_ids'] = sorted(set(gone) | set(basket.get('outside_ids') or []))
+                print(f"[{symbol}] note: leg(s) {gone} of the {side} basket closed outside the bot: closing the "
+                      f"other {len(ids)} and booking the basket as closed outside the bot")
+                self._log_event(symbol, 'LEG_CLOSED_OUTSIDE', 'EXIT', {'side': side, 'legs_gone': gone,
+                                                                       'legs_left': ids})
+                return True
             if known and not new:
                 return False
             if not known:
@@ -1127,12 +1143,21 @@ class MT5TradingBot:
         if not ids and positions and positions.get('positions'):
             ids = [_pos_id(p) for p in positions['positions']]
         profit = positions['total_profit'] if positions else 0.0
+        outside = list(basket.get('outside_ids') or []) if basket is not None else []
         lc = {'time': float(now), 'pnl': profit, 'lost': bool(profit < 0), 'resolved': False, 'source': 'decision',
-              'reason': reason, 'side': side, 'ids': ids,
+              'reason': 'closed_outside' if outside else reason, 'side': side, 'ids': ids,
               'open_time': basket.get('first_time') if basket is not None else None, 'attempts': 0}
+        if outside:
+            lc['outside_ids'] = outside
         state['last_close'] = lc
         state['basket'] = None
         with self.mt5_lock:
+            if outside:
+                # Legs closed outside the bot (_sync_basket): until the history has every leg, the result is what
+                # the bot closed now plus what those legs realised -- or, not in the history yet, a loss.
+                o_pnl, _ = self._basket_pnl(outside, lc['open_time'], now)
+                lc['pnl'] = profit if o_pnl is None else round(profit + o_pnl, 2)
+                lc['lost'] = True if o_pnl is None else bool(lc['pnl'] < 0)
             self._resolve_last_close(state, now)
         self._save_state(symbol, state)
         return lc
@@ -1803,13 +1828,14 @@ class MT5TradingBot:
                     if _in_basket and bool(analysis_data.get('ladder_armed')) != _armed:
                         basket['ladder_armed'] = bool(analysis_data.get('ladder_armed'))
                         self._save_state(symbol, state)
-                    # A close that left positions behind is finished first.
+                    # A close that left positions behind is finished first; so is a basket some of whose legs were
+                    # closed outside the bot (the rest is closed at once).
                     if _in_basket and basket.get('close_pending'):
                         if basket['side'] == 'BUY':
                             buy_signal = Signal.CLOSE_BUY
                         else:
                             sell_signal = Signal.CLOSE_SELL
-                        analysis_data['exit_reason'] = 'close_retry'
+                        analysis_data['exit_reason'] = 'leg_closed_outside' if basket.get('outside_ids') else 'close_retry'
                     analysis_data['rsi_graphs'] = rsi_graphs
                     analysis_data['macd_graphs'] = macd_graphs
                     analysis_data['candle_fresh'] = True
