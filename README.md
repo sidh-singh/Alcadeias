@@ -34,6 +34,22 @@ start_xauusd.bat           REM or: start_job.bat   (both default to demo)
 start_dashboard.bat
 ```
 
+Both launchers start app.py again 30 s after it exits (a crash, a lost terminal); close the window to stop the bot.
+
+## Safety
+
+- **Demo account only.** The bot refuses to start unless the terminal is logged into a demo, hedging account with
+  the login of the credentials, refuses `live` outright, and reads the account again before every poll and every
+  order: if another process logs the shared terminal into another account, nothing is sent and an ERROR line
+  (`ACCOUNT_REFUSED`) appears in the strategy log until the demo account is back.
+- **A broker-side backstop.** Every fill carries a stop 2 x the basket's stop distance beyond it (here 8 x the
+  capped H1 unit; the bot's own stop is at 4), no target. The bot's own stop always closes first; the backstop only
+  acts while the bot or the terminal is down.
+- **A terminal that restarts.** While the terminal does not answer the bot decides nothing; after 5 s it connects
+  again (5, 10, 30, then every 60 s while that fails).
+- **No decision on data the poll does not have:** a positions read that fails skips the poll; an entry needs every
+  vote it reads and 300 closed H1 bars; a fill the terminal has not listed yet is still the open basket for 10 s.
+
 ## What keeps it apart from the other demo bots
 
 All six demo branches (`demo_hedging_xauusd6/7/8`, `demo_hedging_btcusd6/7/8`) use the same demo account, so each bot
