@@ -1,7 +1,7 @@
 # DEMO ONLY · demo_hedging_btcusd7 · BTCUSDm · Turtle System 1 + bot votes
 
-This branch runs **Turtle System 1 + bot votes** on the **demo** account (the `demo` block of slot 7's credentials, the same
-account every slot uses for demo). It is a copy of `hedging_btcusd7`
+This branch runs **Turtle System 1 + bot votes** on the **demo** account of slot 7 (`Exness-MT5Trial7`, login 434526775), which it shares only with
+`demo_hedging_xauusd7`. It is a copy of `hedging_btcusd7`
 (the same files and launchers) with the strategy changed. **Live mode is disabled:** `mt5_credentials.json` holds only the
 `demo` block, and the launchers refuse `live`.
 
@@ -53,8 +53,8 @@ Both launchers start app.py again 30 s after it exits (a crash, a lost terminal)
 
 ## What keeps it apart from the other demo bots
 
-All six demo branches (`demo_hedging_xauusd6/7/8`, `demo_hedging_btcusd6/7/8`) use the same demo account, so each bot
-is fenced off:
+Each slot has its own demo account, used by its gold bot and its BTC bot (slot 7: `demo_hedging_xauusd7` and
+`demo_hedging_btcusd7`), so each bot is fenced off:
 
 | | This bot |
 |---|---|
@@ -63,5 +63,5 @@ is fenced off:
 | Output folder (JSON, logs, daily trades) | `C:\Alcadeias\demo_hedging_btcusd7` |
 | Dashboard port | 8072 |
 
-The account's own balance, equity and margin are shared by all six bots. Each strategy's own result is the sum of the
+The account's own balance, equity and margin are shared by the slot's two bots. Each strategy's own result is the sum of the
 deals with its magic number.
