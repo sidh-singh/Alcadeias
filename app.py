@@ -1119,7 +1119,8 @@ class MT5TradingBot:
         """At the start of a poll: True when the terminal holds this bot's demo account. Otherwise the poll decides
         nothing -- no sync with the positions of another account (they would book this bot's basket as closed),
         no order -- until the account is right again (then an ACCOUNT_OK event)."""
-        problem = self._account_problem()
+        with self.mt5_lock:
+            problem = self._account_problem()
         if problem is not None:
             self._account_refused(symbol, problem, server_time=server_time)
             return False
@@ -1133,7 +1134,7 @@ class MT5TradingBot:
     def _order_guard(self, request):
         """Before every order_send (MT5PositionHelper._send): account_info() is read again and nothing is sent
         unless it is still the demo account; a refused request is an ERROR event, and the polls after it decide
-        nothing until the account is right again (_account_ok)."""
+        nothing until the account is right again (_account_ok). (Called inside the caller's mt5_lock.)"""
         problem = self._account_problem()
         if problem is None:
             return True
@@ -1158,7 +1159,8 @@ class MT5TradingBot:
         """At the start of every poll: True when the poll may read the terminal and decide -- the terminal answers
         and is connected, and it holds this bot's demo account."""
         self._install_order_guard()
-        problem, ipc_lost = self._terminal_problem()
+        with self.mt5_lock:
+            problem, ipc_lost = self._terminal_problem()
         if problem is not None:
             self._poll_failed(symbol, problem, ipc_lost=ipc_lost)
             return False
@@ -1307,7 +1309,7 @@ class MT5TradingBot:
                 # Start of one full iteration's work (excludes the end-of-cycle sleep)
                 _iter_start = time.perf_counter()
 
-                # ── The terminal must hold this bot's demo account, else this poll decides nothing ──
+                # ── The terminal must answer and hold this bot's demo account, else this poll decides nothing ──
                 if not self._poll_guard(symbol):
                     time.sleep(1)
                     if self._stop_event.is_set():
