@@ -10,6 +10,8 @@ The terminal is a hedging account on one symbol:
     half away from zero per position (as MT5 reports it);
   * order_send fills market orders at the ask (buy) / bid (sell) and closes at the bid / ask, writing
     DEAL_ENTRY_IN / DEAL_ENTRY_OUT deals with the request's magic and comment;
+  * a position keeps the request's sl / tp and the broker executes them (execute_stops): at the first tick
+    through one, at that tick's price (a gap fills beyond it), with a DEAL_REASON_SL / _TP deal;
   * history_deals_get(date_from, date_to) returns the deals in that time range;
   * account_info() reports a demo, hedging account (login / trade_mode / margin_mode can be changed);
   * terminal_info(); while the terminal is down (down()) every call answers None, and the connection stays lost
@@ -178,9 +180,13 @@ class FakeMT5:
     ACCOUNT_MARGIN_MODE_RETAIL_NETTING = 0
     ACCOUNT_MARGIN_MODE_EXCHANGE = 1
     ACCOUNT_MARGIN_MODE_RETAIL_HEDGING = 2
+    DEAL_REASON_CLIENT = 0
+    DEAL_REASON_EXPERT = 3
+    DEAL_REASON_SL = 4
+    DEAL_REASON_TP = 5
 
     def __init__(self, symbol, t_ms, bid, ask, clock, warm_m1=None, contract_size=100.0, balance=2000.0,
-                 leverage=2000, warm_bars=600, report_contract_size=True):
+                 leverage=2000, warm_bars=600, report_contract_size=True, execute_stops=True):
         self.symbol = symbol
         self.t_ms = np.asarray(t_ms, np.int64)
         self.bid = np.asarray(bid, float)
@@ -190,6 +196,7 @@ class FakeMT5:
         self.balance = float(balance)
         self.leverage = leverage
         self.report_contract_size = report_contract_size
+        self.execute_stops = execute_stops      # the broker closes a position at its sl / tp
         self.ptr = -1
         self.positions = []
         self.deals = []
@@ -263,6 +270,25 @@ class FakeMT5:
             px = float(self.bid[self.ptr])
             for b in self.bars.values():
                 b.on_tick(ts, px)
+            if self.execute_stops and self.positions:
+                self._broker_stops(int(self.t_ms[self.ptr]), px, float(self.ask[self.ptr]))
+
+    def _broker_stops(self, t_msc, b, a):
+        """The broker's SL / TP: a buy closes at the bid at or below its sl (at or above its tp), a sell at the ask at
+        or above its sl (at or below its tp); 0 = none. The closing deal carries the position's magic."""
+        for p in list(self.positions):
+            sl, tp = p.get('sl') or 0.0, p.get('tp') or 0.0
+            if p['type'] == 0:
+                price, by_sl, by_tp = b, sl > 0 and b <= sl, tp > 0 and b >= tp
+            else:
+                price, by_sl, by_tp = a, sl > 0 and a >= sl, tp > 0 and a <= tp
+            if not (by_sl or by_tp):
+                continue
+            profit = self._pos_profit(p, price, price)
+            self.balance += profit
+            self._deal(p, 1, p['volume'], price, profit, p['magic'], '[sl]' if by_sl else '[tp]', t_msc,
+                       reason=self.DEAL_REASON_SL if by_sl else self.DEAL_REASON_TP)
+            self.positions.remove(p)
 
     def quote(self):
         self._sync()
@@ -388,7 +414,8 @@ class FakeMT5:
             ticket=p['ticket'], identifier=p['ticket'], type=p['type'], volume=p['volume'],
             price_open=p['price_open'], symbol=self.symbol, profit=self._pos_profit(p, b, a),
             time=p['time_msc'] // 1000, time_msc=p['time_msc'], swap=0.0, magic=p['magic'],
-            comment=p['comment']) for p in self.positions if p['time_msc'] <= now - self.list_delay_ms)
+            comment=p['comment'], sl=p.get('sl', 0.0), tp=p.get('tp', 0.0))
+            for p in self.positions if p['time_msc'] <= now - self.list_delay_ms)
 
     def add_position(self, type_, volume, price_open, time_s, magic=0, comment=''):
         """Put a position on the account directly (a foreign trade, or one opened before a restart)."""
@@ -409,12 +436,12 @@ class FakeMT5:
             external_id=''))
         self.balance += profit + commission + swap
 
-    def _deal(self, p, entry, volume, price, profit, magic, comment, t_msc):
+    def _deal(self, p, entry, volume, price, profit, magic, comment, t_msc, reason=3):
         self._deal_ticket += 1
         deal_type = p['type'] if entry == 0 else 1 - p['type']
         self.deals.append(types.SimpleNamespace(
             ticket=self._deal_ticket, order=self._deal_ticket, time=t_msc // 1000, time_msc=t_msc,
-            type=deal_type, entry=entry, magic=magic, position_id=p['ticket'], reason=3, volume=volume,
+            type=deal_type, entry=entry, magic=magic, position_id=p['ticket'], reason=reason, volume=volume,
             price=price, commission=0.0, swap=0.0, profit=profit, fee=0.0, symbol=self.symbol,
             comment=comment, external_id=''))
 
@@ -447,7 +474,8 @@ class FakeMT5:
         price = a if typ == self.ORDER_TYPE_BUY else b
         self._ticket += 1
         p = dict(ticket=self._ticket, type=typ, volume=vol, price_open=price, time_msc=now,
-                 magic=request.get('magic', 0), comment=request.get('comment', ''))
+                 magic=request.get('magic', 0), comment=request.get('comment', ''),
+                 sl=float(request.get('sl', 0.0) or 0.0), tp=float(request.get('tp', 0.0) or 0.0))
         self.positions.append(p)
         self._deal(p, 0, vol, price, 0.0, p['magic'], p['comment'], now)
         return types.SimpleNamespace(retcode=self.TRADE_RETCODE_DONE, price=price, volume=vol,

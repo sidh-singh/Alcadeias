@@ -31,7 +31,7 @@ from constants import (
     TREND_TF, VOL_TF, VOL_LEN,
     TARGET_USD_PER_UNIT, STOP_LOSS_USD_PER_UNIT,
     TARGET_VOL, STOP_VOL, VOL_CAP_USD_PER_UNIT, LADDER_GAP_VOL,
-    LOSS_COOLDOWN_S,
+    LOSS_COOLDOWN_S, BACKSTOP_FACTOR,
     CONTRACT_SIZE_FALLBACK, STATE_SUBDIR,
     # demo isolation
     MAGIC, DEMO_BRANCH, VIRTUAL_START_BALANCE, VIRTUAL_START_DATE,
@@ -228,6 +228,26 @@ def entry_block_reason(want_side, trend_now, vol_now, usd_per_price):
     return None
 
 
+def design_has_stop():
+    """A design whose baskets have a stop (STOP_VOL > 0, or a $ stop): its fills carry a broker-side backstop."""
+    return STOP_VOL > 0 or STOP_LOSS_USD_PER_UNIT is not None
+
+
+def backstop_distance(stop_usd_per_unit, usd_per_price):
+    """
+    How far beyond its fill a basket leg's broker-side backstop (request sl) sits, in price units:
+    BACKSTOP_FACTOR x the basket's stop distance = its stop per unit / the USD value of a 1.0 move per unit
+    (STOP_VOL x unit, capped, for a volatility stop). The bot's own stop closes the basket before the price is one
+    stop distance beyond the fill of any of its legs (the entry's stop sits there; an add, made before the stop,
+    only moves it nearer), so in normal operation it always closes first and the backtested behaviour is
+    unchanged; the backstop acts only while the bot or the terminal is down. None when there is no stop or its
+    distance is not known (no backstop).
+    """
+    if stop_usd_per_unit is None or not usd_per_price or not stop_usd_per_unit > 0:
+        return None
+    return float(BACKSTOP_FACTOR) * float(stop_usd_per_unit) / float(usd_per_price)
+
+
 def design_problems():
     """Why the design in constants.py cannot run (empty = fine). The backtester's BacktestConfig checks."""
     p = list(Strategy.design_problems())
@@ -243,6 +263,8 @@ def design_problems():
             p.append(f'LADDER_TFS entry {tf!r} is not an MT5 timeframe')
     if not isinstance(VOL_LEN, int) or isinstance(VOL_LEN, bool) or VOL_LEN < 2:
         p.append(f'VOL_LEN must be a whole number >= 2, not {VOL_LEN!r}')
+    if not _is_number(BACKSTOP_FACTOR) or BACKSTOP_FACTOR <= 1.0:
+        p.append(f"BACKSTOP_FACTOR must be a number > 1 (the backstop beyond the bot's own stop), not {BACKSTOP_FACTOR!r}")
     vols = {'TARGET_VOL': TARGET_VOL, 'STOP_VOL': STOP_VOL, 'LADDER_GAP_VOL': LADDER_GAP_VOL,
             'VOL_CAP_USD_PER_UNIT': VOL_CAP_USD_PER_UNIT}
     for name, x in vols.items():
@@ -380,6 +402,7 @@ class MT5TradingBot:
         self.state_dir = None
         self._usd_per_price = {}                 # trade symbol -> contract_size x mtqty (USD per unit per 1.0 of price)
         self._virtual_balance_last = None        # last virtual balance read from the deal history
+        self._digits = {}                        # trade symbol -> price digits (the backstop is rounded to them)
         # The account this bot trades on: the demo login initialize_mt5 found (None before it ran; a replay that
         # does not call it takes the first account it sees) and why the account seen last was refused (None = ok).
         self._account_login = None
@@ -1059,6 +1082,37 @@ class MT5TradingBot:
         done = (getattr(mt5, 'TRADE_RETCODE_DONE', 10009), getattr(mt5, 'TRADE_RETCODE_DONE_PARTIAL', 10010))
         return getattr(response, 'retcode', None) in done
 
+    def _price_digits(self, trade_symbol):
+        """The symbol's price digits (symbol_info().digits), read once; None when unknown."""
+        if trade_symbol not in self._digits:
+            info = mt5.symbol_info(trade_symbol)
+            digits = getattr(info, 'digits', None) if info is not None else None
+            if digits is None:
+                return None
+            self._digits[trade_symbol] = int(digits)
+        return self._digits[trade_symbol]
+
+    def _open_leg(self, side, trade_symbol, qty, stop_usd_per_unit, usd_per_price, quote):
+        """
+        The market order of a basket leg (the entry or an add). A design with a stop: with a broker-side backstop,
+        sl = the fill (the decision quote: the ask of a buy, the bid of a sell) -/+ backstop_distance(), and no tp;
+        it is never moved. A design without a stop (the live levers): the live request, its auto sl / tp.
+        Returns (the order response, the backstop sent or None).
+        """
+        send = self.position_helper.buy if side > 0 else self.position_helper.sell
+        if not design_has_stop():
+            with self.mt5_lock:
+                return send(trade_symbol, qty), None
+        dist = backstop_distance(stop_usd_per_unit, usd_per_price)
+        with self.mt5_lock:
+            sl = 0.0
+            if dist is not None and quote is not None:
+                sl = quote - dist if side > 0 else quote + dist
+                digits = self._price_digits(trade_symbol)
+                sl = round(sl, digits) if digits is not None else sl
+                sl = sl if sl > 0 else 0.0
+            return send(trade_symbol, qty, sl=sl, tp=0.0, auto_sltp=False), sl
+
     # ───────────────────── the demo account: the only account this bot trades on ─────────────────────
     @staticmethod
     def _last_error():
@@ -1713,8 +1767,9 @@ class MT5TradingBot:
                         _why = entry_block_reason(1, trend_now, vol_now, _usd_per_price)
                         if _why is None:
                             _levels = basket_levels(vol_now, _usd_per_price)   # fixed for this basket's life
-                            with self.mt5_lock:
-                                order_response = self.position_helper.buy(trade_symbol, units * mtqty)
+                            order_response, _backstop = self._open_leg(1, trade_symbol, units * mtqty,
+                                                                       _levels['stop_usd_per_unit'], _usd_per_price,
+                                                                       _ask)
                             if self._order_done(order_response):
                                 state['basket'] = self._new_basket('BUY', units, _levels, time.time())
                                 self._save_state(symbol, state)
@@ -1725,6 +1780,7 @@ class MT5TradingBot:
                                 'target_usd': None if _levels['target_usd_per_unit'] is None else round(_levels['target_usd_per_unit'] * units, 2),
                                 'stop_usd': None if _levels['stop_usd_per_unit'] is None else round(_levels['stop_usd_per_unit'] * units, 2),
                                 'vol_unit': _levels['vol_unit'],
+                                'backstop_sl': _backstop,
                                 'response': str(order_response),
                             }, server_time=server_time)
                         elif _block_logged != ('BUY', _why):
@@ -1739,8 +1795,9 @@ class MT5TradingBot:
                         }, server_time=server_time)
                 elif buy_signal == Signal.BUY_MORE:
                     vol = self.strategy.next_add_volume(buy_positions['total_volume'], buy_positions['count'], units, mtqty)
-                    with self.mt5_lock:
-                        order_response = self.position_helper.buy(trade_symbol, vol)
+                    order_response, _backstop = self._open_leg(1, trade_symbol, vol,
+                                                               basket.get('stop_usd_per_unit') if _in_basket else None,
+                                                               _usd_per_price, _ask)
                     if _in_basket and self._order_done(order_response):
                         basket['ladder_armed'] = False      # the next add needs a new turn
                         self._save_state(symbol, state)
@@ -1751,6 +1808,7 @@ class MT5TradingBot:
                         'total_volume': buy_positions['total_volume'],
                         'total_profit': buy_positions['total_profit'],
                         'first_profit': buy_positions['first_profit'],
+                        'backstop_sl': _backstop,
                         'response': str(order_response),
                     }, server_time=server_time)
                     time.sleep(ORDER_COOLDOWN_SECONDS)  # Wait for MT5 to register position
@@ -1776,8 +1834,9 @@ class MT5TradingBot:
                         _why = entry_block_reason(-1, trend_now, vol_now, _usd_per_price)
                         if _why is None:
                             _levels = basket_levels(vol_now, _usd_per_price)   # fixed for this basket's life
-                            with self.mt5_lock:
-                                order_response = self.position_helper.sell(trade_symbol, units * mtqty)
+                            order_response, _backstop = self._open_leg(-1, trade_symbol, units * mtqty,
+                                                                       _levels['stop_usd_per_unit'], _usd_per_price,
+                                                                       _bid)
                             if self._order_done(order_response):
                                 state['basket'] = self._new_basket('SELL', units, _levels, time.time())
                                 self._save_state(symbol, state)
@@ -1788,6 +1847,7 @@ class MT5TradingBot:
                                 'target_usd': None if _levels['target_usd_per_unit'] is None else round(_levels['target_usd_per_unit'] * units, 2),
                                 'stop_usd': None if _levels['stop_usd_per_unit'] is None else round(_levels['stop_usd_per_unit'] * units, 2),
                                 'vol_unit': _levels['vol_unit'],
+                                'backstop_sl': _backstop,
                                 'response': str(order_response),
                             }, server_time=server_time)
                         elif _block_logged != ('SELL', _why):
@@ -1802,8 +1862,9 @@ class MT5TradingBot:
                         }, server_time=server_time)
                 elif sell_signal == Signal.SELL_MORE:
                     vol = self.strategy.next_add_volume(sell_positions['total_volume'], sell_positions['count'], units, mtqty)
-                    with self.mt5_lock:
-                        order_response = self.position_helper.sell(trade_symbol, vol)
+                    order_response, _backstop = self._open_leg(-1, trade_symbol, vol,
+                                                               basket.get('stop_usd_per_unit') if _in_basket else None,
+                                                               _usd_per_price, _bid)
                     if _in_basket and self._order_done(order_response):
                         basket['ladder_armed'] = False      # the next add needs a new turn
                         self._save_state(symbol, state)
@@ -1814,6 +1875,7 @@ class MT5TradingBot:
                         'total_volume': sell_positions['total_volume'],
                         'total_profit': sell_positions['total_profit'],
                         'first_profit': sell_positions['first_profit'],
+                        'backstop_sl': _backstop,
                         'response': str(order_response),
                     }, server_time=server_time)
                     time.sleep(ORDER_COOLDOWN_SECONDS)  # Wait for MT5 to register position
