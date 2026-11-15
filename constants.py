@@ -162,7 +162,7 @@ ACTIVE_CONFIG_FILENAME = 'active_config.json'   # Dashboard writes, bot reads on
 #   * in a basket the stop is checked first, then the target, then the force-close, then the ladder.
 DESIGN_NAME = 'live'                 # a label only (startup print, dashboard JSON, state file)
 STRATEGY = 'basket'                  # 'basket' = this bot's logic with the levers below; 'turtle' = the Turtle
-                                     # module (BTC 6/7), which is NOT part of this code: the bot refuses to start
+                                     # (turtle.py, the TURTLE_* constants below; BTC 6/7), the levers then unused
 FORCE_CLOSE_ENABLED = True           # False: the M15 force-close never fires; the M15 votes (FORCE_CLOSE_SCORE_WEIGHTS)
                                      # still feed the ENTRY_AGREE_S agreement gate, so keep that dict as it is
 TREND_TF = None                      # 'H1': a fresh entry only if sign(MACD signal line of the last CLOSED H1 bar)
@@ -198,6 +198,27 @@ STATE_SUBDIR = 'state'               # OUTPUT_DIR/state/<symbol>_state.json: the
                                      # ladder arming and the loss pause (a sub-folder: the dashboard lists every
                                      # top-level JSON of OUTPUT_DIR as a symbol)
 
+# ─── The Turtle (STRATEGY = 'turtle'; the rules: turtle.py) ───
+# The final ten's BTC Turtles, "Turtle + bot votes" (System 1) and "Turtle System 2 + bot votes", with the
+# backtest's parameters (backtesting/research/external.py turtle() on backtest_hedging). Read only with
+# STRATEGY = 'turtle'. Levels from UTC D1 bars (Exness MT5 server time is UTC); entries need the bot's M15
+# votes on CLOSED bars to agree; one stop for all legs, held by the bot (checked every poll, every leg closed
+# at market), no broker SL / TP. As in the backtest: no trading window (symbols.json 'brake' still stops new
+# entries), no re-entry cooldown beyond the next M1 bar, no target. The book (N at the entry, unit, stop, the
+# armed orders) is kept in OUTPUT_DIR/state/<symbol>_turtle.json and rebuilt from the positions without it.
+TURTLE_SYSTEM = 2                    # 1: 20-day breakout, skipped after a winning breakout (then the 55-day
+                                     #    failsafe), 10-day exit; 2: 55-day breakout, 20-day exit
+TURTLE_N_LEN = 20                    # N = Wilder's RMA of the daily true range over this many days
+TURTLE_STOP_N = 2.0                  # the stop: this many N from the newest fill, or the exit channel if tighter
+TURTLE_ADD_N = 0.5                   # one more leg each time the price is this many N beyond the previous fill
+TURTLE_MAX_LEGS = 4                  # legs per trade, the entry included; each leg = the unit x 0.01 lot
+TURTLE_TICK = 0.01                   # entry levels: channel high + this / channel low - this
+TURTLE_VOTE_TF = 'M15'               # the bot's votes on the CLOSED bars of this timeframe gate the entries
+TURTLE_VOTE_BARS = 1000              # closed bars read for the votes
+TURTLE_D1_BARS = 1000                # closed D1 bars read for N, the channels and the System 1 filter (1000: the
+                                     # backtest's levels to the cent)
+TURTLE_MIN_D1_BARS = 300             # fewer closed D1 bars from the terminal: no trading (N not settled yet)
+
 # ── demo deployment (this branch only) ──
 DEMO_BRANCH = 'demo_hedging_btcusd7'                     # demo account only: live mode is refused
 MAGIC = 26127                              # this bot's orders and positions carry this magic number
@@ -208,7 +229,8 @@ VIRTUAL_START_DATE = '2026-11-16'    #   commission of the deals with its MAGIC)
 
 # ─── Design examples ───
 # Copy ONE block below to the very end of this file and remove the leading '# '. Everything not listed
-# stays at the live value above. Effective parameters from the backtester's top3_v4 designs.
+# stays at the live value above. Effective parameters from the backtester's top3_v4 designs; the two
+# Turtles are the final ten's rows (the TURTLE_* values above are theirs).
 #
 # ── XAU V3-lite ──
 # DESIGN_NAME = 'xau_v3lite'
@@ -277,3 +299,13 @@ VIRTUAL_START_DATE = '2026-11-16'    #   commission of the deals with its MAGIC)
 # VOL_CAP_USD_PER_UNIT = 12.0
 # LOSS_COOLDOWN_S = 14400
 # MAX_ADDS = 0
+#
+# ── BTC Turtle System 2 + bot votes ──
+# DESIGN_NAME = 'btc_turtle_s2'
+# STRATEGY = 'turtle'
+# TURTLE_SYSTEM = 2
+#
+# ── BTC Turtle System 1 + bot votes ──
+# DESIGN_NAME = 'btc_turtle_s1'
+# STRATEGY = 'turtle'
+# TURTLE_SYSTEM = 1

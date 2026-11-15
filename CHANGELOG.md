@@ -17,6 +17,74 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2-demo.2] — 2026-11-15 — Demo: the Turtle with the bot's votes (`STRATEGY = 'turtle'`) [demo only]
+
+**Branches:** `demo_hedging_btcusd6` (BTC slots 6 / 7 run it: System 2 / System 1). **NOT** the live-money
+`netting_`/`hedging_` deployment branches. **Files touched:** new `turtle.py`, `app.py`, `constants.py`,
+`mt5_helper.py`, `dashboard.py`, `tests_demo/` (+ this `CHANGELOG.md`). **Baseline:** v3.9.2-demo.1.
+
+**Why.** On BTC the final ten's best rows on the bot's unit sizing are two Turtles, "Turtle System 2 + bot votes"
+(8 years: $2,000 -> $7,815, max DD 32.5%, 60 trades) and "Turtle + bot votes" (System 1: $6,977, 46.0%, 88), not
+the bot's basket logic. They exist only in the backtester's M1-bar simulator (`backtesting/research/external.py`:
+`turtle()`, `_turtle_s1_use20()`, `filtered()`, `_path_kernel()`); this is their port, rule for rule.
+
+### Added: the Turtle (`turtle.py`, pure functions; `app.py` executes)
+- Levels from the closed UTC D1 bars (the last `TURTLE_D1_BARS` = 1000): N = Wilder RMA(20) of the true range
+  seeded with the simple mean; channels that include the day just closed; buy at the high + 0.01, sell at the low
+  - 0.01. System 2: 55-day entry, 20-day exit channel. System 1: 20-day entry, the 55-day failsafe on days the
+  skip-after-winner filter skips it (`_turtle_s1_use20` replayed verbatim), 10-day exit channel.
+- Entry: flat, the D1 bar's orders armed (an entry fill consumes both until the next D1 bar closes), the ask at or
+  above the buy level with the M15 vote +1 (the bid at or below the sell level with -1), the vote = the bot's RSI and
+  MACD pivot-slope votes on the last **closed** M15 bar, both the same way; a vote that turns while the price is past
+  the level enters at the market at once (the backtest's vote-delayed fills); not in the M1 bar of an exit.
+- Unit: the bot's rule on the virtual balance at the first fill, fixed for the trade; every leg = unit x 0.01 lot.
+- Adds: every 0.5 N (N frozen at the entry) beyond the previous actual fill, up to 4 legs, not in the entry's M1
+  bar, not gated by the votes.
+- Stop: one for all legs, the tighter of 2N from the newest fill and the exit channel, raised to the channel at
+  each D1 close (every D1 bar missed while the bot was down is applied in turn), never loosened (also not when a leg
+  is closed outside the bot); held by the bot (checked every poll on the bid / the ask, every leg closed at market);
+  the only exit. No broker SL / TP on the Turtle's orders.
+- No trading window and no re-entry cooldown beyond the next M1 bar (the backtest has neither); `symbols.json`
+  `brake` still stops new entries. The terminal's clock (the last tick) decides when a bar is closed; a new D1 / M15
+  bar is read 2 s after its end.
+- The book (N at the entry, unit, legs, stop, the exit channel ratchet, the armed orders, the last exit) is kept in
+  `OUTPUT_DIR/state/<symbol>_turtle.json`; without it a trade is rebuilt from the positions (magic, open times,
+  prices; N and the channels of the D1 bar before the first leg, every D1 close since) and a flat book takes the
+  day's used orders and the last exit from the deal history.
+
+### Files
+- `turtle.py` (new): the levels, the S1 filter, the closed-bar vote, the unit rule, the book and its transitions,
+  the rebuild.
+- `app.py`: `STRATEGY = 'turtle'` runs `MT5TradingBot._process_turtle` (the basket loop is unchanged and still the
+  default); `turtle_design_problems` / `design_summary`; the book's file; closed-bar reads; the deal-history check.
+- `constants.py`: `TURTLE_SYSTEM` (2), `TURTLE_N_LEN` (20), `TURTLE_STOP_N` (2.0), `TURTLE_ADD_N` (0.5),
+  `TURTLE_MAX_LEGS` (4), `TURTLE_TICK` (0.01), `TURTLE_VOTE_TF` ('M15'), `TURTLE_VOTE_BARS` (1000), `TURTLE_D1_BARS`
+  (1000), `TURTLE_MIN_D1_BARS` (300); example blocks "BTC Turtle System 2 + bot votes" / "System 1". The defaults
+  stay the live bot (`STRATEGY = 'basket'`).
+- `mt5_helper.py`: `buy` / `sell` / `_build_request` take `auto_sltp=False` (sl / tp as given, 0 = none; the
+  default keeps the live auto SL / TP, whose 2 x price TP would close a BTC long leg that doubles).
+- `dashboard.py`: a Turtle line in the status (levels or legs / stop / next add, N, the M15 vote).
+- `tests_demo/`: `test_turtle_rules.py`, `test_turtle_bot.py` (the loop on the fake terminal: trade cycle, orders,
+  closed-bar reads, virtual-balance unit, brake, restarts with and without the state file, closes outside the bot,
+  designs, dashboard) and `test_turtle_replay.py`: turtle.py replayed on the stored BTCUSDm M1 bars in the backtest's
+  order takes the backtest's trades exactly -- 2023-01-01 .. 2026-11-13: System 1 48 trades, System 2 33; the eight
+  years 2018-11-13 .. 2026-11-13: 88 and 60, accounts $6,977.48 and $7,814.72 to the cent -- same entry and exit M1
+  bars, sides, legs and prices; its daily levels are the backtest's plan rows and its vote the backtest's m15_agree.
+  `test_design.py`: a bad Turtle design is the refused one now.
+
+### Known differences from the backtest
+- Orders are market deals at the poll that sees the trigger, at that bid / ask (the backtest fills at the level, or
+  at the M1 open beyond it); slippage, spread widening, swap and commission are real on the demo account.
+- The bars are the terminal's (the backtest's come from the Exness tick archive, which has holes); a UTC day of
+  < 360 M1 bars is not merged into the next (never happened on BTC 2018-2026).
+- After a gap through the stop at an M1 open the backtest may enter in that same bar; here never in an exit's bar
+  (no gap exit happened on BTC 2018-2026).
+
+### Rollback
+`git revert` this commit (self-contained); delete `OUTPUT_DIR/state/<symbol>_turtle.json` afterwards.
+
+---
+
 ## [v3.9.2-demo.1] — 2026-11-15 — Demo branches: the backtester's design levers, demo isolation, restart recovery [demo only]
 
 **Branches:** `demo_hedging_xauusd6` (the port; the other `demo_hedging_*` branches take the same code).

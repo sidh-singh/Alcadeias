@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from mt5_helper import MT5PositionHelper
 from indicator import Indicator
@@ -34,11 +35,35 @@ from constants import (
     CONTRACT_SIZE_FALLBACK, STATE_SUBDIR,
     # demo isolation
     MAGIC, DEMO_BRANCH, VIRTUAL_START_BALANCE, VIRTUAL_START_DATE,
+    # the Turtle (STRATEGY = 'turtle')
+    TURTLE_SYSTEM, TURTLE_N_LEN, TURTLE_STOP_N, TURTLE_ADD_N, TURTLE_MAX_LEGS, TURTLE_TICK,
+    TURTLE_VOTE_TF, TURTLE_VOTE_BARS, TURTLE_D1_BARS, TURTLE_MIN_D1_BARS,
 )
+
+
+def _turtle_rules():
+    """This folder's turtle.py (the Turtle's rules), loaded from its path: the bare name 'turtle' can resolve to
+    Python's own turtle-graphics module."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('alcadeias_turtle', Path(__file__).resolve().parent / 'turtle.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+T = _turtle_rules()
 
 _TF_PREFIX = 'TIMEFRAME_'
 _STATE_VERSION = 1
 _RESOLVE_ATTEMPTS = 30           # polls spent looking for a closed basket's deals before its P/L at the close decision stands
+_TF_SECONDS = {'M1': 60, 'M2': 120, 'M3': 180, 'M4': 240, 'M5': 300, 'M6': 360, 'M10': 600, 'M12': 720, 'M15': 900,
+               'M20': 1200, 'M30': 1800, 'H1': 3600, 'H2': 7200, 'H3': 10800, 'H4': 14400, 'H6': 21600,
+               'H8': 28800, 'H12': 43200, 'D1': 86400}
+_TURTLE_PENDING_S = 10.0         # a leg the bot just filled waits this long for the terminal to list it
+_TURTLE_SETTLE_S = 2.0           # a D1 / M15 bar is read this long after its end (its last ticks are in by then)
+_TURTLE_MIN_VOTE_BARS = 100      # fewer closed M15 bars from the terminal: no vote (no entry)
+_TURTLE_HISTORY_S = 400 * 86400  # deal history read at a start without the Turtle's state file
+_TURTLE_NOTE_S = 300.0           # a repeated Turtle note (no bars, refused order, brake) is printed / logged this often
 
 
 def _tf_key(tf):
@@ -80,6 +105,22 @@ def _pos_time(pos):
     """Open time of a position in seconds (time_msc when the terminal has it)."""
     msc = getattr(pos, 'time_msc', None)
     return msc / 1000.0 if msc else float(pos.time)
+
+
+def _tick_time(tick):
+    """The terminal's clock: the time of the symbol's last tick in seconds (time_msc when there), None without one.
+    The Turtle reads its bars against it, so a bar counts as closed once a tick after its end has arrived."""
+    if tick is None:
+        return None
+    msc = getattr(tick, 'time_msc', 0) or 0
+    if msc:
+        return msc / 1000.0
+    t = getattr(tick, 'time', 0) or 0
+    return float(t) if t else None
+
+
+def _iso(ts):
+    return None if ts is None else _utc(ts).isoformat()
 
 
 def _pos_id(pos):
@@ -193,7 +234,7 @@ def design_problems():
     if STRATEGY not in ('basket', 'turtle'):
         p.append(f"STRATEGY {STRATEGY!r} is not 'basket' or 'turtle'")
     elif STRATEGY == 'turtle':
-        p.append("STRATEGY 'turtle': the Turtle module is not part of this code; this bot runs only 'basket'")
+        p.extend(turtle_design_problems())
     for name, tf in (('TREND_TF', TREND_TF), ('VOL_TF', VOL_TF)):
         if tf is not None and not hasattr(mt5, _tf_name(tf)):
             p.append(f'{name} {tf!r} is not an MT5 timeframe')
@@ -228,8 +269,53 @@ def design_problems():
     return p
 
 
+def _is_int(x):
+    return isinstance(x, int) and not isinstance(x, bool)
+
+
+def turtle_params():
+    """The TURTLE_* constants as turtle.py's keyword arguments."""
+    return dict(system=TURTLE_SYSTEM, n_len=TURTLE_N_LEN, stop_n=float(TURTLE_STOP_N), add_n=float(TURTLE_ADD_N),
+                tick=float(TURTLE_TICK))
+
+
+def turtle_design_problems():
+    """Why the TURTLE_* constants cannot run (empty = fine)."""
+    p = []
+    if not _is_int(TURTLE_SYSTEM) or TURTLE_SYSTEM not in T.SYSTEMS:
+        p.append(f'TURTLE_SYSTEM must be 1 or 2, not {TURTLE_SYSTEM!r}')
+    for name, x in (('TURTLE_STOP_N', TURTLE_STOP_N), ('TURTLE_ADD_N', TURTLE_ADD_N)):
+        if not _is_number(x) or x <= 0:
+            p.append(f'{name} must be a number > 0, not {x!r}')
+    if not _is_number(TURTLE_TICK) or TURTLE_TICK < 0:
+        p.append(f'TURTLE_TICK must be a number >= 0, not {TURTLE_TICK!r}')
+    if not _is_int(TURTLE_N_LEN) or TURTLE_N_LEN < 2:
+        p.append(f'TURTLE_N_LEN must be a whole number >= 2, not {TURTLE_N_LEN!r}')
+    if not _is_int(TURTLE_MAX_LEGS) or TURTLE_MAX_LEGS < 1:
+        p.append(f'TURTLE_MAX_LEGS must be a whole number >= 1, not {TURTLE_MAX_LEGS!r}')
+    key = _tf_key(TURTLE_VOTE_TF) if isinstance(TURTLE_VOTE_TF, str) else None
+    if key is None or key not in _TF_SECONDS or not hasattr(mt5, _TF_PREFIX + key):
+        p.append(f'TURTLE_VOTE_TF {TURTLE_VOTE_TF!r} is not an MT5 timeframe')
+    if not _is_int(TURTLE_VOTE_BARS) or TURTLE_VOTE_BARS < 100:
+        p.append(f'TURTLE_VOTE_BARS must be a whole number >= 100, not {TURTLE_VOTE_BARS!r}')
+    if not _is_int(TURTLE_MIN_D1_BARS) or TURTLE_MIN_D1_BARS < 60:
+        p.append(f'TURTLE_MIN_D1_BARS must be a whole number >= 60 (the 55-day channel and N), not {TURTLE_MIN_D1_BARS!r}')
+    elif not _is_int(TURTLE_D1_BARS) or TURTLE_D1_BARS < TURTLE_MIN_D1_BARS:
+        p.append(f'TURTLE_D1_BARS must be a whole number >= TURTLE_MIN_D1_BARS, not {TURTLE_D1_BARS!r}')
+    if not hasattr(mt5, 'TIMEFRAME_D1'):
+        p.append('the terminal module has no TIMEFRAME_D1')
+    return p
+
+
 def design_summary():
     """One line describing the design in effect (startup print)."""
+    if STRATEGY == 'turtle':
+        bits = [f'design {DESIGN_NAME!r}', T.describe(TURTLE_SYSTEM),
+                f'N {TURTLE_N_LEN}d, stop {TURTLE_STOP_N:g}N, add every {TURTLE_ADD_N:g}N, {TURTLE_MAX_LEGS} legs max',
+                f'votes {TURTLE_VOTE_TF} closed bars', f'magic {MAGIC}',
+                f'virtual ${VIRTUAL_START_BALANCE:g} from {VIRTUAL_START_DATE}' if virtual_balance_enabled()
+                else 'units from the account balance']
+        return ' | '.join(bits)
     from strategy import (FORCE_CLOSE_ENABLED as _fc, MAX_ADDS as _ma, LADDER_TRIGGER as _lt,
                           LADDER_MULTIPLIERS as _lm)
     bits = [f'design {DESIGN_NAME!r}', f'force-close {"on" if _fc else "off"}',
@@ -942,6 +1028,8 @@ class MT5TradingBot:
         _problems = design_problems()
         if _problems:
             raise ValueError(f"design {DESIGN_NAME!r} refused: " + '; '.join(_problems))
+        if STRATEGY == 'turtle':
+            return self._process_turtle(symbol)        # its own loop; everything below is the basket
 
         # Get configuration once before loop (per-symbol config from array)
         sym_cfg = self.symbol_configs.get(symbol, {})
@@ -1524,6 +1612,466 @@ class MT5TradingBot:
                 if self._stop_event.is_set():
                     return
     
+    # ───────────────────── the Turtle (STRATEGY = 'turtle'; its rules are in turtle.py) ─────────────────────
+    def _turtle_state_path(self, symbol):
+        base = self.state_dir or os.path.join(OUTPUT_DIR, STATE_SUBDIR)
+        return os.path.join(base, f'{symbol}_turtle.json')
+
+    def _load_turtle_state(self, symbol):
+        """The persisted Turtle book or None: no file, unreadable, or written for another symbol / magic number /
+        system (then it is rebuilt from the terminal)."""
+        path = self._turtle_state_path(symbol)
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError) as e:
+            print(f"[{symbol}] note: Turtle state file {path} unreadable ({e}); rebuilding it from the terminal")
+            return None
+        if (not isinstance(data, dict) or data.get('symbol') != symbol or data.get('magic') != MAGIC
+                or data.get('system') != TURTLE_SYSTEM or not isinstance(data.get('book'), dict)):
+            print(f"[{symbol}] note: Turtle state file {path} is not this bot's (symbol/magic/system); rebuilding it")
+            return None
+        st = T.new_state()
+        st.update({k: v for k, v in data['book'].items() if k in st})
+        return st
+
+    def _save_turtle_state(self, symbol, st):
+        """Write the book atomically (a crash mid-write leaves the previous file)."""
+        path = self._turtle_state_path(symbol)
+        data = {'version': _STATE_VERSION, 'symbol': symbol, 'magic': MAGIC, 'design': DESIGN_NAME,
+                'system': TURTLE_SYSTEM, 'saved_at': time.time(), 'book': st}
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + '.tmp'
+            with self.thread_lock:
+                with open(tmp, 'w') as f:
+                    json.dump(data, f, indent=2, default=str)
+                os.replace(tmp, path)
+        except OSError as e:
+            print(f"[{symbol}] Error: could not write the Turtle state file {path}: {e}")
+
+    def _turtle_closed_bars(self, trade_symbol, tf_name, count, tf_s, now):
+        """The CLOSED bars of a timeframe at the terminal's time `now`: the last `count` bars of
+        copy_rates_from_pos(..., 0, count + 1) whose open time + tf_s <= now (the bar still forming is dropped).
+        A dict of arrays t (open time, s) / o / h / l / c, or None."""
+        tf = getattr(mt5, tf_name, None)
+        if tf is None:
+            return None
+        with self.mt5_lock:
+            rates = mt5.copy_rates_from_pos(trade_symbol, tf, 0, int(count) + 1)
+        if rates is None or len(rates) == 0:
+            return None
+        t = np.asarray(rates['time'], np.int64)
+        keep = np.flatnonzero(t + int(tf_s) <= now)[-int(count):]
+        return {'t': t[keep], 'o': np.asarray(rates['open'], np.float64)[keep],
+                'h': np.asarray(rates['high'], np.float64)[keep], 'l': np.asarray(rates['low'], np.float64)[keep],
+                'c': np.asarray(rates['close'], np.float64)[keep]}
+
+    def _turtle_history(self, trade_symbol, now):
+        """From this bot's deal history: the time of its last entry (the first leg of a trade: a position opened
+        while none of its positions was open) and of its last closing deal; (None, None) when unknown."""
+        with self.mt5_lock:
+            deals = self.position_helper.get_bot_deals(_utc(now - _TURTLE_HISTORY_S), _utc(now + 86400))
+        if not deals:
+            return None, None
+        deals = [d for d in deals if getattr(d, 'symbol', trade_symbol) == trade_symbol]
+        open_ids, last_entry, last_out = set(), None, None
+        for d in sorted(deals, key=lambda d: (_deal_time(d), int(getattr(d, 'ticket', 0) or 0))):
+            pid = getattr(d, 'position_id', None)
+            if getattr(d, 'entry', None) == 0:
+                if not open_ids:
+                    last_entry = _deal_time(d)
+                open_ids.add(pid)
+            elif _is_out_deal(d):
+                open_ids.discard(pid)
+                last_out = _deal_time(d)
+        return last_entry, last_out
+
+    def _turtle_rows(self, symbol, st, rows, rows_t, server_time):
+        """Every D1 bar closed since the book's last one, oldest first: each raises an open trade's stop to its exit
+        channel and arms its entry orders (a fresh book takes the last bar only). True when the book changed."""
+        n = len(rows_t)
+        if st['row'] is not None and int(st['row']) >= int(rows_t[-1]):
+            return False
+        if st['row'] is None:
+            todo = [n - 1]
+        else:
+            todo = [b for b in range(n) if int(rows_t[b]) > int(st['row'])]
+        if not todo:
+            return False
+        for b in todo:
+            T.on_new_row(st, T.row_levels(rows, rows_t, b))
+        lv = st['levels']
+        self._log_event(symbol, 'TURTLE_LEVELS', 'SIGNAL', {
+            'd1_bar': _iso(lv['bar_time']), 'bars_processed': len(todo), 'system': lv['system'],
+            'buy_level': lv['buy'], 'sell_level': lv['sell'], 'n': lv['n'], 'use20': lv['use20'],
+            'trade': {1: 'BUY', -1: 'SELL'}.get(st['side']), 'stop': st['stop'], 'stop_origin': T.stop_origin(st),
+        }, server_time=server_time)
+        return True
+
+    def _turtle_sync(self, symbol, st, buy_positions, sell_positions, rows, rows_t, mtqty, now, server_time):
+        """
+        Match the book with this bot's open positions. The positions are the truth for the legs (fill price, open
+        time, ticket); a leg the bot has just filled is kept _TURTLE_PENDING_S seconds until the terminal lists it.
+        Positions the book does not hold (a start without the state file): the trade is rebuilt from them (turtle.py
+        rebuild). A book whose positions are all gone: closed (the bot's exit finished, or closed outside it).
+        Returns (changed, hold, pending): hold = make no decision this poll, pending = a fill not listed yet.
+        """
+        nb = buy_positions['count'] if buy_positions else 0
+        ns = sell_positions['count'] if sell_positions else 0
+        if nb and ns:
+            return False, True, False          # both sides open (not the Turtle's doing): hold still
+        side = 1 if nb else (-1 if ns else 0)
+        plist = _sorted_positions((buy_positions if nb else sell_positions).get('positions')) if side else []
+        legs = [{'price': float(p.price_open), 'time': _pos_time(p), 'ticket': _pos_id(p)} for p in plist]
+        if st['side'] != 0 and side in (0, st['side']):
+            seen = {leg['ticket'] for leg in legs}
+            young = [dict(leg) for leg in st['legs']
+                     if leg.get('ticket') not in seen and now - float(leg['time']) < _TURTLE_PENDING_S]
+            merged = sorted(legs + young, key=lambda x: (x['time'], x['ticket'] or 0))
+            if not merged:
+                outside = not st['closing']
+                was = 'BUY' if st['side'] == 1 else 'SELL'
+                T.on_exit(st, now)
+                if outside:
+                    print(f"[{symbol}] note: the Turtle's {was} trade was closed outside the bot")
+                    self._log_event(symbol, 'TURTLE_CLOSED_OUTSIDE', 'EXIT', {'side': was}, server_time=server_time)
+                return True, False, False
+            changed = [(round(a['price'], 8), a['ticket']) for a in merged] != \
+                      [(round(a['price'], 8), a.get('ticket')) for a in st['legs']]
+            if changed:
+                gone = sorted({a.get('ticket') for a in st['legs']} - {a['ticket'] for a in merged} - {None})
+                T.set_legs(st, merged)
+                if gone and not st['closing']:          # (while the bot closes them itself, they go one by one)
+                    print(f"[{symbol}] note: Turtle leg(s) {gone} closed outside the bot; the stop stays at {st['stop']}")
+                    self._log_event(symbol, 'TURTLE_LEG_CLOSED_OUTSIDE', 'EXIT', {
+                        'tickets': gone, 'legs': len(st['legs']), 'stop': st['stop'],
+                        'stop_origin': T.stop_origin(st)}, server_time=server_time)
+            return changed, False, bool(young)
+        if side == 0:
+            return False, False, False
+        # positions the book does not hold
+        if st['side'] != 0:
+            print(f"[{symbol}] note: the Turtle's open trade was replaced outside the bot; taking the positions over")
+            T.on_exit(st, now)
+        units = max(1, int(round(float(plist[0].volume) / float(mtqty)))) if mtqty else 1
+        new = T.rebuild(side, legs, units, rows, rows_t)
+        if new is None:
+            self._turtle_note(symbol, 'rebuild', "the open positions predate the D1 history: they are left alone",
+                              server_time)
+            return False, True, False
+        new['last_exit_time'] = st.get('last_exit_time')
+        st.clear()
+        st.update(new)
+        print(f"[{symbol}] note: Turtle {'BUY' if side == 1 else 'SELL'} trade of {len(legs)} leg(s) taken over from "
+              f"the terminal: unit {units}, N at entry {st['n_entry']}, stop {st['stop']} ({T.stop_origin(st)})")
+        self._log_event(symbol, 'TURTLE_REBUILT', 'SIGNAL', {
+            'side': 'BUY' if side == 1 else 'SELL', 'legs': len(legs), 'units': units, 'n_entry': st['n_entry'],
+            'stop': st['stop'], 'entry_d1_bar': _iso(st['entry_row'])}, server_time=server_time)
+        return True, False, False
+
+    def _turtle_note(self, symbol, key, text, server_time, details=None):
+        """Print and log a repeated note at most every _TURTLE_NOTE_S seconds (per key)."""
+        notes = self.__dict__.setdefault('_turtle_notes', {})
+        now = time.time()
+        if now - notes.get(key, -1e18) < _TURTLE_NOTE_S:
+            return
+        notes[key] = now
+        print(f"[{symbol}] WARNING: {text}" if key in ('rebuild', 'd1', 'order') else f"[{symbol}] note: {text}")
+        self._log_event(symbol, 'TURTLE_NOTE', 'SIGNAL', dict(details or {}, note=text), server_time=server_time)
+
+    def _turtle_units(self, account_info, step_up_balance, max_limit):
+        """The unit for a new trade: the bot's rule on the virtual balance (or the account balance). (units, balance)"""
+        balance = None
+        if virtual_balance_enabled():
+            with self.mt5_lock:
+                balance = self._virtual_balance(time.time())
+        elif account_info:
+            balance = account_info.get('balance', 0)
+        if balance is None:
+            return 1, None
+        return T.unit_rule(balance, step_up_balance, max_limit), balance
+
+    def _process_turtle(self, symbol):
+        """
+        The Turtle's poll loop (STRATEGY = 'turtle'), about once a second; turtle.py decides, this executes:
+          market data and this bot's positions (MAGIC) -> the levels of the closed D1 bars (read again when a UTC
+          day starts: every D1 bar closed since raises an open trade's stop and arms its entry orders) -> the vote of
+          the last closed M15 bar (read again when one closes) -> the book matched with the positions (rebuilt from
+          them without the state file) -> on a live market, one decision: the stop (every leg closed at market),
+          else an add, else -- flat -- an entry (a market order; the unit from the virtual balance, fixed for the
+          trade) -> the book in OUTPUT_DIR/state/<symbol>_turtle.json -> the dashboard JSON.
+        Times are the terminal's (the last tick's): a bar is closed once a tick after its end has arrived.
+        """
+        from datetime import datetime
+
+        sym_cfg = self.symbol_configs.get(symbol, {})
+        brake_manual = self.symbols_config.get('brake', 0)
+        step_up_balance = sym_cfg.get('step_up_balance', 0)
+        max_limit = sym_cfg.get('unit_max_limit', 1)
+        mtqty = self.symbols_config.get('mtqty', 0.01)
+        trade_symbol = self.symbol_map.get(symbol, symbol)
+        params = turtle_params()
+        vote_name = _tf_name(TURTLE_VOTE_TF)
+        vote_s = _TF_SECONDS[_tf_key(TURTLE_VOTE_TF)]
+        vote_kw = dict(rsi_length=RSI_LENGTH, rsi_ma_type=RSI_MA_TYPE, macd_fast=MACD_FAST, macd_slow=MACD_SLOW,
+                       macd_signal=MACD_SIGNAL, lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
+                       rsi_ob=RSI_PEAK_OB, rsi_os=RSI_PEAK_OS)
+
+        st = self._load_turtle_state(symbol)
+        _history_done = st is not None          # no state file: the armed orders / last exit from the deal history
+        if st is None:
+            st = T.new_state()
+        rows = rows_t = None
+        _rows_day = None
+        vote, vote_info, vote_q, vote_bar = 0, None, None, None
+        units = int(st['units']) if st['side'] else 1
+        _virtual_balance = None
+        _units_at = -1e18
+        _last_daily_save = 0.0
+        _last_hist_save = 0.0
+        print(f"[{symbol}] {T.describe(TURTLE_SYSTEM)}")
+
+        while True:
+            try:
+                _iter_start = time.perf_counter()
+                with self.mt5_lock:
+                    mt5.symbol_select(trade_symbol, True)
+                    market_status = self.position_helper.get_market_status(
+                        trade_symbol, getattr(mt5, MARKET_STATUS_TIMEFRAME), lookback_minutes=MARKET_LOOKBACK_MINUTES
+                    )
+                    buy_positions = self.position_helper.get_buy_positions(trade_symbol)
+                    sell_positions = self.position_helper.get_sell_positions(trade_symbol)
+                    account_info = self.position_helper.get_account_info()
+                    server_time = self.position_helper._get_server_time(trade_symbol)
+                    tick = mt5.symbol_info_tick(trade_symbol)
+                bid = float(tick.bid) if tick is not None else None
+                ask = float(tick.ask) if tick is not None else None
+                now = _tick_time(tick)
+                live = bool(market_status.get('is_open')) if market_status else False
+                buy_signal = sell_signal = Signal.DO_NOTHING
+                order_response = close_response = None
+                exit_reason = None
+                changed = False
+
+                # ── the levels: the closed D1 bars, read again when a UTC day starts (and until they are there) ──
+                if now is not None and (rows is None or int((now - _TURTLE_SETTLE_S) // T.DAY_S) != _rows_day):
+                    d1 = self._turtle_closed_bars(trade_symbol, 'TIMEFRAME_D1', TURTLE_D1_BARS, T.DAY_S, now)
+                    got = 0 if d1 is None else len(d1['t'])
+                    if got >= TURTLE_MIN_D1_BARS:
+                        rows = T.daily_rows(d1['o'], d1['h'], d1['l'], d1['c'], **params)
+                        rows_t = d1['t']
+                        _rows_day = int((now - _TURTLE_SETTLE_S) // T.DAY_S)
+                        if got < TURTLE_D1_BARS:
+                            self._turtle_note(symbol, 'd1_short', f'{got} closed D1 bars from the terminal (asked for '
+                                              f'{TURTLE_D1_BARS}): N can differ from the backtest by a little', server_time)
+                    else:
+                        self._turtle_note(symbol, 'd1', f'{got} closed D1 bars from the terminal, at least '
+                                          f'{TURTLE_MIN_D1_BARS} needed: not trading', server_time)
+                # ── the vote of the last closed M15 bar, read again when an M15 bar closes ──
+                _q = None if now is None else int((now - _TURTLE_SETTLE_S) // vote_s)
+                if _q is not None and _q != vote_q:
+                    b15 = self._turtle_closed_bars(trade_symbol, vote_name, TURTLE_VOTE_BARS, vote_s, now)
+                    if b15 is not None and len(b15['c']) >= _TURTLE_MIN_VOTE_BARS:
+                        vote, vote_info = T.closed_bar_vote(b15['c'], self.indicator, **vote_kw)
+                        vote_q = _q
+                        vote_bar = int(b15['t'][-1])
+                    else:
+                        self._turtle_note(symbol, 'm15', f"{0 if b15 is None else len(b15['c'])} closed "
+                                          f"{TURTLE_VOTE_TF} bars from the terminal: no vote, no entry", server_time)
+                vote_fresh = _q is not None and vote_q == _q
+
+                # ── the book and this bot's positions ──
+                hold, pending = True, False
+                if rows is not None and now is not None:
+                    _c, hold, pending = self._turtle_sync(symbol, st, buy_positions, sell_positions, rows, rows_t,
+                                                          mtqty, now, server_time)
+                    changed |= _c
+                    changed |= self._turtle_rows(symbol, st, rows, rows_t, server_time)
+                    if not _history_done:
+                        _history_done = True
+                        if st['side'] == 0:
+                            last_entry, last_out = self._turtle_history(trade_symbol, now)
+                            if last_entry is not None and st['levels'] and last_entry >= st['levels']['from_time']:
+                                st['armed'] = False          # this D1 bar's orders already filled today
+                            if last_out is not None:
+                                st['last_exit_time'] = float(last_out)
+                        changed = True
+                if changed:
+                    self._save_turtle_state(symbol, st)
+                if st['side'] != 0:
+                    units = int(st['units'])
+                elif time.time() - _units_at >= 60.0:
+                    units, _virtual_balance = self._turtle_units(account_info, step_up_balance, max_limit)
+                    _units_at = time.time()
+
+                # ── one decision, on a live market with the levels and a quote ──
+                if live and not hold and bid is not None and ask is not None:
+                    side = st['side']
+                    if side != 0 and (st['closing'] or T.exit_due(st, bid, ask)):
+                        positions = buy_positions if side == 1 else sell_positions
+                        stop, origin = st['stop'], T.stop_origin(st)
+                        with self.mt5_lock:
+                            close_response = self.position_helper.close_by_type(trade_symbol, 0 if side == 1 else 1)
+                        closed = int(close_response.get('closed_count', 0) or 0)
+                        failed = int(close_response.get('failed_count', 0) or 0)
+                        exit_reason = 'stop' if not st['closing'] else 'close_retry'
+                        details = {'mt5_symbol': trade_symbol, 'positions_closed': closed, 'failed': failed,
+                                   'reason': exit_reason, 'stop': stop, 'stop_origin': origin,
+                                   'bid': bid, 'ask': ask, 'legs': len(st['legs']),
+                                   'total_profit': positions['total_profit'] if positions else 0,
+                                   'response': close_response}
+                        if failed == 0:
+                            T.on_exit(st, now)
+                        else:
+                            st['closing'] = True
+                        self._save_turtle_state(symbol, st)
+                        if side == 1:
+                            buy_signal = Signal.CLOSE_BUY
+                        else:
+                            sell_signal = Signal.CLOSE_SELL
+                        self._log_event(symbol, 'CLOSE_BUY' if side == 1 else 'CLOSE_SELL', 'EXIT', details,
+                                        server_time=server_time)
+                    elif side != 0 and not pending:
+                        lvl = T.add_due(st, bid, ask, now, TURTLE_MAX_LEGS)
+                        if lvl is not None:
+                            qty = st['units'] * mtqty
+                            send = self.position_helper.buy if side == 1 else self.position_helper.sell
+                            with self.mt5_lock:
+                                order_response = send(trade_symbol, qty, auto_sltp=False)
+                            ok = self._order_done(order_response)
+                            if ok:
+                                px = float(getattr(order_response, 'price', 0.0) or 0.0) or (ask if side == 1 else bid)
+                                T.on_add(st, px, now, getattr(order_response, 'order', None) or None)
+                                self._save_turtle_state(symbol, st)
+                                self._log_event(symbol, 'BUY_MORE_EXECUTED' if side == 1 else 'SELL_MORE_EXECUTED',
+                                                'ENTRY', {'mt5_symbol': trade_symbol, 'qty': qty, 'leg': len(st['legs']),
+                                                          'level': lvl, 'fill': px, 'stop': st['stop'],
+                                                          'response': str(order_response)}, server_time=server_time)
+                            else:
+                                self._turtle_note(symbol, 'order', f'add refused: {order_response}', server_time)
+                            if side == 1:
+                                buy_signal = Signal.BUY_MORE
+                            else:
+                                sell_signal = Signal.SELL_MORE
+                            time.sleep(ORDER_COOLDOWN_SECONDS)
+                    elif side == 0 and not pending:
+                        d = T.entry_due(st, bid, ask, vote if vote_fresh else 0, now)
+                        if d != 0 and brake_manual:
+                            self._turtle_note(symbol, 'brake', 'Brake active — Turtle entry skipped', server_time,
+                                              {'side': 'BUY' if d == 1 else 'SELL'})
+                        elif d != 0:
+                            units, _virtual_balance = self._turtle_units(account_info, step_up_balance, max_limit)
+                            _units_at = time.time()
+                            qty = units * mtqty
+                            lv = st['levels']
+                            send = self.position_helper.buy if d == 1 else self.position_helper.sell
+                            with self.mt5_lock:
+                                order_response = send(trade_symbol, qty, auto_sltp=False)
+                            if self._order_done(order_response):
+                                px = float(getattr(order_response, 'price', 0.0) or 0.0) or (ask if d == 1 else bid)
+                                T.on_entry(st, d, px, now, units, getattr(order_response, 'order', None) or None)
+                                self._save_turtle_state(symbol, st)
+                                self._log_event(symbol, 'BUY_EXECUTED' if d == 1 else 'SELL_EXECUTED', 'ENTRY', {
+                                    'mt5_symbol': trade_symbol, 'qty': qty, 'units': units, 'balance': _virtual_balance,
+                                    'level': lv['buy'] if d == 1 else lv['sell'], 'fill': px, 'vote': vote,
+                                    'vote_bar': _iso(vote_bar), 'n_entry': st['n_entry'], 'stop': st['stop'],
+                                    'stop_origin': T.stop_origin(st), 'd1_bar': _iso(lv['bar_time']),
+                                    'use20': lv['use20'], 'response': str(order_response)}, server_time=server_time)
+                            else:
+                                self._turtle_note(symbol, 'order', f'entry refused: {order_response}', server_time)
+                            if d == 1:
+                                buy_signal = Signal.BUY
+                            else:
+                                sell_signal = Signal.SELL
+                            time.sleep(ORDER_COOLDOWN_SECONDS)
+
+                # ── the dashboard JSON ──
+                lv = st.get('levels') or {}
+                r_sign = int(((vote_info or {}).get('rsi') or {}).get('sign', 0) or 0)
+                m_sign = int(((vote_info or {}).get('macd') or {}).get('sign', 0) or 0)
+                full = len(st['legs']) >= TURTLE_MAX_LEGS
+                analysis_data = {
+                    'strategy': 'turtle',
+                    'design': DESIGN_NAME,
+                    'candle_fresh': live,
+                    'slopes': {_tf_key(TURTLE_VOTE_TF): {'rsi': (vote_info or {}).get('rsi', {}),
+                                                         'macd': (vote_info or {}).get('macd', {})}},
+                    'entry_direction': {1: 'BUY', -1: 'SELL'}.get(vote if vote_fresh else 0, 'WAIT'),
+                    'open_score': r_sign + m_sign, 'fc_score': r_sign + m_sign,
+                    'entry_allowed': bool(st['armed']) and st['side'] == 0 and not brake_manual,
+                    'exit_reason': exit_reason,
+                    'unit_times': units, 'step_up_balance': step_up_balance, 'unit_max_limit': max_limit,
+                    'virtual_balance': _virtual_balance if virtual_balance_enabled() else None,
+                    'turtle': {
+                        'system': TURTLE_SYSTEM, 'd1_bar': _iso(lv.get('bar_time')), 'd1_bars': 0 if rows_t is None else len(rows_t),
+                        'buy_level': lv.get('buy'), 'sell_level': lv.get('sell'), 'n': lv.get('n'),
+                        'use20': lv.get('use20'), 'armed': bool(st['armed']),
+                        'vote': vote if vote_fresh else None, 'vote_bar': _iso(vote_bar),
+                        'side': {1: 'BUY', -1: 'SELL'}.get(st['side']), 'legs': len(st['legs']),
+                        'max_legs': TURTLE_MAX_LEGS, 'units': st['units'] or units, 'n_entry': st['n_entry'],
+                        'stop': st['stop'], 'stop_origin': T.stop_origin(st),
+                        'next_add': None if (full or st['side'] == 0) else T.add_level(st),
+                        'entry_time': _iso(st['entry_time']), 'last_exit_time': _iso(st['last_exit_time']),
+                        'pending_fill': pending, 'closing': bool(st['closing']), 'hold': hold,
+                    },
+                }
+                symbol_data = {
+                    'symbol': symbol,
+                    'mt5_symbol': trade_symbol,
+                    'last_updated': datetime.now(tz=timezone.utc).isoformat(),
+                    'server_time': server_time.isoformat(),
+                    'market_status': market_status,
+                    'account': account_info if account_info else {},
+                    'positions': {
+                        name: {
+                            'count': p['count'] if p else 0,
+                            'total_profit': p['total_profit'] if p else 0,
+                            'total_volume': p['total_volume'] if p else 0,
+                            'first_profit': p['first_profit'] if p else 0,
+                            'first_volume': p['first_volume'] if p else 0,
+                            'last_profit': p['last_profit'] if p else 0,
+                            'last_volume': p['last_volume'] if p else 0,
+                        } for name, p in (('buy', buy_positions), ('sell', sell_positions))
+                    },
+                    'signal': {'buy_status': buy_signal.name, 'sell_status': sell_signal.name},
+                    'analysis': analysis_data,
+                    'order_response': None if order_response is None else str(order_response),
+                    'demo': {'branch': DEMO_BRANCH, 'magic': MAGIC, 'design': DESIGN_NAME,
+                             'virtual_balance': analysis_data.get('virtual_balance'), 'turtle_book': st},
+                }
+                if close_response is not None:
+                    symbol_data['close_response'] = close_response
+                iteration_ms = round((time.perf_counter() - _iter_start) * 1000, 1)
+                symbol_data['iteration_ms'] = iteration_ms
+                analysis_data['iteration_ms'] = iteration_ms
+                print(f"[{symbol}] iteration {iteration_ms} ms")
+                self._save_symbol_data(symbol, symbol_data)
+
+                _now_ts = time.time()
+                if live:
+                    try:
+                        if _now_ts - _last_daily_save >= 60:
+                            self._save_daily_trades(symbol, mt5_symbol=trade_symbol)
+                            _last_daily_save = _now_ts
+                        if _now_ts - _last_hist_save >= 300:
+                            self._save_historical_summary(symbol, mt5_symbol=trade_symbol)
+                            _last_hist_save = _now_ts
+                    except Exception:
+                        pass  # Non-critical, don't break the main loop
+
+                time.sleep(1)
+                if self._stop_event.is_set():
+                    return
+
+            except Exception as e:
+                print(f"[{symbol}] Error: {e}")
+                time.sleep(1)
+                if self._stop_event.is_set():
+                    return
+
     def run_multithreaded_processing(self):
         """Step 4: Start processing for all symbols.
         

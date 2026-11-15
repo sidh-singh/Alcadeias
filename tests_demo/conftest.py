@@ -1,6 +1,7 @@
 """
 Tests of the demo-branch port: the design levers (trend, volatility unit, target / stop / cap, loss pause,
-macd_turn ladder), the demo isolation (magic, comment, virtual balance) and restart recovery.
+macd_turn ladder), the demo isolation (magic, comment, virtual balance) and restart recovery; the Turtle
+(STRATEGY = 'turtle', turtle.py): test_turtle_*.py, its replay against the backtest in test_turtle_replay.py.
 
 Run from the branch root:  python3 -m pytest tests_demo -q -p no:cacheprovider
 Nothing here talks to a terminal: MetaTrader5 is replaced by tests_demo/fake_mt5.py.

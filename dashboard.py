@@ -1216,6 +1216,21 @@ def build_slope_panel(symbol, analysis, last_updated=''):
     _vb = analysis.get('virtual_balance')
     if isinstance(_vb, (int, float)):
         status_bits.append(f'virtual balance ${_vb:,.2f}')
+    # the Turtle (STRATEGY = 'turtle'): today's levels, or the open trade's legs, stop and next add
+    _tt = analysis.get('turtle')
+    if isinstance(_tt, dict):
+        _px = lambda x: '-' if not isinstance(x, (int, float)) else f'{x:,.2f}'
+        _bits = [f"Turtle S{_tt.get('system')}"]
+        if _tt.get('side'):
+            _bits.append(f"{_tt['side']} {_tt.get('legs')}/{_tt.get('max_legs')} legs · stop {_px(_tt.get('stop'))}"
+                         f" ({_tt.get('stop_origin')})"
+                         + (f" · next add {_px(_tt.get('next_add'))}" if _tt.get('next_add') is not None else ''))
+        else:
+            _bits.append(f"buy ≥ {_px(_tt.get('buy_level'))} · sell ≤ {_px(_tt.get('sell_level'))}"
+                         + ('' if _tt.get('armed') else ' · orders used'))
+        _bits.append(f"N {_px(_tt.get('n'))}")
+        _bits.append('M15 vote ' + {1: '▲', -1: '▼', 0: '–'}.get(_tt.get('vote'), '?'))
+        status_bits.append(' · '.join(_bits))
     # Structural 4H/1H/15M slope read, shown for comparison (the live entry uses the weighted score).
     if structural != decision:
         status_bits.append(f'structural {structural}')
