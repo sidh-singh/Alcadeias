@@ -17,6 +17,98 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2-demo.4] — 2026-11-16 — Demo branches: the re-review's fixes [demo only]
+
+**Branches:** the `demo_hedging_*` branches (written on `demo_hedging_xauusd6`; the Turtle's own parts on the BTC
+Turtle branches). **NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** `app.py`,
+`tests_demo/` (+ this `CHANGELOG.md`, `README.md`); here also the Turtle's loop (`turtle.py` itself is untouched).
+**Baseline:** v3.9.2-demo.3 + the slot's own demo account (`demo: slot N's own demo account ...`).
+
+**Why.** Each slot now has its own demo account, so three logins share the server. The independent re-review of
+the six branches found that the bot logged in on any terminal it was pointed at, and four smaller gaps. Every fix
+leaves the decisions of normal operation alone: the demo parity replay (the branch's app.py against the fast engine
+running its design) passes unchanged, and with the levers at their live defaults the bot still takes the live
+decisions and sends the live requests (`tests_demo/test_live_equivalence.py`). The Turtle has no fast-engine
+counterpart; its rules are untouched and its tests take the same trades.
+
+### The Turtle (this branch: `STRATEGY = 'turtle'`)
+- Findings 1 and 4 hold for its loop as they are (the same `initialize_mt5`, `_poll_failed`, `_try_reconnect`).
+- Finding 2: `_process_turtle` reads the account again right after its positions read, in the same `mt5_lock`
+  block; on a problem the poll decides nothing (before: a switch in between made the legs look closed outside the
+  bot, `TURTLE_LEG_CLOSED_OUTSIDE`).
+- Finding 3, checked: a leg's backstop lies beyond the trade's stop, so when a gap closes the newest leg and the
+  price stays there, the bot's own stop closes the other legs on its next poll. It did not hold when the price was
+  back inside the stop by the time the bot saw the leg gone (the terminal down during a spike): the other legs were
+  kept. Now a leg gone outside the bot is looked up in the deal history: closed at or beyond the trade's stop (its
+  backstop), or not in the history -> the other legs are closed at once (exit reason `stop_passed_outside`;
+  `TURTLE_LEG_CLOSED_OUTSIDE` carries `beyond_stop`); closed by hand inside the stop -> the trade goes on, its stop
+  kept, as before.
+
+### Fixed: never a login on a terminal that holds another account (re-review finding 1, high)
+`initialize_mt5` logged in with the bot's own login at every start, reconnect and launcher restart. A login
+switches the account of every program attached to the terminal: the bots of another slot were locked out, and a
+live bot on the same terminal would have been pulled off the real account, its positions unmanaged.
+- `initialize_mt5` reads `account_info()` right after `mt5.initialize()`: no account -> it logs in; this bot's
+  account (the login and the server of the credentials) -> no login; any other account -> no login,
+  `mt5.shutdown()` (the terminal is left as it is), an ERROR event `TERMINAL_IN_USE` ("the terminal at <path> is
+  logged into another account <login> (<mode>, <server>) ...; give this slot its own MT5 installation"), and the
+  start-up (3 attempts, then the launcher) or the reconnect back-off tries again. `TERMINAL_IN_USE` is logged when
+  it starts or changes, then at most every 15 minutes, also across the launcher's restarts (a start reads the
+  newest entry of the strategy log). The demo-account checks after it are unchanged.
+
+### Fixed: the account read again right after the positions (finding 2, medium)
+- The poll checked the account before it read the positions; a switch in between handed it another account's
+  positions and the open basket was booked as closed outside the bot (then rebuilt). The account is read again
+  right after the positions, in the same `mt5_lock` block; on a problem the poll decides nothing (`ACCOUNT_REFUSED`),
+  exactly as at its start.
+
+### Fixed: a basket a backstop closed only partly (finding 3, low; XAU Top 1, the only design with an add)
+- The entry's backstop lies nearer than the add's: a move through it while the bot is down closes the entry and
+  leaves the add. That was not booked; the gone leg stayed in the basket, its stop was judged on the add alone and
+  the ladder could add again. Now a leg gone without a close of this bot (no `close_pending`) marks the basket
+  (`LEG_CLOSED_OUTSIDE`): the other legs are closed at once on that poll (exit reason `leg_closed_outside`) and the
+  whole basket is booked as closed outside the bot -- the realised P/L of every leg from the deal history (until
+  the history has the legs closed outside, the result counts as a loss), then the pause after a loss, as after any
+  close. The bot's own partial close is not mistaken for one.
+
+### Fixed: a long outage does not fill the strategy log (finding 4, low)
+- `RECONNECT_FAILED` was logged on every retry (4 hours down: 243 events in the 200-entry log). Now on the first
+  failure, when its reason changes (the terminal's `last_error` aside) and at most every 15 minutes otherwise (4
+  hours: 16 events); every attempt is still printed and the back-off is unchanged. `TERMINAL_RECONNECTED` reports
+  `attempt`, `failed_attempts` and `outage_s`; `TERMINAL_ERROR` likewise ignores a change of `last_error` alone.
+
+### Fixed: a stop with a ladder needs an add gap (finding 5, low)
+- `design_problems()` accepted a design with a stop and a ladder that can add in favour (`LADDER_GAP_VOL` = 0),
+  whose add could carry a backstop inside the basket's stop. Refused now (stop + ladder needs `LADDER_GAP_VOL` > 0,
+  or `MAX_ADDS` = 0). The six shipped designs pass unchanged.
+
+### Documented: one MT5 installation per slot (finding 6, low)
+- `README.md`'s safety section: one MT5 installation per slot, never shared with a live bot; the bot now refuses to
+  log in on a terminal that holds another account. Only separate installations close the last gaps: a switch in
+  the microseconds between the order guard's account read and `order_send`, and a terminal still logging into its
+  saved account when the bot attaches.
+
+### Files
+- `app.py`: `initialize_mt5` (the account before the login), `_is_own_account`, `_terminal_in_use_problem`,
+  `_terminal_in_use`, `_log_path`, `_newest_log_entry`; the account re-read after the poll's positions read;
+  `_sync_basket` (`outside_ids`, `LEG_CLOSED_OUTSIDE`), `_after_close` (the booking), the close to finish
+  (`leg_closed_outside`); `_why_key`, `_poll_failed`, `_outage_s`, `_try_reconnect`, `_poll_succeeded`
+  (`_LOG_REPEAT_S` = 900 s); `design_problems` (stop + ladder needs a gap); docstrings.
+- `app.py` (the Turtle): the account re-read in `_process_turtle`; `_turtle_sync` and `_turtle_closed_beyond_stop`
+  (a leg closed beyond the stop: `closing`), the exit reason `stop_passed_outside`.
+- `tests_demo/`: `fake_mt5.py` (a terminal without an account, `login()` switches it for every process attached,
+  `on_call()`, `close_by_broker()`); new `test_terminal_in_use.py`, `test_partial_close.py`; `test_demo_account.py`,
+  `test_reconnect.py`, `test_design.py` extended. The Turtle: `test_turtle_safety.py` (the switch before the
+  positions read, a gap through the newest leg's backstop, a backstop close while the terminal is down, the
+  history lookup, one `RECONNECT_FAILED` of a restart's three failures).
+
+### Rollback
+`git revert` the `demo(safety)` / `demo(fix)` / `demo(turtle)` / `demo(docs)` commits of this version (newest
+first); nothing to clean up (no new state file; a basket marked `outside_ids` in the state file is simply closed by
+the reverted code's close retry, a Turtle book left `closing` by its close retry).
+
+---
+
 ## [v3.9.2-demo.3] — 2026-11-15 — Demo branches: the demo review's safety fixes [demo only]
 
 **Branches:** the `demo_hedging_*` branches (written on `demo_hedging_xauusd6`; `v3.9.2-demo.2` is the Turtle, on
