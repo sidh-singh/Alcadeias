@@ -13,7 +13,9 @@ The terminal is a hedging account on one symbol:
   * a position keeps the request's sl / tp and the broker executes them (execute_stops): at the first tick
     through one, at that tick's price (a gap fills beyond it), with a DEAL_REASON_SL / _TP deal;
   * history_deals_get(date_from, date_to) returns the deals in that time range;
-  * account_info() reports a demo, hedging account (login / trade_mode / margin_mode can be changed);
+  * account_info() reports a demo, hedging account (login / server / trade_mode / margin_mode can be changed;
+    logged_in False = the terminal holds no account: None); login() switches the terminal to the account it is
+    given, for every process attached to it, as a real terminal does;
   * terminal_info(); while the terminal is down (down()) every call answers None, and the connection stays lost
     until initialize() succeeds again, as with the MetaTrader5 package after a terminal restart.
 Failures can be injected (refused orders, failed closes, no history, a terminal down, positions_get errors), and
@@ -204,8 +206,10 @@ class FakeMT5:
         self.iter_t = clock.now_ms  # start of the bot's current loop pass
         self._ticket = 100000
         self._deal_ticket = 500000
-        # the account the terminal is logged into (change them to switch it)
+        # the account the terminal is logged into (change them to switch it; logged_in False = no account at all)
         self.account_login = 1
+        self.server = 'Fake-Demo'
+        self.logged_in = True
         self.trade_mode = self.ACCOUNT_TRADE_MODE_DEMO
         self.margin_mode = self.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING
         self.calls = []             # (name, terminal ms) of initialize / login / shutdown
@@ -316,8 +320,12 @@ class FakeMT5:
         return True
 
     @_terminal_call
-    def login(self, *a, **k):
+    def login(self, login=None, password=None, server=None, **k):
+        """As a real terminal: the terminal is switched to that account, for every process attached to it."""
         self.calls.append(('login', self.clock.now_ms))
+        self.account_login = int(login) if login is not None else self.account_login
+        self.server = server if server is not None else self.server
+        self.logged_in = True
         return True
 
     def shutdown(self):
@@ -347,11 +355,14 @@ class FakeMT5:
     @_terminal_call
     def account_info(self):
         b, a = self.quote()
+        if not self.logged_in:
+            self._error = (-6, 'Terminal: Authorization failed')
+            return None
         profit = sum(self._pos_profit(p, b, a) for p in self.positions) if b is not None else 0.0
         margin = sum(p['volume'] * self.contract * p['price_open'] / self.leverage for p in self.positions)
         equity = self.balance + profit
         return types.SimpleNamespace(login=self.account_login, trade_mode=self.trade_mode,
-                                     margin_mode=self.margin_mode, server='Fake-Demo', leverage=self.leverage,
+                                     margin_mode=self.margin_mode, server=self.server, leverage=self.leverage,
                                      balance=self.balance, equity=equity, margin=margin, margin_free=equity - margin,
                                      margin_level=(equity / margin * 100.0) if margin else 0.0, profit=profit)
 

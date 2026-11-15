@@ -64,7 +64,8 @@ def test_a_terminal_restart_mid_basket_is_ridden_out(tmp_path):
     run = run_bot(fake, clock, overrides=NO_LADDER, state_dir=tmp_path / 'run',
                   on_new_bot=_with_credentials(recording_states(saved)))
     assert _tries(fake, t0) == [5, 10, 20, 50]
-    assert [n for n, t in fake.calls if t >= (t0 + 50) * 1000] == ['shutdown', 'initialize', 'login']
+    # the terminal came back holding this bot's account: no login (finding 1 of the re-review)
+    assert [n for n, t in fake.calls if t >= (t0 + 50) * 1000] == ['shutdown', 'initialize']
     assert saved and not booked_outside(saved)
     assert deals_of(fake) == deals_of(fake0)
     assert not any((t0 + 0.5) * 1000 <= o['_t_ms'] <= (t0 + 50.5) * 1000 for o in fake.orders)
