@@ -309,3 +309,10 @@ VIRTUAL_START_DATE = '2026-11-16'    #   commission of the deals with its MAGIC)
 # DESIGN_NAME = 'btc_turtle_s1'
 # STRATEGY = 'turtle'
 # TURTLE_SYSTEM = 1
+
+# ─── Design of this branch (demo_hedging_btcusd6): BTC Turtle System 2 + bot votes ───
+# The example block 'BTC Turtle System 2 + bot votes' above, uncommented. Everything not set here stays at the live value.
+DESIGN_NAME = 'btc_turtle_s2'
+STRATEGY = 'turtle'
+TURTLE_SYSTEM = 2
+VIRTUAL_START_DATE = '2026-11-15'    # the demo forward test's virtual $2,000 counts this bot's deals from this UTC day
