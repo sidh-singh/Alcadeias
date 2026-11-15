@@ -211,14 +211,27 @@ def levels_complete(vol_unit, usd_per_price):
     return bool(usd_per_price) or not (TARGET_VOL > 0 or STOP_VOL > 0 or VOL_CAP_USD_PER_UNIT > 0)
 
 
-def entry_block_reason(want_side, trend_now, vol_now, usd_per_price):
+def entry_timeframes():
+    """Short keys of every timeframe a fresh entry reads: the OPEN and FORCE-CLOSE (agreement) sections, TREND_TF
+    and VOL_TF."""
+    keys = Strategy.section_timeframes() + [_tf_key(t) for t in (TREND_TF, VOL_TF) if t is not None]
+    return list(dict.fromkeys(keys))
+
+
+def entry_block_reason(want_side, trend_now, vol_now, usd_per_price, no_data=()):
     """
     Why a fresh entry the strategy wants is not sent, after the brake (None = send it). The backtester's
-    execution-time order (kernels.py L1206-1225): trend, then the volatility unit not known.
+    execution-time order (kernels.py L1206-1225): trend, then the volatility unit not known; before them
+    the data the live terminal may not have given this poll.
+      votes unknown: a timeframe of entry_timeframes() returned no bars this poll (`no_data`): its votes are
+                     missing, which the scores would read as 0 -- with ENTRY_AGREE_S = 0 a missing M15 would
+                     pass the agreement gate. Exits and stops do not depend on it.
       trend: TREND_TF set and want_side * trend <= 0 (a trend of 0 blocks both sides)
       volatility unknown: VOL_TF set and the unit of the last closed bar is not > 0
       contract size unknown: a volatility distance is configured and the USD value of a price move is not known
     """
+    if no_data and {_tf_key(t) for t in no_data} & set(entry_timeframes()):
+        return 'votes unknown'
     if TREND_TF is not None and want_side * trend_now <= 0:
         return 'trend'
     if VOL_TF is not None and not (vol_now is not None and vol_now > 0):
@@ -1479,6 +1492,7 @@ class MT5TradingBot:
                 trend_now = 0              # sign of the TREND_TF MACD signal line, last closed bar
                 trend_signal = None
                 vol_now = None             # VOL_TF volatility unit, last closed bar (price units)
+                _no_data = []              # timeframes the terminal returned no bars for this poll (their votes unknown)
 
                 if not has_candle_data:
                     print(f"[{symbol}] WARNING: No candle data returned by MT5")
@@ -1611,6 +1625,7 @@ class MT5TradingBot:
                                 vol_now = Indicator.vol_unit(tf_df['close'].to_numpy()[:-1], VOL_LEN)
                         else:
                             rsi_mtf[tf_name] = 50.0
+                            _no_data.append(_tf_key(tf_name))
                     current_rsi = rsi_mtf.get('TIMEFRAME_M1', 50.0)
 
                     # A basket taken over without the bars of its open (levels pending) takes the
@@ -1658,6 +1673,15 @@ class MT5TradingBot:
                         last_fill_price=_last_fill,
                         bid=_bid, ask=_ask,
                     )
+                    # A ladder tier whose timeframe returned no bars: its vote is not known this poll (not a vote
+                    # against the basket) -- no add, and the arming stays as it was.
+                    _tier = analysis_data.get('ladder_tier')
+                    if _in_basket and _tier and _tf_key(_tier) in _no_data:
+                        analysis_data['ladder_armed'] = _armed
+                        if buy_signal == Signal.BUY_MORE:
+                            buy_signal = Signal.DO_NOTHING
+                        if sell_signal == Signal.SELL_MORE:
+                            sell_signal = Signal.DO_NOTHING
                     # The macd_turn ladder's arming is a fact of this poll's votes: keep it.
                     if _in_basket and bool(analysis_data.get('ladder_armed')) != _armed:
                         basket['ladder_armed'] = bool(analysis_data.get('ladder_armed'))
@@ -1675,6 +1699,7 @@ class MT5TradingBot:
                     analysis_data['trend'] = trend_now if TREND_TF is not None else None
                     analysis_data['trend_signal'] = trend_signal if trend_signal == trend_signal else None
                     analysis_data['vol_unit_now'] = vol_now
+                    analysis_data['no_data'] = list(_no_data)
                     analysis_data['loss_pause_s'] = _pause
                     analysis_data['pause_left_s'] = max(0.0, round(_pause - (time.time() - _last_close_time), 1))
                     analysis_data['last_close_lost'] = _lc.get('lost')
@@ -1764,7 +1789,7 @@ class MT5TradingBot:
                 close_response = None
                 if has_candle_data and candle_is_fresh and buy_signal == Signal.BUY:
                     if not brake:
-                        _why = entry_block_reason(1, trend_now, vol_now, _usd_per_price)
+                        _why = entry_block_reason(1, trend_now, vol_now, _usd_per_price, no_data=_no_data)
                         if _why is None:
                             _levels = basket_levels(vol_now, _usd_per_price)   # fixed for this basket's life
                             order_response, _backstop = self._open_leg(1, trade_symbol, units * mtqty,
@@ -1788,6 +1813,7 @@ class MT5TradingBot:
                             self._log_event(symbol, 'BUY_SIGNAL', 'SIGNAL', {
                                 'note': f'Entry blocked: {_why} — order skipped',
                                 'trend_signal': analysis_data.get('trend_signal'), 'vol_unit': vol_now,
+                                'no_data': list(_no_data),
                             }, server_time=server_time)
                     else:
                         self._log_event(symbol, 'BUY_SIGNAL', 'SIGNAL', {
@@ -1831,7 +1857,7 @@ class MT5TradingBot:
                 # Execute sell signal
                 if has_candle_data and candle_is_fresh and sell_signal == Signal.SELL:
                     if not brake:
-                        _why = entry_block_reason(-1, trend_now, vol_now, _usd_per_price)
+                        _why = entry_block_reason(-1, trend_now, vol_now, _usd_per_price, no_data=_no_data)
                         if _why is None:
                             _levels = basket_levels(vol_now, _usd_per_price)   # fixed for this basket's life
                             order_response, _backstop = self._open_leg(-1, trade_symbol, units * mtqty,
@@ -1855,6 +1881,7 @@ class MT5TradingBot:
                             self._log_event(symbol, 'SELL_SIGNAL', 'SIGNAL', {
                                 'note': f'Entry blocked: {_why} — order skipped',
                                 'trend_signal': analysis_data.get('trend_signal'), 'vol_unit': vol_now,
+                                'no_data': list(_no_data),
                             }, server_time=server_time)
                     else:
                         self._log_event(symbol, 'SELL_SIGNAL', 'SIGNAL', {

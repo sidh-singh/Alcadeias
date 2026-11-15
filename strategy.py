@@ -107,6 +107,11 @@ class Strategy:
         return ['TIMEFRAME_' + k for k in dict.fromkeys(keys)]
 
     @staticmethod
+    def section_timeframes():
+        """Short keys of the OPEN and FORCE-CLOSE (entry agreement) section timeframes: the votes a fresh entry reads."""
+        return list(dict.fromkeys(_tf_key(k) for k in list(OPEN_SCORE_WEIGHTS) + list(FORCE_CLOSE_SCORE_WEIGHTS)))
+
+    @staticmethod
     def rsi_timeframes():
         """'TIMEFRAME_<key>' of the ladder tiers, whose forming-bar RSI the 'rsi_level' ladder reads."""
         return ['TIMEFRAME_' + k for k in dict.fromkeys(Strategy.ladder_tiers())]
