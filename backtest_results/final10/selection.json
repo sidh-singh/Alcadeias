@@ -1,0 +1,1055 @@
+{
+ "rule": {
+  "pool": "every row with results in 2021, 2022, 2023, 2024-25 and 2025-26",
+  "yardstick": "fresh $2,000 account per quarter; average profit per quarter in each period",
+  "eligible": "profit in at least 4 of 5 periods, never wiped, worst fresh-quarter drawdown at most 50%",
+  "rank": "average profit per quarter over the five periods / worst fresh-quarter drawdown (%)",
+  "diversity": "at most 2 rows per published strategy; each own design counts on its own",
+  "n": 10
+ },
+ "protocol": {
+  "windows": {
+   "8y": {
+    "start": "2018-11-13",
+    "end": "2026-11-13",
+    "what": "8 years, Nov 2018 - Nov 2026"
+   },
+   "5y": {
+    "start": "2021-11-13",
+    "end": "2026-11-13",
+    "what": "5 years, Nov 2021 - Nov 2026"
+   },
+   "new": {
+    "start": "2018-11-13",
+    "end": "2021-01-01",
+    "what": "new data, Nov 2018 - Dec 2020"
+   },
+   "1y": {
+    "start": "2025-11-13",
+    "end": "2026-11-13",
+    "what": "last year, Nov 2025 - Nov 2026"
+   }
+  },
+  "account": "one fresh $2,000 account per window, nothing withdrawn, leverage 1:2000, swap-free; sizing as the row says (the bot's unit rule: unit = floor(balance / 2,500) + 1 lots of 0.01, at most 10, unless risk-sized)",
+  "engines": {
+   "own designs": "the tick engine: per-second replay (one loop timing) for 8y / 5y / new, raw ticks under eight loop timings for 1y (median, with the range)",
+   "published strategies and V3-lite hybrids": "external.py's M1-bar simulator, unchanged, with history from 2017-01 (gold) / 2018-01 (BTC) for the indicators"
+  },
+  "rankings": {
+   "highest equity": "final equity of the window's account",
+   "lowest drawdown": "maximum drawdown, % of the running equity peak",
+   "combined": "annual return (CAGR, %) / maximum drawdown (%); for 1y the return over the year"
+  },
+  "honest test": "the 'new' window: 13 Nov 2018 - 31 Dec 2020 had not been read by any earlier study"
+ },
+ "pool_size": {
+  "XAUUSDm": 87,
+  "BTCUSDm": 78
+ },
+ "eligible": {
+  "XAUUSDm": 20,
+  "BTCUSDm": 25
+ },
+ "final": {
+  "XAUUSDm": [
+   {
+    "rank": 1,
+    "label": "London breakout + H1 trend",
+    "kind": "published",
+    "engine": "bars",
+    "family": "london",
+    "name": "Asian-range / London breakout (gold); daily volatility breakout (BTC)",
+    "params": "default",
+    "variant": "+ H1 trend",
+    "sizing": "bot unit rule",
+    "rule": "range 03-08 server (New York + 7 h), flat 21:00 server",
+    "evidence": {
+     "2021": 9.6,
+     "2022": 49.5,
+     "2023": -0.1,
+     "2024-25": 62.2,
+     "2025-26": 179.0
+    },
+    "periods_up": 4,
+    "mean_q": 60.0,
+    "dd_fresh": 10.9,
+    "profit_per_dd": 5.48,
+    "lost_q": 6,
+    "n_q": 23
+   },
+   {
+    "rank": 2,
+    "label": "London breakout (risk-sized)",
+    "kind": "published",
+    "engine": "bars",
+    "family": "london",
+    "name": "Asian-range / London breakout (gold); daily volatility breakout (BTC)",
+    "params": "default",
+    "variant": "risk-sized",
+    "sizing": "1% of equity at risk",
+    "rule": "range 03-08 server (New York + 7 h), flat 21:00 server",
+    "evidence": {
+     "2021": 1.5,
+     "2022": 51.7,
+     "2023": -2.1,
+     "2024-25": 169.7,
+     "2025-26": 6.8
+    },
+    "periods_up": 4,
+    "mean_q": 45.5,
+    "dd_fresh": 8.5,
+    "profit_per_dd": 5.35,
+    "lost_q": 6,
+    "n_q": 23
+   },
+   {
+    "rank": 3,
+    "label": "V3-lite + 200-day trend filter",
+    "kind": "published",
+    "engine": "bars",
+    "family": "rsi2",
+    "name": "Connors RSI(2) pullback with the 200-day trend",
+    "params": "default",
+    "variant": "V3-lite + regime",
+    "sizing": "bot unit rule",
+    "rule": "RSI(2) 5 / 95, exit at SMA 5",
+    "evidence": {
+     "2021": 1.9,
+     "2022": 25.6,
+     "2023": 1.3,
+     "2024-25": 121.4,
+     "2025-26": 244.2
+    },
+    "periods_up": 5,
+    "mean_q": 78.9,
+    "dd_fresh": 15.7,
+    "profit_per_dd": 5.03,
+    "lost_q": 5,
+    "n_q": 23
+   },
+   {
+    "rank": 4,
+    "label": "V3-lite + 12-month momentum filter",
+    "kind": "published",
+    "engine": "bars",
+    "family": "tsmom",
+    "name": "Time-series momentum (Moskowitz-Ooi-Pedersen; Hurst-Ooi-Pedersen)",
+    "params": "alt",
+    "variant": "V3-lite + regime",
+    "sizing": "bot unit rule",
+    "rule": "12-month sign only (MOP-12)",
+    "evidence": {
+     "2021": 0.0,
+     "2022": 0.5,
+     "2023": 2.1,
+     "2024-25": 121.4,
+     "2025-26": 205.7
+    },
+    "periods_up": 4,
+    "mean_q": 65.9,
+    "dd_fresh": 15.7,
+    "profit_per_dd": 4.21,
+    "lost_q": 5,
+    "n_q": 23
+   },
+   {
+    "rank": 5,
+    "label": "Top 3",
+    "kind": "own",
+    "engine": "ticks",
+    "family": "Top 3",
+    "name": "Top 3",
+    "params": "Top 3: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=12.0, max_adds=1.0, loss_cooldown_s=3600.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "Top 3: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=12.0, max_adds=1.0, loss_cooldown_s=3600.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "evidence": {
+     "2021": 28.1,
+     "2022": -38.0,
+     "2023": 25.8,
+     "2024-25": 110.8,
+     "2025-26": 554.6
+    },
+    "periods_up": 4,
+    "mean_q": 136.3,
+    "dd_fresh": 40.1,
+    "profit_per_dd": 3.4,
+    "lost_q": 8,
+    "n_q": 23,
+    "overrides": {
+     "entry_agree_s": 0.0,
+     "entry_rsi_block_mode": "any",
+     "entry_rsi_block_tfs": null,
+     "force_close_enabled": false,
+     "ladder_gap_vol": 1.0,
+     "ladder_multipliers": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "ladder_tfs": [
+      "M5",
+      "M15",
+      "H1",
+      "H1",
+      "H1"
+     ],
+     "ladder_trigger": "macd_turn",
+     "loss_cooldown_s": 3600.0,
+     "max_adds": 1,
+     "open_weights": {
+      "H1": 1
+     },
+     "stop_loss_usd_per_unit": null,
+     "stop_vol": 8.0,
+     "target_usd_per_unit": null,
+     "target_vol": 10.0,
+     "trend_tf": "H1",
+     "vol_cap_usd_per_unit": 12.0,
+     "vol_len": 24,
+     "vol_tf": "H1"
+    }
+   },
+   {
+    "rank": 6,
+    "label": "Long moving average + H1 trend",
+    "kind": "published",
+    "engine": "bars",
+    "family": "ma",
+    "name": "Long-horizon moving-average rule (Urquhart et al.; 50-day SMA on BTC)",
+    "params": "default",
+    "variant": "+ H1 trend",
+    "sizing": "bot unit rule",
+    "rule": "gold M5 SMA 41 / 356, always in",
+    "evidence": {
+     "2021": 12.8,
+     "2022": -13.2,
+     "2023": 5.2,
+     "2024-25": 111.9,
+     "2025-26": 449.7
+    },
+    "periods_up": 4,
+    "mean_q": 113.3,
+    "dd_fresh": 34.9,
+    "profit_per_dd": 3.24,
+    "lost_q": 9,
+    "n_q": 23
+   },
+   {
+    "rank": 7,
+    "label": "V3-lite",
+    "kind": "own",
+    "engine": "ticks",
+    "family": "V3-lite",
+    "name": "V3-lite",
+    "params": "V3-lite",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "V3-lite",
+    "evidence": {
+     "2021": 27.6,
+     "2022": 3.0,
+     "2023": 104.6,
+     "2024-25": 154.3,
+     "2025-26": 409.1
+    },
+    "periods_up": 5,
+    "mean_q": 139.7,
+    "dd_fresh": 45.3,
+    "profit_per_dd": 3.09,
+    "lost_q": 4,
+    "n_q": 23,
+    "overrides": {
+     "trend_tf": "H1",
+     "force_close_enabled": false,
+     "loss_cooldown_s": 43200.0,
+     "vol_tf": "H1",
+     "vol_len": 24,
+     "target_usd_per_unit": null,
+     "stop_loss_usd_per_unit": null,
+     "max_adds": 0,
+     "open_weights": {
+      "H1": 1
+     },
+     "entry_agree_s": 2.0,
+     "target_vol": 8.0,
+     "stop_vol": 8.0
+    }
+   },
+   {
+    "rank": 8,
+    "label": "Noise-area momentum (risk-sized)",
+    "kind": "published",
+    "engine": "bars",
+    "family": "noise",
+    "name": "Noise-area intraday momentum with VWAP trail (Zarattini-Aziz-Barbon 2024)",
+    "params": "default",
+    "variant": "risk-sized",
+    "sizing": "2% daily vol target, 4x cap",
+    "rule": "COMEX session 08:20-13:30 New York",
+    "evidence": {
+     "2021": -76.5,
+     "2022": 51.2,
+     "2023": 135.1,
+     "2024-25": 19.3,
+     "2025-26": 53.1
+    },
+    "periods_up": 4,
+    "mean_q": 36.4,
+    "dd_fresh": 12.4,
+    "profit_per_dd": 2.95,
+    "lost_q": 8,
+    "n_q": 23
+   },
+   {
+    "rank": 9,
+    "label": "Long moving average [alt] + H1 trend",
+    "kind": "published",
+    "engine": "bars",
+    "family": "ma",
+    "name": "Long-horizon moving-average rule (Urquhart et al.; 50-day SMA on BTC)",
+    "params": "alt",
+    "variant": "+ H1 trend",
+    "sizing": "bot unit rule",
+    "rule": "gold M5 SMA 34 / 339",
+    "evidence": {
+     "2021": 12.9,
+     "2022": -11.9,
+     "2023": 13.3,
+     "2024-25": 132.9,
+     "2025-26": 402.1
+    },
+    "periods_up": 4,
+    "mean_q": 109.9,
+    "dd_fresh": 38.8,
+    "profit_per_dd": 2.84,
+    "lost_q": 7,
+    "n_q": 23
+   },
+   {
+    "rank": 10,
+    "label": "V3-lite + H4 Supertrend filter",
+    "kind": "published",
+    "engine": "bars",
+    "family": "supertrend",
+    "name": "Supertrend (ATR 10 x 3) stop and reverse",
+    "params": "default",
+    "variant": "V3-lite + regime",
+    "sizing": "bot unit rule",
+    "rule": "H4, always in",
+    "evidence": {
+     "2021": -37.4,
+     "2022": 14.2,
+     "2023": 4.7,
+     "2024-25": 75.7,
+     "2025-26": 104.7
+    },
+    "periods_up": 4,
+    "mean_q": 32.4,
+    "dd_fresh": 29.9,
+    "profit_per_dd": 1.08,
+    "lost_q": 11,
+    "n_q": 23
+   }
+  ],
+  "BTCUSDm": [
+   {
+    "rank": 1,
+    "label": "Top 2",
+    "kind": "own",
+    "engine": "ticks",
+    "family": "Top 2",
+    "name": "Top 2",
+    "params": "Top 2: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=12.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "Top 2: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=12.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "evidence": {
+     "2021": -24.3,
+     "2022": 20.2,
+     "2023": 20.8,
+     "2024-25": 147.6,
+     "2025-26": 55.7
+    },
+    "periods_up": 4,
+    "mean_q": 44.0,
+    "dd_fresh": 9.8,
+    "profit_per_dd": 4.49,
+    "lost_q": 11,
+    "n_q": 23,
+    "overrides": {
+     "entry_agree_s": 0.0,
+     "entry_rsi_block_mode": "any",
+     "entry_rsi_block_tfs": null,
+     "force_close_enabled": false,
+     "ladder_gap_vol": 1.0,
+     "ladder_multipliers": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "ladder_tfs": [
+      "M5",
+      "M15",
+      "H1",
+      "H1",
+      "H1"
+     ],
+     "ladder_trigger": "macd_turn",
+     "loss_cooldown_s": 14400.0,
+     "max_adds": 0,
+     "open_weights": {
+      "H1": 1
+     },
+     "stop_loss_usd_per_unit": null,
+     "stop_vol": 8.0,
+     "target_usd_per_unit": null,
+     "target_vol": 10.0,
+     "trend_tf": "H1",
+     "vol_cap_usd_per_unit": 12.0,
+     "vol_len": 24,
+     "vol_tf": "H1"
+    }
+   },
+   {
+    "rank": 2,
+    "label": "Top 3",
+    "kind": "own",
+    "engine": "ticks",
+    "family": "Top 3",
+    "name": "Top 3",
+    "params": "Top 3: open_weights=H1+M15, entry_agree_s=0.0, target_vol=8.0, stop_vol=8.0, vol_cap_usd_per_unit=0.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "Top 3: open_weights=H1+M15, entry_agree_s=0.0, target_vol=8.0, stop_vol=8.0, vol_cap_usd_per_unit=0.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "evidence": {
+     "2021": -60.8,
+     "2022": 43.2,
+     "2023": 18.2,
+     "2024-25": 101.6,
+     "2025-26": 157.0
+    },
+    "periods_up": 4,
+    "mean_q": 51.8,
+    "dd_fresh": 12.3,
+    "profit_per_dd": 4.23,
+    "lost_q": 10,
+    "n_q": 23,
+    "overrides": {
+     "entry_agree_s": 0.0,
+     "entry_rsi_block_mode": "any",
+     "entry_rsi_block_tfs": null,
+     "force_close_enabled": false,
+     "ladder_gap_vol": 1.0,
+     "ladder_multipliers": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "ladder_tfs": [
+      "M5",
+      "M15",
+      "H1",
+      "H1",
+      "H1"
+     ],
+     "ladder_trigger": "macd_turn",
+     "loss_cooldown_s": 14400.0,
+     "max_adds": 0,
+     "open_weights": {
+      "H1": 1,
+      "M15": 1
+     },
+     "stop_loss_usd_per_unit": null,
+     "stop_vol": 8.0,
+     "target_usd_per_unit": null,
+     "target_vol": 8.0,
+     "trend_tf": "H1",
+     "vol_cap_usd_per_unit": 0.0,
+     "vol_len": 24,
+     "vol_tf": "H1"
+    }
+   },
+   {
+    "rank": 3,
+    "label": "Turtle + bot votes",
+    "kind": "published",
+    "engine": "bars",
+    "family": "turtle",
+    "name": "Turtle Donchian breakout (Original Turtle Rules)",
+    "params": "default",
+    "variant": "+ bot votes",
+    "sizing": "bot unit rule",
+    "rule": "System 1: 20-day entry with the skip-after-winner filter and 55-day failsafe, 10-day exit",
+    "evidence": {
+     "2021": 188.8,
+     "2022": 116.2,
+     "2023": 57.7,
+     "2024-25": 138.9,
+     "2025-26": 162.9
+    },
+    "periods_up": 5,
+    "mean_q": 132.9,
+    "dd_fresh": 32.5,
+    "profit_per_dd": 4.08,
+    "lost_q": 8,
+    "n_q": 23
+   },
+   {
+    "rank": 4,
+    "label": "V3-lite + 1/3/12-month momentum filter",
+    "kind": "published",
+    "engine": "bars",
+    "family": "tsmom",
+    "name": "Time-series momentum (Moskowitz-Ooi-Pedersen; Hurst-Ooi-Pedersen)",
+    "params": "default",
+    "variant": "V3-lite + regime",
+    "sizing": "bot unit rule",
+    "rule": "1/3/12-month signs, equal weight, monthly",
+    "evidence": {
+     "2021": 35.4,
+     "2022": 39.1,
+     "2023": -4.5,
+     "2024-25": 45.0,
+     "2025-26": 37.8
+    },
+    "periods_up": 4,
+    "mean_q": 30.6,
+    "dd_fresh": 7.8,
+    "profit_per_dd": 3.94,
+    "lost_q": 9,
+    "n_q": 23
+   },
+   {
+    "rank": 5,
+    "label": "Turtle (risk-sized)",
+    "kind": "published",
+    "engine": "bars",
+    "family": "turtle",
+    "name": "Turtle Donchian breakout (Original Turtle Rules)",
+    "params": "default",
+    "variant": "risk-sized",
+    "sizing": "1% of equity per N, 20% cut per 10% drawdown",
+    "rule": "System 1: 20-day entry with the skip-after-winner filter and 55-day failsafe, 10-day exit",
+    "evidence": {
+     "2021": 0.0,
+     "2022": 102.8,
+     "2023": 95.1,
+     "2024-25": 87.4,
+     "2025-26": 44.2
+    },
+    "periods_up": 4,
+    "mean_q": 65.9,
+    "dd_fresh": 17.2,
+    "profit_per_dd": 3.84,
+    "lost_q": 4,
+    "n_q": 23
+   },
+   {
+    "rank": 6,
+    "label": "Daily volatility breakout + bot votes",
+    "kind": "published",
+    "engine": "bars",
+    "family": "london",
+    "name": "Asian-range / London breakout (gold); daily volatility breakout (BTC)",
+    "params": "default",
+    "variant": "+ bot votes",
+    "sizing": "bot unit rule",
+    "rule": "buy stop at the previous close + ATR(2), stop 8%, out at the day's end",
+    "evidence": {
+     "2021": 37.0,
+     "2022": 14.3,
+     "2023": 6.0,
+     "2024-25": 27.3,
+     "2025-26": 6.1
+    },
+    "periods_up": 5,
+    "mean_q": 18.1,
+    "dd_fresh": 5.7,
+    "profit_per_dd": 3.2,
+    "lost_q": 7,
+    "n_q": 23
+   },
+   {
+    "rank": 7,
+    "label": "Daily volatility breakout",
+    "kind": "published",
+    "engine": "bars",
+    "family": "london",
+    "name": "Asian-range / London breakout (gold); daily volatility breakout (BTC)",
+    "params": "default",
+    "variant": "standalone",
+    "sizing": "bot unit rule",
+    "rule": "buy stop at the previous close + ATR(2), stop 8%, out at the day's end",
+    "evidence": {
+     "2021": 49.4,
+     "2022": 19.4,
+     "2023": 15.3,
+     "2024-25": 30.2,
+     "2025-26": 5.7
+    },
+    "periods_up": 5,
+    "mean_q": 24.0,
+    "dd_fresh": 8.0,
+    "profit_per_dd": 3.02,
+    "lost_q": 7,
+    "n_q": 23
+   },
+   {
+    "rank": 8,
+    "label": "Connors RSI(2) + bot votes",
+    "kind": "published",
+    "engine": "bars",
+    "family": "rsi2",
+    "name": "Connors RSI(2) pullback with the 200-day trend",
+    "params": "default",
+    "variant": "+ bot votes",
+    "sizing": "bot unit rule",
+    "rule": "RSI(2) 5 / 95, exit at SMA 5",
+    "evidence": {
+     "2021": 2.5,
+     "2022": 14.3,
+     "2023": 1.4,
+     "2024-25": 16.4,
+     "2025-26": 28.3
+    },
+    "periods_up": 5,
+    "mean_q": 12.6,
+    "dd_fresh": 4.3,
+    "profit_per_dd": 2.91,
+    "lost_q": 2,
+    "n_q": 23
+   },
+   {
+    "rank": 9,
+    "label": "V3-lite",
+    "kind": "own",
+    "engine": "ticks",
+    "family": "V3-lite",
+    "name": "V3-lite",
+    "params": "V3-lite",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "V3-lite",
+    "evidence": {
+     "2021": -26.4,
+     "2022": 25.0,
+     "2023": 7.5,
+     "2024-25": 48.1,
+     "2025-26": 120.7
+    },
+    "periods_up": 4,
+    "mean_q": 35.0,
+    "dd_fresh": 12.1,
+    "profit_per_dd": 2.9,
+    "lost_q": 10,
+    "n_q": 23,
+    "overrides": {
+     "trend_tf": "H1",
+     "force_close_enabled": false,
+     "loss_cooldown_s": 43200.0,
+     "vol_tf": "H1",
+     "vol_len": 24,
+     "target_usd_per_unit": null,
+     "stop_loss_usd_per_unit": null,
+     "max_adds": 0,
+     "open_weights": {
+      "H1": 1
+     },
+     "entry_agree_s": 2.0,
+     "target_vol": 8.0,
+     "stop_vol": 8.0
+    }
+   },
+   {
+    "rank": 10,
+    "label": "TSMOM",
+    "kind": "published",
+    "engine": "bars",
+    "family": "tsmom",
+    "name": "Time-series momentum (Moskowitz-Ooi-Pedersen; Hurst-Ooi-Pedersen)",
+    "params": "default",
+    "variant": "standalone",
+    "sizing": "bot unit rule",
+    "rule": "1/3/12-month signs, equal weight, monthly",
+    "evidence": {
+     "2021": 30.8,
+     "2022": 73.8,
+     "2023": -3.3,
+     "2024-25": 53.8,
+     "2025-26": 50.5
+    },
+    "periods_up": 4,
+    "mean_q": 41.1,
+    "dd_fresh": 16.6,
+    "profit_per_dd": 2.47,
+    "lost_q": 11,
+    "n_q": 23
+   }
+  ]
+ },
+ "references": {
+  "XAUUSDm": [
+   {
+    "rank": null,
+    "label": "Live",
+    "kind": "reference",
+    "engine": "ticks",
+    "family": "Live",
+    "name": "Live",
+    "params": "Live",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "Live",
+    "evidence": {
+     "2021": -1113.7,
+     "2022": -1189.7,
+     "2023": -669.5,
+     "2024-25": -702.4,
+     "2025-26": -1525.6
+    },
+    "periods_up": 0,
+    "mean_q": -1040.2,
+    "dd_fresh": 100.5,
+    "profit_per_dd": -10.35,
+    "lost_q": 22,
+    "n_q": 23,
+    "overrides": {}
+   },
+   {
+    "rank": null,
+    "label": "Owner's rules + H1 trend + 4 h pause",
+    "kind": "reference",
+    "engine": "ticks",
+    "family": "Owner's rules + H1 trend + 4 h pause",
+    "name": "Owner's rules + H1 trend + 4 h pause",
+    "params": "Owner's rules + H1 trend + 4 h pause",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "Owner's rules + H1 trend + 4 h pause",
+    "evidence": {
+     "2021": -134.2,
+     "2022": -144.0,
+     "2023": -17.4,
+     "2024-25": -14.7,
+     "2025-26": 62.9
+    },
+    "periods_up": 1,
+    "mean_q": -49.5,
+    "dd_fresh": 31.4,
+    "profit_per_dd": -1.58,
+    "lost_q": 15,
+    "n_q": 23,
+    "overrides": {
+     "entry_rsi_block_tfs": [
+      "H1",
+      "H4"
+     ],
+     "entry_rsi_block_mode": "any",
+     "fc_rsi_tfs": [
+      "H1",
+      "H4"
+     ],
+     "trend_tf": "H1",
+     "loss_cooldown_s": 14400.0
+    }
+   },
+   {
+    "rank": null,
+    "label": "Top 1",
+    "kind": "own",
+    "engine": "ticks",
+    "family": "Top 1",
+    "name": "Top 1",
+    "params": "Top 1: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=0.0, max_adds=1.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "Top 1: open_weights=H1, entry_agree_s=0.0, target_vol=10.0, stop_vol=8.0, vol_cap_usd_per_unit=0.0, max_adds=1.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "evidence": {
+     "2021": 66.5,
+     "2022": -66.0,
+     "2023": -0.7,
+     "2024-25": 131.3,
+     "2025-26": 689.5
+    },
+    "periods_up": 3,
+    "mean_q": 164.1,
+    "dd_fresh": 41.9,
+    "profit_per_dd": 3.92,
+    "lost_q": 8,
+    "n_q": 23,
+    "overrides": {
+     "entry_agree_s": 0.0,
+     "entry_rsi_block_mode": "any",
+     "entry_rsi_block_tfs": null,
+     "force_close_enabled": false,
+     "ladder_gap_vol": 1.0,
+     "ladder_multipliers": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "ladder_tfs": [
+      "M5",
+      "M15",
+      "H1",
+      "H1",
+      "H1"
+     ],
+     "ladder_trigger": "macd_turn",
+     "loss_cooldown_s": 14400.0,
+     "max_adds": 1,
+     "open_weights": {
+      "H1": 1
+     },
+     "stop_loss_usd_per_unit": null,
+     "stop_vol": 8.0,
+     "target_usd_per_unit": null,
+     "target_vol": 10.0,
+     "trend_tf": "H1",
+     "vol_cap_usd_per_unit": 0.0,
+     "vol_len": 24,
+     "vol_tf": "H1"
+    }
+   },
+   {
+    "rank": null,
+    "label": "Top 2",
+    "kind": "own",
+    "engine": "ticks",
+    "family": "Top 2",
+    "name": "Top 2",
+    "params": "Top 2: open_weights=H1, entry_agree_s=0.0, target_vol=8.0, stop_vol=4.0, vol_cap_usd_per_unit=12.0, max_adds=0.0, loss_cooldown_s=43200.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "Top 2: open_weights=H1, entry_agree_s=0.0, target_vol=8.0, stop_vol=4.0, vol_cap_usd_per_unit=12.0, max_adds=0.0, loss_cooldown_s=43200.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "evidence": {
+     "2021": -21.2,
+     "2022": -11.3,
+     "2023": 30.0,
+     "2024-25": 155.7,
+     "2025-26": 417.2
+    },
+    "periods_up": 3,
+    "mean_q": 114.1,
+    "dd_fresh": 18.4,
+    "profit_per_dd": 6.2,
+    "lost_q": 7,
+    "n_q": 23,
+    "overrides": {
+     "entry_agree_s": 0.0,
+     "entry_rsi_block_mode": "any",
+     "entry_rsi_block_tfs": null,
+     "force_close_enabled": false,
+     "ladder_gap_vol": 1.0,
+     "ladder_multipliers": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "ladder_tfs": [
+      "M5",
+      "M15",
+      "H1",
+      "H1",
+      "H1"
+     ],
+     "ladder_trigger": "macd_turn",
+     "loss_cooldown_s": 43200.0,
+     "max_adds": 0,
+     "open_weights": {
+      "H1": 1
+     },
+     "stop_loss_usd_per_unit": null,
+     "stop_vol": 4.0,
+     "target_usd_per_unit": null,
+     "target_vol": 8.0,
+     "trend_tf": "H1",
+     "vol_cap_usd_per_unit": 12.0,
+     "vol_len": 24,
+     "vol_tf": "H1"
+    }
+   },
+   {
+    "rank": null,
+    "label": "V3-lite (bar level)",
+    "kind": "published",
+    "engine": "bars",
+    "family": "v3lite",
+    "name": "V3-lite (bar level)",
+    "params": "reference",
+    "variant": "standalone",
+    "sizing": "bot unit rule",
+    "rule": "H1 votes + M15 agree + H1 trend, 8 / 8 vol units",
+    "evidence": {
+     "2021": -17.0,
+     "2022": 10.8,
+     "2023": 21.6,
+     "2024-25": 89.4,
+     "2025-26": 93.6
+    },
+    "periods_up": 4,
+    "mean_q": 39.7,
+    "dd_fresh": 35.6,
+    "profit_per_dd": 1.11,
+    "lost_q": 9,
+    "n_q": 23
+   }
+  ],
+  "BTCUSDm": [
+   {
+    "rank": null,
+    "label": "Live",
+    "kind": "reference",
+    "engine": "ticks",
+    "family": "Live",
+    "name": "Live",
+    "params": "Live",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "Live",
+    "evidence": {
+     "2021": -2000.0,
+     "2022": -1532.8,
+     "2023": -1184.0,
+     "2024-25": -2000.0,
+     "2025-26": -593.8
+    },
+    "periods_up": 0,
+    "mean_q": -1462.1,
+    "dd_fresh": 100.6,
+    "profit_per_dd": -14.53,
+    "lost_q": 22,
+    "n_q": 23,
+    "overrides": {}
+   },
+   {
+    "rank": null,
+    "label": "Owner's rules + H1 trend + 4 h pause",
+    "kind": "reference",
+    "engine": "ticks",
+    "family": "Owner's rules + H1 trend + 4 h pause",
+    "name": "Owner's rules + H1 trend + 4 h pause",
+    "params": "Owner's rules + H1 trend + 4 h pause",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "Owner's rules + H1 trend + 4 h pause",
+    "evidence": {
+     "2021": -280.7,
+     "2022": -104.7,
+     "2023": -124.7,
+     "2024-25": -200.8,
+     "2025-26": -32.6
+    },
+    "periods_up": 0,
+    "mean_q": -148.7,
+    "dd_fresh": 30.0,
+    "profit_per_dd": -4.95,
+    "lost_q": 20,
+    "n_q": 23,
+    "overrides": {
+     "entry_rsi_block_tfs": [
+      "H1",
+      "H4"
+     ],
+     "entry_rsi_block_mode": "any",
+     "fc_rsi_tfs": [
+      "H1",
+      "H4"
+     ],
+     "trend_tf": "H1",
+     "loss_cooldown_s": 14400.0
+    }
+   },
+   {
+    "rank": null,
+    "label": "Top 1",
+    "kind": "own",
+    "engine": "ticks",
+    "family": "Top 1",
+    "name": "Top 1",
+    "params": "Top 1: open_weights=H1, entry_agree_s=0.0, target_vol=8.0, stop_vol=8.0, vol_cap_usd_per_unit=20.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "variant": "-",
+    "sizing": "bot unit rule",
+    "rule": "Top 1: open_weights=H1, entry_agree_s=0.0, target_vol=8.0, stop_vol=8.0, vol_cap_usd_per_unit=20.0, max_adds=0.0, loss_cooldown_s=14400.0, entry_rsi_block_tfs=none, fc_rsi_tfs=nan, force_close_enabled=False",
+    "evidence": {
+     "2021": -66.4,
+     "2022": -8.8,
+     "2023": 25.9,
+     "2024-25": 69.7,
+     "2025-26": 160.4
+    },
+    "periods_up": 3,
+    "mean_q": 36.2,
+    "dd_fresh": 10.4,
+    "profit_per_dd": 3.46,
+    "lost_q": 10,
+    "n_q": 23,
+    "overrides": {
+     "entry_agree_s": 0.0,
+     "entry_rsi_block_mode": "any",
+     "entry_rsi_block_tfs": null,
+     "force_close_enabled": false,
+     "ladder_gap_vol": 1.0,
+     "ladder_multipliers": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "ladder_tfs": [
+      "M5",
+      "M15",
+      "H1",
+      "H1",
+      "H1"
+     ],
+     "ladder_trigger": "macd_turn",
+     "loss_cooldown_s": 14400.0,
+     "max_adds": 0,
+     "open_weights": {
+      "H1": 1
+     },
+     "stop_loss_usd_per_unit": null,
+     "stop_vol": 8.0,
+     "target_usd_per_unit": null,
+     "target_vol": 8.0,
+     "trend_tf": "H1",
+     "vol_cap_usd_per_unit": 20.0,
+     "vol_len": 24,
+     "vol_tf": "H1"
+    }
+   },
+   {
+    "rank": null,
+    "label": "V3-lite (bar level)",
+    "kind": "published",
+    "engine": "bars",
+    "family": "v3lite",
+    "name": "V3-lite (bar level)",
+    "params": "reference",
+    "variant": "standalone",
+    "sizing": "bot unit rule",
+    "rule": "H1 votes + M15 agree + H1 trend, 8 / 8 vol units",
+    "evidence": {
+     "2021": -47.2,
+     "2022": 4.5,
+     "2023": -1.8,
+     "2024-25": 38.2,
+     "2025-26": 8.7
+    },
+    "periods_up": 3,
+    "mean_q": 0.5,
+    "dd_fresh": 10.5,
+    "profit_per_dd": 0.04,
+    "lost_q": 13,
+    "n_q": 23
+   }
+  ]
+ }
+}

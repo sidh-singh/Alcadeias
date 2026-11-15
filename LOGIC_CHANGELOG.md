@@ -56,6 +56,42 @@ replayed, five quarters (13 Aug 2025 → 13 Nov 2026), each run eight times with
 
 ---
 
+## 2026-11-15 · The final ten: pre-registration (before any 2018-2020 data is read)
+
+**Status:** *in progress*. Results will be added to this entry; nothing about the selection or the test changes after this commit.
+
+**What.** Every design and published strategy tested so far is narrowed to ten per symbol by one fixed rule. The ten are then run on three windows, each on a fresh $2,000 account: eight years (13 Nov 2018 → 13 Nov 2026), five years (13 Nov 2021 → 13 Nov 2026) and the last year (13 Nov 2025 → 13 Nov 2026). The eight-year window also gets its own account for the part no study had read: 13 Nov 2018 → 31 Dec 2020, downloaded for this test (BTC's archive starts in January 2018, gold's in 2016).
+
+**The rule** (code: `backtesting/research/final10.py`; lists: `backtest_results/final10/selection.json`; evidence: `evidence.csv`)
+- Pool: every row with results in all five periods 2021, 2022, 2023, 2024-25 and 2025-26. That is 87 rows for gold and 78 for BTC: our round-4 designs plus the ten published strategies, with every parameter set, variant and sizing.
+- One yardstick: fresh $2,000 accounts per quarter, the average profit per quarter in each period. For our designs this is the median of the eight loop timings.
+- Eligible: profit in at least 4 of the 5 periods, never wiped, worst quarter's drawdown at most 50%. That leaves 20 rows for gold and 25 for BTC.
+- Ranked by profit per unit of drawdown: the average profit per quarter divided by the worst quarter's drawdown in %.
+- At most two rows of any one published strategy; each of our designs counts on its own.
+
+**The finalists** (average profit per quarter 2021 / 2022 / 2023 / 2024-25 / 2025-26, worst quarter's drawdown)
+
+| # | Gold | Evidence | DD | BTC | Evidence | DD |
+|---|---|---|---|---|---|---|
+| 1 | London breakout + H1 trend | +10 / +50 / −0 / +62 / +179 | 11% | Top 2 (ours) | −24 / +20 / +21 / +148 / +56 | 10% |
+| 2 | London breakout, 1% risk per trade | +2 / +52 / −2 / +170 / +7 | 9% | Top 3 (ours) | −61 / +43 / +18 / +102 / +157 | 12% |
+| 3 | V3-lite + 200-day trend filter | +2 / +26 / +1 / +121 / +244 | 16% | Turtle + bot votes | +189 / +116 / +58 / +139 / +163 | 33% |
+| 4 | V3-lite + 12-month momentum filter | +0 / +0 / +2 / +121 / +206 | 16% | V3-lite + 1/3/12-month momentum filter | +35 / +39 / −4 / +45 / +38 | 8% |
+| 5 | Top 3 (ours) | +28 / −38 / +26 / +111 / +555 | 40% | Turtle, 1% of equity per N | +0 / +103 / +95 / +87 / +44 | 17% |
+| 6 | 41 / 356 moving average (M5) + H1 trend | +13 / −13 / +5 / +112 / +450 | 35% | Daily volatility breakout + bot votes | +37 / +14 / +6 / +27 / +6 | 6% |
+| 7 | V3-lite (ours) | +28 / +3 / +105 / +154 / +409 | 45% | Daily volatility breakout | +49 / +19 / +15 / +30 / +6 | 8% |
+| 8 | Noise-area momentum, vol-targeted | −76 / +51 / +135 / +19 / +53 | 12% | Connors RSI(2) + bot votes | +2 / +14 / +1 / +16 / +28 | 4% |
+| 9 | 34 / 339 moving average (M5) + H1 trend | +13 / −12 / +13 / +133 / +402 | 39% | V3-lite (ours) | −26 / +25 / +8 / +48 / +121 | 12% |
+| 10 | V3-lite + H4 Supertrend filter | −37 / +14 / +5 / +76 / +105 | 30% | TSMOM (1/3/12-month) | +31 / +74 / −3 / +54 / +50 | 17% |
+
+References, run alongside but not ranked: the live logic, the owner's rules design (round 3), our designs that missed the cut (gold: Top 1 and Top 2, which lost in 2 of the 5 periods; BTC: Top 1) and the bar-level V3-lite (to compare the two engines).
+
+**How they run.** Our designs run on the tick engine: per-second replay for the long windows (eight years of raw ticks would not fit in memory) and raw ticks under eight loop timings for the last year. The published strategies and the V3-lite hybrids run on the M1-bar simulator of `external.py`, unchanged, with history from 2017 (gold) or 2018 (BTC) for the slow indicators. Rankings per symbol and window: highest final equity, lowest maximum drawdown, and the two combined (annual return ÷ maximum drawdown).
+
+**How to read the results.** Data from 2021 on helped choose these rows. The five-year and one-year windows are therefore in-sample, and only Nov 2018 – Dec 2020 is a fair test.
+
+---
+
 ## 2026-11-15 · Round 4: best combination of everything researched, and strategies from the internet
 
 **Status:** backtest-only. Nothing changed in the live bot.
