@@ -1419,12 +1419,22 @@ class MT5TradingBot:
                     with self.mt5_lock:
                         buy_positions = self.position_helper.get_buy_positions(trade_symbol)
                         sell_positions = self.position_helper.get_sell_positions(trade_symbol)
+                        # the account again, right after the positions: a switch since the poll's first check
+                        # would hand this poll another account's positions (read as "this basket closed outside")
+                        _account_bad = self._account_problem()
                         account_info = self.position_helper.get_account_info()
                         server_time = self.position_helper._get_server_time(trade_symbol)
                         _tick = mt5.symbol_info_tick(trade_symbol)     # the decision quote (add gap)
                 except TerminalReadError as e:
                     # The positions are not known this poll (not "none"): no sync, no bookkeeping, no decision.
                     self._poll_failed(symbol, str(e))
+                    time.sleep(1)
+                    if self._stop_event.is_set():
+                        return
+                    continue
+                if _account_bad is not None:
+                    # Not this bot's account any more: the poll decides nothing, as _poll_guard refuses it.
+                    self._account_refused(symbol, _account_bad)
                     time.sleep(1)
                     if self._stop_event.is_set():
                         return
