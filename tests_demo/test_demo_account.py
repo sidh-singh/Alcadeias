@@ -125,16 +125,24 @@ def test_no_order_is_sent_while_the_terminal_holds_another_account(mods):
     assert res['closed_count'] == 1 and not fake.positions and len(fake.orders) == 2
 
 
+@pytest.fixture(scope='module')
+def switch_reference(tmp_path_factory):
+    fake0, clock0 = market(1800, seed=21)
+    ref = run_bot(fake0, clock0, overrides=NO_LADDER, state_dir=tmp_path_factory.mktemp('switch_ref'))
+    assert not ref.errors, ref.errors[:3]
+    return fake0, quiet_window(ref, fake0, 60)
+
+
 @pytest.mark.slow
-def test_a_switch_to_another_account_mid_basket_changes_nothing(tmp_path):
+@pytest.mark.parametrize('lands', ['before_the_poll', 'between_the_account_check_and_the_positions_read'])
+def test_a_switch_to_another_account_mid_basket_changes_nothing(tmp_path, switch_reference, lands):
     """A live bot logs the shared terminal into the real account for a minute while this bot holds a basket; that
     account shows none of this bot's positions. Nothing is booked as closed outside the bot, nothing is sent, and
-    when the demo account is back the bot takes the same decisions and fills as without the switch."""
-    fake0, clock0 = market(1800, seed=21)
-    ref = run_bot(fake0, clock0, overrides=NO_LADDER, state_dir=tmp_path / 'ref')
-    assert not ref.errors, ref.errors[:3]
-    t0 = quiet_window(ref, fake0, 60)
-
+    when the demo account is back the bot takes the same decisions and fills as without the switch -- also when the
+    switch lands after the poll's account check, just before its positions read (finding 2 of the re-review: that
+    poll read the live account's empty positions and booked the basket as closed outside the bot, then rebuilt it):
+    the account is read again right after the positions."""
+    fake0, t0 = switch_reference
     fake, clock = market(1800, seed=21)
     stash = {}
 
@@ -145,7 +153,10 @@ def test_a_switch_to_another_account_mid_basket_changes_nothing(tmp_path):
     def back(f):
         f.positions = stash['positions']
         f.account_login, f.trade_mode = 1, f.ACCOUNT_TRADE_MODE_DEMO
-    fake.at(t0 + 0.5, to_live)
+    if lands == 'before_the_poll':
+        fake.at(t0 + 0.5, to_live)                      # the poll's first call (terminal_info) already sees it
+    else:
+        fake.on_call('positions_get', t0 + 0.5, to_live)
     fake.at(t0 + 60.5, back)
     saved = []
     run = run_bot(fake, clock, overrides=NO_LADDER, state_dir=tmp_path / 'run', on_new_bot=recording_states(saved))
