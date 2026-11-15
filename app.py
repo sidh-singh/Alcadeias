@@ -2205,16 +2205,32 @@ class MT5TradingBot:
         while True:
             try:
                 _iter_start = time.perf_counter()
-                with self.mt5_lock:
-                    mt5.symbol_select(trade_symbol, True)
-                    market_status = self.position_helper.get_market_status(
-                        trade_symbol, getattr(mt5, MARKET_STATUS_TIMEFRAME), lookback_minutes=MARKET_LOOKBACK_MINUTES
-                    )
-                    buy_positions = self.position_helper.get_buy_positions(trade_symbol)
-                    sell_positions = self.position_helper.get_sell_positions(trade_symbol)
-                    account_info = self.position_helper.get_account_info()
-                    server_time = self.position_helper._get_server_time(trade_symbol)
-                    tick = mt5.symbol_info_tick(trade_symbol)
+                # ── the terminal must answer and hold this bot's demo account, else this poll decides nothing ──
+                if not self._poll_guard(symbol):
+                    time.sleep(1)
+                    if self._stop_event.is_set():
+                        return
+                    continue
+                try:
+                    with self.mt5_lock:
+                        mt5.symbol_select(trade_symbol, True)
+                        market_status = self.position_helper.get_market_status(
+                            trade_symbol, getattr(mt5, MARKET_STATUS_TIMEFRAME), lookback_minutes=MARKET_LOOKBACK_MINUTES
+                        )
+                        buy_positions = self.position_helper.get_buy_positions(trade_symbol)
+                        sell_positions = self.position_helper.get_sell_positions(trade_symbol)
+                        account_info = self.position_helper.get_account_info()
+                        server_time = self.position_helper._get_server_time(trade_symbol)
+                        tick = mt5.symbol_info_tick(trade_symbol)
+                except TerminalReadError as e:
+                    # The positions are not known this poll (not "none"): the book is not matched with them (it would
+                    # end the trade as closed outside the bot), and nothing is decided.
+                    self._poll_failed(symbol, str(e))
+                    time.sleep(1)
+                    if self._stop_event.is_set():
+                        return
+                    continue
+                self._poll_succeeded(symbol)
                 bid = float(tick.bid) if tick is not None else None
                 ask = float(tick.ask) if tick is not None else None
                 now = _tick_time(tick)
