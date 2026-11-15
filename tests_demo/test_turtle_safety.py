@@ -76,7 +76,8 @@ def test_another_account_on_the_terminal_mid_trade_changes_nothing(reference, tm
 @pytest.mark.slow
 def test_a_terminal_restart_mid_trade_is_ridden_out(reference, tmp_path):
     """The terminal is gone for 45 s: the polls decide nothing, the bot connects again after 5 failed polls and
-    then after 5, 10 and 30 s; the fourth attempt finds it back, and the trade goes on as it would have."""
+    then after 5, 10 and 30 s; the fourth attempt finds it back, and the trade goes on as it would have. Of the three
+    failures (one reason) only the first is logged; TERMINAL_RECONNECTED counts them and the outage."""
     fake, clock = _market(_long_trip())
     a = START + QUIET[0]
     fake.down(a, a + 45)
@@ -89,7 +90,9 @@ def test_a_terminal_restart_mid_trade_is_ridden_out(reference, tmp_path):
     _same_trade(fake, reference)
     events = [e['event'] for e in run.events]
     assert not set(OUTSIDE) & set(events)
-    assert events.count('RECONNECT_FAILED') == 3 and events.count('TERMINAL_RECONNECTED') == 1
+    assert events.count('RECONNECT_FAILED') == 1 and events.count('TERMINAL_RECONNECTED') == 1
+    back = next(e['details'] for e in run.events if e['event'] == 'TERMINAL_RECONNECTED')
+    assert back['attempt'] == 4 and back['failed_attempts'] == 3 and back['outage_s'] == pytest.approx(49, abs=1)
 
 
 @pytest.mark.slow
