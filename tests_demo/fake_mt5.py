@@ -219,6 +219,7 @@ class FakeMT5:
         self.ipc_ok = True          # the connection to the terminal (lost while it is down, until initialize())
         self.connected = True       # terminal_info().connected: the terminal's connection to the trade server
         self.list_delay_ms = 0      # positions_get lists a position only this long after it opened (async terminal)
+        self.rates_none = {}        # {'M15': [(from_ms, to_ms)]}: the rates of a timeframe answer None in these windows
         self._error = (1, 'Success')
         for name, code in TF_CODES.items():
             setattr(self, 'TIMEFRAME_' + name, code)
@@ -236,6 +237,13 @@ class FakeMT5:
         """Run fn(self) once, at the first terminal call at or after terminal time t_s (seconds)."""
         self._hooks.append((int(round(t_s * 1000)), fn))
         self._hooks.sort(key=lambda h: h[0])
+
+    def fail_rates(self, tf, from_s, to_s):
+        """copy_rates_* of timeframe `tf` ('M15') answer None from terminal time from_s to to_s (seconds)."""
+        self.rates_none.setdefault(tf, []).append((int(round(from_s * 1000)), int(round(to_s * 1000))))
+
+    def _rates_fail(self, timeframe):
+        return self._within(self.rates_none.get(TF_BY_CODE[int(timeframe)], ()), self.clock.now_ms)
 
     def fail_positions(self, from_s, to_s):
         """positions_get answers None (a terminal error) from terminal time from_s to to_s (seconds)."""
@@ -385,6 +393,8 @@ class FakeMT5:
             return None
         self._sync()
         assert start_pos == 0
+        if self._rates_fail(timeframe):
+            return None
         return self.bars[TF_BY_CODE[int(timeframe)]].last(int(count))
 
     @_terminal_call
@@ -392,6 +402,8 @@ class FakeMT5:
         if symbol != self.symbol:
             return None
         self._sync()
+        if self._rates_fail(timeframe):
+            return None
         ts = int(date_from.timestamp()) if hasattr(date_from, 'timestamp') else int(date_from)
         return self.bars[TF_BY_CODE[int(timeframe)]].last(int(count), upto_t=ts)
 
@@ -593,7 +605,7 @@ def make_bot(mods, fake, symbol, run, state_dir=None, step_up=2500, max_limit=10
             'exit_reason': an.get('exit_reason'), 'rsi': dict(an.get('rsi_mtf') or {}),
             'ladder_armed': an.get('ladder_armed'), 'trend': an.get('trend'), 'vol': an.get('vol_unit_now'),
             'levels': an.get('basket_levels'), 'pause_left': an.get('pause_left_s'),
-            'virtual_balance': an.get('virtual_balance'),
+            'virtual_balance': an.get('virtual_balance'), 'no_data': an.get('no_data'),
             'votes': {tf: ((v or {}).get('rsi', {}).get('sign'), (v or {}).get('macd', {}).get('sign'))
                       for tf, v in (an.get('slopes') or {}).items()},
         })
