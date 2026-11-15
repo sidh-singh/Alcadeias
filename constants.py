@@ -277,3 +277,25 @@ VIRTUAL_START_DATE = '2026-11-16'    #   commission of the deals with its MAGIC)
 # VOL_CAP_USD_PER_UNIT = 12.0
 # LOSS_COOLDOWN_S = 14400
 # MAX_ADDS = 0
+
+# ─── Design of this branch (demo_hedging_xauusd8): XAU Top 1 ───
+# The example block 'XAU Top 1' above, uncommented. Everything not set here stays at the live value.
+DESIGN_NAME = 'xau_top1'
+OPEN_SCORE_WEIGHTS = {'H1': 1}
+ENTRY_AGREE_S = 0
+FORCE_CLOSE_ENABLED = False
+TREND_TF = 'H1'
+VOL_TF = 'H1'
+VOL_LEN = 24
+TARGET_USD_PER_UNIT = None
+STOP_LOSS_USD_PER_UNIT = None
+TARGET_VOL = 10.0
+STOP_VOL = 8.0
+VOL_CAP_USD_PER_UNIT = 0.0
+LOSS_COOLDOWN_S = 14400
+MAX_ADDS = 1
+LADDER_TRIGGER = 'macd_turn'
+LADDER_TFS = ['M5', 'M15', 'H1', 'H1', 'H1']
+LADDER_GAP_VOL = 1.0
+LADDER_MULTIPLIERS = [1, 1, 1, 1]
+VIRTUAL_START_DATE = '2026-11-15'    # the demo forward test's virtual $2,000 counts this bot's deals from this UTC day
