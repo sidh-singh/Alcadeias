@@ -126,6 +126,30 @@ history (the live code never meets one), a loop that does not take exactly one s
 pass, and the 90 s / 3.5 min close-only durations themselves, which are read off Exness's
 published behaviour and not measured.
 
+**Demo branches.** A demo branch (`demo_hedging_<symbol><n>`) implements the levers of a backtest
+design behind a set of constants at the end of its `constants.py` (`reference.CONTRACT_NAMES`:
+`TREND_TF`, `VOL_TF`, `TARGET_VOL`, `STOP_VOL`, `LOSS_COOLDOWN_S`, `MAX_ADDS`, `LADDER_TRIGGER`, ...;
+their defaults are the live bot) and isolates itself on a shared account with `MAGIC`, an order
+comment and a virtual balance. The reference engine recognises such a root and sets those constants
+from the `BacktestConfig` (`reference.design_constants`) instead of refusing the design; `SimMT5`
+serves what such a branch reads (magic numbers and comments on orders, positions and deals, the deal
+history, the contract size and volume limits, closed bars). One command checks a branch:
+
+```
+python -m backtesting.engine.demo_parity <branch dir> XAUUSDm "Top 1" "2026-11-02 22:00" "2026-11-03 14:00"
+```
+
+It builds the design exactly as `backtest_results/improve/round4/top3_v4_<SYMBOL>_designs.json` has it
+(overrides of `BacktestConfig.live`), then (1) checks that the branch's constants and `symbols.json` hold
+that design, (2) replays the branch's `app.py` on raw ticks against the fast engine with the parity
+timing and prints signals, baskets, fills, balance and the first divergence with the polls around it,
+and (3) by default runs the replay on a shared account (a larger balance, other positions and trades,
+an own trade before the virtual start) and checks that every order carries the branch's magic and
+comment. `--plain` drops (3); `--set field=value` replays a variant (for example scaled-down distances
+that fire every rule within an hour of the bundled ticks) while still checking the branch against the
+design row. A real-parameter window takes about 12 ms per live poll, so roughly 16 minutes per day of
+ticks. The Turtle branches (`STRATEGY = 'turtle'`) have no fast-engine counterpart and are refused.
+
 ## What is simulated, and how
 
 | Aspect | Model |
@@ -256,7 +280,7 @@ strategies whose trades overlap (several positions at once), tested in `tests/te
 backtesting/
   config.py            BacktestConfig, symbol specs, BacktestConfig.live()
   data/                exness.py (download) · store.py (tick store) · quality.py
-  engine/              kernels.py · fast.py · reference.py · parity.py
+  engine/              kernels.py · fast.py · reference.py · parity.py · demo_parity.py
   analysis/            metrics.py · diagnostics.py · signal.py · sweep.py · robustness.py · holdout.py
   viz/                 report.py · index.py · markdown.py · studio.py · replay.py · snapshot.py · theme.py
   experiments.py       the pipeline behind backtest_results/
@@ -276,6 +300,7 @@ BTC ticks and 45 minutes of real gold ticks with their warm-up history.
 | `test_live_strategy_characterization.py` | the rules of the live `strategy.py` as they are today, so an accidental edit is caught |
 | `test_parity.py` | the fast engine against the real `app.py` loop on the bundled ticks: every poll, signal, score, fill and the final balance |
 | `test_engine_invariants.py` | the account adds up; baskets close what they opened; cooldown, window and sizing rules; determinism; no look-ahead; per-second series = raw ticks |
+| `test_demo_parity.py` | what the simulated terminal serves a demo branch (magic numbers and comments on orders, positions and deals; the deal history; contract size and volume limits; closed bars; a demo account record; requests the MetaTrader5 package refuses), the demo contract driven from a configuration and what it refuses, the ladder RSI compared for the tiers the kernel writes, the design rows and the static, isolation and shared-account helpers of `demo_parity` |
 | `test_live_fault_injection.py` | three weaknesses of the live loop, demonstrated on the real code: a failed position read, a restart, a rejected order |
 | `test_levers_and_reports.py` | the ladder shape and spacing levers, the price and time stops, the per-lot target and the broker close-only window do what they say; reports, diagnostics and sweep grids build |
 | `test_lever_rules.py` | the rules no live code stands behind, on the engine's own fills and poll trace: an independent replay of the decision rules with several levers on at once; one property per remaining lever and setting (confirmation times, hold, direction and hour filters, thresholds, cooldown, split weights and grey-fill, exit order, book and profit bar, ladder levels and timeframes); closed-bar signals and other indicator settings against `indicator.py`; a BUY / SELL mirror run; every lever inert at its off value |

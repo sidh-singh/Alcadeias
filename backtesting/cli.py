@@ -94,7 +94,18 @@ def _config(args) -> BacktestConfig:
     if getattr(args, "leverage", None) is not None:
         kw["leverage"] = args.leverage
     kw.update(_parse_sets(getattr(args, "set", None)))
-    return BacktestConfig.live(args.symbol, repo_root=_live_root(args), **kw)
+    root = _live_root(args)
+    # a demo branch keeps its design's levers in constants BacktestConfig.live() does not read: add them
+    from .config import load_live_constants
+    from .engine.reference import contract_of, contract_overrides
+    c = load_live_constants(root)
+    try:
+        demo = contract_of(c)
+    except ValueError as e:
+        raise SystemExit(f"--live-root {root}: {e}")
+    if demo:
+        kw = {**contract_overrides(c), **kw}
+    return BacktestConfig.live(args.symbol, repo_root=root, **kw)
 
 
 def _write_json(path, obj) -> None:
