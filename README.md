@@ -1,7 +1,7 @@
 # DEMO ONLY · demo_hedging_xauusd8 · XAUUSDm · Top 1
 
-This branch runs **Top 1** on the **demo** account (the `demo` block of slot 8's credentials, the same
-account every slot uses for demo). It is a copy of `hedging_xauusd8`
+This branch runs **Top 1** on the **demo** account of slot 8 (`Exness-MT5Trial14`, login 416608971), which it shares only with
+`demo_hedging_btcusd8`. It is a copy of `hedging_xauusd8`
 (the same files and launchers) with the strategy changed. **Live mode is disabled:** `mt5_credentials.json` holds only the
 `demo` block, and the launchers refuse `live`.
 
@@ -53,8 +53,8 @@ Both launchers start app.py again 30 s after it exits (a crash, a lost terminal)
 
 ## What keeps it apart from the other demo bots
 
-All six demo branches (`demo_hedging_xauusd6/7/8`, `demo_hedging_btcusd6/7/8`) use the same demo account, so each bot
-is fenced off:
+Each slot has its own demo account, used by its gold bot and its BTC bot (slot 8: `demo_hedging_xauusd8` and
+`demo_hedging_btcusd8`), so each bot is fenced off:
 
 | | This bot |
 |---|---|
@@ -63,5 +63,5 @@ is fenced off:
 | Output folder (JSON, logs, daily trades) | `C:\Alcadeias\demo_hedging_xauusd8` |
 | Dashboard port | 8063 |
 
-The account's own balance, equity and margin are shared by all six bots. Each strategy's own result is the sum of the
+The account's own balance, equity and margin are shared by the slot's two bots. Each strategy's own result is the sum of the
 deals with its magic number.
