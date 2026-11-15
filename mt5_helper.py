@@ -50,12 +50,23 @@ class MT5PositionHelper:
         """
         self.mt5 = mt5_instance
         self.risk_reward_ratio = RISK_REWARD_RATIO
-        
+        # Called with the request before every order_send (opens, adds, closes, SL/TP changes); False = the
+        # request is not sent (order_send's "no answer", None). app.py puts its demo-account check here.
+        self.order_guard = None
+
         # Store MT5 constants for building per-call request dicts
         self._order_time_gtc = self.mt5.ORDER_TIME_GTC
         self._order_filling_ioc = self.mt5.ORDER_FILLING_IOC
         self._trade_action_deal = self.mt5.TRADE_ACTION_DEAL
-    
+
+    def _send(self, request: dict):
+        """order_send of every request of this bot, behind order_guard: a request the guard refuses is not sent
+        and answered None, as order_send answers a request it could not deliver."""
+        guard = self.order_guard
+        if guard is not None and not guard(request):
+            return None
+        return self.mt5.order_send(request)
+
     def get_buy_positions(self, symbol: str) -> Optional[Dict]:
         """
         Get detailed position information for this bot's BUY positions (MAGIC only)
@@ -560,7 +571,7 @@ class MT5PositionHelper:
             Order result from MT5
         """
         request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_BUY, sl, tp, auto_sltp)
-        order_status = self.mt5.order_send(request)
+        order_status = self._send(request)
         time.sleep(0.1)
         return order_status
     
@@ -579,7 +590,7 @@ class MT5PositionHelper:
             Order result from MT5
         """
         request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_SELL, sl, tp, auto_sltp)
-        order_status = self.mt5.order_send(request)
+        order_status = self._send(request)
         time.sleep(0.1)
         return order_status
     
@@ -655,8 +666,8 @@ class MT5PositionHelper:
                 "type_filling": self.mt5.ORDER_FILLING_IOC,
             })
             
-            order_result = self.mt5.order_send(request)
-            
+            order_result = self._send(request)
+
             if order_result is None:
                 result['errors'].append(f"order_send failed for position {pos.ticket}, no response")
                 result['failed_count'] += 1
