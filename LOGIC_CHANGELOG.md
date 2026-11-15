@@ -56,6 +56,51 @@ replayed, five quarters (13 Aug 2025 → 13 Nov 2026), each run eight times with
 
 ---
 
+## 2026-11-15 · René Balke's strategies (BM Trading GmbH), rebuilt and backtested
+
+**Status:** *done* (backtest only; the live files are unchanged). Full write-up: `backtest_results/balke/BALKE.md`. Code: `backtesting/research/balke.py`; tests: `tests/test_balke.py`.
+
+**What.**
+- René Balke sells Expert Advisors on MQL5 and runs a YouTube channel. His newest product, the Four Edge EA (31 Oct 2026, v3.29), bundles the four strategies he trades live: Go Long, Turnaround Tuesday, Range Breakout and ATR Breakout, in 14 instances with published settings files.
+- The four were rebuilt from his settings files, guide and videos. Eight of his 14 instances ran on our Exness data, each with his own sizing on $2,000 and $10,000 accounts:
+  - gold: Range Breakout and ATR Breakout;
+  - BTC: Range Breakout;
+  - US30: Range Breakout, Go Long and Turnaround Tuesday;
+  - USTEC: Go Long and Turnaround Tuesday.
+- Gold and BTC also ran on the bot's unit rule. The windows were the final ten's on gold and BTC, and Jul 2020 – Nov 2026 on the indices (the Exness index archive starts in Jun 2020, downloaded for this study).
+- Nothing was tuned: every setting is his.
+
+**New in the simulator.** `multi_account` is an account for trades that overlap (several positions at once, as his hedging account holds them). On trades that never overlap it reproduces the single-position kernel to the cent (tested).
+
+**Results** (his sizing on $10,000 unless said; DD = deepest fall from an equity peak)
+
+| | Result | Reading |
+|---|---|---|
+| Gold Range Breakout, 8 years | $22,995 (+11.0% a year), DD 24.0%. Bot's unit rule: $9,474, DD 29.4% (V3-lite: $11,957, DD 33.0%) | Near V3-lite on equal sizing, and nearly uncorrelated with it (daily 0.10). Shared half and half with V3-lite on one account (unit rule, closed trades), it ended above V3-lite alone in every window: $15,092 against $11,957 over 8 years, with drawdown 14.5% against 19.8%. The drawdown rose a little over 5 years and in 2018 – 2020 |
+| Gold ATR Breakout, 8 years | $19,126 (+8.4% a year), DD 27.1%, profit factor 1.16, 140 trades a year | Matches his test (1.15, 141 a year) and his live months, but only when every signal is traded (several positions at once). One at a time: +2.6% a year |
+| BTC Range Breakout | 8 years: $5,536, DD 80.2%. At a 0.02% spread throughout: $168,113. Last year: +46.8%, DD 15.1% | The spread decides it: Exness's BTC spread fell from 0.22% of the price (2018) to 0.017% (2026) |
+| Turnaround Tuesday, Jul 2020 – Nov 2026 | US30 +2.3% a year, DD 6.2%, profit factor 1.57; USTEC +5.1%, DD 5.7%, 1.92 | Steadiest idea in the study: a profit in every calendar year on both indices, but small |
+| Go Long, Jul 2020 – Nov 2026 | US30 +3.9% a year (holding: +11.6%); USTEC +1.9% (holding: +17.3%), DD 44% | Exness's index spreads before 2025 took most of its edge |
+| His 8 instances on one account | +39.6% a year from Jul 2020, but DD 75.5% (daily marks): 2022 −57% | His sizing stacks the instances on one balance; his own main account's MQL5 record shows a 77.8% relative drawdown |
+
+**Found by the independent review, fixed before the final runs.**
+- Turnaround Tuesday read the price one minute after its decision.
+- The BTC Range Breakout dropped every US spring-forward Sunday.
+- Three edge cases in the new multi-position kernel.
+- `years_*.csv` money columns for the $10,000 accounts were stored in $2,000 units.
+- The V3-lite combination was first computed with proportional sizing; it is now a unit-rule trade replay.
+
+All of these were fixed and the tests extended (33 in `tests/test_balke.py`). Separately, Exness's index CFDs reopen at 18:30 New York in US summer time, so his 01:05 server-time index entries are taken at the first quote after it.
+
+**Conclusions.**
+- **Gold Range Breakout is the one outside idea worth a further test,** as a complement to V3-lite. It needs a tick-level test of breakout fills (real fills slip) and a demo forward run.
+- **ATR Breakout** has a small edge and needs several positions at once.
+- **BTC Range Breakout** works only at today's spreads.
+- **The index strategies** are outside the bot's markets.
+- **Data.** No new hold-out data was used: every year since 2018 has been read before.
+
+---
+
 ## 2026-11-15 · The final ten: 8 years, 5 years, the last year, and the never-read 2018 – 2020
 
 **Status:** *done* (backtest only; the live files are unchanged). Full write-up: `backtest_results/final10/FINAL10.md`. The selection and protocol below were pre-registered in commit `5d1e10e`, before any 2018 – 2020 data was read.

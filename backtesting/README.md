@@ -243,6 +243,13 @@ It is off by default (`tests/test_regime_filter.py`). The final ten
 `python -m backtesting.research.final10`) uses it to run V3-lite with a published strategy's trend
 as its filter.
 
+René Balke's public strategies (his Four Edge EA: Range Breakout, ATR Breakout, Go Long, Turnaround
+Tuesday, with his published settings) are rebuilt in `backtesting/research/balke.py` and run on gold,
+BTC and the US30 / USTEC index CFDs
+([`backtest_results/balke/BALKE.md`](../backtest_results/balke/BALKE.md),
+`python -m backtesting.research.balke run`, then `report`). It adds `multi_account`, an account for
+strategies whose trades overlap (several positions at once), tested in `tests/test_balke.py`.
+
 ## Layout
 
 ```
