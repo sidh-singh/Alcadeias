@@ -365,6 +365,10 @@ class MT5TradingBot:
         self.state_dir = None
         self._usd_per_price = {}                 # trade symbol -> contract_size x mtqty (USD per unit per 1.0 of price)
         self._virtual_balance_last = None        # last virtual balance read from the deal history
+        # The account this bot trades on: the demo login initialize_mt5 found (None before it ran; a replay that
+        # does not call it takes the first account it sees) and why the account seen last was refused (None = ok).
+        self._account_login = None
+        self._account_bad = None
 
     # ── Day-of-week mapping for trading_window config ──
     _DAY_NAME_TO_NUM = {
@@ -468,6 +472,9 @@ class MT5TradingBot:
         
     def load_credentials(self):
         """Step 1: Load MT5 credentials from JSON file"""
+        if DEMO_BRANCH and self.mode != 'demo':
+            print(f"✗ This is the demo branch {DEMO_BRANCH}: mode '{self.mode}' is refused, it trades on demo only")
+            return False
         try:
             json_path = Path(__file__).parent / 'mt5_credentials.json'
             with open(json_path, 'r') as f:
@@ -573,7 +580,15 @@ class MT5TradingBot:
             print("✗ Failed to get account info")
             mt5.shutdown()
             return False
-        
+
+        # Only ever this branch's demo account: a demo, hedging account with the login of the credentials
+        problem = self._login_problem(account_info)
+        if problem:
+            print(f"✗ Refused: {problem}")
+            mt5.shutdown()
+            return False
+        self._account_login = account_info.login
+
         print(f"\n{'='*60}")
         print(f"  Login Successful - {self.mode.upper()} Account")
         print(f"{'='*60}")
@@ -588,6 +603,7 @@ class MT5TradingBot:
         
         # Initialize position helper with mt5 instance
         self.position_helper = MT5PositionHelper(mt5)
+        self._install_order_guard()
 
         # Resolve configured symbols to broker symbol names (suffix/alias safe)
         self._build_symbol_map()
@@ -1008,6 +1024,116 @@ class MT5TradingBot:
         done = (getattr(mt5, 'TRADE_RETCODE_DONE', 10009), getattr(mt5, 'TRADE_RETCODE_DONE_PARTIAL', 10010))
         return getattr(response, 'retcode', None) in done
 
+    # ───────────────────── the demo account: the only account this bot trades on ─────────────────────
+    @staticmethod
+    def _last_error():
+        try:
+            return mt5.last_error()
+        except Exception as e:          # a broken terminal connection can raise instead of answering
+            return repr(e)
+
+    def _account_problem(self, acct=None, check_login=True):
+        """
+        Why the account the terminal is logged into is not this bot's right now (None = it is). Read at the start
+        of every poll and before every order: with DEMO_BRANCH set it must be a demo account
+        (trade_mode ACCOUNT_TRADE_MODE_DEMO) and the login initialize_mt5 remembered. All demo bots attach to one
+        terminal, so another process (a live bot) can log it into another account at any time. A bot that was not
+        started through initialize_mt5 (a replay) takes the first demo account it sees as its own, so a later
+        switch is still caught.
+        """
+        if acct is None:
+            acct = mt5.account_info()
+        if acct is None:
+            return f'account_info() returned None (last_error {self._last_error()})'
+        login = getattr(acct, 'login', None)
+        demo = getattr(mt5, 'ACCOUNT_TRADE_MODE_DEMO', 0)
+        mode = getattr(acct, 'trade_mode', None)
+        if DEMO_BRANCH and mode != demo:
+            return f'account {login} is not a demo account (trade_mode {mode}, demo is {demo})'
+        if check_login:
+            if self._account_login is None:
+                self._account_login = login
+            elif login != self._account_login:
+                return f'the terminal is logged into account {login}, not the demo account {self._account_login}'
+        return None
+
+    def _login_problem(self, acct):
+        """Why the account initialize_mt5 has just logged into may not be traded (None = it may): a demo account
+        (DEMO_BRANCH), a hedging account (the basket holds one position per fill), and the login of the
+        credentials (not one another process switched the terminal to in the meantime)."""
+        problem = self._account_problem(acct, check_login=False)
+        if problem:
+            return problem
+        hedging = getattr(mt5, 'ACCOUNT_MARGIN_MODE_RETAIL_HEDGING', 2)
+        mode = getattr(acct, 'margin_mode', None)
+        if mode != hedging:
+            return f'account {acct.login} is not a hedging account (margin_mode {mode}, hedging is {hedging})'
+        want = (self.credentials or {}).get('login_id')
+        if want is not None:
+            try:
+                same = int(acct.login) == int(want)
+            except (TypeError, ValueError):
+                same = False
+            if not same:
+                return f'the terminal is logged into account {acct.login}, not the login of the credentials ({want})'
+        return None
+
+    def _account_refused(self, symbol, problem, request=None, server_time=None):
+        """The account is not this bot's: a WARNING and an ERROR event when the problem starts or changes."""
+        if problem == self._account_bad:
+            return
+        self._account_bad = problem
+        print(f"[{symbol}] WARNING: not trading: {problem}")
+        details = {'problem': problem, 'demo_login': self._account_login}
+        if request is not None:
+            details['request'] = {k: request.get(k) for k in ('action', 'symbol', 'type', 'volume', 'position')
+                                  if k in request}
+        self._log_event(symbol, 'ACCOUNT_REFUSED', 'ERROR', details, server_time=server_time)
+
+    def _account_ok(self, symbol, server_time=None):
+        """At the start of a poll: True when the terminal holds this bot's demo account. Otherwise the poll decides
+        nothing -- no sync with the positions of another account (they would book this bot's basket as closed),
+        no order -- until the account is right again (then an ACCOUNT_OK event)."""
+        problem = self._account_problem()
+        if problem is not None:
+            self._account_refused(symbol, problem, server_time=server_time)
+            return False
+        if self._account_bad is not None:
+            print(f"[{symbol}] note: the terminal holds the demo account {self._account_login} again: trading")
+            self._log_event(symbol, 'ACCOUNT_OK', 'SIGNAL', {'login': self._account_login, 'was': self._account_bad},
+                            server_time=server_time)
+            self._account_bad = None
+        return True
+
+    def _order_guard(self, request):
+        """Before every order_send (MT5PositionHelper._send): account_info() is read again and nothing is sent
+        unless it is still the demo account; a refused request is an ERROR event, and the polls after it decide
+        nothing until the account is right again (_account_ok)."""
+        problem = self._account_problem()
+        if problem is None:
+            return True
+        self._account_refused(self._symbol_of(request.get('symbol')), problem, request=request)
+        return False
+
+    def _symbol_of(self, trade_symbol):
+        """The configured symbol of a terminal symbol name (the log files are named by it)."""
+        for sym, resolved in self.symbol_map.items():
+            if resolved == trade_symbol:
+                return sym
+        return trade_symbol or (self.symbols[0] if self.symbols else '?')
+
+    def _install_order_guard(self):
+        """_order_guard in front of every order_send of the helper the bot trades through (initialize_mt5 makes a
+        new helper; a replay brings its own)."""
+        helper = self.position_helper
+        if helper is not None and getattr(helper, 'order_guard', None) is None:
+            helper.order_guard = self._order_guard
+
+    def _poll_guard(self, symbol):
+        """At the start of every poll: True when the poll may read the terminal and decide."""
+        self._install_order_guard()
+        return self._account_ok(symbol)
+
     def process_symbol(self, symbol):
         """
         Process a single symbol (will be called in separate threads)
@@ -1076,6 +1202,13 @@ class MT5TradingBot:
             try:
                 # Start of one full iteration's work (excludes the end-of-cycle sleep)
                 _iter_start = time.perf_counter()
+
+                # ── The terminal must hold this bot's demo account, else this poll decides nothing ──
+                if not self._poll_guard(symbol):
+                    time.sleep(1)
+                    if self._stop_event.is_set():
+                        return
+                    continue
 
                 # ── Gather MT5 data under lock (split into small windows for fairness) ──
                 with self.mt5_lock:
@@ -2243,6 +2376,8 @@ def main():
                         help='Run only this symbol (e.g. BTCUSDm). '
                              'Recommended: run one process per symbol.')
     args = parser.parse_args()
+    if DEMO_BRANCH and args.mode != 'demo':
+        parser.error(f"this is the demo branch {DEMO_BRANCH}: mode '{args.mode}' is refused, it trades on demo only")
 
     # Create bot instance and execute job
     bot = MT5TradingBot(mode=args.mode, target_symbol=args.symbol)
