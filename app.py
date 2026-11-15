@@ -324,7 +324,7 @@ class MT5TradingBot:
         from datetime import datetime
         
         # Per-symbol folder: C:\Alcadeias\daily_trade\{symbol}\
-        output_dir = os.path.join(r'C:\Alcadeias', 'daily_trade', symbol)
+        output_dir = os.path.join(OUTPUT_DIR, DAILY_TRADE_SUBDIR, symbol)
         os.makedirs(output_dir, exist_ok=True)
         
         # Use server time for the filename so it matches broker's trading day
