@@ -1187,11 +1187,35 @@ def build_slope_panel(symbol, analysis, last_updated=''):
 
     status_bits = []
     if not entry_allowed:
-        status_bits.append('⏳ entry cooldown')
+        _left = analysis.get('pause_left_s')
+        try:
+            _left = float(_left) if _left is not None else None
+        except (TypeError, ValueError):
+            _left = None
+        if _left and _left > 0:
+            status_bits.append(f'⏳ entry pause {_left / 3600.0:.1f} h left'
+                               + (' (after a loss)' if analysis.get('last_close_lost') else ''))
+        else:
+            status_bits.append('⏳ entry cooldown')
     if entry_chop_block:
         status_bits.append('🌀 waiting: fast/slow disagree')
     if exit_reason:
         status_bits.append(f'exit: {exit_reason}')
+    # demo design (constants.py design levers): the name, the H1 trend and the open basket's fixed distances
+    _design = analysis.get('design')
+    if _design and _design != 'live':
+        status_bits.append(f'design {_design}')
+    _trend = analysis.get('trend')
+    if _trend is not None:
+        status_bits.append('trend ' + {1: '▲ up', -1: '▼ down'}.get(_trend, '– none'))
+    _lv = analysis.get('basket_levels') or {}
+    if isinstance(_lv, dict) and (_lv.get('stop_usd') is not None or _lv.get('target_usd') is not None):
+        _fmt = lambda x: '-' if x is None else f'${x:,.2f}'
+        status_bits.append(f"stop {_fmt(_lv.get('stop_usd'))} · target {_fmt(_lv.get('target_usd'))}"
+                           + (' · add armed' if _lv.get('ladder_armed') else ''))
+    _vb = analysis.get('virtual_balance')
+    if isinstance(_vb, (int, float)):
+        status_bits.append(f'virtual balance ${_vb:,.2f}')
     # Structural 4H/1H/15M slope read, shown for comparison (the live entry uses the weighted score).
     if structural != decision:
         status_bits.append(f'structural {structural}')
@@ -1230,7 +1254,10 @@ def build_slope_panel(symbol, analysis, last_updated=''):
             # OPEN score meter (config-driven timeframes -> fresh entry + DCA ladder-add gate)
             _score_gauge(open_score, _score_axis(OPEN_SCORE_WEIGHTS)),
             # FORCE-CLOSE score meter (config-driven -> force-close; +$unit target books profit)
-            _exit_gauge(fc_score, 'FORCE-CLOSE SCORE', _fmt_weights(FORCE_CLOSE_SCORE_WEIGHTS),
+            _exit_gauge(fc_score,
+                        'FORCE-CLOSE SCORE' if analysis.get('force_close_enabled', True)
+                        else 'FORCE-CLOSE OFF · ENTRY AGREEMENT ONLY',
+                        _fmt_weights(FORCE_CLOSE_SCORE_WEIGHTS),
                         FORCE_CLOSE_S, COLORS['sell'], '🔴', _score_axis(FORCE_CLOSE_SCORE_WEIGHTS),
                         entry_agree=ENTRY_AGREE_S),
             # slope grid (one row per fetched timeframe, slowest -> fastest; feeds the section scores)
