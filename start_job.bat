@@ -63,9 +63,18 @@ if not exist ".\deps_installed.flag" (
     echo Dependencies already installed, skipping...
 )
 
-REM === Run job via launch_strategy.py with mode parameter ===
+REM === Run the job; on demo it is started again 30 s after app.py exits (a crash, a lost terminal) ===
+REM     Close this window (or Ctrl+C, then Y) to stop it.
+:run_bot
 echo Running job on %MODE% account
 "%PYTHON_EXE%" -X utf8 -u app.py %MODE% --symbol BTCUSDm
+set "BOT_EXIT=%ERRORLEVEL%"
+if /i not "%MODE%"=="demo" goto finished
+echo.
+echo ============= app.py exited (code %BOT_EXIT%) - restarting in 30 s =============
+ping -n 31 127.0.0.1 > nul
+goto run_bot
 
+:finished
 echo.
 echo ============= SCRIPT FINISHED =============

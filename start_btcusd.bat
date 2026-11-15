@@ -42,7 +42,17 @@ if not exist ".\deps_installed.flag" (
     echo Dependencies already installed, skipping...
 )
 
+REM === Run the bot; on demo it is started again 30 s after app.py exits (a crash, a lost terminal) ===
+REM     Close this window (or Ctrl+C, then Y) to stop it.
+:run_bot
 "%PYTHON_EXE%" -X utf8 -u app.py %MODE% --symbol BTCUSDm
+set "BOT_EXIT=%ERRORLEVEL%"
+if /i not "%MODE%"=="demo" goto stopped
+echo.
+echo ============= BTCUSDm PROCESS EXITED (code %BOT_EXIT%) - restarting in 30 s =============
+ping -n 31 127.0.0.1 > nul
+goto run_bot
 
+:stopped
 echo.
 echo ============= BTCUSDm PROCESS STOPPED =============

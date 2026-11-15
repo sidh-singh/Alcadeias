@@ -11,10 +11,13 @@ The terminal is a hedging account on one symbol:
   * order_send fills market orders at the ask (buy) / bid (sell) and closes at the bid / ask, writing
     DEAL_ENTRY_IN / DEAL_ENTRY_OUT deals with the request's magic and comment;
   * history_deals_get(date_from, date_to) returns the deals in that time range;
-  * account_info() reports a demo, hedging account (login / trade_mode / margin_mode can be changed).
-Failures can be injected (refused orders, failed closes, no history), and anything can be scheduled at a
-terminal time with at(t_s, fn) (an account switch ...).
+  * account_info() reports a demo, hedging account (login / trade_mode / margin_mode can be changed);
+  * terminal_info(); while the terminal is down (down()) every call answers None, and the connection stays lost
+    until initialize() succeeds again, as with the MetaTrader5 package after a terminal restart.
+Failures can be injected (refused orders, failed closes, no history, a terminal down, positions_get errors), and
+anything can be scheduled at a terminal time with at(t_s, fn) (an account switch ...).
 """
+import functools
 import math
 import sys
 import types
@@ -139,6 +142,17 @@ class Bars:
         return out
 
 
+def _terminal_call(fn):
+    """A call into the terminal: None (last_error -10004) while the connection to the terminal is lost."""
+    @functools.wraps(fn)
+    def call(self, *a, **k):
+        if not self._ipc_alive():
+            self._error = (-10004, 'No IPC connection')
+            return None
+        return fn(self, *a, **k)
+    return call
+
+
 class FakeMT5:
     """The slice of the MetaTrader5 module the bot uses, as a hedging account on one symbol."""
 
@@ -194,6 +208,9 @@ class FakeMT5:
         self.fail_close_tickets = set()
         self.history_none = False   # history_deals_get returns None (terminal error)
         self.positions_none = []    # [(from_ms, to_ms)]: positions_get answers None (an error) in these windows
+        self.terminal_down = []     # [(from_ms, to_ms)]: the terminal is gone (restarted, closed); see down()
+        self.ipc_ok = True          # the connection to the terminal (lost while it is down, until initialize())
+        self.connected = True       # terminal_info().connected: the terminal's connection to the trade server
         self._error = (1, 'Success')
         for name, code in TF_CODES.items():
             setattr(self, 'TIMEFRAME_' + name, code)
@@ -216,9 +233,20 @@ class FakeMT5:
         """positions_get answers None (a terminal error) from terminal time from_s to to_s (seconds)."""
         self.positions_none.append((int(round(from_s * 1000)), int(round(to_s * 1000))))
 
+    def down(self, from_s, to_s):
+        """The terminal is gone from terminal time from_s to to_s (seconds): every call answers None, initialize()
+        fails; after to_s the connection stays lost until the bot calls initialize() again."""
+        self.terminal_down.append((int(round(from_s * 1000)), int(round(to_s * 1000))))
+
     @staticmethod
     def _within(windows, now_ms):
         return any(a <= now_ms < b for a, b in windows)
+
+    def _ipc_alive(self):
+        self._run_hooks()
+        if self._within(self.terminal_down, self.clock.now_ms):
+            self.ipc_ok = False
+        return self.ipc_ok
 
     def _run_hooks(self):
         now = self.clock.now_ms
@@ -244,18 +272,33 @@ class FakeMT5:
     # ── session ──
     def initialize(self, *a, **k):
         self.calls.append(('initialize', self.clock.now_ms))
+        self._run_hooks()
+        if self._within(self.terminal_down, self.clock.now_ms):
+            self._error = (-10003, 'IPC initialize failed, MetaTrader 5 x64 not found')
+            return False
+        self.ipc_ok = True
+        self._error = (1, 'Success')
         return True
 
+    @_terminal_call
     def login(self, *a, **k):
         self.calls.append(('login', self.clock.now_ms))
         return True
 
     def shutdown(self):
         self.calls.append(('shutdown', self.clock.now_ms))
+        self.ipc_ok = False
         return True
 
+    @_terminal_call
     def version(self):
         return (5, 0, 4738)
+
+    @_terminal_call
+    def terminal_info(self):
+        self._error = (1, 'Success')
+        return types.SimpleNamespace(connected=self.connected, trade_allowed=True, tradeapi_disabled=False,
+                                     build=4738, name='FakeMT5', company='Fake', path='')
 
     def last_error(self):
         return self._error
@@ -266,6 +309,7 @@ class FakeMT5:
             return round2((b - p['price_open']) * p['volume'] * self.contract)
         return round2((p['price_open'] - a) * p['volume'] * self.contract)
 
+    @_terminal_call
     def account_info(self):
         b, a = self.quote()
         profit = sum(self._pos_profit(p, b, a) for p in self.positions) if b is not None else 0.0
@@ -277,6 +321,7 @@ class FakeMT5:
                                      margin_level=(equity / margin * 100.0) if margin else 0.0, profit=profit)
 
     # ── symbols / quotes / bars ──
+    @_terminal_call
     def symbol_info(self, symbol):
         if symbol != self.symbol:
             return None
@@ -286,14 +331,17 @@ class FakeMT5:
             info['trade_contract_size'] = self.contract
         return types.SimpleNamespace(**info)
 
+    @_terminal_call
     def symbol_select(self, symbol, enable=True):
         # the bot's first call of every loop pass: it stamps the pass (as the backtester's reference replay does)
         self.iter_t = self.clock.now_ms
         return symbol == self.symbol
 
+    @_terminal_call
     def symbols_get(self, pattern=None):
         return ()
 
+    @_terminal_call
     def symbol_info_tick(self, symbol):
         if symbol != self.symbol:
             return None
@@ -304,6 +352,7 @@ class FakeMT5:
         return types.SimpleNamespace(time=int(self.t_ms[i] // 1000), time_msc=int(self.t_ms[i]),
                                      bid=float(self.bid[i]), ask=float(self.ask[i]), last=0.0, volume=0)
 
+    @_terminal_call
     def copy_rates_from_pos(self, symbol, timeframe, start_pos, count):
         if symbol != self.symbol:
             return None
@@ -311,6 +360,7 @@ class FakeMT5:
         assert start_pos == 0
         return self.bars[TF_BY_CODE[int(timeframe)]].last(int(count))
 
+    @_terminal_call
     def copy_rates_from(self, symbol, timeframe, date_from, count):
         if symbol != self.symbol:
             return None
@@ -318,10 +368,12 @@ class FakeMT5:
         ts = int(date_from.timestamp()) if hasattr(date_from, 'timestamp') else int(date_from)
         return self.bars[TF_BY_CODE[int(timeframe)]].last(int(count), upto_t=ts)
 
+    @_terminal_call
     def copy_ticks_from(self, *a, **k):
         return None
 
     # ── positions / orders / deals ──
+    @_terminal_call
     def positions_get(self, symbol=None, **k):
         b, a = self.quote()
         if self._within(self.positions_none, self.clock.now_ms):
@@ -364,6 +416,7 @@ class FakeMT5:
             price=price, commission=0.0, swap=0.0, profit=profit, fee=0.0, symbol=self.symbol,
             comment=comment, external_id=''))
 
+    @_terminal_call
     def order_send(self, request):
         self.orders.append(dict(request, _t_ms=self.clock.now_ms))
         b, a = self.quote()
@@ -398,6 +451,7 @@ class FakeMT5:
         return types.SimpleNamespace(retcode=self.TRADE_RETCODE_DONE, price=price, volume=vol,
                                      order=self._ticket, deal=self._deal_ticket, comment='done')
 
+    @_terminal_call
     def history_deals_get(self, date_from=None, date_to=None, **k):
         if self.history_none:
             return None
