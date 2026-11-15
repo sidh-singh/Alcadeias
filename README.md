@@ -7,7 +7,7 @@ account every slot uses for demo). It is a copy of `hedging_btcusd8`
 
 ## What it trades
 
-The bot's RSI/MACD logic, tuned: entries on the H1 votes in the direction of the H1 trend (the M15 votes not against); one position per basket; a target of 10 and a stop of 8 H1 volatility units; no M15 force-close; 4 hours of pause after a losing basket.
+The bot's RSI/MACD logic, tuned: entries on the H1 votes in the direction of the H1 trend (the M15 votes not against); one position per basket; a target of 10 and a stop of 8 H1 volatility units (the unit capped at $12 per 0.01 lot, a cap that has never bound on BTC); no M15 force-close; 4 hours of pause after a losing basket.
 
 Why this one: the lowest drawdown of our BTC designs over 8 years.
 
