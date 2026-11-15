@@ -3,6 +3,34 @@ import pandas as pd
 import time
 from datetime import datetime, timedelta, timezone
 from constants import RISK_REWARD_RATIO, ALLOW_SYNTHETIC_TICK_BAR
+# demo isolation (constants.py). Read at call time, so a replay can set them on this module.
+from constants import MAGIC, ORDER_COMMENT, DEMO_BRANCH
+
+
+def order_comment():
+    """The comment every order of this bot carries: ORDER_COMMENT, or DEMO_BRANCH when it is None, cut to
+    the 31 characters MT5 accepts ('' = no comment)."""
+    c = ORDER_COMMENT if ORDER_COMMENT is not None else DEMO_BRANCH
+    return str(c)[:31] if c else ''
+
+
+def is_own(item):
+    """True for a position / deal of this bot: it carries MAGIC (MAGIC None = no isolation, everything is
+    this bot's, as live). An object with no `magic` attribute at all (a terminal that does not report it)
+    counts as this bot's."""
+    if MAGIC is None:
+        return True
+    return getattr(item, 'magic', MAGIC) == MAGIC
+
+
+def _tag(request):
+    """Add this bot's magic number and comment to an order request."""
+    if MAGIC is not None:
+        request['magic'] = int(MAGIC)
+    comment = order_comment()
+    if comment:
+        request['comment'] = comment
+    return request
 
 
 
@@ -30,7 +58,7 @@ class MT5PositionHelper:
     
     def get_buy_positions(self, symbol: str) -> Optional[Dict]:
         """
-        Get detailed position information for BUY positions
+        Get detailed position information for this bot's BUY positions (MAGIC only)
         
         Args:
             symbol: Trading symbol (e.g., 'XAUUSD', 'XAUUSD')
@@ -47,7 +75,7 @@ class MT5PositionHelper:
                 - last_volume: Volume of last BUY position
             Returns None if no positions found
         """
-        positions = self.mt5.positions_get(symbol=symbol)
+        positions = self._own_positions(symbol)
         
         if positions is None or len(positions) == 0:
             return None
@@ -74,12 +102,13 @@ class MT5PositionHelper:
             'first_profit': round(first_pos.profit, 2),
             'first_volume': round(first_pos.volume, 2),
             'last_profit': round(last_pos.profit, 2),
-            'last_volume': round(last_pos.volume, 2)
+            'last_volume': round(last_pos.volume, 2),
+            'positions': buy_positions,   # the position objects (tickets, open times, prices)
         }
     
     def get_sell_positions(self, symbol: str) -> Optional[Dict]:
         """
-        Get detailed position information for SELL positions
+        Get detailed position information for this bot's SELL positions (MAGIC only)
         
         Args:
             symbol: Trading symbol (e.g., 'XAUUSD', 'XAUUSD')
@@ -96,7 +125,7 @@ class MT5PositionHelper:
                 - last_volume: Volume of last SELL position
             Returns None if no positions found
         """
-        positions = self.mt5.positions_get(symbol=symbol)
+        positions = self._own_positions(symbol)
         
         if positions is None or len(positions) == 0:
             return None
@@ -123,8 +152,17 @@ class MT5PositionHelper:
             'first_profit': round(first_pos.profit, 2),
             'first_volume': round(first_pos.volume, 2),
             'last_profit': round(last_pos.profit, 2),
-            'last_volume': round(last_pos.volume, 2)
+            'last_volume': round(last_pos.volume, 2),
+            'positions': sell_positions,  # the position objects (tickets, open times, prices)
         }
+
+    def _own_positions(self, symbol: str):
+        """This bot's open positions on `symbol` (those carrying MAGIC), in the terminal's order; None when
+        the terminal returns nothing."""
+        positions = self.mt5.positions_get(symbol=symbol)
+        if positions is None:
+            return None
+        return [pos for pos in positions if is_own(pos)]
     
     def get_account_info(self) -> Optional[Dict]:
         """
@@ -480,7 +518,7 @@ class MT5PositionHelper:
         else:
             computed_tp = tp
         
-        return {
+        return _tag({
             "action": self._trade_action_deal,
             "symbol": symbol,
             "volume": qty,
@@ -490,7 +528,7 @@ class MT5PositionHelper:
             "type_filling": self._order_filling_ioc,
             "sl": computed_sl,
             "tp": computed_tp,
-        }
+        })
 
     def buy(self, symbol: str, qty: float, sl: float = 0, tp: float = 0):
         """
@@ -530,7 +568,7 @@ class MT5PositionHelper:
     
     def close_by_type(self, symbol: str, pos_type: int):
         """
-        Close all positions of a specific type (BUY or SELL)
+        Close all of this bot's positions (MAGIC) of a specific type (BUY or SELL)
         
         Args:
             symbol: Trading symbol
@@ -558,7 +596,7 @@ class MT5PositionHelper:
             'errors': [],
         }
         
-        positions = self.mt5.positions_get(symbol=symbol)
+        positions = self._own_positions(symbol)   # this bot's positions only (MAGIC)
         if positions is None:
             result['message'] = f"No positions found for {symbol}"
             result['success'] = True  # No positions is not an error
@@ -588,7 +626,7 @@ class MT5PositionHelper:
             # Price: close BUY at bid, close SELL at ask
             price = tick.bid if pos.type == 0 else tick.ask
             
-            request = {
+            request = _tag({
                 "action": self.mt5.TRADE_ACTION_DEAL,
                 "position": pos.ticket,
                 "symbol": pos.symbol,
@@ -598,7 +636,7 @@ class MT5PositionHelper:
                 "deviation": 20,
                 "type_time": self.mt5.ORDER_TIME_GTC,
                 "type_filling": self.mt5.ORDER_FILLING_IOC,
-            }
+            })
             
             order_result = self.mt5.order_send(request)
             
@@ -623,7 +661,8 @@ class MT5PositionHelper:
     def get_deal_history(self, from_date: datetime, to_date: datetime, symbol: str = None) -> List[Dict]:
         """
         Get closed deal history from MT5 for a date range.
-        Only returns deals with entry type DEAL_ENTRY_OUT (closed trades with realized P/L).
+        Only returns deals with entry type DEAL_ENTRY_OUT (closed trades with realized P/L) of this
+        bot (MAGIC).
         
         Args:
             from_date: Start datetime
@@ -658,6 +697,10 @@ class MT5PositionHelper:
             
             # Apply symbol filter if provided
             if symbol and deal.symbol != symbol:
+                continue
+
+            # This bot's closing deals only (its close requests carry MAGIC)
+            if not is_own(deal):
                 continue
             
             net = round(deal.profit + deal.commission + deal.swap + deal.fee, 2)
@@ -739,6 +782,22 @@ class MT5PositionHelper:
         except Exception:
             pass
         return datetime.now(tz=timezone.utc)
+
+    def get_bot_deals(self, from_date: datetime, to_date: datetime):
+        """
+        This bot's deals in [from_date, to_date], as the terminal's deal objects: every deal carrying
+        MAGIC, plus any other deal on a position one of them opened (a close from the terminal or by the
+        broker carries no magic). None when the terminal returns no history at all (an error), so the
+        caller can tell "no deals" from "unknown".
+        """
+        deals = self.mt5.history_deals_get(from_date, to_date)
+        if deals is None:
+            return None
+        own = [d for d in deals if is_own(d)]
+        ids = {getattr(d, 'position_id', None) for d in own} - {None, 0}
+        if not ids:
+            return own
+        return [d for d in deals if is_own(d) or getattr(d, 'position_id', None) in ids]
 
     def get_deals_since(self, days: int, symbol: str = None) -> List[Dict]:
         """
