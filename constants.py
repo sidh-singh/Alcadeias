@@ -277,3 +277,21 @@ VIRTUAL_START_DATE = '2026-11-16'    #   commission of the deals with its MAGIC)
 # VOL_CAP_USD_PER_UNIT = 12.0
 # LOSS_COOLDOWN_S = 14400
 # MAX_ADDS = 0
+
+# ─── Design of this branch (demo_hedging_btcusd8): BTC Top 2 ───
+# The example block 'BTC Top 2' above, uncommented. Everything not set here stays at the live value.
+DESIGN_NAME = 'btc_top2'
+OPEN_SCORE_WEIGHTS = {'H1': 1}
+ENTRY_AGREE_S = 0
+FORCE_CLOSE_ENABLED = False
+TREND_TF = 'H1'
+VOL_TF = 'H1'
+VOL_LEN = 24
+TARGET_USD_PER_UNIT = None
+STOP_LOSS_USD_PER_UNIT = None
+TARGET_VOL = 10.0
+STOP_VOL = 8.0
+VOL_CAP_USD_PER_UNIT = 12.0
+LOSS_COOLDOWN_S = 14400
+MAX_ADDS = 0
+VIRTUAL_START_DATE = '2026-11-15'    # the demo forward test's virtual $2,000 counts this bot's deals from this UTC day
