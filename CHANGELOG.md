@@ -17,6 +17,86 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2-demo.3] — 2026-11-15 — Demo branches: the demo review's safety fixes [demo only]
+
+**Branches:** the `demo_hedging_*` branches (written on `demo_hedging_xauusd6`; `v3.9.2-demo.2` is the Turtle, on
+the BTC Turtle branches only). **NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:**
+`app.py`, `mt5_helper.py`, `strategy.py`, `constants.py`, `start_job.bat`, `start_<symbol>.bat`, `tests_demo/`
+(+ this `CHANGELOG.md`, `README.md`). **Baseline:** v3.9.2-demo.1 + the branch's design block.
+
+**Why.** The review of the demo branches before the forward test found seven ways the bot could trade where it
+should not, trade twice, trade unprotected, or decide on data it did not have. Every fix leaves the decisions of
+normal operation alone: the demo parity replays (the branch's app.py against the fast engine running its design)
+pass unchanged, and with the levers at their live defaults the bot still takes the live decisions and sends the live
+requests (`tests_demo/test_live_equivalence.py`, which now also compares every request's sl / tp).
+
+### Fixed: trades on the demo account only (review finding 1, high)
+All demo bots attach to one terminal; a live bot logging it into the real account would have received their orders.
+- `initialize_mt5`: right after the login, refuse to start unless `account_info()` is a demo account
+  (`trade_mode` `ACCOUNT_TRADE_MODE_DEMO`), a hedging account (`margin_mode` `ACCOUNT_MARGIN_MODE_RETAIL_HEDGING`)
+  and the login of the credentials; remember the login.
+- Mode `live` is refused outright on a demo branch: by the command line and by `load_credentials` (before the file
+  is opened).
+- Every poll and every `order_send` (opens, adds, closes: `MT5PositionHelper._send` behind `order_guard`) read
+  `account_info()` first: another login or not a demo account -> the poll syncs, decides and sends nothing, a
+  WARNING and an ERROR event `ACCOUNT_REFUSED`, until the demo account is back (`ACCOUNT_OK`).
+
+### Fixed: a just-opened basket is not dropped while the terminal has not listed it (finding 2)
+- A basket without positions is kept `_PENDING_FILL_S` = 10 s after it opened (as the Turtle keeps its legs); while
+  it is pending its side counts as in a basket (no entry, the basket's unit). It was dropped at once, and the next
+  poll opened a second basket (a 1.5 s listing delay: 13 duplicate entries in 30 minutes of the scaled design).
+
+### Added: a broker-side backstop (finding 3)
+- A design with a stop (`STOP_VOL > 0`, or a $ stop) sends every fill (entry, add) with a request `sl` =
+  its fill -/+ `BACKSTOP_FACTOR` (2.0, `constants.py`) x the basket's stop distance (STOP_VOL x unit, capped; an add
+  uses the basket's), rounded to the symbol's digits, and no `tp`; never moved. The bot's own stop closes the basket
+  before the price is one stop distance beyond any leg's fill, so it always closes first and the backtest is
+  unchanged; the backstop acts only while the bot or the terminal is down. A position it closes is booked by the
+  existing "closed outside the bot" path (the realised loss and the closing time from the deal history, then the
+  loss pause). A design without a stop (the live levers) keeps the live request.
+
+### Fixed: reconnect after a terminal restart (finding 4)
+- Every poll checks `terminal_info()`: no answer, or not connected to the trade server -> the poll decides and sends
+  nothing (ERROR event `TERMINAL_ERROR` with `last_error()`). After 5 polls in a row without the terminal:
+  `mt5.shutdown()` and `initialize_mt5()` again (with the checks of finding 1), retried after 5, 10, 30, then every
+  60 s (`RECONNECT_FAILED`, `TERMINAL_RECONNECTED`, `TERMINAL_OK`). A broker disconnect only waits (the terminal
+  reconnects by itself; logging the shared terminal in again could undo another process's login).
+- `start_job.bat`, `start_<symbol>.bat`: on demo, app.py is started again 30 s after it exits.
+
+### Fixed: a failed positions read is not "flat" (finding 5)
+- `positions_get()` answering None raises `TerminalReadError` (`mt5_helper`); the poll is skipped (no sync, no
+  bookkeeping, no decision) instead of booking the open basket as closed outside the bot; a close that cannot see the
+  positions closes nothing and reports a failure.
+
+### Fixed: no entry on missing votes or a short history (findings 6, 7)
+- `'votes unknown'`: no fresh entry while any timeframe of `OPEN_SCORE_WEIGHTS`, `FORCE_CLOSE_SCORE_WEIGHTS`,
+  `TREND_TF` or `VOL_TF` returned no bars this poll (a failed M15 fetch passed the ENTRY_AGREE_S = 0 gate); exits and
+  stops keep working; a ladder tier without data neither adds nor arms.
+- `'volatility unknown'` also while `VOL_TF` / `TREND_TF` have fewer than 300 closed bars (the EWMA unit was off by
+  up to 12% on BTC with 100 H1 bars); the same for the unit of a basket rebuilt after a restart.
+
+### Files
+- `app.py`: `_account_problem` / `_login_problem` / `_account_ok` / `_order_guard` / `_poll_guard`;
+  `_terminal_problem` / `_poll_failed` / `_try_reconnect` / `_reconnect` / `_poll_succeeded`; `fill_pending`;
+  `design_has_stop` / `backstop_distance` / `_open_leg` / `_price_digits`; `entry_timeframes` and
+  `entry_block_reason(no_data, short_history)`; `_vol_unit_at` needs 300 closed bars; design checks
+  (`BACKSTOP_FACTOR` > 1, `RSI_CANDLE_COUNT`); `main()` refuses live; the analysis keys `fill_pending`, `no_data`,
+  `short_history`; the events above and `backstop_sl` in the order events.
+- `mt5_helper.py`: `TerminalReadError`; `order_guard` / `_send`; `auto_sltp` on `buy` / `sell` / `_build_request`
+  (the same code as on the Turtle branches).
+- `strategy.py`: `Strategy.section_timeframes()`. `constants.py`: `BACKSTOP_FACTOR`.
+- `start_job.bat`, `start_<symbol>.bat`: the demo restart loop.
+- `tests_demo/`: `test_demo_account.py`, `test_read_errors.py`, `test_reconnect.py`, `test_pending_fill.py`,
+  `test_backstop.py`, `test_entry_data.py`; `fake_mt5.py` models the account (login / trade_mode / margin_mode),
+  `terminal_info()` and a terminal that goes down, `positions_get` / rates errors, a delayed listing, the broker's
+  sl / tp; shared helpers in `conftest.py`.
+
+### Rollback
+`git revert` the seven `demo(safety)` / `demo(fix)` commits and this one (newest first); nothing to clean up (no new
+state file; the backstop of a position already open stays on it until it closes).
+
+---
+
 ## [v3.9.2-demo.1] — 2026-11-15 — Demo branches: the backtester's design levers, demo isolation, restart recovery [demo only]
 
 **Branches:** `demo_hedging_xauusd6` (the port; the other `demo_hedging_*` branches take the same code).
