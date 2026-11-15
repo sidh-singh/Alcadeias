@@ -20,7 +20,8 @@ The terminal is a hedging account on one symbol:
     until initialize() succeeds again, as with the MetaTrader5 package after a terminal restart.
 Failures can be injected (refused orders, failed closes, no history, a terminal down, positions_get errors), and
 anything can be scheduled at a terminal time with at(t_s, fn) (an account switch ...), or at the first call of one
-terminal function from a terminal time on with on_call(name, t_s, fn) (a switch between two reads of one poll).
+terminal function from a terminal time on with on_call(name, t_s, fn) (a switch between two reads of one poll);
+close_by_broker(ticket) closes one position as the broker's stop does.
 """
 import functools
 import math
@@ -314,6 +315,21 @@ class FakeMT5:
             self._deal(p, 1, p['volume'], price, profit, p['magic'], '[sl]' if by_sl else '[tp]', t_msc,
                        reason=self.DEAL_REASON_SL if by_sl else self.DEAL_REASON_TP)
             self.positions.remove(p)
+
+    def close_by_broker(self, ticket):
+        """The broker closes one position at the market, as its sl does (a backstop, a stop-out): a DEAL_REASON_SL
+        deal with the position's magic. True when the position was there."""
+        b, a = self.quote()
+        for p in list(self.positions):
+            if p['ticket'] == ticket:
+                price = b if p['type'] == 0 else a
+                profit = self._pos_profit(p, price, price)
+                self.balance += profit
+                self._deal(p, 1, p['volume'], price, profit, p['magic'], '[sl]', self.clock.now_ms,
+                           reason=self.DEAL_REASON_SL)
+                self.positions.remove(p)
+                return True
+        return False
 
     def quote(self):
         self._sync()
