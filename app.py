@@ -381,6 +381,8 @@ def design_summary():
 _RECONNECT_AFTER = 5                         # polls in a row without the terminal (terminal_info() None) before the
                                              # bot connects again: mt5.shutdown(), then initialize_mt5()
 _RECONNECT_BACKOFF_S = (5.0, 10.0, 30.0, 60.0)   # waits after a reconnect that failed (the last one repeats)
+_LOG_REPEAT_S = 900.0                        # a problem that lasts (the terminal held by another account) is logged
+                                             # again at most this often
 _PENDING_FILL_S = 10.0                       # a basket the bot just opened waits this long for the terminal to list
                                              # its position (as the Turtle's legs do)
 _MIN_CLOSED_BARS = 300                       # closed VOL_TF / TREND_TF bars an entry (and a rebuilt basket's unit)
@@ -440,6 +442,10 @@ class MT5TradingBot:
         self._reconnects_failed = 0
         self._reconnect_at = None
         self._init_problem = None
+        # initialize_mt5 found the terminal logged into another account (it never logs in there): the problem
+        # last logged as TERMINAL_IN_USE and when.
+        self._in_use_logged = None
+        self._in_use_logged_at = None
 
     # ── Day-of-week mapping for trading_window config ──
     _DAY_NAME_TO_NUM = {
@@ -619,7 +625,9 @@ class MT5TradingBot:
             return False
     
     def initialize_mt5(self):
-        """Step 3: Initialize and login to MT5"""
+        """Step 3: Initialize and login to MT5. The login only on a terminal that holds no account; a terminal that
+        holds this bot's account (login and server of the credentials) is used as it is, and one that holds any
+        other account is refused (TERMINAL_IN_USE) and left alone. Then the demo-account checks."""
         print(f"\n{'='*60}")
         print(f"  Initializing MT5 - {self.mode.upper()} Account")
         print(f"{'='*60}\n")
@@ -633,19 +641,35 @@ class MT5TradingBot:
         print(f"✓ MT5 initialized successfully")
         print(f"✓ MT5 version: {mt5.version()}")
 
-        # Login to MT5 account
-        authorized = mt5.login(
-            login=self.credentials['login_id'],
-            password=self.credentials['login_pass'],
-            server=self.credentials['server']
-        )
-
-        if not authorized:
-            error = mt5.last_error()
-            self._init_problem = f'login failed: {error}'
-            print(f"✗ Login failed: {error}")
-            mt5.shutdown()
+        # The account the terminal holds before any login: a login switches the account of EVERY process attached
+        # to the terminal (the bots of another slot, a live bot), so this bot logs in only on a terminal that holds
+        # no account, and never on one that holds another account.
+        held = mt5.account_info()
+        if held is not None and not getattr(held, 'login', None):
+            held = None                     # (login 0: no account)
+        if held is not None and not self._is_own_account(held):
+            problem = self._terminal_in_use_problem(held)
+            self._init_problem = problem
+            print(f"✗ Refused: {problem}")
+            self._terminal_in_use(problem, held)
+            mt5.shutdown()                  # detach; the terminal and its account are left as they are
             return False
+        if held is None:
+            # Login to MT5 account
+            authorized = mt5.login(
+                login=self.credentials['login_id'],
+                password=self.credentials['login_pass'],
+                server=self.credentials['server']
+            )
+
+            if not authorized:
+                error = mt5.last_error()
+                self._init_problem = f'login failed: {error}'
+                print(f"✗ Login failed: {error}")
+                mt5.shutdown()
+                return False
+        else:
+            print(f"✓ The terminal already holds this bot's account {held.login} ({held.server}): no login")
 
         # Get account info
         account_info = mt5.account_info()
@@ -664,6 +688,7 @@ class MT5TradingBot:
             return False
         self._account_login = account_info.login
         self._init_problem = None
+        self._in_use_logged = None
 
         print(f"\n{'='*60}")
         print(f"  Login Successful - {self.mode.upper()} Account")
@@ -822,9 +847,8 @@ class MT5TradingBot:
             'details': details or {},
         }
 
-        log_dir = os.path.join(OUTPUT_DIR, 'logs')
-        os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, f'{symbol}_{STRATEGY_LOG_FILENAME}')
+        log_path = self._log_path(symbol)
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
         with self.thread_lock:
             # Load existing log
@@ -840,7 +864,22 @@ class MT5TradingBot:
 
             with open(log_path, 'w') as f:
                 json.dump(log_data, f, indent=2, default=str)
-    
+
+    @staticmethod
+    def _log_path(symbol):
+        """The symbol's strategy log: OUTPUT_DIR/logs/<symbol>_<STRATEGY_LOG_FILENAME> (newest entry first)."""
+        return os.path.join(OUTPUT_DIR, 'logs', f'{symbol}_{STRATEGY_LOG_FILENAME}')
+
+    def _newest_log_entry(self, symbol):
+        """The newest entry of the symbol's strategy log; None without a (readable) log."""
+        try:
+            with self.thread_lock:
+                with open(self._log_path(symbol), 'r') as f:
+                    data = json.load(f)
+        except (OSError, ValueError):
+            return None
+        return data[0] if isinstance(data, list) and data and isinstance(data[0], dict) else None
+
     # ───────────────────── per-basket state, loss pause, virtual balance ─────────────────────
     def _state_path(self, symbol):
         base = self.state_dir or os.path.join(OUTPUT_DIR, STATE_SUBDIR)
@@ -1149,10 +1188,11 @@ class MT5TradingBot:
         """
         Why the account the terminal is logged into is not this bot's right now (None = it is). Read at the start
         of every poll and before every order: with DEMO_BRANCH set it must be a demo account
-        (trade_mode ACCOUNT_TRADE_MODE_DEMO) and the login initialize_mt5 remembered. All demo bots attach to one
-        terminal, so another process (a live bot) can log it into another account at any time. A bot that was not
-        started through initialize_mt5 (a replay) takes the first demo account it sees as its own, so a later
-        switch is still caught.
+        (trade_mode ACCOUNT_TRADE_MODE_DEMO) and the login initialize_mt5 remembered. Each slot should have its own
+        MT5 installation, but any other process attached to the terminal (a live bot, the bot of another slot) can
+        log it into another account at any time; this bot then waits and never logs in again over it. A bot that
+        was not started through initialize_mt5 (a replay) takes the first demo account it sees as its own, so a
+        later switch is still caught.
         """
         if acct is None:
             acct = mt5.account_info()
@@ -1190,6 +1230,55 @@ class MT5TradingBot:
             if not same:
                 return f'the terminal is logged into account {acct.login}, not the login of the credentials ({want})'
         return None
+
+    def _is_own_account(self, acct):
+        """True when the account a terminal holds is this bot's: the login and the server of the credentials."""
+        creds = self.credentials or {}
+        try:
+            same_login = int(acct.login) == int(creds.get('login_id'))
+        except (TypeError, ValueError):
+            return False
+        want = str(creds.get('server') or '').strip().casefold()
+        have = str(getattr(acct, 'server', '') or '').strip().casefold()
+        return same_login and (not want or have == want)
+
+    @staticmethod
+    def _trade_mode_name(mode):
+        names = {getattr(mt5, 'ACCOUNT_TRADE_MODE_DEMO', 0): 'demo', getattr(mt5, 'ACCOUNT_TRADE_MODE_CONTEST', 1): 'contest',
+                 getattr(mt5, 'ACCOUNT_TRADE_MODE_REAL', 2): 'real'}
+        return names.get(mode, f'trade_mode {mode}')
+
+    def _terminal_in_use_problem(self, acct):
+        creds = self.credentials or {}
+        return (f"TERMINAL_IN_USE: the terminal at {creds.get('terminal_path')} is logged into another account "
+                f"{acct.login} ({self._trade_mode_name(getattr(acct, 'trade_mode', None))}, "
+                f"{getattr(acct, 'server', '?')}), not this bot's {creds.get('login_id')} ({creds.get('server')}); "
+                f"give this slot its own MT5 installation")
+
+    def _terminal_in_use(self, problem, acct):
+        """initialize_mt5 found the terminal logged into another account and left it alone: an ERROR event
+        TERMINAL_IN_USE when that starts or changes, then at most every _LOG_REPEAT_S while it lasts -- also across
+        the launcher's restarts of app.py (a start reads the newest entry of the strategy log), so it does not fill
+        the 200-entry log."""
+        symbol = self._symbol_of(None)
+        now = time.time()
+        if self._in_use_logged is None:
+            last = self._newest_log_entry(symbol) or {}
+            if last.get('event') == 'TERMINAL_IN_USE' and (last.get('details') or {}).get('problem') == problem:
+                try:
+                    from datetime import datetime
+                    self._in_use_logged, self._in_use_logged_at = problem, datetime.fromisoformat(
+                        str(last.get('utc_time'))).timestamp()
+                except (TypeError, ValueError):
+                    pass
+        if problem == self._in_use_logged and now - float(self._in_use_logged_at or 0.0) < _LOG_REPEAT_S:
+            return
+        self._in_use_logged, self._in_use_logged_at = problem, now
+        creds = self.credentials or {}
+        self._log_event(symbol, 'TERMINAL_IN_USE', 'ERROR', {
+            'problem': problem, 'terminal_path': creds.get('terminal_path'), 'login': getattr(acct, 'login', None),
+            'server': getattr(acct, 'server', None), 'trade_mode': self._trade_mode_name(getattr(acct, 'trade_mode', None)),
+            'own_login': creds.get('login_id')})
 
     def _account_refused(self, symbol, problem, request=None, server_time=None):
         """The account is not this bot's: a WARNING and an ERROR event when the problem starts or changes."""
@@ -1258,8 +1347,8 @@ class MT5TradingBot:
         """Why the terminal cannot be used this poll: (problem, ipc_lost), (None, False) when it can. ipc_lost:
         terminal_info() answers None (or raises), the connection to the terminal is gone -- the terminal was
         restarted or closed -- and every call will answer None until the bot connects again. Not connected to the
-        trade server: the terminal reconnects by itself (a reconnect of the bot would log in again, and may undo
-        another process's login on the shared terminal), so the poll only waits."""
+        trade server: the terminal reconnects to it by itself, so the poll only waits (the bot's own reconnect is for
+        a lost connection to the terminal, and it never logs in over another account, see initialize_mt5)."""
         try:
             info = mt5.terminal_info()
         except Exception as e:
@@ -1304,8 +1393,9 @@ class MT5TradingBot:
             'attempt': attempt, 'why': self._init_problem, 'next_in_s': wait, 'failed_polls': self._failed_polls})
 
     def _reconnect(self, symbol):
-        """mt5.shutdown(), then initialize_mt5() again: the terminal, the login, the demo-account checks, the symbol
-        map and a new helper behind the order guard. True when the bot is on its demo account again."""
+        """mt5.shutdown(), then initialize_mt5() again: the terminal, the login (only on a terminal that holds no
+        account), the demo-account checks, the symbol map and a new helper behind the order guard. True when the bot
+        is on its demo account again."""
         print(f"[{symbol}] reconnecting to the MT5 terminal ...")
         with self.mt5_lock:
             try:
