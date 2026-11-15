@@ -151,6 +151,14 @@
       ],
       "trend_tf": "H1",
       "loss_cooldown_s": 14400
+    },
+    "V2": {
+      "trend_tf": "H1",
+      "max_adds": 0,
+      "target_usd_per_unit": 20,
+      "stop_loss_usd_per_unit": 20,
+      "force_close_enabled": false,
+      "loss_cooldown_s": 14400
     }
   }
 }
