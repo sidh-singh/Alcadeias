@@ -10,8 +10,10 @@ The terminal is a hedging account on one symbol:
     half away from zero per position (as MT5 reports it);
   * order_send fills market orders at the ask (buy) / bid (sell) and closes at the bid / ask, writing
     DEAL_ENTRY_IN / DEAL_ENTRY_OUT deals with the request's magic and comment;
-  * history_deals_get(date_from, date_to) returns the deals in that time range.
-Failures can be injected (refused orders, failed closes, no history).
+  * history_deals_get(date_from, date_to) returns the deals in that time range;
+  * account_info() reports a demo, hedging account (login / trade_mode / margin_mode can be changed).
+Failures can be injected (refused orders, failed closes, no history), and anything can be scheduled at a
+terminal time with at(t_s, fn) (an account switch ...).
 """
 import math
 import sys
@@ -156,6 +158,12 @@ class FakeMT5:
     DEAL_TYPE_BALANCE = 2
     COPY_TICKS_ALL = -1
     SYMBOL_TRADE_MODE_DISABLED = 0
+    ACCOUNT_TRADE_MODE_DEMO = 0
+    ACCOUNT_TRADE_MODE_CONTEST = 1
+    ACCOUNT_TRADE_MODE_REAL = 2
+    ACCOUNT_MARGIN_MODE_RETAIL_NETTING = 0
+    ACCOUNT_MARGIN_MODE_EXCHANGE = 1
+    ACCOUNT_MARGIN_MODE_RETAIL_HEDGING = 2
 
     def __init__(self, symbol, t_ms, bid, ask, clock, warm_m1=None, contract_size=100.0, balance=2000.0,
                  leverage=2000, warm_bars=600, report_contract_size=True):
@@ -175,6 +183,12 @@ class FakeMT5:
         self.iter_t = clock.now_ms  # start of the bot's current loop pass
         self._ticket = 100000
         self._deal_ticket = 500000
+        # the account the terminal is logged into (change them to switch it)
+        self.account_login = 1
+        self.trade_mode = self.ACCOUNT_TRADE_MODE_DEMO
+        self.margin_mode = self.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING
+        self.calls = []             # (name, terminal ms) of initialize / login / shutdown
+        self._hooks = []            # [(t_ms, fn)]: fn(self) runs once the clock reaches t_ms (see at())
         # failure injection
         self.refuse_orders = 0      # refuse the next N new orders (not closes)
         self.fail_close_tickets = set()
@@ -191,7 +205,18 @@ class FakeMT5:
             self.bars[name] = Bars(tf_s, seed, span // tf_s + 2)
 
     # ── time: the terminal knows every tick up to "now" ──
+    def at(self, t_s, fn):
+        """Run fn(self) once, at the first terminal call at or after terminal time t_s (seconds)."""
+        self._hooks.append((int(round(t_s * 1000)), fn))
+        self._hooks.sort(key=lambda h: h[0])
+
+    def _run_hooks(self):
+        now = self.clock.now_ms
+        while self._hooks and self._hooks[0][0] <= now:
+            self._hooks.pop(0)[1](self)
+
     def _sync(self):
+        self._run_hooks()
         now = self.clock.now_ms
         while self.ptr + 1 < len(self.t_ms) and self.t_ms[self.ptr + 1] <= now:
             self.ptr += 1
@@ -208,12 +233,15 @@ class FakeMT5:
 
     # ── session ──
     def initialize(self, *a, **k):
+        self.calls.append(('initialize', self.clock.now_ms))
         return True
 
     def login(self, *a, **k):
+        self.calls.append(('login', self.clock.now_ms))
         return True
 
     def shutdown(self):
+        self.calls.append(('shutdown', self.clock.now_ms))
         return True
 
     def version(self):
@@ -233,8 +261,9 @@ class FakeMT5:
         profit = sum(self._pos_profit(p, b, a) for p in self.positions) if b is not None else 0.0
         margin = sum(p['volume'] * self.contract * p['price_open'] / self.leverage for p in self.positions)
         equity = self.balance + profit
-        return types.SimpleNamespace(login=1, server='Fake-Demo', leverage=self.leverage, balance=self.balance,
-                                     equity=equity, margin=margin, margin_free=equity - margin,
+        return types.SimpleNamespace(login=self.account_login, trade_mode=self.trade_mode,
+                                     margin_mode=self.margin_mode, server='Fake-Demo', leverage=self.leverage,
+                                     balance=self.balance, equity=equity, margin=margin, margin_free=equity - margin,
                                      margin_level=(equity / margin * 100.0) if margin else 0.0, profit=profit)
 
     # ── symbols / quotes / bars ──
