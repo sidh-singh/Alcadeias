@@ -33,7 +33,7 @@ Written on 16 Nov 2026, about 03:00 IST, in the Alcadeias repo (`/Users/sidharth
 | `docs/handoff/turtle_map.md` | The two BTC Turtle rows: data, N, channels, the System 1 filter, order and stop execution on M1 bars, the vote gate, sizing, results, and what a live port needs |
 | `docs/handoff/parity_map.md` | The parity harness: the reference replay of a branch's own `app.py` against a simulated broker, what is compared and with which tolerances, cost, the port rules that keep parity reachable, the smallest reliable check |
 
-Each map starts with a note saying when it was written, which commit it describes, and which of its statements are out of date. The fact-check corrected those notes: the first version said the scratch files the maps name were gone, but they still existed at about 03:50 IST on 16 Nov 2026 (§0.6).
+Each map starts with a note saying when it was written, which commit it describes, and which of its statements are out of date. The fact-check corrected those notes: the first version said the scratch files the maps name were gone, but they still existed at about 03:50 IST on 16 Nov 2026. They were then copied into this repo's git-ignored `data/archive/session_2026-11-16/` (§0.6).
 
 ### 0.2 Reaching this repo from the Ballom session
 
@@ -80,7 +80,7 @@ Paths are relative to the repo root.
 | [PAR] | `backtest_results/parity/*.json`: the 7 hedging parity reports |
 | [MLL] [ML] [MT] [MP] | the maps `docs/handoff/live_loop_map.md`, `levers_map.md`, `turtle_map.md`, `parity_map.md` |
 | [CL] | `CHANGELOG.md`: the live bot's own release notes (identical on the live branches) |
-| [CLd] | `CHANGELOG.md` on the demo branches: v3.9.2-demo.1 and demo.3 on all six; demo.2 (the Turtle) only on `demo_hedging_btcusd6` and `btcusd7`; demo.4 only on the local branches so far (§0.5) |
+| [CLd] | `CHANGELOG.md` on the demo branches: v3.9.2-demo.1 and demo.3 on all six; demo.2 (the Turtle) only on `demo_hedging_btcusd6` and `btcusd7`; demo.4 on all six, pushed on 16 Nov 2026 at 03:56 IST (§0.5) |
 | [RMd] | `README.md` on each demo branch |
 | [J-audit] [J-balke] [J-port] [J-fix1] [J-fix2] | review journals outside the repo (§0.6): the original live-code audit (`wf_285378d0-a0a`), the Balke code review (`wf_c9b9a4c0-2f4`), the demo port (`wf_3ebd063f-c01`), the first fix round and re-review (`wf_c0f3ff36-384`), the second fix round (`wf_ea170a6c-975`) |
 | [MEM] | the owner's memory notes for the Alcadeias project (outside the repo; a Ballom session cannot see them) |
@@ -89,13 +89,13 @@ Paths are relative to the repo root.
 
 ### 0.5 State of the repos when this was written
 
-- **`backtest_hedging`.** Local HEAD `bed551e` when this was written. It was 2 commits ahead of `origin/backtest_hedging` (`0ae5794`): `c61c998` (the demo-parity harness) and `bed551e` (the re-stamped parity reports) were not pushed yet.
-- **Committed on 16 Nov 2026, not pushed:** this file and `docs/handoff/`, in one commit on top of `bed551e` ("docs(handoff): the Alcadeias research hand-off for the next repository (Ballom_Fyers)"). With it the branch is 3 commits ahead of origin.
+- **`backtest_hedging`.** Local HEAD `bed551e` when this was written, 2 commits ahead of `origin/backtest_hedging` (`0ae5794`): `c61c998` (the demo-parity harness) and `bed551e` (the re-stamped parity reports).
+- **Committed on 16 Nov 2026:** this file and `docs/handoff/`, in `ed4fdba` on top of `bed551e` ("docs(handoff): the Alcadeias research hand-off for the next repository (Ballom_Fyers)"), then a follow-up commit (the scratch files archived in `data/archive/`, §0.6, and this status). Pushed with `c61c998` and `bed551e` on 16 Nov 2026, about 04:25 IST.
 - **Not committed:** `backtest_results/demo_parity/DEMO_PARITY.md`.
 - **`DEMO_PARITY.md` is partly stale.** It quotes 69 / 105 demo tests; after the first fix round there were 107 / 147 [J-fix1], and after the second fix round 124 / 168 on the local heads [J-fix2]. It says there is no broker-side stop; the first fix round added broker-side backstops (§5.9).
 - **Live branches.** Unchanged since 13 Nov 2026: `origin/hedging_xauusd6` at `1ed2d6c`, `origin/hedging_btcusd6` at `cef581a`. The live files at the root of `backtest_hedging` are byte-identical to `origin/hedging_xauusd6` (checked with `git hash-object` on 16 Nov 2026).
-- **Demo branches on origin:** `demo_hedging_xauusd6` `766a523`, `xauusd7` `d6f9b48`, `xauusd8` `843b442`, `btcusd6` `b082312`, `btcusd7` `9696c00`, `btcusd8` `1393693`. Unchanged at about 03:55 IST.
-- **The second fix round (v3.9.2-demo.4) was committed on all six local demo branches but not pushed** (§5.13) [J-fix2; `git log origin/demo_hedging_<x>..demo_hedging_<x>`, checked at about 03:55 IST]:
+- **Demo branches on origin** (pushed 16 Nov 2026, 03:56 IST): `demo_hedging_xauusd6` `18e422d`, `xauusd7` `fdf8553`, `xauusd8` `effac75`, `btcusd6` `5eca621`, `btcusd7` `68915b5`, `btcusd8` `b3a557e`. Before that push they were at `766a523`, `d6f9b48`, `843b442`, `b082312`, `9696c00`, `1393693`.
+- **The second fix round (v3.9.2-demo.4) is on all six demo branches, pushed on 16 Nov 2026 at 03:56 IST** (§5.13) [J-fix2; before the push: the six branches' upstreams were their own `origin/demo_hedging_*`, they held only demo commits and only the `demo` credentials block, and every other branch on origin was unchanged after it]:
   - `demo_hedging_xauusd6`: six commits, 02:29 – 02:52 IST (`87a7f71`, `ed1594e`, `8c8f5ad`, `d77c323`, `9101642`, `18e422d`).
   - `demo_hedging_btcusd6`: eight commits, 02:55 – 03:06 IST (`bc7cab0` … `5eca621`): the five code fixes cherry-picked, two Turtle-only fixes (`659703d`, the account read again right after the Turtle's positions read; `6c43e1a`, a leg closed beyond the stop ends the trade) and the demo.4 docs commit.
   - 03:26 – 03:29 IST: cherry-picked onto the other four. `xauusd7` `fdf8553`, `xauusd8` `effac75` and `btcusd8` `b3a557e` are each 6 commits ahead of origin; `btcusd7` `68915b5` is 8 ahead.
@@ -105,9 +105,9 @@ Paths are relative to the repo root.
 ### 0.6 What exists only outside the repo
 
 - **The review journals**, under `~/.claude/projects/-Users-sidharthsingh-Desktop-Alcadeias-Alcadeias/210c2577-eab3-4001-bc50-2408e8c4d100/subagents/workflows/<id>/journal.jsonl`. They hold each reviewer's full result. Their findings are written out in §3.7 and §5.9.
-- **The parity recordings**: `parity_final/*.ref.pkl` (14 files: 7 hedging, 7 netting; 109 MB) and the re-check script `parity_final.py`, in the session's temporary scratch folder `/private/tmp/claude-501/-Users-sidharthsingh-Desktop-Alcadeias-Alcadeias/210c2577-eab3-4001-bc50-2408e8c4d100/scratchpad/`. They were there at about 03:50 IST on 16 Nov 2026, with the other scratch files the maps name (the probe scripts in `map_parity_check/` and `turtle_probe/`, `levers_*.py`, `devclone/`, the parity queue scripts). A reboot or a clean-up can delete that folder.
+- **The parity recordings and the scratch files the maps name**: `parity_final/*.ref.pkl` (14 files: 7 hedging, 7 netting; 109 MB), the re-check script `parity_final.py`, the probe scripts in `map_parity_check/` and `turtle_probe/`, `levers_*.py` and the parity queue scripts. They were made in the session's temporary scratch folder, which a reboot or a clean-up can delete. On 16 Nov 2026 they were copied into **`data/archive/session_2026-11-16/`** of this repo, which is git-ignored (local to this machine, never committed or pushed). Its `README.md` lists what is there and how to re-check the recordings.
+  - The copy includes `netting_live/`, the netting live code the 7 netting windows replay, rebuilt from `origin/netting_xauusd6` with `git archive` (byte-identical to the scratch snapshot). `devclone/` was not copied: its six live code files are byte-identical to `origin/hedging_xauusd6`. The re-check run from the archive on 16 Nov 2026 (`parity_final.py recheck`, code at `ed4fdba`): 14 windows, 711,376 live polls, all identical.
   - Without the recordings, the stored live traces can only be rebuilt by re-running the reference replays: about 16.5 – 17 minutes per 24 h window in one process, 24 – 34 minutes with three in parallel [MP §5].
-  - The owner may want to keep them somewhere durable outside git.
 - **The owner's memory notes.** Everything in them that matters for Ballom is in §1 and §6.
 
 ---
@@ -1237,7 +1237,7 @@ Why these: gold V3-lite is the most dependable design, Top 2 has the best growth
 
 ## 5. The designs and levers, the demo branches, and the engineering checklist
 
-All of §5 is **measured** or read in the code, as of 16 Nov 2026 about 02:53 IST; the status of the second fix round in §5.7, §5.8, §5.9 and §5.13 is as checked at about 03:55 IST. Kernel line numbers are of `backtesting/engine/kernels.py`, unchanged since `9e4c71f`. "app6", "strat6", "mt6", "const6" are `app.py`, `strategy.py`, `mt5_helper.py`, `constants.py` on `origin/demo_hedging_xauusd6` (`766a523`); "appT" and "turtle" are `app.py` and `turtle.py` on `origin/demo_hedging_btcusd6` (`b082312`). [R1] is the first review of the port (7 findings), [R2] the re-review of the fixed branches (6 findings) [J-port; J-fix1].
+All of §5 is **measured** or read in the code, as of 16 Nov 2026 about 02:53 IST; the status of the second fix round in §5.7, §5.8, §5.9 and §5.13 is as checked at about 04:25 IST, after its push. Kernel line numbers are of `backtesting/engine/kernels.py`, unchanged since `9e4c71f`. "app6", "strat6", "mt6", "const6" are `app.py`, `strategy.py`, `mt5_helper.py`, `constants.py` on `origin/demo_hedging_xauusd6` (`766a523`); "appT" and "turtle" are `app.py` and `turtle.py` on `origin/demo_hedging_btcusd6` (`b082312`). [R1] is the first review of the port (7 findings), [R2] the re-review of the fixed branches (6 findings) [J-port; J-fix1].
 
 ### 5.1 Words
 
@@ -1457,7 +1457,7 @@ Known differences from the backtest: market fills, slippage, spread widening, sw
 | README | what it runs, its backtest, how to start it, how it is kept apart | `cf5ad63` / `03a5426` |
 | Review fixes (v3.9.2-demo.3) | the seven findings of [R1] (§5.9) | `1a7080d` … `39a80a8` / `6340753` … `e2c576d` |
 | Own demo account per slot (16 Nov 2026) | credentials and README only | `766a523` / `b082312` |
-| Second fix round (v3.9.2-demo.4; committed on all six local branches, not pushed at about 03:55 IST) | the [R2] findings (§5.9, §5.13), plus two Turtle fixes | `87a7f71` … `18e422d` / `bc7cab0` … `5eca621` (Turtle: `659703d`, `6c43e1a`) |
+| Second fix round (v3.9.2-demo.4; pushed on all six on 16 Nov 2026, 03:56 IST) | the [R2] findings (§5.9, §5.13), plus two Turtle fixes | `87a7f71` … `18e422d` / `bc7cab0` … `5eca621` (Turtle: `659703d`, `6c43e1a`) |
 
 The four basket branches share identical `app.py`, `mt5_helper.py` and `strategy.py`, comments aside; BTC 6 and 7 add `turtle.py` and the Turtle loop. A diff of xau 7 / 8 against xau 6, and of btc 7 against btc 6, shows only `constants.py` (identity, design block), the branch name in the three launchers, and `README.md` [J-fix1].
 
@@ -1489,7 +1489,7 @@ The four basket branches share identical `app.py`, `mt5_helper.py` and `strategy
 - 2018-11-13 – 2026-11-13: 88 and 60 trades, $6,977.48 and $7,814.72, the final ten's figures to the cent. The daily levels equal the backtest's plan rows on every D1 bar; the vote equals the backtest's on every M15 bar checked.
 - Run with `TURTLE_REPLAY_FROM=2018-11-13`, the backtester checkout in `ALCADEIAS_BACKTEST_REPO`, and `TURTLE_REPLAY_CACHE` for the votes (a cold run takes 80 s) [J-port].
 
-**Tests on the branches:** `python3 -m pytest tests_demo -q -p no:cacheprovider` with `PYTHONDONTWRITEBYTECODE=1`, from the branch root, against `tests_demo/fake_mt5.py`. 69 (basket) / 105 (Turtle) tests at the port; **107 / 147 after the first fix round**, all passing on the six heads of that round: `39a80a8` and `e2c576d` (15 Nov 2026, 23:34 IST), `91cf724`, `63f18d8`, `040c6f4` and `3378e44` (16 Nov 2026, 00:08 – 00:11 IST). Only in UTC do all six fall on 15 Nov. The six suites ran in parallel after those commits, 1,184.53 – 1,276.96 s each [J-port; J-fix1]. **124 / 168 after the second fix round**, on the six local heads (§0.5), 20 – 22 minutes each [J-fix2]. Every replay-based fix test was run against the pre-fix code and failed there [J-fix1]. On `backtest_hedging`, `tests/test_demo_parity.py` has 27 tests of the harness extensions (about 5 s) [git c61c998].
+**Tests on the branches:** `python3 -m pytest tests_demo -q -p no:cacheprovider` with `PYTHONDONTWRITEBYTECODE=1`, from the branch root, against `tests_demo/fake_mt5.py`. 69 (basket) / 105 (Turtle) tests at the port; **107 / 147 after the first fix round**, all passing on the six heads of that round: `39a80a8` and `e2c576d` (15 Nov 2026, 23:34 IST), `91cf724`, `63f18d8`, `040c6f4` and `3378e44` (16 Nov 2026, 00:08 – 00:11 IST). Only in UTC do all six fall on 15 Nov. The six suites ran in parallel after those commits, 1,184.53 – 1,276.96 s each [J-port; J-fix1]. **124 / 168 after the second fix round**, on the six heads pushed at 03:56 IST (§0.5), 20 – 22 minutes each [J-fix2]. Every replay-based fix test was run against the pre-fix code and failed there [J-fix1]. On `backtest_hedging`, `tests/test_demo_parity.py` has 27 tests of the harness extensions (about 5 s) [git c61c998].
 
 **What the checks do not cover** [DP; J-fix1]:
 - **Polls:** parity holds on a fixed 1 s grid in a simulated terminal; on the demo account the loop's timing, the feed, requotes and slippage differ. The eight-timing spread is the guide (gold Top 3 last year: $3,708 – $4,674). The live loop makes about 7 rate fetches per poll, so it runs slower than 1.0 s [R1].
@@ -1502,24 +1502,24 @@ The four basket branches share identical `app.py`, `mt5_helper.py` and `strategy
 
 ### 5.9 The engineering checklist: every defect the reviews found, and the generic lesson
 
-Status as of 16 Nov 2026 about 03:55 IST. "Local" means committed on all six local `demo_hedging_*` branches (cherry-picked from `demo_hedging_xauusd6`, the Turtle fixes from `demo_hedging_btcusd6`), with every branch's full test suite passing, but not pushed (§0.5).
+Status as of 16 Nov 2026 about 04:25 IST. Every fix in the table is pushed. The second-round fixes were cherry-picked from `demo_hedging_xauusd6` (the Turtle fixes from `demo_hedging_btcusd6`) onto all six branches, and pushed at 03:56 IST after every branch's full test suite passed (§0.5).
 
 | # | Item | Found by | Severity | Fix commit | Status |
 |---|---|---|---|---|---|
 | 1 | Trade on the intended account only | [R1] #1 | high | `1a7080d` | pushed |
-| 2 | Never log in on a terminal another account holds | [R2] #1 | high | `87a7f71` | local |
-| 3 | Account switch between the check and the positions read | [R2] #2 | medium | `ed1594e`; Turtle `659703d` | local |
+| 2 | Never log in on a terminal another account holds | [R2] #1 | high | `87a7f71` | pushed |
+| 3 | Account switch between the check and the positions read | [R2] #2 | medium | `ed1594e`; Turtle `659703d` | pushed |
 | 4 | Keep each bot's positions apart (magic) | port design | – | `22c382d` | in place |
 | 5 | Size from the strategy's own ledger (virtual balance) | port design | – | `22c382d` | in place |
 | 6 | Survive a restart (state file, rebuild) | port design | – | `22c382d` | in place; the add's arming cannot be rebuilt |
 | 7 | A fill the broker has not listed yet | [R1] #2 | medium | `825c63f` | pushed |
-| 8 | Broker-side backstop | [R1] #3 (+ [R2] #5) | medium | `1c3f434`, `cad41e9`; `9101642` | pushed; the stop + ladder design check local |
+| 8 | Broker-side backstop | [R1] #3 (+ [R2] #5) | medium | `1c3f434`, `cad41e9`; `9101642` | pushed |
 | 9 | Reconnect after a terminal restart | [R1] #4 | medium | `a34fe2e` | pushed |
 | 10 | A failed read is not an empty answer | [R1] #5 | low | `1aaede4` (deal history: `22c382d`) | pushed |
 | 11 | No entry on votes the poll does not have | [R1] #6 | low | `cfe43d2` | pushed |
 | 12 | No decision on a short history | [R1] #7 | low | `38bfaa4` | pushed |
-| 13 | Partial closes | port design (+ [R2] #3) | low | `22c382d`; `8c8f5ad`; Turtle `6c43e1a` | own partial close in place; one leg closed outside: local |
-| 14 | Logs that flood | [R2] #4 | low | `d77c323` | local |
+| 13 | Partial closes | port design (+ [R2] #3) | low | `22c382d`; `8c8f5ad`; Turtle `6c43e1a` | own partial close in place; one leg closed outside: pushed |
+| 14 | Logs that flood | [R2] #4 | low | `d77c323` | pushed |
 | 15 | Refuse an impossible design at start | port design | – | `22c382d` and later | in place |
 | – | Microsecond window between the account check and `order_send` | [R2] #6 | low | none possible in code | deployment rule (§5.12) |
 | – | A terminal still logging into its saved account when the bot attaches reads as having no account, so the bot logs in | [J-fix2], named by the fix round | – | none possible in code | deployment rule (§5.12) |
@@ -1586,15 +1586,15 @@ These defects were in the *verification* tooling and matter as much as the bot's
 - **Launchers:** on demo both launchers restart `app.py` 30 s after it exits; close the window to stop. The `.bat` files are stored with LF line endings; consider `*.bat text eol=crlf` in `.gitattributes` [J-fix1].
 - **Pre-flight list before starting a demo bot:** (1) the branch is a `demo_hedging_*` branch whose upstream is its own remote branch; (2) its terminal is its own installation, logged into its own demo account, with no live bot attached; (3) `python3 -m pytest tests_demo -q -p no:cacheprovider` passes on the branch head; (4) the start-up line shows the right design, magic and virtual balance; (5) no other process writes to its `OUTPUT_DIR` and its dashboard port is free; (6) check whether the account charges swap.
 
-### 5.13 Status and open items (16 Nov 2026, about 03:55 IST)
+### 5.13 Status and open items (16 Nov 2026, about 04:25 IST)
 
 - **Pushed:** all six demo branches with the first fix round (v3.9.2-demo.3) and each slot's own demo account.
-- **Committed locally, not pushed (second fix round, [J-fix2]):**
+- **Pushed on 16 Nov 2026 at 03:56 IST (second fix round, [J-fix2]):**
   - On `demo_hedging_xauusd6`: `87a7f71` (terminal-in-use guard), `ed1594e` (account re-read after the positions read), `8c8f5ad` (a basket a backstop closed only partly is closed and booked whole), `d77c323` (a long outage does not fill the strategy log), `9101642` (a design with a stop and a ladder needs an add gap), `18e422d` (CHANGELOG v3.9.2-demo.4 and the README's safety section).
   - On `demo_hedging_btcusd6` (02:55 – 03:06 IST): the five code fixes cherry-picked (`bc7cab0`, `cd36ed9`, `e69dc79`, `d1a3540`, `2ff49ef`), two Turtle-only fixes, `659703d` (the account read again right after the Turtle's positions read) and `6c43e1a` (a leg closed beyond the stop ends the trade at once), and the demo.4 docs commit `5eca621`.
   - Cherry-picked onto the other four at 03:26 – 03:29 IST: `xauusd7` `fdf8553`, `xauusd8` `effac75`, `btcusd8` `b3a557e` (six commits each), `btcusd7` `68915b5` (eight).
   - Checks: the full suites pass on all six local heads (124 basket tests, 168 Turtle tests). The demo parity replay after the fixes ran on `xauusd6` only (V3-lite, 2026-06-30 00:00 – 07-01 14:00 UTC): PASS, 133,228 polls, $1,853.57 as before. Top 2, Top 1 and BTC Top 2 were not replayed again; their `app.py` is the same as `xauusd6`'s (`btcusd8`'s differs only in two docstring examples), and a Top 1 replay (the one design with an add) would be the most useful extra check.
-  - Still to come: the push. Check `git log origin/demo_hedging_<x>`.
+  - Still running at 04:25 IST: replays of the other designs on the fixed code (Top 2, Top 1, BTC Top 2, and the Turtle decision replays) and an independent review of the fixes. Their outcome goes into `backtest_results/demo_parity/DEMO_PARITY.md`. Check `git log origin/demo_hedging_<x>` for any later fix.
 - **Open by design:** no exact broker-side stop (backstop only); the Top 1 arming lost with the state file; swap; feed and cadence differences; the server clock assumed UTC; no Turtle poll-level parity [DP]. Two account gaps that only one MT5 installation per slot closes: the microsecond window between the account check and `order_send`, and a terminal still logging into its saved account when the bot attaches, which reads as having no account, so the bot logs in [J-fix2].
 - **Not done:** the live-defaults replay ran on gold only, one window [J-port]. The netting variant has no demo branch and was not put through the later research [MEM].
 
@@ -1820,5 +1820,5 @@ The full table with costs is §3.8. The ones a Ballom session is most likely to 
 | Ballom_Fyers | `/Users/sidharthsingh/Desktop/Ballom` | from the owner's note; not opened for this file |
 | The review journals | `~/.claude/projects/-Users-sidharthsingh-Desktop-Alcadeias-Alcadeias/210c2577-eab3-4001-bc50-2408e8c4d100/subagents/workflows/<id>/journal.jsonl` (`wf_285378d0-a0a`, `wf_c9b9a4c0-2f4`, `wf_3ebd063f-c01`, `wf_c0f3ff36-384`, `wf_ea170a6c-975`) | the full record of each review; their findings are in §3.7 and §5.9 |
 | The owner's memory notes for Alcadeias | `~/.claude/projects/-Users-sidharthsingh-Desktop-Alcadeias-Alcadeias/memory/` | not visible to a Ballom session; their content is in §1 and §6 |
-| The parity recordings and re-check script | the session's temporary scratch folder, `/private/tmp/claude-501/-Users-sidharthsingh-Desktop-Alcadeias-Alcadeias/210c2577-eab3-4001-bc50-2408e8c4d100/scratchpad/` (`parity_final/*.ref.pkl`, 14 files, 109 MB; `parity_final.py`) | present at about 03:50 IST on 16 Nov 2026; at risk of deletion; see §0.6 |
+| The parity recordings, re-check script and probe scripts | `data/archive/session_2026-11-16/` in this repo (git-ignored, this machine only; `parity_final/*.ref.pkl`, 14 files, 109 MB; `parity_final.py`; `README.md`) | copied from the session's temporary scratch folder on 16 Nov 2026; see §0.6 |
 | The tick store | `data/raw/` and `data/store/` in this repo (git-ignored; 11 GB and 22 GB on 16 Nov 2026) | rebuild with `python -m backtesting data` |

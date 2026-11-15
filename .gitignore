@@ -3,6 +3,8 @@
 data/raw/
 data/store/
 data/*.log
+# Local copies of session scratch files (parity recordings, probes): see HANDOFF.md §0.6
+data/archive/
 
 # Python / tooling
 __pycache__/
