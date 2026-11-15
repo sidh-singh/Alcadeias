@@ -2412,6 +2412,9 @@ class MT5TradingBot:
                         )
                         buy_positions = self.position_helper.get_buy_positions(trade_symbol)
                         sell_positions = self.position_helper.get_sell_positions(trade_symbol)
+                        # the account again, right after the positions: a switch since the poll's first check would
+                        # hand this poll another account's positions (read as legs closed outside the bot)
+                        account_bad = self._account_problem()
                         account_info = self.position_helper.get_account_info()
                         server_time = self.position_helper._get_server_time(trade_symbol)
                         tick = mt5.symbol_info_tick(trade_symbol)
@@ -2419,6 +2422,13 @@ class MT5TradingBot:
                     # The positions are not known this poll (not "none"): the book is not matched with them (it would
                     # end the trade as closed outside the bot), and nothing is decided.
                     self._poll_failed(symbol, str(e))
+                    time.sleep(1)
+                    if self._stop_event.is_set():
+                        return
+                    continue
+                if account_bad is not None:
+                    # Not this bot's account any more: the poll decides nothing, as _poll_guard refuses it.
+                    self._account_refused(symbol, account_bad)
                     time.sleep(1)
                     if self._stop_event.is_set():
                         return

@@ -50,9 +50,12 @@ def test_a_failed_positions_read_mid_trade_changes_nothing(reference, tmp_path):
 
 
 @pytest.mark.slow
-def test_another_account_on_the_terminal_mid_trade_changes_nothing(reference, tmp_path):
+@pytest.mark.parametrize('lands', ['before_the_poll', 'between_the_account_check_and_the_positions_read'])
+def test_another_account_on_the_terminal_mid_trade_changes_nothing(reference, tmp_path, lands):
     """A live bot logs the shared terminal into the real account for a minute: that account shows none of this
-    bot's legs. Nothing is synced or sent until the demo account is back, and the trade goes on as it would have."""
+    bot's legs. Nothing is synced or sent until the demo account is back, and the trade goes on as it would have --
+    also when the switch lands after the poll's account check, just before its positions read (finding 2 of the
+    re-review: the legs looked closed outside the bot): the account is read again right after the positions."""
     fake, clock = _market(_long_trip())
     stash = {}
 
@@ -63,7 +66,10 @@ def test_another_account_on_the_terminal_mid_trade_changes_nothing(reference, tm
     def back(f):
         f.positions = stash['positions']
         f.account_login, f.trade_mode = 1, f.ACCOUNT_TRADE_MODE_DEMO
-    fake.at(START + QUIET[0], to_live)
+    if lands == 'before_the_poll':
+        fake.at(START + QUIET[0], to_live)
+    else:
+        fake.on_call('positions_get', START + QUIET[0], to_live)
     fake.at(START + QUIET[0] + 60, back)
     run = _run(fake, clock, tmp_path)
     _same_trade(fake, reference)
