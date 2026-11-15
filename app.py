@@ -333,6 +333,12 @@ def design_summary():
     return ' | '.join(bits)
 
 
+# ─── the terminal (demo review) ───
+_RECONNECT_AFTER = 5                         # polls in a row without the terminal (terminal_info() None) before the
+                                             # bot connects again: mt5.shutdown(), then initialize_mt5()
+_RECONNECT_BACKOFF_S = (5.0, 10.0, 30.0, 60.0)   # waits after a reconnect that failed (the last one repeats)
+
+
 class MT5TradingBot:
     """Main Trading Bot Class with Clean Architecture"""
     
@@ -369,9 +375,15 @@ class MT5TradingBot:
         # does not call it takes the first account it sees) and why the account seen last was refused (None = ok).
         self._account_login = None
         self._account_bad = None
-        # Polls in a row that could not read the terminal (they decide nothing), and why the last one could not.
+        # Polls in a row that could not read the terminal (they decide nothing), and why the last one could not;
+        # those of them without the terminal at all (terminal_info() None), the reconnects that failed since, the
+        # time of the next attempt, and why initialize_mt5 failed last.
         self._failed_polls = 0
         self._read_bad = None
+        self._ipc_failed = 0
+        self._reconnects_failed = 0
+        self._reconnect_at = None
+        self._init_problem = None
 
     # ── Day-of-week mapping for trading_window config ──
     _DAY_NAME_TO_NUM = {
@@ -558,28 +570,31 @@ class MT5TradingBot:
         
         # Initialize MT5
         if not mt5.initialize(path=self.credentials['terminal_path']):
+            self._init_problem = f'initialize failed: {mt5.last_error()}'
             print(f"✗ MT5 initialization failed: {mt5.last_error()}")
             return False
-        
+
         print(f"✓ MT5 initialized successfully")
         print(f"✓ MT5 version: {mt5.version()}")
-        
+
         # Login to MT5 account
         authorized = mt5.login(
             login=self.credentials['login_id'],
             password=self.credentials['login_pass'],
             server=self.credentials['server']
         )
-        
+
         if not authorized:
             error = mt5.last_error()
+            self._init_problem = f'login failed: {error}'
             print(f"✗ Login failed: {error}")
             mt5.shutdown()
             return False
-        
+
         # Get account info
         account_info = mt5.account_info()
         if account_info is None:
+            self._init_problem = 'no account info'
             print("✗ Failed to get account info")
             mt5.shutdown()
             return False
@@ -587,10 +602,12 @@ class MT5TradingBot:
         # Only ever this branch's demo account: a demo, hedging account with the login of the credentials
         problem = self._login_problem(account_info)
         if problem:
+            self._init_problem = problem
             print(f"✗ Refused: {problem}")
             mt5.shutdown()
             return False
         self._account_login = account_info.login
+        self._init_problem = None
 
         print(f"\n{'='*60}")
         print(f"  Login Successful - {self.mode.upper()} Account")
@@ -1133,18 +1150,79 @@ class MT5TradingBot:
             helper.order_guard = self._order_guard
 
     def _poll_guard(self, symbol):
-        """At the start of every poll: True when the poll may read the terminal and decide."""
+        """At the start of every poll: True when the poll may read the terminal and decide -- the terminal answers
+        and is connected, and it holds this bot's demo account."""
         self._install_order_guard()
+        problem, ipc_lost = self._terminal_problem()
+        if problem is not None:
+            self._poll_failed(symbol, problem, ipc_lost=ipc_lost)
+            return False
         return self._account_ok(symbol)
 
-    def _poll_failed(self, symbol, problem):
-        """A poll that could not read what it decides on (the terminal answered None): it syncs, books and decides
-        nothing. A WARNING and an ERROR event TERMINAL_ERROR when such a streak starts or its problem changes."""
+    def _terminal_problem(self):
+        """Why the terminal cannot be used this poll: (problem, ipc_lost), (None, False) when it can. ipc_lost:
+        terminal_info() answers None (or raises), the connection to the terminal is gone -- the terminal was
+        restarted or closed -- and every call will answer None until the bot connects again. Not connected to the
+        trade server: the terminal reconnects by itself (a reconnect of the bot would log in again, and may undo
+        another process's login on the shared terminal), so the poll only waits."""
+        try:
+            info = mt5.terminal_info()
+        except Exception as e:
+            return f'terminal_info() raised {e!r}', True
+        if info is None:
+            return f'terminal_info() returned None (last_error {self._last_error()})', True
+        if getattr(info, 'connected', True) is False:
+            return f'the terminal is not connected to the trade server (last_error {self._last_error()})', False
+        return None, False
+
+    def _poll_failed(self, symbol, problem, ipc_lost=False):
+        """A poll that could not read what it decides on: it syncs, books and decides nothing. A WARNING and an ERROR
+        event TERMINAL_ERROR when such a streak starts or its problem changes. After _RECONNECT_AFTER polls in a
+        row without the terminal the bot connects again (_try_reconnect), and while that fails again after 5, 10,
+        30, then every 60 s."""
         self._failed_polls += 1
         if problem != self._read_bad:
             self._read_bad = problem
             print(f"[{symbol}] WARNING: poll skipped, nothing decided: {problem}")
             self._log_event(symbol, 'TERMINAL_ERROR', 'ERROR', {'problem': problem, 'failed_polls': self._failed_polls})
+        if not ipc_lost:
+            return
+        self._ipc_failed += 1
+        if self._ipc_failed >= _RECONNECT_AFTER and (self._reconnect_at is None or time.time() >= self._reconnect_at):
+            self._try_reconnect(symbol)
+
+    def _try_reconnect(self, symbol):
+        attempt = self._reconnects_failed + 1
+        if self._reconnect(symbol):
+            print(f"[{symbol}] note: connected to the terminal again (attempt {attempt})")
+            self._log_event(symbol, 'TERMINAL_RECONNECTED', 'SIGNAL', {
+                'attempt': attempt, 'failed_polls': self._failed_polls, 'login': self._account_login})
+            self._ipc_failed = 0
+            self._reconnects_failed = 0
+            self._reconnect_at = None
+            return
+        wait = _RECONNECT_BACKOFF_S[min(self._reconnects_failed, len(_RECONNECT_BACKOFF_S) - 1)]
+        self._reconnects_failed += 1
+        self._reconnect_at = time.time() + wait
+        print(f"[{symbol}] WARNING: reconnect attempt {attempt} failed ({self._init_problem}); next one in {wait:g} s")
+        self._log_event(symbol, 'RECONNECT_FAILED', 'ERROR', {
+            'attempt': attempt, 'why': self._init_problem, 'next_in_s': wait, 'failed_polls': self._failed_polls})
+
+    def _reconnect(self, symbol):
+        """mt5.shutdown(), then initialize_mt5() again: the terminal, the login, the demo-account checks, the symbol
+        map and a new helper behind the order guard. True when the bot is on its demo account again."""
+        print(f"[{symbol}] reconnecting to the MT5 terminal ...")
+        with self.mt5_lock:
+            try:
+                mt5.shutdown()
+            except Exception:
+                pass
+            self.mt5_initialized = False
+            try:
+                return bool(self.initialize_mt5())
+            except Exception as e:          # (no credentials, a terminal that raises ...)
+                self._init_problem = f'initialize_mt5 raised {e!r}'
+                return False
 
     def _poll_succeeded(self, symbol):
         """The poll has read the terminal: a streak of failed polls is over (an event TERMINAL_OK)."""
@@ -1153,6 +1231,9 @@ class MT5TradingBot:
             self._log_event(symbol, 'TERMINAL_OK', 'SIGNAL', {'failed_polls': self._failed_polls, 'was': self._read_bad})
         self._failed_polls = 0
         self._read_bad = None
+        self._ipc_failed = 0
+        self._reconnects_failed = 0
+        self._reconnect_at = None
 
     def process_symbol(self, symbol):
         """
