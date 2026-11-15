@@ -193,6 +193,8 @@ class FakeMT5:
         self.refuse_orders = 0      # refuse the next N new orders (not closes)
         self.fail_close_tickets = set()
         self.history_none = False   # history_deals_get returns None (terminal error)
+        self.positions_none = []    # [(from_ms, to_ms)]: positions_get answers None (an error) in these windows
+        self._error = (1, 'Success')
         for name, code in TF_CODES.items():
             setattr(self, 'TIMEFRAME_' + name, code)
         span = int((self.t_ms[-1] - self.t_ms[0]) // 1000) + 1 if len(self.t_ms) else 0
@@ -209,6 +211,14 @@ class FakeMT5:
         """Run fn(self) once, at the first terminal call at or after terminal time t_s (seconds)."""
         self._hooks.append((int(round(t_s * 1000)), fn))
         self._hooks.sort(key=lambda h: h[0])
+
+    def fail_positions(self, from_s, to_s):
+        """positions_get answers None (a terminal error) from terminal time from_s to to_s (seconds)."""
+        self.positions_none.append((int(round(from_s * 1000)), int(round(to_s * 1000))))
+
+    @staticmethod
+    def _within(windows, now_ms):
+        return any(a <= now_ms < b for a, b in windows)
 
     def _run_hooks(self):
         now = self.clock.now_ms
@@ -248,7 +258,7 @@ class FakeMT5:
         return (5, 0, 4738)
 
     def last_error(self):
-        return (1, 'Success')
+        return self._error
 
     # ── account ──
     def _pos_profit(self, p, b, a):
@@ -314,6 +324,10 @@ class FakeMT5:
     # ── positions / orders / deals ──
     def positions_get(self, symbol=None, **k):
         b, a = self.quote()
+        if self._within(self.positions_none, self.clock.now_ms):
+            self._error = (-1, 'Terminal: Call failed')
+            return None
+        self._error = (1, 'Success')
         if b is None or (symbol is not None and symbol != self.symbol):
             return ()
         return tuple(types.SimpleNamespace(

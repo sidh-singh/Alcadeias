@@ -6,7 +6,7 @@ import threading
 import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from mt5_helper import MT5PositionHelper
+from mt5_helper import MT5PositionHelper, TerminalReadError
 from indicator import Indicator
 from strategy import Strategy, Signal
 from datetime import timezone
@@ -283,6 +283,9 @@ class MT5TradingBot:
         # does not call it takes the first account it sees) and why the account seen last was refused (None = ok).
         self._account_login = None
         self._account_bad = None
+        # Polls in a row that could not read the terminal (they decide nothing), and why the last one could not.
+        self._failed_polls = 0
+        self._read_bad = None
 
     # ── Day-of-week mapping for trading_window config ──
     _DAY_NAME_TO_NUM = {
@@ -1048,6 +1051,23 @@ class MT5TradingBot:
         self._install_order_guard()
         return self._account_ok(symbol)
 
+    def _poll_failed(self, symbol, problem):
+        """A poll that could not read what it decides on (the terminal answered None): it syncs, books and decides
+        nothing. A WARNING and an ERROR event TERMINAL_ERROR when such a streak starts or its problem changes."""
+        self._failed_polls += 1
+        if problem != self._read_bad:
+            self._read_bad = problem
+            print(f"[{symbol}] WARNING: poll skipped, nothing decided: {problem}")
+            self._log_event(symbol, 'TERMINAL_ERROR', 'ERROR', {'problem': problem, 'failed_polls': self._failed_polls})
+
+    def _poll_succeeded(self, symbol):
+        """The poll has read the terminal: a streak of failed polls is over (an event TERMINAL_OK)."""
+        if self._failed_polls:
+            print(f"[{symbol}] note: the terminal answers again after {self._failed_polls} skipped poll(s)")
+            self._log_event(symbol, 'TERMINAL_OK', 'SIGNAL', {'failed_polls': self._failed_polls, 'was': self._read_bad})
+        self._failed_polls = 0
+        self._read_bad = None
+
     def process_symbol(self, symbol):
         """
         Process a single symbol (will be called in separate threads)
@@ -1131,12 +1151,21 @@ class MT5TradingBot:
                         trade_symbol, getattr(mt5, MARKET_STATUS_TIMEFRAME), lookback_minutes=MARKET_LOOKBACK_MINUTES
                     )
                 time.sleep(0)  # yield so other symbol-threads can acquire the lock
-                with self.mt5_lock:
-                    buy_positions = self.position_helper.get_buy_positions(trade_symbol)
-                    sell_positions = self.position_helper.get_sell_positions(trade_symbol)
-                    account_info = self.position_helper.get_account_info()
-                    server_time = self.position_helper._get_server_time(trade_symbol)
-                    _tick = mt5.symbol_info_tick(trade_symbol)     # the decision quote (add gap)
+                try:
+                    with self.mt5_lock:
+                        buy_positions = self.position_helper.get_buy_positions(trade_symbol)
+                        sell_positions = self.position_helper.get_sell_positions(trade_symbol)
+                        account_info = self.position_helper.get_account_info()
+                        server_time = self.position_helper._get_server_time(trade_symbol)
+                        _tick = mt5.symbol_info_tick(trade_symbol)     # the decision quote (add gap)
+                except TerminalReadError as e:
+                    # The positions are not known this poll (not "none"): no sync, no bookkeeping, no decision.
+                    self._poll_failed(symbol, str(e))
+                    time.sleep(1)
+                    if self._stop_event.is_set():
+                        return
+                    continue
+                self._poll_succeeded(symbol)
                 _now = time.time()
                 _bid = float(_tick.bid) if _tick is not None else None
                 _ask = float(_tick.ask) if _tick is not None else None
