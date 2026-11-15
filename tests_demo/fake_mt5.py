@@ -211,6 +211,7 @@ class FakeMT5:
         self.terminal_down = []     # [(from_ms, to_ms)]: the terminal is gone (restarted, closed); see down()
         self.ipc_ok = True          # the connection to the terminal (lost while it is down, until initialize())
         self.connected = True       # terminal_info().connected: the terminal's connection to the trade server
+        self.list_delay_ms = 0      # positions_get lists a position only this long after it opened (async terminal)
         self._error = (1, 'Success')
         for name, code in TF_CODES.items():
             setattr(self, 'TIMEFRAME_' + name, code)
@@ -382,11 +383,12 @@ class FakeMT5:
         self._error = (1, 'Success')
         if b is None or (symbol is not None and symbol != self.symbol):
             return ()
+        now = self.clock.now_ms
         return tuple(types.SimpleNamespace(
             ticket=p['ticket'], identifier=p['ticket'], type=p['type'], volume=p['volume'],
             price_open=p['price_open'], symbol=self.symbol, profit=self._pos_profit(p, b, a),
             time=p['time_msc'] // 1000, time_msc=p['time_msc'], swap=0.0, magic=p['magic'],
-            comment=p['comment']) for p in self.positions)
+            comment=p['comment']) for p in self.positions if p['time_msc'] <= now - self.list_delay_ms)
 
     def add_position(self, type_, volume, price_open, time_s, magic=0, comment=''):
         """Put a position on the account directly (a foreign trade, or one opened before a restart)."""
