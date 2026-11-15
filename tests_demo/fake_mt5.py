@@ -19,7 +19,8 @@ The terminal is a hedging account on one symbol:
   * terminal_info(); while the terminal is down (down()) every call answers None, and the connection stays lost
     until initialize() succeeds again, as with the MetaTrader5 package after a terminal restart.
 Failures can be injected (refused orders, failed closes, no history, a terminal down, positions_get errors), and
-anything can be scheduled at a terminal time with at(t_s, fn) (an account switch ...).
+anything can be scheduled at a terminal time with at(t_s, fn) (an account switch ...), or at the first call of one
+terminal function from a terminal time on with on_call(name, t_s, fn) (a switch between two reads of one poll).
 """
 import functools
 import math
@@ -214,6 +215,7 @@ class FakeMT5:
         self.margin_mode = self.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING
         self.calls = []             # (name, terminal ms) of initialize / login / shutdown
         self._hooks = []            # [(t_ms, fn)]: fn(self) runs once the clock reaches t_ms (see at())
+        self._call_hooks = []       # [(name, t_ms, fn)]: fn(self) runs once at the first call of `name` from t_ms on
         # failure injection
         self.refuse_orders = 0      # refuse the next N new orders (not closes)
         self.fail_close_tickets = set()
@@ -241,6 +243,17 @@ class FakeMT5:
         """Run fn(self) once, at the first terminal call at or after terminal time t_s (seconds)."""
         self._hooks.append((int(round(t_s * 1000)), fn))
         self._hooks.sort(key=lambda h: h[0])
+
+    def on_call(self, name, t_s, fn):
+        """Run fn(self) once, at the first call of the terminal function `name` (only 'positions_get') at or after
+        terminal time t_s (seconds), before it answers: what happens between two reads of one poll."""
+        self._call_hooks.append((name, int(round(t_s * 1000)), fn))
+
+    def _run_call_hooks(self, name):
+        now = self.clock.now_ms
+        for hook in [h for h in self._call_hooks if h[0] == name and h[1] <= now]:
+            self._call_hooks.remove(hook)
+            hook[2](self)
 
     def fail_rates(self, tf, from_s, to_s):
         """copy_rates_* of timeframe `tf` ('M15') answer None from terminal time from_s to to_s (seconds)."""
@@ -425,6 +438,7 @@ class FakeMT5:
     # ── positions / orders / deals ──
     @_terminal_call
     def positions_get(self, symbol=None, **k):
+        self._run_call_hooks('positions_get')
         b, a = self.quote()
         if self._within(self.positions_none, self.clock.now_ms):
             self._error = (-1, 'Terminal: Call failed')
