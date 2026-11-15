@@ -241,6 +241,10 @@ def design_problems():
         p.append(f'VOL_LEN must be a whole number >= 2, not {VOL_LEN!r}')
     if not _is_number(BACKSTOP_FACTOR) or BACKSTOP_FACTOR <= 1.0:
         p.append(f"BACKSTOP_FACTOR must be a number > 1 (the backstop beyond the bot's own stop), not {BACKSTOP_FACTOR!r}")
+    if design_has_stop() and Strategy.ladder_tiers() and not (_is_number(LADDER_GAP_VOL) and LADDER_GAP_VOL > 0):
+        p.append("a design with a stop and a ladder needs LADDER_GAP_VOL > 0 (and VOL_TF), or MAX_ADDS = 0: without a "
+                 "gap an add can fill in favour of the basket, and its broker-side backstop could then lie inside the "
+                 "basket's stop (the broker would close it before the bot's own stop)")
     if (TREND_TF is not None or VOL_TF is not None) and RSI_CANDLE_COUNT - 1 < _MIN_CLOSED_BARS:
         p.append(f'RSI_CANDLE_COUNT {RSI_CANDLE_COUNT} leaves fewer than {_MIN_CLOSED_BARS} closed bars for TREND_TF / '
                  f'VOL_TF: no entry could ever be sent')

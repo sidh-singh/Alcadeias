@@ -111,6 +111,26 @@ def test_designs_the_bot_cannot_run_are_refused(mods, tmp_path, ov, needle):
         F.make_bot(m, m.fake, 'XAUUSDm', F.Run(), state_dir=tmp_path).process_symbol('XAUUSDm')
 
 
+def test_a_design_with_a_stop_and_a_ladder_needs_an_add_gap(mods, tmp_path):
+    """A stop with a ladder that can add in favour of the basket (LADDER_GAP_VOL = 0): an add far in favour carries a
+    broker-side backstop inside the basket's stop -- the broker would close it while the bot's own stop has not fired
+    (finding 5 of the re-review). Refused; with a gap every add is against the basket and its backstop lies beyond
+    the stop. The designs the branches ship all pass (test_each_example_design_is_accepted_...)."""
+    vol = dict(VOL_TF='H1', TARGET_USD_PER_UNIT=None, TARGET_VOL=10.0, STOP_VOL=8.0)
+    for ov in (dict(vol, MAX_ADDS=1, LADDER_TRIGGER='macd_turn'),       # XAU Top 1 without its gap
+               dict(vol),                                               # a stop with the live RSI ladder
+               {'STOP_LOSS_USD_PER_UNIT': 4.0}):                        # a $ stop with the live ladder
+        m = mods(**ov)
+        problems = m.app.design_problems()
+        assert any('LADDER_GAP_VOL > 0' in p for p in problems), (ov, problems)
+        with pytest.raises(ValueError, match='LADDER_GAP_VOL'):
+            F.make_bot(m, m.fake, 'XAUUSDm', F.Run(), state_dir=tmp_path).process_symbol('XAUUSDm')
+    for ov in (dict(vol, MAX_ADDS=1, LADDER_TRIGGER='macd_turn', LADDER_GAP_VOL=1.0),     # XAU Top 1
+               dict(vol, MAX_ADDS=0),                                                    # no ladder
+               {}):                                                                      # no stop: the live bot
+        assert mods(**ov).app.design_problems() == [], ov
+
+
 def test_a_refused_design_stops_the_job_before_it_connects(mods):
     m = mods(STRATEGY='turtle')
     called = []
