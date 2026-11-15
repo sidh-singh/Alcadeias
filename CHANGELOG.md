@@ -96,7 +96,8 @@ All demo bots attach to one terminal; a live bot logging it into the real accoun
   `design_has_stop` / `backstop_distance` / `_open_leg` / `_price_digits`; `entry_timeframes` and
   `entry_block_reason(no_data, short_history)`; `_vol_unit_at` needs 300 closed bars; design checks
   (`BACKSTOP_FACTOR` > 1, `RSI_CANDLE_COUNT`); `main()` refuses live; the analysis keys `fill_pending`, `no_data`,
-  `short_history`; the events above and `backstop_sl` in the order events.
+  `short_history`; the events above and `backstop_sl` in the order events; the poll's `terminal_info()` /
+  `account_info()` reads under `mt5_lock`, like every other MT5 call.
 - `mt5_helper.py`: `TerminalReadError`; `order_guard` / `_send`; `auto_sltp` on `buy` / `sell` / `_build_request`
   (the same code as on the Turtle branches).
 - `strategy.py`: `Strategy.section_timeframes()`. `constants.py`: `BACKSTOP_FACTOR`, `TURTLE_BACKSTOP_N`.
@@ -110,7 +111,7 @@ All demo bots attach to one terminal; a live bot logging it into the real accoun
   through every backstop); `test_turtle_bot.py` (every leg's backstop, the design check).
 
 ### Rollback
-`git revert` this one, the two `demo(turtle)` commits and the seven `demo(safety)` / `demo(fix)` ones (newest first);
+`git revert` the `demo(safety)` / `demo(fix)` / `demo(turtle)` / `demo(docs)` commits of this version (newest first);
 nothing to clean up (no new state file; the backstop of a position already open stays on it until it closes).
 
 ---
