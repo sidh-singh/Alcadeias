@@ -4,6 +4,11 @@ the demo review: every call answered None for ever). Every poll checks terminal_
 the terminal decides and sends nothing; after 5 such polls in a row the bot calls mt5.shutdown() and
 initialize_mt5() again (with the demo-account checks), and while that fails tries again after 5, 10, 30, then
 every 60 s. The launchers start app.py again 30 s after it exits (demo only).
+
+A long outage does not fill the 200-entry strategy log (finding 4 of the re-review: 4 hours down wrote 243
+RECONNECT_FAILED events): RECONNECT_FAILED is logged on the first failure, when its reason changes (the terminal's
+last_error aside), and at most every 15 minutes otherwise; TERMINAL_RECONNECTED reports the attempts and the
+outage's length.
 """
 import re
 
@@ -43,10 +48,56 @@ def test_the_reconnects_back_off_5_10_30_then_every_60_s(mods):
         clock.sleep(1)
     assert _tries(fake, t0) == [4, 9, 19, 49, 109, 169, 229, 289]     # the 5th failed poll, then +5 +10 +30 +60 ...
     failed = [e for e in run.events if e['event'] == 'RECONNECT_FAILED']
-    assert [e['details']['next_in_s'] for e in failed] == [5, 10, 30, 60, 60, 60, 60, 60]
-    assert all(e['tag'] == 'ERROR' and 'initialize failed' in e['details']['why'] for e in failed)
+    assert len(failed) == 1 and failed[0]['details']['attempt'] == 1 and failed[0]['details']['next_in_s'] == 5
+    assert failed[0]['tag'] == 'ERROR' and 'initialize failed' in failed[0]['details']['why']   # (the same 7 times more)
     first = [e for e in run.events if e['event'] == 'TERMINAL_ERROR']
     assert len(first) == 1 and 'terminal_info() returned None' in first[0]['details']['problem']
+
+
+def test_a_long_outage_does_not_fill_the_log(mods):
+    """4 hours without the terminal, then it is back: RECONNECT_FAILED on the first failure, then every 15 minutes
+    (16 events, not 243, in the 200-entry log), and TERMINAL_RECONNECTED with the number of attempts and how long it
+    lasted."""
+    fake, clock = market(4 * 3600 + 300)
+    m = mods(fake=fake, clock=clock)
+    m.app.print = lambda *a, **k: None
+    run = F.Run()
+    bot = F.make_bot(m, fake, 'XAUUSDm', run)
+    bot.credentials = dict(CREDS)
+    t0 = clock.time()
+    fake.down(t0, t0 + 4 * 3600)
+    k = 0
+    while not bot._poll_guard('XAUUSDm'):
+        clock.sleep(1)
+        k += 1
+        assert k < 4 * 3600 + 120
+    failed = [round(e['t'] / 1000.0 - t0) for e in run.events if e['event'] == 'RECONNECT_FAILED']
+    assert failed == [4] + [949 + 900 * n for n in range(15)]          # (the attempts at 9, 19, 49, 109 ... not)
+    assert len(_tries(fake, t0)) == 244                                # every attempt was made: 243 failed
+    back = [e for e in run.events if e['event'] == 'TERMINAL_RECONNECTED']
+    assert len(back) == 1 and back[0]['details']['attempt'] == 244 and back[0]['details']['failed_attempts'] == 243
+    assert back[0]['details']['outage_s'] == pytest.approx(14449, abs=1)
+    assert len(run.events) == 18                                       # TERMINAL_ERROR, 16 x RECONNECT_FAILED, back
+
+
+def test_a_new_reason_is_logged_at_once(mods):
+    """The terminal is back but holds another account: that failure is logged at once (its reason changed), then
+    every 15 minutes again."""
+    fake, clock = market(1500)
+    m = mods(fake=fake, clock=clock)
+    m.app.print = lambda *a, **k: None
+    run = F.Run()
+    bot = F.make_bot(m, fake, 'XAUUSDm', run)
+    bot.credentials = dict(CREDS)
+    t0 = clock.time()
+    fake.down(t0, t0 + 100)
+    fake.at(t0 + 99, lambda f: setattr(f, 'account_login', 7))
+    for _ in range(1400):
+        bot._poll_guard('XAUUSDm')
+        clock.sleep(1)
+    failed = [(round(e['t'] / 1000.0 - t0), e['details']['why'].split(':')[0])
+              for e in run.events if e['event'] == 'RECONNECT_FAILED']
+    assert failed == [(4, 'initialize failed'), (109, 'TERMINAL_IN_USE'), (1009, 'TERMINAL_IN_USE')]
 
 
 @pytest.mark.slow
@@ -71,9 +122,10 @@ def test_a_terminal_restart_mid_basket_is_ridden_out(tmp_path):
     assert not any((t0 + 0.5) * 1000 <= o['_t_ms'] <= (t0 + 50.5) * 1000 for o in fake.orders)
     assert not any((t0 + 0.5) * 1000 < p['t'] < (t0 + 50.5) * 1000 for p in run.polls)
     events = [e['event'] for e in run.events if e['event'].startswith(('TERMINAL', 'RECONNECT'))]
-    assert events == ['TERMINAL_ERROR', 'RECONNECT_FAILED', 'RECONNECT_FAILED', 'RECONNECT_FAILED',
-                      'TERMINAL_RECONNECTED', 'TERMINAL_OK']
-    assert [e for e in run.events if e['event'] == 'TERMINAL_RECONNECTED'][0]['details']['login'] == 1
+    assert events == ['TERMINAL_ERROR', 'RECONNECT_FAILED', 'TERMINAL_RECONNECTED', 'TERMINAL_OK']   # (one failure
+    back = [e for e in run.events if e['event'] == 'TERMINAL_RECONNECTED'][0]['details']           # logged of three)
+    assert back['login'] == 1 and back['attempt'] == 4 and back['failed_attempts'] == 3
+    assert back['outage_s'] == pytest.approx(49, abs=1)                  # from the first poll without it
 
 
 def test_a_reconnect_onto_another_account_is_refused(mods):
