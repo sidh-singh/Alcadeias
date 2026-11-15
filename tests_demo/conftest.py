@@ -172,3 +172,50 @@ def baskets(fake, magic=None):
             out.append(dict(t_open=leg['t_in'], t_close=leg['t_out'], side=leg['side'], legs=[leg],
                             pnl=round(leg['profit'], 2)))
     return out
+
+
+# ───────────────────────────── terminal and account failures (the demo review) ─────────────────────────────
+
+NO_LADDER = dict(SCALED, MAX_ADDS=0)      # no arming state: polls that decide nothing can be skipped exactly
+
+
+def deals_of(fake):
+    return [(d.time_msc, d.type, d.entry, d.volume, d.price, d.profit) for d in fake.deals]
+
+
+def quiet_window(run, fake, seconds):
+    """Start (terminal seconds) of a stretch of `seconds` inside a basket in which `run` decided nothing: every poll
+    DO_NOTHING with a basket open, no order sent. Skipping those polls changes nothing that follows."""
+    order_t = [o['_t_ms'] for o in fake.orders]
+    polls = run.polls
+    for i, p in enumerate(polls):
+        if p['t'] < (START + 120) * 1000 or p['nb'] + p['ns'] == 0:
+            continue
+        t0, t1 = p['t'], p['t'] + seconds * 1000
+        window = [q for q in polls[i:] if q['t'] <= t1 + 1000]
+        if window[-1]['t'] < t1:
+            break
+        if (all(q['buy'] == q['sell'] == 'DO_NOTHING' and q['nb'] + q['ns'] > 0 for q in window)
+                and not any(t0 - 1000 <= t <= t1 + 1000 for t in order_t)):
+            return t0 / 1000.0
+    raise AssertionError('no quiet window')
+
+
+def recording_states(saved):
+    """on_new_bot hook: every state the bot saves, as JSON, into `saved`."""
+    import json
+
+    def on_new_bot(bot, n):
+        save = bot._save_state
+
+        def rec(symbol, state):
+            saved.append(json.loads(json.dumps(state, default=str)))
+            save(symbol, state)
+        bot._save_state = rec
+    return on_new_bot
+
+
+def booked_outside(saved):
+    """The saved states that book a basket as closed outside the bot or take one over from the terminal."""
+    return [s for s in saved if (s.get('last_close') or {}).get('reason') == 'closed_outside'
+            or (s.get('basket') or {}).get('opened_by') == 'rebuild']
