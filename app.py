@@ -1,4 +1,5 @@
 import MetaTrader5 as mt5
+import copy
 import json
 import os
 import sys
@@ -36,7 +37,7 @@ from constants import (
     # demo isolation
     MAGIC, DEMO_BRANCH, VIRTUAL_START_BALANCE, VIRTUAL_START_DATE,
     # the Turtle (STRATEGY = 'turtle')
-    TURTLE_SYSTEM, TURTLE_N_LEN, TURTLE_STOP_N, TURTLE_ADD_N, TURTLE_MAX_LEGS, TURTLE_TICK,
+    TURTLE_SYSTEM, TURTLE_N_LEN, TURTLE_STOP_N, TURTLE_ADD_N, TURTLE_MAX_LEGS, TURTLE_TICK, TURTLE_BACKSTOP_N,
     TURTLE_VOTE_TF, TURTLE_VOTE_BARS, TURTLE_D1_BARS, TURTLE_MIN_D1_BARS,
 )
 
@@ -326,7 +327,8 @@ def turtle_design_problems():
     p = []
     if not _is_int(TURTLE_SYSTEM) or TURTLE_SYSTEM not in T.SYSTEMS:
         p.append(f'TURTLE_SYSTEM must be 1 or 2, not {TURTLE_SYSTEM!r}')
-    for name, x in (('TURTLE_STOP_N', TURTLE_STOP_N), ('TURTLE_ADD_N', TURTLE_ADD_N)):
+    for name, x in (('TURTLE_STOP_N', TURTLE_STOP_N), ('TURTLE_ADD_N', TURTLE_ADD_N),
+                    ('TURTLE_BACKSTOP_N', TURTLE_BACKSTOP_N)):
         if not _is_number(x) or x <= 0:
             p.append(f'{name} must be a number > 0, not {x!r}')
     if not _is_number(TURTLE_TICK) or TURTLE_TICK < 0:
@@ -2162,6 +2164,29 @@ class MT5TradingBot:
             return 1, None
         return T.unit_rule(balance, step_up_balance, max_limit), balance
 
+    def _turtle_backstop(self, trade_symbol, st, side, price, now, units=None):
+        """
+        The broker-side backstop (request sl) of a new Turtle leg filled at `price` (the decision quote: the ask of a
+        buy, the bid of a sell): the trade's stop with that leg -- turtle.py's own rule (on_entry / on_add: the
+        tighter of 2N from the newest fill and the exit channel, never looser than before) -- minus (a long) / plus
+        (a short) TURTLE_BACKSTOP_N x N_entry, rounded to the symbol's digits; never moved afterwards. The bot's own
+        stop only ever tightens and closes every leg at market, so it is always met first; the backstop acts only
+        while the bot or the terminal is down, and a leg it closes is handled as one closed outside the bot (the
+        stop is kept). 0.0 (none) when it cannot be known.
+        """
+        trial = copy.deepcopy(st)
+        if trial['side'] == 0:
+            T.on_entry(trial, side, price, now, units)
+        else:
+            T.on_add(trial, price, now)
+        stop, n = trial.get('stop'), trial.get('n_entry')
+        if not (_is_number(stop) and _is_number(n)):
+            return 0.0
+        sl = stop - TURTLE_BACKSTOP_N * n if side == 1 else stop + TURTLE_BACKSTOP_N * n
+        digits = self._price_digits(trade_symbol)
+        sl = round(sl, digits) if digits is not None else sl
+        return float(sl) if sl > 0 else 0.0
+
     def _process_turtle(self, symbol):
         """
         The Turtle's poll loop (STRATEGY = 'turtle'), about once a second; turtle.py decides, this executes:
@@ -2324,7 +2349,8 @@ class MT5TradingBot:
                             qty = st['units'] * mtqty
                             send = self.position_helper.buy if side == 1 else self.position_helper.sell
                             with self.mt5_lock:
-                                order_response = send(trade_symbol, qty, auto_sltp=False)
+                                backstop = self._turtle_backstop(trade_symbol, st, side, ask if side == 1 else bid, now)
+                                order_response = send(trade_symbol, qty, sl=backstop, tp=0.0, auto_sltp=False)
                             ok = self._order_done(order_response)
                             if ok:
                                 px = float(getattr(order_response, 'price', 0.0) or 0.0) or (ask if side == 1 else bid)
@@ -2333,6 +2359,7 @@ class MT5TradingBot:
                                 self._log_event(symbol, 'BUY_MORE_EXECUTED' if side == 1 else 'SELL_MORE_EXECUTED',
                                                 'ENTRY', {'mt5_symbol': trade_symbol, 'qty': qty, 'leg': len(st['legs']),
                                                           'level': lvl, 'fill': px, 'stop': st['stop'],
+                                                          'backstop_sl': backstop,
                                                           'response': str(order_response)}, server_time=server_time)
                             else:
                                 self._turtle_note(symbol, 'order', f'add refused: {order_response}', server_time)
@@ -2353,7 +2380,8 @@ class MT5TradingBot:
                             lv = st['levels']
                             send = self.position_helper.buy if d == 1 else self.position_helper.sell
                             with self.mt5_lock:
-                                order_response = send(trade_symbol, qty, auto_sltp=False)
+                                backstop = self._turtle_backstop(trade_symbol, st, d, ask if d == 1 else bid, now, units)
+                                order_response = send(trade_symbol, qty, sl=backstop, tp=0.0, auto_sltp=False)
                             if self._order_done(order_response):
                                 px = float(getattr(order_response, 'price', 0.0) or 0.0) or (ask if d == 1 else bid)
                                 T.on_entry(st, d, px, now, units, getattr(order_response, 'order', None) or None)
@@ -2363,7 +2391,8 @@ class MT5TradingBot:
                                     'level': lv['buy'] if d == 1 else lv['sell'], 'fill': px, 'vote': vote,
                                     'vote_bar': _iso(vote_bar), 'n_entry': st['n_entry'], 'stop': st['stop'],
                                     'stop_origin': T.stop_origin(st), 'd1_bar': _iso(lv['bar_time']),
-                                    'use20': lv['use20'], 'response': str(order_response)}, server_time=server_time)
+                                    'use20': lv['use20'], 'backstop_sl': backstop,
+                                    'response': str(order_response)}, server_time=server_time)
                             else:
                                 self._turtle_note(symbol, 'order', f'entry refused: {order_response}', server_time)
                             if d == 1:

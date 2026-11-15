@@ -159,12 +159,20 @@ def test_a_long_from_the_breakout_to_the_stop(long_run):
     assert all(o['_t_ms'] < t_exit for o in opens)
 
 
-def test_the_orders_carry_the_magic_and_the_comment_and_no_broker_sl_or_tp(long_run):
-    for o in long_run.fake.orders:
+def test_the_orders_carry_the_magic_the_comment_and_a_backstop_but_no_target(long_run):
+    """Every leg goes out with a broker-side backstop 1 N beyond the trade's stop at its fill (never moved) and no
+    broker target; the stop that closed the trade is the bot's own, always nearer (the broker closed nothing)."""
+    fake = long_run.fake
+    for o in fake.orders:
         assert o['magic'] == MAGIC and o['comment'] == COMMENT
-    for o in _opens(long_run.fake):
+    fills = [d.price for d in _deal_ins(fake)]
+    for k, o in enumerate(_opens(fake)):
         assert o['volume'] == pytest.approx(0.01)                              # unit 1 at $2,000, every leg
-        assert o['sl'] == 0.0 and o['tp'] == 0.0                               # the stop is the bot's; no target
+        stop = max(max(fills[:k + 1]) - LV['stop_dist'], LV['trail_long'])    # the trade's stop with this leg
+        assert o['sl'] == pytest.approx(round(stop - LV['n'], 3)) and o['tp'] == 0.0
+    assert not [d for d in fake.deals if d.reason in (fake.DEAL_REASON_SL, fake.DEAL_REASON_TP)]
+    ev = [e['details'] for e in long_run.events if e['event'] in ('BUY_EXECUTED', 'BUY_MORE_EXECUTED')]
+    assert [e['backstop_sl'] for e in ev] == [o['sl'] for o in _opens(fake)]
 
 
 def test_the_book_is_saved_with_n_frozen_at_the_entry(long_run):
@@ -404,7 +412,8 @@ def test_turtle_designs_are_accepted_and_bad_ones_refused(mods):
     assert 'System 1' in mods(**dict(TURTLE, TURTLE_SYSTEM=1)).app.design_summary()
     for ov, needle in (({'TURTLE_SYSTEM': 3}, 'TURTLE_SYSTEM'), ({'TURTLE_MAX_LEGS': 0}, 'TURTLE_MAX_LEGS'),
                        ({'TURTLE_VOTE_TF': 'M7'}, 'TURTLE_VOTE_TF'), ({'TURTLE_D1_BARS': 50}, 'TURTLE_D1_BARS'),
-                       ({'TURTLE_STOP_N': 0}, 'TURTLE_STOP_N'), ({'TURTLE_VOTE_BARS': 10}, 'TURTLE_VOTE_BARS')):
+                       ({'TURTLE_STOP_N': 0}, 'TURTLE_STOP_N'), ({'TURTLE_VOTE_BARS': 10}, 'TURTLE_VOTE_BARS'),
+                       ({'TURTLE_BACKSTOP_N': 0}, 'TURTLE_BACKSTOP_N')):
         problems = mods(**dict(TURTLE, **ov)).app.design_problems()
         assert any(needle in p for p in problems), (ov, problems)
 

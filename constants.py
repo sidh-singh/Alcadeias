@@ -208,13 +208,17 @@ STATE_SUBDIR = 'state'               # OUTPUT_DIR/state/<symbol>_state.json: the
 # backtest's parameters (backtesting/research/external.py turtle() on backtest_hedging). Read only with
 # STRATEGY = 'turtle'. Levels from UTC D1 bars (Exness MT5 server time is UTC); entries need the bot's M15
 # votes on CLOSED bars to agree; one stop for all legs, held by the bot (checked every poll, every leg closed
-# at market), no broker SL / TP. As in the backtest: no trading window (symbols.json 'brake' still stops new
-# entries), no re-entry cooldown beyond the next M1 bar, no target. The book (N at the entry, unit, stop, the
-# armed orders) is kept in OUTPUT_DIR/state/<symbol>_turtle.json and rebuilt from the positions without it.
+# at market); a broker-side backstop further out on every leg (TURTLE_BACKSTOP_N), no broker target. As in
+# the backtest: no trading window (symbols.json 'brake' still stops new entries), no re-entry cooldown beyond
+# the next M1 bar, no target. The book (N at the entry, unit, stop, the armed orders) is kept in
+# OUTPUT_DIR/state/<symbol>_turtle.json and rebuilt from the positions without it.
 TURTLE_SYSTEM = 2                    # 1: 20-day breakout, skipped after a winning breakout (then the 55-day
                                      #    failsafe), 10-day exit; 2: 55-day breakout, 20-day exit
 TURTLE_N_LEN = 20                    # N = Wilder's RMA of the daily true range over this many days
 TURTLE_STOP_N = 2.0                  # the stop: this many N from the newest fill, or the exit channel if tighter
+TURTLE_BACKSTOP_N = 1.0              # every leg goes out with a broker-side stop (request sl) this many N_entry beyond
+                                     # the trade's stop at its fill, never moved: it guards the legs while the bot or
+                                     # the terminal is down; the bot's stop, nearer (it never loosens), stays the exit
 TURTLE_ADD_N = 0.5                   # one more leg each time the price is this many N beyond the previous fill
 TURTLE_MAX_LEGS = 4                  # legs per trade, the entry included; each leg = the unit x 0.01 lot
 TURTLE_TICK = 0.01                   # entry levels: channel high + this / channel low - this

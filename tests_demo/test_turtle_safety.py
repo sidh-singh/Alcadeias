@@ -1,14 +1,15 @@
 """
-The demo review's terminal and account fixes in the Turtle's own loop (STRATEGY = 'turtle'): every poll first
-checks that the terminal answers and holds this bot's demo account (findings 1 and 4), and a positions read that
-fails skips the poll (finding 5) -- the book is never matched with positions that are not this account's or not
-known, so an open trade is not ended as "closed outside the bot". Polls in which the reference run decided nothing
-are skipped exactly: the trade is the same.
+The demo review's fixes in the Turtle's own loop (STRATEGY = 'turtle'). Every poll first checks that the terminal
+answers and holds this bot's demo account (findings 1 and 4), and a positions read that fails skips the poll
+(finding 5) -- the book is never matched with positions that are not this account's or not known, so an open trade
+is not ended as "closed outside the bot"; polls in which the reference run decided nothing are skipped exactly: the
+trade is the same. Every leg carries a broker-side backstop 1 N beyond the trade's stop at its fill (finding 3); a
+leg it closes is handled as one closed outside the bot.
 """
 import pytest
 
 from conftest import START
-from test_turtle_bot import _closes, _long_trip, _market, _opens, _run
+from test_turtle_bot import LV, _closes, _long_trip, _market, _opens, _run
 
 CREDS = {'terminal_path': r'C:\fake\terminal64.exe', 'login_id': 1, 'login_pass': 'not-a-password',
          'server': 'Fake-Demo'}
@@ -89,3 +90,22 @@ def test_a_terminal_restart_mid_trade_is_ridden_out(reference, tmp_path):
     events = [e['event'] for e in run.events]
     assert not set(OUTSIDE) & set(events)
     assert events.count('RECONNECT_FAILED') == 3 and events.count('TERMINAL_RECONNECTED') == 1
+
+
+@pytest.mark.slow
+def test_a_gap_through_every_backstop_ends_the_trade_as_closed_outside_the_bot(tmp_path):
+    """The price gaps 5 N down while the trade holds its four legs (the bot cannot act in between): the broker's
+    backstops close the four legs at the gap price; the bot ends the trade as closed outside it, sends no close of
+    its own and takes no new entry on the day's used orders."""
+    fake, clock = _market(_long_trip())
+    i = int((fake.t_ms >= (START + 1600) * 1000).argmax())          # after the fourth leg (1435 s), before the stop
+    fake.bid[i:] -= 5 * LV['n']
+    fake.ask[i:] -= 5 * LV['n']
+    books = []
+    run = _run(fake, clock, tmp_path, books=books)
+    by_broker = [d for d in fake.deals if d.reason == fake.DEAL_REASON_SL]
+    assert len(by_broker) == 4 and {d.time_msc for d in by_broker} == {int(fake.t_ms[i])}
+    assert len(_opens(fake)) == 4 and not _closes(fake) and not fake.positions
+    events = [e['event'] for e in run.events]
+    assert events.count('TURTLE_CLOSED_OUTSIDE') == 1 and 'CLOSE_BUY' not in events
+    assert books[-1]['side'] == 0 and books[-1]['armed'] is False and books[-1]['last_exit_time'] is not None
