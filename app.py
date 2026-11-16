@@ -2561,10 +2561,14 @@ class MT5TradingBot:
             return None
         except (OSError, ValueError) as e:
             print(f"[{symbol}] note: Turtle state file {path} unreadable ({e}); rebuilding it from the terminal")
+            self._trace(symbol, 'state_note', 'WARN', f'the Turtle state file {path} is unreadable ({e!r}): the book is '
+                        'rebuilt from the terminal')
             return None
         if (not isinstance(data, dict) or data.get('symbol') != symbol or data.get('magic') != MAGIC
                 or data.get('system') != TURTLE_SYSTEM or not isinstance(data.get('book'), dict)):
             print(f"[{symbol}] note: Turtle state file {path} is not this bot's (symbol/magic/system); rebuilding it")
+            self._trace(symbol, 'state_note', 'WARN', f"the Turtle state file {path} is not this bot's (symbol / magic / "
+                        'system): the book is rebuilt from the terminal')
             return None
         st = T.new_state()
         st.update({k: v for k, v in data['book'].items() if k in st})
@@ -2584,6 +2588,10 @@ class MT5TradingBot:
                 os.replace(tmp, path)
         except OSError as e:
             print(f"[{symbol}] Error: could not write the Turtle state file {path}: {e}")
+            self._trace(symbol, 'state_note', 'ERROR', f'could not write the Turtle state file {path}: {e!r} (a restart '
+                        'now would rebuild the trade from the terminal)')
+            return
+        self._trace(symbol, 'turtle_state_saved', st)
 
     def _turtle_closed_bars(self, trade_symbol, tf_name, count, tf_s, now):
         """The CLOSED bars of a timeframe at the terminal's time `now`: the last `count` bars of
@@ -2822,12 +2830,15 @@ class MT5TradingBot:
         _last_daily_save = 0.0
         _last_hist_save = 0.0
         print(f"[{symbol}] {T.describe(TURTLE_SYSTEM)}")
+        # the trace: the start-up block of the text log (branch, design, every constant, the book found)
+        self._trace(symbol, 'loop_start', locals())
 
         while True:
             try:
                 _iter_start = time.perf_counter()
                 # ── the terminal must answer and hold this bot's demo account, else this poll decides nothing ──
                 if not self._poll_guard(symbol):
+                    self._trace(symbol, 'poll_skipped', 'guard')
                     time.sleep(1)
                     if self._stop_event.is_set():
                         return
@@ -2850,6 +2861,7 @@ class MT5TradingBot:
                     # The positions are not known this poll (not "none"): the book is not matched with them (it would
                     # end the trade as closed outside the bot), and nothing is decided.
                     self._poll_failed(symbol, str(e))
+                    self._trace(symbol, 'poll_skipped', 'positions', str(e))
                     time.sleep(1)
                     if self._stop_event.is_set():
                         return
@@ -3087,7 +3099,12 @@ class MT5TradingBot:
                             self._save_historical_summary(symbol, mt5_symbol=trade_symbol)
                             _last_hist_save = _now_ts
                     except Exception:
-                        pass  # Non-critical, don't break the main loop
+                        # Non-critical, don't break the main loop (a WARN with the traceback in the text log)
+                        self._trace(symbol, 'exception', 'SAVE', 'the daily-trade / history-summary files could not be '
+                                    'saved (tried again next poll)', level='WARN')
+
+                # ── the trace (tracelog.py): reads this poll's locals, writes the dashboard's files and the text log ──
+                self._trace(symbol, 'poll', locals())
 
                 time.sleep(1)
                 if self._stop_event.is_set():
@@ -3095,6 +3112,7 @@ class MT5TradingBot:
 
             except Exception as e:
                 print(f"[{symbol}] Error: {e}")
+                self._trace(symbol, 'exception', 'LOOP', f'the poll failed: {e!r}; the loop goes on in 1 s')
                 time.sleep(1)
                 if self._stop_event.is_set():
                     return

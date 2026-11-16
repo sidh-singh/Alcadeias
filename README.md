@@ -57,13 +57,18 @@ Next to the files the old dashboard reads, the bot writes into its output folder
 `docs/dashboard-data.md`):
 
 - `BTCUSDm_trace.json`: after every poll, what the bot sees and decides: one sentence on what it does now and why,
-  every check in the order it makes them (passed, blocked, fired), the votes, the trend, the volatility unit, the
-  pause, and the open basket with its stop, target and backstop as prices;
-- `BTCUSDm_bars.json`: the bars for the chart (M1, M5, M15, H1, D1), `BTCUSDm_trades.json`: every basket with its
-  open, close, P/L and exit reason, and the virtual-balance curve;
+  every check in the order it makes them (passed, blocked, fired), and the Turtle's numbers: N, the 20-day and 10-day
+  channels of the last closed D1 bar (on a failsafe day the 55-day channel instead of the 20-day), today's buy and
+  sell levels and whether their orders are still armed or were used, the M15 vote of the last closed bar with its RSI
+  and MACD parts, what a new trade would get, and the open trade with its legs, its one stop (and where it comes
+  from: 2N or the 10-day channel), the next add price and the broker backstops;
+- `BTCUSDm_bars.json`: the bars for the chart (M1, M5, M15, H1, D1) and the daily buy / sell / exit levels per D1
+  bar, `BTCUSDm_trades.json`: every trade with its legs, open, close, P/L and exit reason, N at the entry, its add
+  levels and every stop move, and the virtual-balance curve;
 - `logs\BTCUSDm_<YYYY-MM-DD>.log`: the detailed text log (UTC days, kept 30 days): the start-up and every constant,
-  every decision change, order, fill, close, pause, reconnect and error with its traceback, and a heartbeat line
-  every minute. When something looks wrong, this file (and `logs\BTCUSDm_events.jsonl`) is the one to send.
+  the levels of every day, every vote change, every decision change, order, fill, add, stop move, close and its
+  realised result, reconnect and error with its traceback, and a heartbeat line every minute. When something looks
+  wrong, this file (and `logs\BTCUSDm_events.jsonl`) is the one to send.
 
 ## Safety
 
