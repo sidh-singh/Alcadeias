@@ -461,8 +461,9 @@ def _why_key(why):
     return s
 
 
-def _unlisted_adds(basket):
-    """{position id: fill time} of a basket's adds the terminal has not listed yet (MT5TradingBot._record_add)."""
+def _unlisted_fills(basket):
+    """{position id: fill time} of a basket's legs (its entry, its adds) the terminal has not listed yet
+    (MT5TradingBot._record_fill)."""
     out = {}
     for u in (basket or {}).get('unlisted') or []:
         try:
@@ -473,14 +474,15 @@ def _unlisted_adds(basket):
 
 
 def fill_pending(basket, now):
-    """True while a fill of the bot is not listed yet and was made under _PENDING_FILL_S ago: a basket it opened that
-    has no position listed yet, or an add it made (_record_add). With no position listed, its side then counts as in
-    that basket (no second entry, the basket's unit), and the basket is not booked as closed."""
+    """True while a fill of the bot is not listed yet and was made under _PENDING_FILL_S ago: the entry of a basket it
+    opened, or an add it made (_record_fill; a basket opened without an order ticket: under _PENDING_FILL_S since it
+    opened). With no position listed, its side then counts as in that basket (no second entry, the basket's unit), and
+    the basket is not booked as closed."""
     if basket is None:
         return False
     if not basket.get('ids'):
         return now - float(basket.get('opened_at') or 0.0) < _PENDING_FILL_S
-    return any(now - t < _PENDING_FILL_S for t in _unlisted_adds(basket).values())
+    return any(now - t < _PENDING_FILL_S for t in _unlisted_fills(basket).values())
 
 
 class MT5TradingBot:
@@ -1167,13 +1169,14 @@ class MT5TradingBot:
         state['last_close'] = {
             'time': float(now), 'pnl': profit, 'lost': bool(profit < 0), 'resolved': False, 'source': 'last_seen',
             'reason': 'closed_outside', 'side': basket.get('side'), 'ids': list(basket.get('ids') or []),
-            'open_time': basket.get('first_time'), 'attempts': 0, 'time_from_history': True}
+            'open_time': basket.get('first_time') or basket.get('opened_at'),     # (an entry never listed: its fill)
+            'attempts': 0, 'time_from_history': True}
         state['basket'] = None
 
     @staticmethod
     def _unlisted(basket):
-        """{position id: fill time} of the basket's adds the terminal has not listed yet (_record_add)."""
-        return _unlisted_adds(basket)
+        """{position id: fill time} of the basket's legs the terminal has not listed yet (_record_fill)."""
+        return _unlisted_fills(basket)
 
     @staticmethod
     def _set_unlisted(basket, unlisted):
@@ -1182,15 +1185,17 @@ class MT5TradingBot:
         else:
             basket.pop('unlisted', None)
 
-    def _record_add(self, basket, response, now):
+    def _record_fill(self, basket, response, now):
         """
-        An add the terminal reports filled is a leg of the basket from then on, listed or not. Its position id -- on a
-        hedging account the position a market order opens has the order's ticket as its identifier (fake_mt5 and the
-        backtester's SimMT5 answer so) -- joins the basket's ids at once, and `unlisted` with its fill time until a
-        positions read lists it (kept _PENDING_FILL_S, as the entry's fill). It is saved with the state, so a terminal
-        outage or a restart in the ~2 s before the next positions read still counts the add: a leg gone then (the
-        entry, or the add) is a leg closed outside the bot (LEG_CLOSED_OUTSIDE: the rest is closed, the whole basket
-        booked), not a new basket to take over. False without a ticket (then the next positions read adds it).
+        A leg the terminal reports filled -- the entry of a basket, or an add -- is a leg of the basket from then on,
+        listed or not. Its position id -- on a hedging account the position a market order opens has the order's
+        ticket as its identifier (fake_mt5 and the backtester's SimMT5 answer so) -- joins the basket's ids at once, and
+        `unlisted` with its fill time until a positions read lists it (kept _PENDING_FILL_S). It is saved with the
+        state, so a terminal outage or a restart in the ~1-2 s before the next positions read still counts the leg: an
+        entry gone then (its backstop) is a basket closed outside the bot (booked with its realised P/L, then the pause
+        after a loss), not a fill that "never showed up"; a leg gone with another still there is a leg closed outside
+        the bot (LEG_CLOSED_OUTSIDE: the rest is closed, the whole basket booked), not a new basket to take over. False
+        without a ticket (then the next positions read adds it).
         """
         try:
             pid = int(getattr(response, 'order', 0) or 0)
@@ -1211,8 +1216,9 @@ class MT5TradingBot:
         """Match the state's basket with this bot's open positions. True when the state changed. A basket the bot
         has just opened is kept _PENDING_FILL_S seconds while the terminal does not list its position yet (the
         terminal answers asynchronously; dropped at once, the next poll saw "flat" and opened a second basket), and so
-        is an add, by the position id recorded from its order (_record_add; a position listed under another id while
-        such an add is not listed is that add). A basket some of whose legs are gone without a close of this bot -- an
+        is an add -- both by the position id recorded from the order (_record_fill; a position listed under another id
+        while such a leg is not listed is that leg). An entry gone after that without ever being listed is a basket
+        closed outside the bot, booked as such. A basket some of whose legs are gone without a close of this bot -- an
         add too, listed yet or not -- is marked to close the rest at once (close_pending, outside_ids); _after_close
         then books the whole basket as closed outside the bot."""
         nb = buy_positions['count'] if buy_positions else 0
@@ -1226,8 +1232,14 @@ class MT5TradingBot:
             if fill_pending(basket, now):
                 return False                # filled, not listed yet (the entry, or an add): still this bot's basket
             if basket.get('ids'):
+                never_listed = basket.get('first_time') is None
                 self._finish_outside_close(state, basket, now)
-                print(f"[{symbol}] note: the {basket.get('side')} basket was closed outside the bot")
+                if never_listed:
+                    print(f"[{symbol}] note: the {basket.get('side')} entry {basket.get('ids')} is gone before the "
+                          f"terminal listed it (its backstop while the bot or the terminal was down?): booked as "
+                          f"closed outside the bot, its result from the deal history")
+                else:
+                    print(f"[{symbol}] note: the {basket.get('side')} basket was closed outside the bot")
             else:
                 print(f"[{symbol}] note: the {basket.get('side')} fill of {basket.get('opened_at')} never showed up "
                       f"as a position in {_PENDING_FILL_S:g} s; the basket is dropped")
@@ -1239,11 +1251,11 @@ class MT5TradingBot:
             return False
         ids = [_pos_id(p) for p in plist]
         known = list(basket.get('ids') or []) if basket is not None else []
-        unlisted = self._unlisted(basket)               # adds recorded from their order, not listed yet
+        unlisted = self._unlisted(basket)               # legs recorded from their order, not listed yet
         if basket is not None and basket.get('side') == side and (not known or set(ids) & set(known) or unlisted):
             new = [i for i in ids if i not in known]
             waiting = [i for i in known if i in unlisted and i not in ids]
-            while new and waiting:                      # an add listed under another id than its order's ticket
+            while new and waiting:                      # a leg listed under another id than its order's ticket
                 old, pid = waiting.pop(0), new.pop(0)
                 known = [pid if k == old else k for k in known]
                 unlisted.pop(old)
@@ -1268,7 +1280,7 @@ class MT5TradingBot:
                 return True
             if known and not new and not changed:
                 return False
-            if not known:
+            if basket.get('first_time') is None:        # its first listing (the entry recorded from its order, or not)
                 basket['first_time'] = _pos_time(plist[0])
             basket['ids'] = known + new
             self._set_unlisted(basket, unlisted)
@@ -1285,7 +1297,7 @@ class MT5TradingBot:
     def _after_close(self, symbol, state, side, close_response, positions, reason, now):
         """Book this bot's close of the basket: the loss pause starts at this close decision. A close that
         closed nothing changes nothing (it is decided again next poll, as the backtester does); a partial one -- a
-        leg the terminal refused to close, or an add it has not listed yet (_record_add) -- keeps the basket and
+        leg the terminal refused to close, or an add it has not listed yet (_record_fill) -- keeps the basket and
         closes the rest on the next polls. Returns the new last_close or None."""
         closed = int((close_response or {}).get('closed_count', 0) or 0)
         failed = int((close_response or {}).get('failed_count', 0) or 0)
@@ -2189,7 +2201,9 @@ class MT5TradingBot:
                                                                        _levels['stop_usd_per_unit'], _usd_per_price,
                                                                        _ask)
                             if self._order_done(order_response):
-                                state['basket'] = self._new_basket('BUY', units, _levels, time.time())
+                                _t_fill = time.time()
+                                state['basket'] = self._new_basket('BUY', units, _levels, _t_fill)
+                                self._record_fill(state['basket'], order_response, _t_fill)   # a leg now, listed or not
                                 self._save_state(symbol, state)
                             _block_logged = None
                             self._log_event(symbol, 'BUY_EXECUTED', 'ENTRY', {
@@ -2219,7 +2233,7 @@ class MT5TradingBot:
                                                                _usd_per_price, _ask)
                     if _in_basket and self._order_done(order_response):
                         basket['ladder_armed'] = False      # the next add needs a new turn
-                        self._record_add(basket, order_response, time.time())    # a leg now, listed or not
+                        self._record_fill(basket, order_response, time.time())   # a leg now, listed or not
                         self._save_state(symbol, state)
                     self._log_event(symbol, 'BUY_MORE_EXECUTED', 'ENTRY', {
                         'mt5_symbol': trade_symbol,
@@ -2259,7 +2273,9 @@ class MT5TradingBot:
                                                                        _levels['stop_usd_per_unit'], _usd_per_price,
                                                                        _bid)
                             if self._order_done(order_response):
-                                state['basket'] = self._new_basket('SELL', units, _levels, time.time())
+                                _t_fill = time.time()
+                                state['basket'] = self._new_basket('SELL', units, _levels, _t_fill)
+                                self._record_fill(state['basket'], order_response, _t_fill)   # a leg now, listed or not
                                 self._save_state(symbol, state)
                             _block_logged = None
                             self._log_event(symbol, 'SELL_EXECUTED', 'ENTRY', {
@@ -2289,7 +2305,7 @@ class MT5TradingBot:
                                                                _usd_per_price, _bid)
                     if _in_basket and self._order_done(order_response):
                         basket['ladder_armed'] = False      # the next add needs a new turn
-                        self._record_add(basket, order_response, time.time())    # a leg now, listed or not
+                        self._record_fill(basket, order_response, time.time())   # a leg now, listed or not
                         self._save_state(symbol, state)
                     self._log_event(symbol, 'SELL_MORE_EXECUTED', 'ENTRY', {
                         'mt5_symbol': trade_symbol,
