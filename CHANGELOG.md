@@ -17,6 +17,30 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2-demo.8] — 2026-11-17 — Demo branches: the live bots' MetaTrader 5 is used while it holds this bot's demo account [demo only]
+
+**Why:** on the owner's demo server the MetaTrader 5 at `C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe` (the path
+the live branches use) is logged into the slot's demo account by hand, and no live bot runs there. demo.5 refused that
+path before attaching, so the bot never started ("Refused before attaching to any terminal: LIVE_TERMINAL_PATH ...").
+
+**What changed:**
+- On that path the bot now attaches, and never logs in. It trades only while the terminal already holds this bot's own
+  demo account (the login and server of the credentials).
+- Another account there: `TERMINAL_IN_USE`, as on any terminal (no login; the terminal is left as it is).
+- No account there for the whole 15 s grace: `LIVE_TERMINAL_PATH`, no login; the bot detaches and tries again (the
+  launcher every 30 s; the strategy log at most every 15 minutes). The line says what to do: log that MetaTrader 5 into
+  the slot's demo account by hand, or give the slot its own MetaTrader 5.
+- An empty `terminal_path` is still refused before the bot attaches to any terminal.
+- What stays safe: the bot never calls `login()` on the live bots' MetaTrader 5, so it can never switch that terminal's
+  account; every order is still checked against this branch's demo account first.
+
+**Files:** `app.py` (`initialize_mt5`, `_terminal_path_problem`, `_never_login_here`,
+`_no_account_on_live_terminal_problem`); `tracelog.py` and `dashboard.py` (the wording of `LIVE_TERMINAL_PATH`);
+`tests_demo/test_live_terminal.py` (rewritten for the new rule); `test_tracelog.py` and `test_dashboard.py` (their refused
+start now uses an empty `terminal_path`); `README.md`.
+
+---
+
 ## [v3.9.2-demo.7] — unreleased — Demo branches: the new dashboard (what the bot does and why, the chart, the log) [demo only]
 
 **Branches:** the six demo branches (`demo_hedging_xauusd6/7/8`, `demo_hedging_btcusd6/7/8`; written on

@@ -1069,9 +1069,9 @@ class TraceLog:
                # once, then at most every 15 min: _log_limited)
                'TERMINAL_IN_USE': ('{note}; no login: the terminal and its account are left as they are (this line '
                                    'comes once for each account the terminal holds, then at most every 15 min)'),
-               'LIVE_TERMINAL_PATH': ('{note}. The bot attached to no terminal and does not trade; the launcher starts '
+               'LIVE_TERMINAL_PATH': ('{note}. The bot does not trade and does not log in; the launcher starts '
                                       'it again every 30 s and it is refused each time (this line comes at most every '
-                                      '15 min while terminal_path stays as it is)'),
+                                      '15 min while the problem lasts)'),
                }.get(event, f'{event}: {{note}}' if note else event)
         msg = msg.format(note=note)
         if event == 'TERMINAL_RECONNECTED' and d.get('outage_s') is not None:
