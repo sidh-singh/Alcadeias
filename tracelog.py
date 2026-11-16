@@ -84,7 +84,7 @@ LEVELS = ('DEBUG', 'INFO', 'ORDER', 'FILL', 'CLOSE', 'WARN', 'ERROR')
 
 ACTIONS = ('SKIPPED', 'NO_DATA', 'MARKET_CLOSED', 'WAIT', 'PAUSED', 'BLOCKED', 'OPEN_BUY', 'OPEN_SELL', 'OPEN_FAILED',
            'WAIT_FILL', 'HOLD', 'ADD_BUY', 'ADD_SELL', 'ADD_FAILED', 'CLOSE_BUY', 'CLOSE_SELL', 'BOTH_SIDES',
-           'UNMANAGED')
+           'UNMANAGED', 'TRACE_ERROR')
 TURTLE_JOURNAL_KEEP = 500        # the newest Turtle trades kept in state/<SYMBOL>_turtle_trades.json
 VOTE_SERIES_N = 40               # the Turtle's M15 RSI / MACD lines in the trace: the last 40 closed bars
 
@@ -576,27 +576,36 @@ class LogWriter:
 
 # ───────────────────────────── the trace ─────────────────────────────
 
-def _guarded(fn):
-    """A trace entry point: whatever it raises is logged (ERROR + traceback) and swallowed; the lines it made are
-    written at its end."""
-    name = fn.__name__
+def _guarded(fn=None, *, flush=True):
+    """A trace entry point: whatever it raises is logged (ERROR + traceback) and swallowed. The lines it made are
+    written at its end, unless the bot holds its mt5_lock at that moment (_flush waits then: an order, a close or a
+    sync inside the lock never waits for the disk) or flush is False (order(), which runs inside
+    MT5PositionHelper._send): those lines wait for the next write outside the lock -- the end of the poll,
+    poll_skipped, an exception, the job's start-up lines."""
+    def wrap(fn):
+        name = fn.__name__
 
-    @functools.wraps(fn)
-    def call(self, *args, **kwargs):
-        try:
-            return fn(self, *args, **kwargs)
-        except Exception as e:
+        @functools.wraps(fn)
+        def call(self, *args, **kwargs):
             try:
-                self._hook_failed(name, e)
-            except Exception:
-                pass
-            return None
-        finally:
-            try:
-                self._flush()
-            except Exception:
-                pass
-    return call
+                return fn(self, *args, **kwargs)
+            except Exception as e:
+                try:
+                    self._hook_failed(name, e)
+                except Exception:
+                    pass
+                return None
+            finally:
+                if flush:
+                    try:
+                        self._flush()
+                    except Exception:
+                        pass
+        return call
+    return wrap(fn) if fn is not None else wrap
+
+
+_FAILED = object()      # what _step returns when the step raised
 
 
 class _Ctx:
@@ -665,7 +674,9 @@ class TraceLog:
     boot(), loop_start(locals), poll(locals) at the end of every poll, poll_skipped(kind, problem), order(request,
     result, refused, ms) from MT5PositionHelper._send, event(...) from _log_event, state_saved(state),
     exception(cat, msg) from an except block, write_failed(what, path, error), reconnect_failed(...) from
-    _try_reconnect, log(level, cat, msg, kv)."""
+    _try_reconnect, log(level, cat, msg, kv).
+    No file is written while the bot holds mt5_lock (order() never writes; the others wait when the lock is held):
+    the lines made there are written at the end of the poll, by poll_skipped or the exception hook."""
 
     def __init__(self, bot, symbol, out_dir, app_module):
         self.bot = bot
@@ -723,6 +734,7 @@ class TraceLog:
         self._ch_key = self._ch = None         # the D1 channels, computed once per new D1 bar
         self._vs_key = self._vs = None         # the M15 RSI / MACD lines, computed once per new M15 bar
         self._book_ref = None                  # the Turtle's book (the bot's own dict, read only): entry or add?
+        self._state_ref = None                 # the basket loop's state (the bot's own dict, read only): entry or add?
         self._closed_known = None              # the Turtle's closed trades already in trades.json (a RESULT line each)
         self._legs_outside = {}                # the Turtle's legs closed outside the bot: ticket -> TURTLE_LEG_CLOSED_OUTSIDE
         self._outside_logged = set()           # ... of those, the ones the log has a line for
@@ -751,7 +763,19 @@ class TraceLog:
         if level == 'ERROR':
             self._errors.append(t)
 
+    def _in_lock(self):
+        """True while the bot's mt5_lock is held (one symbol per process: by this thread, sending or reading)."""
+        lk = getattr(self.bot, 'mt5_lock', None)
+        try:
+            return bool(lk is not None and lk.locked())
+        except Exception:
+            return False
+
     def _flush(self):
+        """Write the pending lines -- never while the bot holds mt5_lock: then they wait for the next flush, so no
+        order, close or terminal read waits for the disk."""
+        if self._in_lock():
+            return
         with self._lock:
             recs, self._pending = self._pending, []
         if recs:
@@ -769,14 +793,36 @@ class TraceLog:
         self._repeats[key] = (now, 0)
         return True, (last[1] if last else 0)
 
-    def _hook_failed(self, name, e):
+    def _hook_failed(self, name, e, step=None):
         tb = traceback.format_exc()
-        write, n = self._repeat(('hook', name, type(e).__name__, _tb_where(tb)))
+        write, n = self._repeat(('hook', name, step, type(e).__name__, _tb_where(tb)))
         if write:
             more = f' (it failed {n} more times since it was last written)' if n else ''
-            self._rec('ERROR', 'TRACE', f'the trace hook {name}() failed: {e!r}; ignored, trading goes on{more}', tb=tb)
+            at = f' in its step {step}' if step else ''
+            goes_on = 'its other steps and the trading go on' if step else 'trading goes on'
+            self._rec('ERROR', 'TRACE', f'the trace hook {name}() failed{at}: {e!r}; ignored, {goes_on}{more}', tb=tb)
         else:
             self._errors.append(self._now())
+
+    def _step(self, name, step, fn, *args, **kwargs):
+        """One step of a poll hook: what it raises is an ERROR line (with its traceback, repeats at most every 10 min)
+        and _FAILED is returned, so the steps after it (the trace file, the bars, the trades, the heartbeat, the
+        bookkeeping) still run."""
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            try:
+                self._hook_failed(name, e, step)
+            except Exception:
+                pass
+            return _FAILED
+
+    def _failed_decision(self, orders, step):
+        """The decision of a poll whose trace could not work it out (a step before it raised): said as such."""
+        return {'action': 'TRACE_ERROR', 'reason': step, 'side': None,
+                'headline': (f'The trace could not work out what the bot decided this poll: its step {step} failed (the '
+                             'ERROR line of the log has the traceback). The trading is not affected.'),
+                'gates': [], 'blocked_by': None, 'signal': None, 'orders': orders}
 
     def _errors_1h(self, now):
         return sum(1 for t in self._errors if now - t <= 3600.0)
@@ -834,23 +880,23 @@ class TraceLog:
     def state_note(self, level, msg):
         self._rec(level, 'STATE', msg)
 
-    @_guarded
+    @_guarded(flush=False)
     def order(self, request, result, refused=False, ms=None):
-        """Every order request of the bot (MT5PositionHelper._send) and its result; called inside the bot's mt5_lock."""
+        """Every order request of the bot (MT5PositionHelper._send) and its result. It runs inside the bot's mt5_lock,
+        before order_send's result reaches the bot, so it only makes the record and its lines: they are written at the
+        end of the poll (or by poll_skipped / the exception hook), never in here. A close is told by the side of the
+        position it closes (side; the order itself is the other side: order_side)."""
         r = request or {}
         typ = _i(r.get('type'))
-        side = 'BUY' if typ == 0 else 'SELL' if typ == 1 else str(typ)
+        order_side = 'BUY' if typ == 0 else 'SELL' if typ == 1 else str(typ)
         is_close = 'position' in r
         if is_close:
             kind = 'close'
-            what = f"close position {r.get('position')} ({'SELL' if typ == 0 else 'BUY'} {r.get('volume')} lot)"
+            side = 'SELL' if typ == 0 else 'BUY' if typ == 1 else str(typ)      # a BUY order closes a SELL position
+            what = f"close position {r.get('position')} ({side} {r.get('volume')} lot, with a {order_side} order)"
         else:
-            book = self._book_ref if isinstance(self._book_ref, dict) else None
-            if book is not None:                 # the Turtle: its book (changed in place) says entry or add
-                kind = 'add' if book.get('side') == (1 if side == 'BUY' else -1) else 'open'
-            else:
-                prev = self._prev.get('positions') or {}
-                kind = 'add' if prev.get(side) else 'open'
+            side = order_side
+            kind = self._entry_kind(side)
             what = f"{kind} {side} {r.get('volume')} lot"
         retcode = _i(getattr(result, 'retcode', None))
         done = retcode in _DONE
@@ -861,7 +907,8 @@ class TraceLog:
             except Exception as e:
                 err = repr(e)
         o = {
-            't': self._now(), 'kind': kind, 'side': side, 'symbol': r.get('symbol'), 'volume': _f(r.get('volume')),
+            't': self._now(), 'kind': kind, 'side': side, 'order_side': order_side, 'symbol': r.get('symbol'),
+            'volume': _f(r.get('volume')),
             'price': _f(r.get('price')), 'sl': _f(r.get('sl')), 'tp': _f(r.get('tp')), 'position': r.get('position'),
             'magic': r.get('magic'), 'comment': r.get('comment'), 'refused': bool(refused), 'retcode': retcode,
             'retcode_text': RETCODES.get(retcode) if retcode is not None else ('refused by the account guard'
@@ -877,9 +924,10 @@ class TraceLog:
         stops = '' if is_close else f" sl {_px(o['sl'], d) if o['sl'] else 'none'} tp {_px(o['tp'], d) if o['tp'] else 'none'}"
         res = ('not sent: the account guard refused it' if refused else
                f"{o['retcode_text']} ({retcode})" if retcode is not None else f'no answer ({err})')
-        kv = {k: o[k] for k in ('kind', 'side', 'symbol', 'volume', 'price', 'sl', 'tp', 'position', 'magic',
-                                'comment', 'retcode', 'retcode_text', 'result_price', 'result_volume', 'order',
-                                'deal', 'result_comment', 'last_error', 'ms') if o[k] is not None}
+        kv = {k: o[k] for k in ('kind', 'side', 'order_side', 'symbol', 'volume', 'price', 'sl', 'tp', 'position',
+                                'magic', 'comment', 'retcode', 'retcode_text', 'result_price', 'result_volume', 'order',
+                                'deal', 'result_comment', 'last_error', 'ms')
+              if o[k] is not None and (k != 'order_side' or is_close)}
         self._rec('ORDER', 'ORDER', f'{what}{price}{stops} -> {res}', kv=kv)
         if done and not is_close:
             self._rec('FILL', 'FILL', f"{side} {o['result_volume'] or o['volume']} lot filled at "
@@ -893,6 +941,21 @@ class TraceLog:
             self._rec('WARN', 'ORDER', f'{what} was not filled: {res}', kv={'retcode': retcode, 'last_error': err})
         if done:
             self._trades_dirty = True
+
+    def _entry_kind(self, side):
+        """'add' or 'open' for an order that is not a close, from the bot's own dicts (changed in place, read only):
+        the Turtle's book, or the basket loop's state -- an order on the side of the trade or basket it holds is an
+        add (also on the first poll after a start, before the trace has seen a poll); without them (a trace made
+        outside the loop) the positions of the last poll."""
+        book = self._book_ref if isinstance(self._book_ref, dict) else None
+        if book is not None:
+            return 'add' if book.get('side') == (1 if side == 'BUY' else -1) else 'open'
+        st = self._state_ref if isinstance(self._state_ref, dict) else None
+        if st is not None:
+            b = st.get('basket')
+            return 'add' if isinstance(b, dict) and b.get('side') == side else 'open'
+        prev = self._prev.get('positions') or {}
+        return 'add' if prev.get(side) else 'open'
 
     _EVENTS = {  # the strategy log's events -> (level, category); None = covered by the ORDER / FILL / BASKET / CLOSE lines
         'BUY_EXECUTED': None, 'SELL_EXECUTED': None, 'BUY_MORE_EXECUTED': None, 'SELL_MORE_EXECUTED': None,
@@ -968,6 +1031,12 @@ class TraceLog:
     def loop_start(self, ctx):
         """The start of the trading loop: who, what design, every effective constant, symbols.json, the state found."""
         c = _Ctx(ctx)
+        # the loop's own dict, changed in place (read only): an order of the first poll is an open or an add by it
+        if self._is_turtle():
+            if isinstance(c.st, dict):
+                self._book_ref = c.st                 # the Turtle's book
+        elif isinstance(c.state, dict):
+            self._state_ref = c.state                 # the basket loop's state
         # (a trace made before the login -- by a TERMINAL_IN_USE event -- had no symbol map yet)
         self.mt5_symbol = (getattr(self.bot, 'symbol_map', None) or {}).get(self.symbol, self.mt5_symbol)
         if self._is_turtle():
@@ -1067,12 +1136,21 @@ class TraceLog:
         health = self._health(None, now, skip=(kind, problem))
         prev = self._last_snapshot or {}
         snap = self._base(now)
+        # the last good poll's blocks, marked as such: the market is not known this poll (the quote is the last one
+        # read) and the votes were not computed this poll
+        market, basket = prev.get('market'), prev.get('basket')
+        if isinstance(market, dict):
+            market = dict(market, status='UNKNOWN', message="the terminal was not read this poll: the quote is the last "
+                                                            "good poll's")
+        if isinstance(basket, dict):
+            basket = dict(basket, fresh=False)
         snap.update(stale=True, stale_since_utc=_iso(self._last_poll_t), health=health,
-                    account=prev.get('account'), market=prev.get('market'), decision=dec,
-                    basket=prev.get('basket'), turtle=prev.get('turtle'))
-        self._decision_line(dec, now)
-        self._write_trace(snap, dec, now, force=True)
-        self._heartbeat(dec, snap, now)
+                    account=prev.get('account'), market=market, decision=dec,
+                    basket=basket, turtle=prev.get('turtle'))
+        S = functools.partial(self._step, 'poll_skipped')
+        S('_decision_line', self._decision_line, dec, now)
+        S('_write_trace', self._write_trace, snap, dec, now, force=True)
+        S('_heartbeat', self._heartbeat, dec, snap, now)
         self._flush()
         self.cost_ms = round((time.perf_counter() - t0) * 1000.0, 3)
         self.costs.append(self.cost_ms)
@@ -1090,27 +1168,40 @@ class TraceLog:
 
     # ── one poll ──
     def _poll(self, c):
+        """Every step on its own (_step): one that raises is an ERROR line and the others still run -- the trace file,
+        the bars, the trades, the heartbeat and the bookkeeping. A step the decision needs that fails gives the
+        decision TRACE_ERROR."""
         if self._is_turtle():
             return self._poll_turtle(c)
         now = self._now()
         self.polls += 1
+        if isinstance(c.state, dict):
+            self._state_ref = c.state
         orders = self._take_orders()
-        digits = self._get_digits()
+        S = functools.partial(self._step, 'poll')
+        digits = S('_get_digits', self._get_digits)
+        digits = None if digits is _FAILED else digits
         snap = self._base(now)
-        snap['health'] = self._health(c, now)
-        snap['account'] = self._account(c)
-        snap['market'] = self._market(c, now, digits)
-        snap['basket'] = self._basket_section(c, now, digits, orders)
+        for key, fn, args in (('health', self._health, (c, now)), ('account', self._account, (c,)),
+                              ('market', self._market, (c, now, digits))):
+            v = S('_' + key, fn, *args)
+            snap[key] = None if v is _FAILED else v
+        bk = S('_basket_section', self._basket_section, c, now, digits, orders)
+        snap['basket'] = None if bk is _FAILED else bk
         snap['turtle'] = None
-        dec = self._decide(c, snap, orders, now, digits)
+        dec = _FAILED if bk is _FAILED else S('_decide', self._decide, c, snap, orders, now, digits)
+        failed = dec is _FAILED
+        if failed:
+            dec = self._failed_decision(orders, '_basket_section' if bk is _FAILED else '_decide')
         snap['decision'] = dec
-        self._transitions(c, snap, dec, orders, now, digits)
-        self._decision_line(dec, now)
+        if not failed:
+            S('_transitions', self._transitions, c, snap, dec, orders, now, digits)
+        S('_decision_line', self._decision_line, dec, now)
         self._last_snapshot = snap
-        self._write_trace(snap, dec, now)
-        self._bars(c, now, digits)
-        self._trades(c, snap, now, digits)
-        self._heartbeat(dec, snap, now)
+        S('_write_trace', self._write_trace, snap, dec, now)
+        S('_bars', self._bars, c, now, digits)
+        S('_trades', self._trades, c, snap, now, digits)
+        S('_heartbeat', self._heartbeat, dec, snap, now)
         self._prev['positions'] = {'BUY': _i(c._buy_ct) or 0, 'SELL': _i(c._sell_ct) or 0}
         self._last_poll_t = now
         self._flush()
@@ -2245,15 +2336,17 @@ class TraceLog:
                 since = None
         if since is None:
             since = now - TRADES_LOOKBACK_S
+        # set before the read and cleared only after a good write: a read, a build or a write that fails is not
+        # tried again on every poll (the full deal history is read under mt5_lock)
+        self._trades_retry_t = now + TRADES_RETRY_S
         with self.bot.mt5_lock:
             deals = self.bot.position_helper.get_bot_deals(_utc_dt(since), _utc_dt(now + 86400))
         if deals is None:
-            self._trades_retry_t = now + TRADES_RETRY_S
             write, n = self._repeat(('history',), every=300.0)
             if write:
                 self._rec('WARN', 'TRADES', 'the terminal gave no deal history: trades.json keeps its last content')
             return
-        self._trades_retry_t = None
+        self._trades_retry_t = now + TRADES_INTERVAL_S          # a build that raises: the next read in a minute
         doc = self._build_trades(list(deals), snap, since, now, digits, virtual)
         if self._is_turtle():
             self._turtle_results(doc)
@@ -2263,6 +2356,7 @@ class TraceLog:
             self.write_failed('the trades', self.paths['trades'], e)
             self._trades_retry_t = now + 30.0               # no history read every poll while the disk fails
             return
+        self._trades_retry_t = None
         self._trades_again = self._trades_dirty
         self._trades_dirty = False
         self._trades_t = now
@@ -2569,33 +2663,43 @@ class TraceLog:
 
     # ── one poll ──
     def _poll_turtle(self, c):
+        """As _poll: every step on its own, so one that raises leaves the others running."""
         now = self._now()
         self.polls += 1
         if isinstance(c.st, dict):
             self._book_ref = c.st
         orders = self._take_orders()
-        facts = self._symbol_facts() or {}
+        S = functools.partial(self._step, 'poll')
+        facts = S('_symbol_facts', self._symbol_facts)
+        facts = facts if isinstance(facts, dict) else {}
         digits = facts.get('digits')
         if digits is None:
             digits = _i((getattr(self.bot, '_digits', None) or {}).get(self.mt5_symbol))
         snap = self._base(now)
-        snap['health'] = self._health(c, now, live=bool(c.live), tick=c.tick)
-        snap['account'] = self._account(c)
-        snap['market'] = self._turtle_market(c, digits)
+        for key, fn, args, kw in (('health', self._health, (c, now), {'live': bool(c.live), 'tick': c.tick}),
+                                  ('account', self._account, (c,), {}),
+                                  ('market', self._turtle_market, (c, digits), {})):
+            v = S(fn.__name__, fn, *args, **kw)
+            snap[key] = None if v is _FAILED else v
         snap['basket'] = None
-        snap['turtle'] = self._turtle_section(c, now, digits, orders, facts)
-        dec = self._turtle_decide(c, snap, orders, digits)
+        tv = S('_turtle_section', self._turtle_section, c, now, digits, orders, facts)
+        snap['turtle'] = None if tv is _FAILED else tv
+        dec = _FAILED if tv is _FAILED else S('_turtle_decide', self._turtle_decide, c, snap, orders, digits)
+        failed = dec is _FAILED
+        if failed:
+            dec = self._failed_decision(orders, '_turtle_section' if tv is _FAILED else '_turtle_decide')
         snap['decision'] = dec
-        self._turtle_transitions(c, snap, dec, orders, now, digits)
-        self._decision_line(dec, now)
+        if not failed:
+            S('_turtle_transitions', self._turtle_transitions, c, snap, dec, orders, now, digits)
+        S('_decision_line', self._decision_line, dec, now)
         self._last_snapshot = snap
-        self._write_trace(snap, dec, now)
+        S('_write_trace', self._write_trace, snap, dec, now)
         tick = c.tick
         sig = None if tick is None else (getattr(tick, 'time_msc', None) or getattr(tick, 'time', None),
                                          _f(getattr(tick, 'bid', None)))
-        self._bars(c, now, digits, sig=sig, overlay=lambda: self._turtle_overlay(c, digits))
-        self._trades(c, snap, now, digits)
-        self._heartbeat(dec, snap, now)
+        S('_bars', self._bars, c, now, digits, sig=sig, overlay=lambda: self._turtle_overlay(c, digits))
+        S('_trades', self._trades, c, snap, now, digits)
+        S('_heartbeat', self._heartbeat, dec, snap, now)
         self._prev['positions'] = {'BUY': self._count(c.buy_positions), 'SELL': self._count(c.sell_positions)}
         self._last_poll_t = now
         self._flush()
