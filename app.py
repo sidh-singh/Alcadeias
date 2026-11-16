@@ -1,6 +1,8 @@
 import MetaTrader5 as mt5
 import json
+import ntpath
 import os
+import re
 import sys
 import threading
 import time
@@ -318,6 +320,46 @@ def _ipc_error(err):
     return _IPC_ERRORS[0] <= code <= _IPC_ERRORS[1]
 
 
+# The MetaTrader 5 of the live bots on the server: every live branch's mt5_credentials.json names it as terminal_path.
+# A demo bot never attaches to it (LIVE_TERMINAL_PATH): any login on it, the bot's or another program's, would switch
+# the live account of every live bot attached to it.
+_LIVE_TERMINAL_PATHS = (r'C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe',)
+
+
+def _norm_path(path):
+    """A Windows path as the terminal reads it: '/' and '\\' alike, no doubled separators or '.', any case."""
+    return ntpath.normpath(str(path).strip().strip('"').strip()).casefold()
+
+
+def _same_file(a, b):
+    try:
+        return os.path.exists(a) and os.path.exists(b) and os.path.samefile(a, b)
+    except (OSError, ValueError):
+        return False
+
+
+def _live_terminal(path):
+    """True when `path` is the live bots' MetaTrader 5: its terminal64.exe, its folder or a file in it -- however it is
+    spelt (on the server also another spelling of the same file, such as a short 8.3 name)."""
+    p = _norm_path(path)
+    raw = str(path).strip().strip('"').strip()
+    for live in _LIVE_TERMINAL_PATHS:
+        exe = _norm_path(live)
+        folder = ntpath.dirname(exe)
+        if p in (exe, folder) or p.startswith(folder + '\\'):
+            return True
+        live_folder = ntpath.dirname(live)
+        if _same_file(raw, live) or _same_file(raw, live_folder) or _same_file(ntpath.dirname(raw), live_folder):
+            return True
+    return False
+
+
+def _slot_name():
+    """'slot 6' for demo_hedging_xauusd6 (the number at the end of DEMO_BRANCH); 'this slot' without one."""
+    m = re.search(r'(\d+)$', str(DEMO_BRANCH or ''))
+    return f'slot {m.group(1)}' if m else 'this slot'
+
+
 def _why_key(why):
     """A problem without the terminal's last_error, which can differ from one attempt to the next ('initialize
     failed: (-10003, ...)' -> 'initialize failed'): whether a repeated problem is a new one to log."""
@@ -402,10 +444,10 @@ class MT5TradingBot:
         self._reconnect_at = None
         self._init_problem = None
         self._reconnect_logged = {}
-        # initialize_mt5 found the terminal logged into another account (it never logs in there): the problem
-        # last logged as TERMINAL_IN_USE and when.
-        self._in_use_logged = None
-        self._in_use_logged_at = None
+        # Problems initialize_mt5 refuses to start on and that can last -- the terminal logged into another account
+        # (TERMINAL_IN_USE), terminal_path naming the live bots' MetaTrader 5 (LIVE_TERMINAL_PATH): for each event the
+        # problem last logged and when (_log_limited).
+        self._limited_logged = {}
 
     # ── Day-of-week mapping for trading_window config ──
     _DAY_NAME_TO_NUM = {
@@ -589,11 +631,21 @@ class MT5TradingBot:
         _ACCOUNT_GRACE_S (a first None or login-0 answer can be momentary, and an IPC error means the account is not
         known: no login, retried later); a terminal that holds this bot's account (login and server of the
         credentials) is used as it is, and one that holds any other account is refused (TERMINAL_IN_USE) and left
-        alone. Then the demo-account checks."""
+        alone. Then the demo-account checks. Before all that, a demo bot whose terminal_path names the live bots'
+        MetaTrader 5 (or is empty) is refused before any terminal call (LIVE_TERMINAL_PATH): it never attaches."""
         print(f"\n{'='*60}")
         print(f"  Initializing MT5 - {self.mode.upper()} Account")
         print(f"{'='*60}\n")
         
+        # Never the live bots' MetaTrader 5: refused before mt5.initialize() could attach to it
+        problem = self._terminal_path_problem()
+        if problem:
+            self._init_problem = problem
+            print(f"✗ Refused before attaching to any terminal: {problem}")
+            self._log_limited('LIVE_TERMINAL_PATH', problem, {
+                'terminal_path': (self.credentials or {}).get('terminal_path'), 'live_terminal': _LIVE_TERMINAL_PATHS[0]})
+            return False
+
         # Initialize MT5
         if not mt5.initialize(path=self.credentials['terminal_path']):
             self._init_problem = f'initialize failed: {mt5.last_error()}'
@@ -654,7 +706,7 @@ class MT5TradingBot:
             return False
         self._account_login = account_info.login
         self._init_problem = None
-        self._in_use_logged = None
+        self._limited_logged = {}
 
         print(f"\n{'='*60}")
         print(f"  Login Successful - {self.mode.upper()} Account")
@@ -1341,28 +1393,51 @@ class MT5TradingBot:
 
     def _terminal_in_use(self, problem, acct):
         """initialize_mt5 found the terminal logged into another account and left it alone: an ERROR event
-        TERMINAL_IN_USE when that starts or changes, then at most every _LOG_REPEAT_S while it lasts -- also across
-        the launcher's restarts of app.py (a start reads the newest entry of the strategy log), so it does not fill
-        the 200-entry log."""
-        symbol = self._symbol_of(None)
-        now = time.time()
-        if self._in_use_logged is None:
-            last = self._newest_log_entry(symbol) or {}
-            if last.get('event') == 'TERMINAL_IN_USE' and (last.get('details') or {}).get('problem') == problem:
-                try:
-                    from datetime import datetime
-                    self._in_use_logged, self._in_use_logged_at = problem, datetime.fromisoformat(
-                        str(last.get('utc_time'))).timestamp()
-                except (TypeError, ValueError):
-                    pass
-        if problem == self._in_use_logged and now - float(self._in_use_logged_at or 0.0) < _LOG_REPEAT_S:
-            return
-        self._in_use_logged, self._in_use_logged_at = problem, now
+        TERMINAL_IN_USE, limited by _log_limited."""
         creds = self.credentials or {}
-        self._log_event(symbol, 'TERMINAL_IN_USE', 'ERROR', {
-            'problem': problem, 'terminal_path': creds.get('terminal_path'), 'login': getattr(acct, 'login', None),
+        self._log_limited('TERMINAL_IN_USE', problem, {
+            'terminal_path': creds.get('terminal_path'), 'login': getattr(acct, 'login', None),
             'server': getattr(acct, 'server', None), 'trade_mode': self._trade_mode_name(getattr(acct, 'trade_mode', None)),
             'own_login': creds.get('login_id')})
+
+    def _terminal_path_problem(self):
+        """Why this demo bot may not attach to the terminal of its credentials (None = it may): terminal_path names the
+        live bots' MetaTrader 5 (_LIVE_TERMINAL_PATHS), or is empty -- then initialize() attaches to a terminal it finds
+        itself, on the server the live bots'."""
+        if not DEMO_BRANCH:
+            return None
+        path = (self.credentials or {}).get('terminal_path')
+        todo = (f'install a separate MetaTrader 5 for {_slot_name()} and set terminal_path in mt5_credentials.json to '
+                f'its terminal64.exe')
+        if not str(path or '').strip():
+            return (f"LIVE_TERMINAL_PATH: terminal_path in mt5_credentials.json is empty, so initialize() would attach "
+                    f"to a MetaTrader 5 it finds itself (on the server, the live bots'): {todo}")
+        if _live_terminal(path):
+            return (f"LIVE_TERMINAL_PATH: terminal_path {str(path).strip()} is the MetaTrader 5 of the live bots "
+                    f"({_LIVE_TERMINAL_PATHS[0]}): {todo}")
+        return None
+
+    def _log_limited(self, event, problem, details):
+        """An ERROR event `event` (details + problem) for a problem initialize_mt5 refuses to start on: when it starts
+        or changes, then at most every _LOG_REPEAT_S while it lasts -- also across the launcher's restarts of app.py
+        (a start reads the newest entry of the strategy log), so a problem that lasts does not fill the 200-entry
+        log. True when it was logged."""
+        symbol = self._symbol_of(None)
+        now = time.time()
+        if event not in self._limited_logged:
+            last = self._newest_log_entry(symbol) or {}
+            if last.get('event') == event and (last.get('details') or {}).get('problem') == problem:
+                try:
+                    from datetime import datetime
+                    self._limited_logged[event] = (problem, datetime.fromisoformat(str(last.get('utc_time'))).timestamp())
+                except (TypeError, ValueError):
+                    pass
+        was, at = self._limited_logged.get(event, (None, 0.0))
+        if problem == was and now - float(at or 0.0) < _LOG_REPEAT_S:
+            return False
+        self._limited_logged[event] = (problem, now)
+        self._log_event(symbol, event, 'ERROR', dict(details, problem=problem))
+        return True
 
     def _account_refused(self, symbol, problem, request=None, server_time=None):
         """The account is not this bot's: a WARNING and an ERROR event when the problem starts or changes."""
