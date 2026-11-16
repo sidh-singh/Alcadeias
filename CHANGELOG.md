@@ -332,7 +332,8 @@ new paths, after a check of what the trace already reported. In `app.py` only re
 - **Once per the limit, in the text log too.** The strategy log has the refusal at most every 15 minutes, also across
   the launcher's restarts. The text log now follows it: a start whose refusal the limit holds back writes no line at
   all (before: 7 lines at every restart, every 40 s or so, about 630 an hour). The first start after the 15 minutes
-  writes the whole block again. The same holds for a start refused on TERMINAL_IN_USE.
+  writes the whole block again. The same holds for a start refused on TERMINAL_IN_USE. A start whose other attempt
+  failed another way is written whole (the final step's fix, below).
 - **The wait for the terminal's account** (the 15 s of fix B): 'the terminal shows no account yet (account_info()
   answered None, last_error ...): the bot reads it again every second for up to 15 s before any login' (INFO
   ACCOUNT); an IPC error: 'no login: account not known: ...; the bot detached and tries again later' (WARN ACCOUNT);
@@ -359,6 +360,30 @@ new paths, after a check of what the trace already reported. In `app.py` only re
   this entry's session fixture now sets only the trace folder of a bot without one (`F.TRACE_ROOT`, a pytest temp
   folder). It no longer points `DEFAULTS['OUTPUT_DIR']` at one shared folder, so every bot keeps its own folder in the
   test's tmp_path.
+
+### Fixed before release: the review of the merge (the final step)
+- **An entry gone before the terminal listed it** (the basket branches; fix E's case: its broker backstop closed it
+  while the bot or the terminal was down). The merge's CLOSE line for it raised `UnboundLocalError` (its second half
+  was never set). It failed on that poll and on every poll after it until the bot's next close. The log got an ERROR
+  TRACE line, the status bar a red count (1,204 errors in an hour in the review's replay), no CLOSE and no PAUSE
+  line, and a basket after it 'replaced the BUY one' on every poll. The trading was not affected. Now there is one
+  CLOSE line: 'the BUY entry [N] is gone before the terminal listed it (its broker backstop while the bot or the
+  terminal was down?): booked as closed outside the bot, with the pause after a loss if it lost: realised -$11.54,
+  its closing deal at ... (deal history)'. The PAUSE line follows it.
+- **A line of the transitions that fails is not tried again on every poll** (basket and Turtle). When the transitions
+  step of a poll raises, the poll hook (`_transitions_step`) still keeps that poll's book for the next poll. The error
+  is written once (before: again on every poll until the book changed, hours in a pause after a loss).
+- **A refused start is held back only when all 3 attempts were held back.** The 15-minute limit skips the text log of
+  a start only when each of its 3 attempts was refused on a problem the limit held back (LIVE_TERMINAL_PATH,
+  TERMINAL_IN_USE). Before, the check read only the problem of the last attempt, or one left from an earlier attempt.
+  So a start with another failure wrote nothing: a login by the bot that failed, or `mt5.initialize()` raising ('the
+  job failed: RuntimeError: ...' was lost, and the dashboard kept showing the old refusal instead of 'Stopped'). Now
+  such a start is written whole. `execute_job` clears `_init_problem` before each attempt.
+- Tests: `test_tracelog.py` +3 (the gone entry over 11 polls; a transitions line that fails; a held-back
+  TERMINAL_IN_USE start, then one whose second attempt is a failed login, then one whose second attempt raises).
+  `test_pending_fill.py`: its crash and outage replays right after the entry also check the text log (one CLOSE line,
+  the PAUSE line, no ERROR TRACE line). On the Turtle branches `test_turtle_trace.py` +1 (a Turtle transitions line
+  that fails is tried once, not on all 2,995 polls). Each test fails on the code before the fix.
 
 ### Fixed before release: the final reviews (security and correctness of the port)
 - **A credentials file that is not UTF-8 is never written into the log.** Notepad on Windows Server can save
@@ -508,7 +533,8 @@ In `app.py` only read-only hooks, each through `_trace` / `_boot` (they cannot r
 ### Files
 - `tracelog.py` (new; the same file on all six demo branches): `TraceLog` (entry points `boot`, `loop_start`,
   `poll`, `poll_skipped`, `order`, `event`, `state_saved`, `state_note`, `exception`, `write_failed`,
-  `reconnect_failed`, `log`; each catches and logs its own errors), `LogWriter` (day files, retention, size cap,
+  `reconnect_failed`, `log`; each catches and logs its own errors; `_transitions_step`: when a poll's transitions
+  step raises, the poll's book is still kept for the next poll), `LogWriter` (day files, retention, size cap,
   events rotation; never raises), `write_json_atomic`.
 - `app.py`: guarded `import tracelog`; `MT5TradingBot.trace_dir` / `trace_enabled` / `_tracer` / `_trace` / `_boot` /
   `_boot_flush` / `_order_observed` / `_write_failed`; hooks: `loop_start` and `poll(locals())` in `process_symbol`,
@@ -518,11 +544,12 @@ In `app.py` only read-only hooks, each through `_trace` / `_boot` (they cannot r
   in `_load_state` / `_save_state`, the event mirror in `_log_event`; the writers above. For the paths of
   v3.9.2-demo.4: the no-login line in `initialize_mt5`, `reconnect_failed` in `_try_reconnect`,
   `poll_skipped('account_recheck')` after the account read again right after the positions (in `process_symbol`). For the paths of v3.9.2-demo.5: the account lines in `_account_held` and
-  `initialize_mt5`, the problem in the job's last line, `_start_held_back` in `_boot_flush`; the hook in
+  `initialize_mt5`, the problem in the job's last line, `_start_held_back` after each start attempt in
+  `execute_job` (its result in `_boot_flush(held_back=)`); the hook in
   `_try_reconnect` reads `_reconnect_logged` per reason.
 - `mt5_helper.py`: `MT5PositionHelper.order_observer` and `_observe` (called after every request with its result and
   its time; anything it raises is swallowed).
-- `tests_demo/`: `test_tracelog.py` (30 tests: 4 for the paths of v3.9.2-demo.4, 4 for the review's fixes; its account
+- `tests_demo/`: `test_tracelog.py` (43 test cases on the merged branches; its account
   test covers login and no login; its job test uses the new design check, so the file is the same on every branch);
   `fake_mt5.py` loads
   `tracelog`, gives every bot a temp trace folder, `make_bot(trace_dir=, keep_writers=)`; `conftest.py` puts the trace of a bot without its own folder in a pytest temp folder
