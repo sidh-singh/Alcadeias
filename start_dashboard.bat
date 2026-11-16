@@ -24,18 +24,19 @@ set "PYTHON_EXE=%PYTHON_ROOT%\python.exe"
 echo Python path: %PYTHON_EXE%
 echo.
 
-REM === Check if Dash is installed ===
-if not exist ".\dash_installed.flag" (
-    echo Installing dashboard dependencies...
-    "%PYTHON_EXE%" -m pip install dash plotly
-    echo Dashboard dependencies installed > ".\dash_installed.flag"
+REM === Dash and plotly: the versions requirements.txt pins (an unpinned install could bring Dash 3 or plotly 6) ===
+REM     The flag file names the versions, so a PC with an older flag installs these once.
+if not exist ".\dash_2.18.2_plotly_5.24.1.flag" (
+    echo Installing dashboard dependencies: dash 2.18.2, plotly 5.24.1 ...
+    "%PYTHON_EXE%" -m pip install dash==2.18.2 plotly==5.24.1
+    echo Dashboard dependencies installed > ".\dash_2.18.2_plotly_5.24.1.flag"
 ) else (
     echo Dashboard dependencies already installed, skipping...
 )
 
 echo ============================================================
 echo   STARTING ALCADEIAS DASHBOARD
-echo   Open browser at http://localhost:8050
+echo   It prints its address on the next lines.
 echo ============================================================
 echo.
 

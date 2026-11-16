@@ -54,14 +54,21 @@ without it fails at its end).
 ## The dashboard
 
 `start_dashboard.bat` (or `python dashboard.py`) serves it on port 8073 of this PC (`DASHBOARD_PORT`;
-`http://localhost:8073`). It only reads the files below (it never talks to the terminal), refreshes every 5 s, and
-shows times in UTC like the log. One `dashboard.py` serves the basket branches and the Turtle branches: it reads the
-strategy from the bot's trace, so here it draws the basket's page.
+`http://localhost:8073`; the first start installs dash 2.18.2 and plotly 5.24.1, the versions of `requirements.txt`).
+It only reads the files below (it never talks to the terminal), refreshes every 5 s, and shows times in UTC like the
+log. One `dashboard.py` serves the basket branches and the Turtle branches: it reads the strategy from the bot's
+trace, so here it draws the basket's page.
+
+**The dashboard has no login.** Anyone who can reach port 8073 sees this bot's account figures, its trades and its
+logs. Open the port in the server's firewall only to your own IP address, or open the dashboard on the server itself
+(`http://localhost:8073`). It shows only the bot's own files in its output folder: a request for any other file
+(for example `mt5_credentials.json`) is refused.
 
 - **Status bar** (on every tab): the symbol, the design, the branch and its magic number; whether the bot's data is
-  fresh (red when it has not written for a minute), the demo-account check, the terminal, the market, errors in the
-  last hour; the virtual balance, the unit and lot, this bot's open and closed P/L and its equity, the shared demo
-  account, how long the bot has run.
+  fresh, the demo-account check, the terminal, the market, errors in the last hour; the virtual balance, the unit and
+  lot, this bot's open and closed P/L and its equity, the shared demo account, how long the bot has run. When the bot
+  has not written for a minute, the first chip is red, the others are grey with the time of its last poll ('as of
+  09:10'), and a red banner says the page shows that poll, not now.
 - **Live**: *what the bot is doing now*: the action and the bot's own one-sentence reason, every check in the order
   the bot makes it (✓ passed, ✗ blocks, ⚡ fires, ○ not yet; the one that decided is marked) with its value against
   the rule, and the strategy's numbers: the open and agreement scores against their thresholds, every timeframe's
@@ -69,14 +76,16 @@ strategy from the bot's trace, so here it draws the basket's page.
   countdown after a loss, what a new basket would get (entry, target, stop, backstop). Then the **price chart**
   (M1 / M5 / M15 / H1 / D1, bid): every entry (▲ buy, ▼ sell, one per leg), every exit (✕, green won, red lost) with
   its reason and P/L and a dotted line from its entries, the open basket's legs and its levels as labelled lines
-  (target, stop, average price, the broker backstops, the next add when the design has a ladder, the bid); hover any
-  mark for its details. Then the **open position** (the basket's P/L between its stop and its target, its levels and
-  legs; when flat, the last trade) and the **latest events**.
+  (target, stop, average price, the broker backstops, the next add when the design has a ladder, the bid and the
+  ask); hover any mark for its details. The candles are bid prices: a level the bot compares with the ask (a sell
+  basket's stop and target, a buy basket's next add) says '(ask)'. Then the **open position** (the basket's P/L
+  between its stop and its target, its levels and legs; when flat, the last trade) and the **latest events**.
 - **Trades**: the summary (trades, win rate, net P/L, largest loss, max drawdown of the virtual balance, profit
   factor), the virtual balance after every close, and every trade, newest first (click one for its legs, its profit,
   swap and commission, and the exit reason the bot recorded).
-- **Log**: the events with level filters (ERROR, WARN, ORDER, FILL, CLOSE, INFO, DEBUG), a search, live or paused; the
-  raw text of any day; the path of today's text log to copy and a button that downloads a day's file.
+- **Log**: the events with level filters (ERROR, WARN, ORDER, FILL, CLOSE, INFO, DEBUG), a search (type, then press
+  Enter), live or paused; the raw text of any day; the path of today's text log to copy and a button that downloads a
+  day's file.
   **When something looks wrong, send that day's file.**
 - **History & settings**: the old views (daily trades, the lifetime summary, the old strategy log), the settings the
   bot started with (a value `constants.py` has changed since is marked: the bot takes it at its next start), and the
