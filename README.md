@@ -53,9 +53,10 @@ without it fails at its end).
 
 ## The dashboard
 
-`start_dashboard.bat` (or `python dashboard.py`) serves it on port 8072 of this PC (`http://localhost:8072`). It only
-reads the files below (it never talks to the terminal), refreshes every 5 s, and shows times in UTC like the log. One
-`dashboard.py` serves the basket branches and the Turtle branches: it reads the strategy from the bot's trace.
+`start_dashboard.bat` (or `python dashboard.py`) serves it on port 8072 of this PC (`DASHBOARD_PORT`;
+`http://localhost:8072`). It only reads the files below (it never talks to the terminal), refreshes every 5 s, and
+shows times in UTC like the log. One `dashboard.py` serves the basket branches and the Turtle branches: it reads the
+strategy from the bot's trace, so here it draws the Turtle's page.
 
 - **Status bar** (on every tab): the symbol, the design, the branch and its magic number; whether the bot's data is
   fresh (red when it has not written for a minute), the demo-account check, the terminal, the market, errors in the
@@ -86,7 +87,7 @@ reads the files below (it never talks to the terminal), refreshes every 5 s, and
 ## What it writes for the dashboard, and its log
 
 Next to the files the old dashboard reads, the bot writes into its output folder (every field:
-`docs/dashboard-data.md`):
+`docs/dashboard-data.md`; `tracelog.py`, which writes them, is the same file on all six demo branches):
 
 - `BTCUSDm_trace.json`: after every poll, what the bot sees and decides: one sentence on what it does now and why,
   every check in the order it makes them (passed, blocked, fired), and the Turtle's numbers: N, the 20-day and 10-day
@@ -99,8 +100,10 @@ Next to the files the old dashboard reads, the bot writes into its output folder
   levels and every stop move, and the virtual-balance curve;
 - `logs\BTCUSDm_<YYYY-MM-DD>.log`: the detailed text log (UTC days, kept 30 days): the start-up and every constant,
   the levels of every day, every vote change, every decision change, order, fill, add, stop move, close and its
-  realised result, reconnect and error with its traceback, and a heartbeat line every minute. When something looks
-  wrong, this file (and `logs\BTCUSDm_events.jsonl`) is the one to send.
+  realised result, reconnect and error with its traceback, and a heartbeat line every minute; also every safety
+  refusal of the section below (a terminal that holds another account, the account refused, every failed reconnect
+  attempt, a leg closed outside the bot and whether that was beyond the stop). When something looks wrong, this file
+  (and `logs\BTCUSDm_events.jsonl`) is the one to send.
 
 ## Safety
 

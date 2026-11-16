@@ -289,7 +289,9 @@ def test_a_poll_that_could_not_read_the_terminal_is_in_the_trace(tmp_path):
     text = '\n'.join(_read_log(r.out))
     for needle in ('-> SKIPPED: Poll skipped, nothing decided: terminal_info() returned None', '| WARN | TERMINAL |',
                    '| ERROR | TERMINAL | reconnect failed', '| ERROR | TERMINAL | MT5 initialize failed',
-                   '| INFO | ACCOUNT | logged in: account 1 on Fake-Demo', '| INFO | TERMINAL | connected to the terminal again',
+                   # (the terminal came back holding this bot's account: no login, v3.9.2-demo.4)
+                   "| INFO | ACCOUNT | no login: the terminal already holds this bot's account 1 (Fake-Demo)",
+                   '| INFO | ACCOUNT | account 1 on Fake-Demo; checks passed', '| INFO | TERMINAL | connected to the terminal again',
                    '| INFO | TERMINAL | the terminal answers again'):
         assert needle in text, needle
 
@@ -588,25 +590,36 @@ def test_an_exception_in_the_loop_is_an_error_with_its_traceback(tmp_path):
 # ───────────────────────────── start-up lines ─────────────────────────────
 
 def test_the_account_checks_of_the_start_are_in_the_log(mods, tmp_path):
+    """A terminal that holds no account: the bot logs in. One that holds this bot's account: no login (since
+    v3.9.2-demo.4, never a login over an account). Then the checks."""
     fake, clock = market(60)
     m = mods(fake=fake, clock=clock)
     bot = F.make_bot(m, fake, SYMBOL, F.Run(), trace_dir=tmp_path)
     bot.credentials = dict(CREDS)
     bot.mt5_initialized, bot.position_helper = False, None
-    assert bot.initialize_mt5()
+    fake.logged_in, fake.account_login = False, 0
+    assert bot.initialize_mt5()                                      # logs in
+    assert bot.initialize_mt5()                                      # the terminal holds this bot's account now
     fake.trade_mode = fake.ACCOUNT_TRADE_MODE_REAL
     assert not bot.initialize_mt5()
     bot._tracer(SYMBOL)                       # the first trace writes what was logged before it existed
     text = '\n'.join(_read_log(tmp_path))
     assert ('| INFO | ACCOUNT | logged in: account 1 on Fake-Demo; checks passed (a demo account, a hedging account, '
             'the login of the credentials) | login=1 server=Fake-Demo trade_mode=0 margin_mode=2') in text
+    assert ("| INFO | ACCOUNT | no login: the terminal already holds this bot's account 1 (Fake-Demo) | login=1 "
+            'server=Fake-Demo') in text
+    assert ('| INFO | ACCOUNT | account 1 on Fake-Demo; checks passed (a demo account, a hedging account, the login of '
+            'the credentials)') in text
+    assert text.count('| INFO | ACCOUNT | logged in:') == 1
     assert '| ERROR | ACCOUNT | refused, not trading: account 1 is not a demo account (trade_mode 2, demo is 0)' in text
     assert '| INFO | TERMINAL | MT5 initialized' in text and '| INFO | TERMINAL | symbols: XAUUSDm -> XAUUSDm' in text
 
 
 def test_a_job_that_ends_before_the_loop_leaves_its_log(mods, tmp_path):
-    """(a design this branch refuses -- the job ends before it connects, so the credentials file is never read)"""
-    m = mods(STRATEGY='turtle', TURTLE_SYSTEM=3, OUTPUT_DIR=str(tmp_path))
+    """A design every demo branch refuses (a stop and a ladder without an add gap: the check of v3.9.2-demo.4): the job
+    ends before it connects -- the credentials file is never opened -- and its log says why."""
+    m = mods(VOL_TF='H1', TARGET_USD_PER_UNIT=None, TARGET_VOL=10.0, STOP_VOL=8.0, MAX_ADDS=1,
+             LADDER_TRIGGER='macd_turn', OUTPUT_DIR=str(tmp_path))
     m.app.open = lambda *a, **k: (_ for _ in ()).throw(AssertionError('no file may be opened by the job here'))
     bot = m.app.MT5TradingBot(mode='demo', target_symbol=SYMBOL)
     assert bot.execute_job() is False
@@ -614,7 +627,8 @@ def test_a_job_that_ends_before_the_loop_leaves_its_log(mods, tmp_path):
     assert len([n for n in logs if n.endswith('.log')]) == 1
     with open(tmp_path / 'logs' / next(n for n in logs if n.endswith('.log')), encoding='utf-8') as f:
         text = f.read()
-    assert "| ERROR | START | the design in constants.py is refused: TURTLE_SYSTEM must be 1 or 2, not 3" in text
+    assert ('| ERROR | START | the design in constants.py is refused: a design with a stop and a ladder needs '
+            'LADDER_GAP_VOL > 0') in text
 
 
 # ───────────────────────────── bounded files ─────────────────────────────
@@ -688,3 +702,151 @@ def test_the_line_format(mods):
     assert head.split(' | ', 4)[3] == 'a ; b / c'
     assert tb == ['    Traceback (most recent call last):', '      File "x.py", line 1', '    ValueError: v']
     assert tl.dumps({'a': float('nan'), 'b': [1.0, float('inf')]}) == '{"a":null,"b":[1.0,null]}'
+
+
+# ───────────────────── the paths of v3.9.2-demo.4 (the re-review's fixes) in the trace and the log ─────────────────────
+
+def test_a_terminal_that_holds_another_account_is_in_the_log(mods, tmp_path):
+    """TERMINAL_IN_USE: the start-up's three attempts leave the terminal alone. The text log has the problem once as an
+    ERROR (the strategy log's event: when it starts or changes, then at most every 15 min) with who holds the terminal,
+    and no double prefix."""
+    fake, clock = market(60)
+    m = mods(fake=fake, clock=clock, OUTPUT_DIR=str(tmp_path))
+    fake.account_login, fake.server, fake.trade_mode = 99, 'Fake-Real', fake.ACCOUNT_TRADE_MODE_REAL
+    bot = m.app.MT5TradingBot(mode='demo', target_symbol=SYMBOL)
+    bot.credentials, bot.symbols = dict(CREDS), [SYMBOL]
+    for _ in range(3):
+        assert bot.initialize_mt5() is False
+    assert 'login' not in [c[0] for c in fake.calls]
+    lines = _read_log(tmp_path)
+    err = [ln for ln in lines if '| ERROR | ACCOUNT | TERMINAL_IN_USE: the terminal at' in ln]
+    assert len(err) == 1 and not any('TERMINAL_IN_USE: TERMINAL_IN_USE' in ln for ln in lines)
+    assert 'is logged into another account 99 (real, Fake-Real)' in err[0]
+    assert 'give this slot its own MT5 installation; no login: the terminal and its account are left as they are' in err[0]
+    assert ' login=99 ' in err[0] and ' own_login=1' in err[0]
+    assert sum('| INFO | TERMINAL | MT5 initialized' in ln for ln in lines) == 3          # every attempt
+    assert not any('| ACCOUNT | logged in:' in ln for ln in lines)
+
+
+@pytest.mark.slow
+def test_every_failed_reconnect_attempt_is_in_the_log_and_the_trace(tmp_path):
+    """The terminal is gone for 4 minutes. The strategy log has RECONNECT_FAILED once (one reason: the throttle of
+    v3.9.2-demo.4); the text log has its ERROR line and a WARN line for every other failed attempt, and the trace's
+    health the failed attempts, the next one, the outage so far and why the last one failed; TERMINAL_RECONNECTED says
+    how long it took."""
+    def hook(bot, n):
+        bot.credentials = dict(CREDS)
+        bot.position_helper.mt5.down(START + 60, START + 300)
+    r = _replay(tmp_path, seconds=420, hook=hook)
+    failed = [e for e in r.run.events if e['event'] == 'RECONNECT_FAILED']
+    back = [e['details'] for e in r.run.events if e['event'] == 'TERMINAL_RECONNECTED']
+    assert len(failed) == 1 and len(back) == 1 and back[0]['failed_attempts'] >= 5
+    lines = _read_log(r.out)
+    err = [ln for ln in lines if '| ERROR | TERMINAL | reconnect failed: initialize failed' in ln]
+    warn = [ln for ln in lines if '| WARN | TERMINAL | reconnect attempt ' in ln]
+    assert len(err) == 1 and 'next attempt in 5 s (the strategy log has this once' in err[0]
+    assert len(warn) == back[0]['failed_attempts'] - 1                                   # every other attempt
+    assert all('failed (initialize failed' in ln and 'without the terminal so far' in ln for ln in warn)
+    up = [ln for ln in lines if '| INFO | TERMINAL | connected to the terminal again' in ln]
+    assert len(up) == 1 and f"(attempt {back[0]['attempt']}, after " in up[0] and 'failed attempt(s))' in up[0]
+    skipped = [s for s in r.snaps if s['decision']['action'] == 'SKIPPED' and s['health']['reconnect_failed_attempts']]
+    assert skipped
+    h = skipped[-1]['health']
+    assert h['connect_problem'].startswith('initialize failed') and h['next_reconnect_utc'] and h['outage_s'] > 60
+    assert h['terminal_in_use'] is False
+    assert f"The last of {h['reconnect_failed_attempts']} failed reconnect attempt(s): initialize failed" in \
+        skipped[-1]['decision']['headline']
+    assert r.snaps[-1]['health']['reconnect_failed_attempts'] == 0 and r.snaps[-1]['health']['outage_s'] is None
+
+
+@pytest.mark.slow
+def test_an_account_switch_just_before_the_positions_read_is_in_the_trace(tmp_path):
+    """The account changes after the poll's first check, just before its positions read: the account read again right
+    after the positions (v3.9.2-demo.4) refuses that poll. The trace says SKIPPED with the gate that refused and why;
+    the log has ACCOUNT_REFUSED, then ACCOUNT_OK when the demo account is back; the bot trades on."""
+    def hook(bot, n):
+        f = bot.position_helper.mt5
+
+        def to_live(f_):
+            f_.account_login, f_.trade_mode = 99, f_.ACCOUNT_TRADE_MODE_REAL
+
+        def back(f_):
+            f_.account_login, f_.trade_mode = 1, f_.ACCOUNT_TRADE_MODE_DEMO
+        f.on_call('positions_get', START + 60, to_live)
+        f.at(START + 70, back)
+    r = _replay(tmp_path, seconds=150, hook=hook)
+    assert [e['event'] for e in r.run.events if e['event'] in ('ACCOUNT_REFUSED', 'ACCOUNT_OK')] == \
+        ['ACCOUNT_REFUSED', 'ACCOUNT_OK']
+    re_ = [s for s in r.snaps if s['decision']['reason'] == 'account_recheck']
+    assert len(re_) == 1
+    dec = re_[0]['decision']
+    g = {x['key']: x for x in dec['gates']}
+    assert dec['action'] == 'SKIPPED' and dec['blocked_by'] == 'account_recheck' and re_[0]['stale']
+    assert g['account']['ok'] is True and g['positions']['ok'] is True and g['account_recheck']['ok'] is False
+    assert g['account_recheck']['value'].startswith('account 99 is not a demo account')
+    assert "the account read again right after the positions is not this bot's (account 99" in dec['headline']
+    assert re_[0]['health']['account_ok'] is False
+    lines = _read_log(r.out)
+    assert any('| ERROR | ACCOUNT | not trading: account 99 is not a demo account' in ln for ln in lines)
+    assert any('| INFO | ACCOUNT | the terminal holds the demo account again: trading' in ln for ln in lines)
+    assert any('-> SKIPPED: Poll skipped, nothing decided: the account read again right after the positions' in ln
+               for ln in lines)
+    later = [s for s in r.snaps if s['t'] > START + 75]
+    assert later and later[-1]['decision']['action'] != 'SKIPPED' and later[-1]['health']['account_ok']
+
+
+def test_a_basket_a_backstop_closed_only_partly_is_booked_whole_in_the_trace(tmp_path):
+    """The broker's backstop closed the entry of a two-leg BUY basket while the bot was down (the add is left): the
+    first poll closes the add at once and books the whole basket as closed outside the bot (v3.9.2-demo.4). The trace
+    shows the gate and the headline, the log the leg gone, the close of the rest and the booking, and trades.json
+    one trade of both legs with the exit reason leg_closed_outside."""
+    ids = {}
+
+    def hook(bot, n):
+        if n:
+            return
+        f = bot.position_helper.mt5
+        e = f.add_position(0, 0.01, 2000.5, START - 300, magic=MAGIC, comment='demo')
+        a = f.add_position(0, 0.01, 1999.5, START - 200, magic=MAGIC, comment='demo')
+        f.positions[:] = [p for p in f.positions if p['ticket'] != e]        # its backstop, 100 s before the start
+        f.add_deal(e, 1, 1, 0.01, 1995.0, -5.5, START - 100, magic=MAGIC)
+        f.deals[-1].reason = f.DEAL_REASON_SL
+        ids.update(e=e, a=a)
+        basket = {'target_usd_per_unit': 50.0, 'stop_usd_per_unit': 50.0, 'gap_px': 1.0, 'vol_unit_raw': 1.0,
+                  'vol_unit': 1.0, 'side': 'BUY', 'units': 1, 'ids': [e, a], 'first_time': START - 300,
+                  'opened_at': START - 300, 'opened_by': 'bot', 'ladder_armed': False, 'close_pending': False,
+                  'levels_pending': False, 'vol_source': 'bars', 'last_profit': 0.0}
+        path = bot._state_path(SYMBOL)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump({'version': 1, 'symbol': SYMBOL, 'magic': MAGIC, 'design': 'scaled_test', 'saved_at': START - 100,
+                       'basket': basket, 'last_close': None}, fh)
+    r = _replay(tmp_path, seconds=40, hook=hook)
+    assert not r.run.errors, r.run.errors[:3]
+    e, a = ids['e'], ids['a']
+    closes = [o for o in r.fake.orders if 'position' in o]
+    assert [o['position'] for o in closes] == [a] and closes[0]['_t_ms'] <= (START + 3) * 1000
+    snap = next(s for s in r.snaps if s['decision']['action'] == 'CLOSE_BUY')
+    dec = snap['decision']
+    g = {x['key']: x for x in dec['gates']}
+    assert dec['reason'] == 'leg_closed_outside' and dec['blocked_by'] == 'legs_outside'
+    assert g['legs_outside']['ok'] is True and g['legs_outside']['value'] == [e] and 'close_retry' not in g
+    assert dec['headline'].startswith(f'Closing the rest of the BUY basket: leg(s) [{e}] were closed outside the bot')
+    assert snap['basket']['open']['outside_ids'] == [e]
+    lines = _read_log(r.out)
+    text = '\n'.join(lines)
+    assert (f"| WARN | BASKET | leg(s) [{e}] of the BUY basket closed outside the bot (the broker's backstop, a "
+            'stop-out or by hand): the other 1 leg(s) are closed at once and the whole basket is booked as closed '
+            'outside the bot') in text
+    assert f'| CLOSE | CLOSE | the rest of the BUY basket closed after leg(s) [{e}] were closed outside the bot: 1 ' \
+           'position(s)' in text
+    realised = round(sum(d.profit for d in r.fake.deals if d.position_id in (e, a)), 2)
+    book = [ln for ln in lines if '| CLOSE | CLOSE | the BUY basket is booked as closed outside the bot' in ln]
+    assert len(book) == 1 and f'leg(s) [{e}] were closed outside it' in book[0] and 'the bot closed the other 1' in book[0]
+    assert ('realised ' + ('-' if realised < 0 else '+') + f'${abs(realised):,.2f} on every leg (deal history)') in book[0]
+    assert '| INFO | PAUSE | entry pause started:' in text
+    assert not any('| WARN | TRACE |' in ln for ln in lines)                            # the gates read as the bot did
+    doc = r.trades[-1]
+    t = next(x for x in doc['closed'] if {l['position_id'] for l in x['legs']} == {e, a})
+    assert t['exit_reason'] == 'leg_closed_outside' and t['pnl'] == realised
+    assert t['exit_reason_text'] == 'a leg closed outside the bot, the rest closed by the bot'
