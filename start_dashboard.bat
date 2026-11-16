@@ -1,5 +1,7 @@
 @echo off
 REM === Alcadeias Dashboard Launcher ===
+REM Run from the bot's own folder, wherever it was started from (Task Scheduler without "Start in", a shortcut)
+cd /d "%~dp0"
 REM Usage: start_dashboard.bat [mode]
 REM   mode: demo (default), live
 
@@ -29,6 +31,11 @@ REM     The flag file names the versions, so a PC with an older flag installs th
 if not exist ".\dash_2.18.2_plotly_5.24.1.flag" (
     echo Installing dashboard dependencies: dash 2.18.2, plotly 5.24.1 ...
     "%PYTHON_EXE%" -m pip install dash==2.18.2 plotly==5.24.1
+    if errorlevel 1 (
+        echo pip failed: the dashboard needs dash 2.18.2 and plotly 5.24.1. Check the internet connection and run this again.
+        pause
+        exit /b 1
+    )
     echo Dashboard dependencies installed > ".\dash_2.18.2_plotly_5.24.1.flag"
 ) else (
     echo Dashboard dependencies already installed, skipping...
