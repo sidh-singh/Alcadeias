@@ -120,8 +120,8 @@ def test_writes_elsewhere_and_reads_of_the_real_folder_are_not_refused(tmp_path,
     Path('out', 'x.json').write_text('{}')
     os.replace(os.path.join('out', 'x.json'), os.path.join('out', 'y.json'))
     shutil.rmtree('out')
-    with pytest.raises(FileNotFoundError):
-        open(os.path.join(C.REAL_OUTPUT_DIR, 'state', 'XAUUSDm_state.json'))      # a read is not a write
+    with pytest.raises(FileNotFoundError):         # a read is not refused (on Windows: of a file the bot never has)
+        open(os.path.join(C.REAL_OUTPUT_DIR, 'state', 'no_such_file_of_tests_demo.json'))
     assert len(C.REFUSED_WRITES) == n
 
 
