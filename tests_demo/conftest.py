@@ -223,6 +223,18 @@ def _bot_output_in_tmp_path(tmp_path):
         _BotOutput.current = None
 
 
+@pytest.fixture(scope='session', autouse=True)
+def _traces_in_temp(tmp_path_factory):
+    """The trace files and text log (tracelog.py) of a bot that make_bot builds without a trace_dir go to a new folder
+    under this pytest temp folder (F.TRACE_ROOT); a bot with keep_writers writes them into its OUTPUT_DIR, which is in
+    the test's tmp_path (_bot_modules_in_tmp above)."""
+    F.TRACE_ROOT = str(tmp_path_factory.mktemp('trace'))
+    try:
+        yield
+    finally:
+        F.TRACE_ROOT = None
+
+
 @pytest.fixture(scope='session')
 def root():
     return ROOT

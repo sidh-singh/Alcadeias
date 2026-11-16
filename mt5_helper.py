@@ -59,6 +59,9 @@ class MT5PositionHelper:
         # Called with the request before every order_send (opens, adds, closes, SL/TP changes); False = the
         # request is not sent (order_send's "no answer", None). app.py puts its demo-account check here.
         self.order_guard = None
+        # Called after every request with (request, result, refused, ms) -- app.py's trace (the text log's ORDER and
+        # FILL lines). It only reads; whatever it raises is swallowed here, so it can never change an order.
+        self.order_observer = None
 
         # Store MT5 constants for building per-call request dicts
         self._order_time_gtc = self.mt5.ORDER_TIME_GTC
@@ -67,11 +70,25 @@ class MT5PositionHelper:
 
     def _send(self, request: dict):
         """order_send of every request of this bot, behind order_guard: a request the guard refuses is not sent
-        and answered None, as order_send answers a request it could not deliver."""
+        and answered None, as order_send answers a request it could not deliver. order_observer sees each one."""
         guard = self.order_guard
         if guard is not None and not guard(request):
+            self._observe(request, None, True, None)
             return None
-        return self.mt5.order_send(request)
+        t0 = time.perf_counter()
+        result = self.mt5.order_send(request)
+        self._observe(request, result, False, (time.perf_counter() - t0) * 1000.0)
+        return result
+
+    def _observe(self, request, result, refused, ms):
+        """Tell order_observer about a request and its result; nothing it does can reach the order."""
+        observer = self.order_observer
+        if observer is None:
+            return
+        try:
+            observer(dict(request), result, refused, ms)
+        except Exception:
+            pass
 
     def get_buy_positions(self, symbol: str) -> Optional[Dict]:
         """

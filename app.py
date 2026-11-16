@@ -37,6 +37,11 @@ from constants import (
     # demo isolation
     MAGIC, DEMO_BRANCH, VIRTUAL_START_BALANCE, VIRTUAL_START_DATE,
 )
+try:
+    import tracelog as _tracelog     # the dashboard's trace files and the text log; trading never needs them
+except Exception as _e:              # a broken tracelog.py must not stop the bot: it trades without them
+    print(f"note: tracelog.py did not load ({_e!r}): no trace files, no text log")
+    _tracelog = None
 
 _TF_PREFIX = 'TIMEFRAME_'
 _STATE_VERSION = 1
@@ -450,6 +455,77 @@ class MT5TradingBot:
         # (TERMINAL_IN_USE), terminal_path naming the live bots' MetaTrader 5 (LIVE_TERMINAL_PATH): for each event, each
         # problem logged and when (_log_limited).
         self._limited_logged = {}
+        # The dashboard's trace and the text log (tracelog.py), one per symbol, in trace_dir (None = OUTPUT_DIR).
+        # Nothing the bot decides reads them; every call into them is wrapped (_trace), trace_enabled False = none.
+        self.trace_dir = None
+        self.trace_enabled = True
+        self._tracers = {}
+        self._boot_lines = []                    # lines logged before a symbol's trace exists (job start, login)
+        self._last_account = None                # (login, trade_mode, margin_mode) of the account read last
+        self._guard_why = None                   # why the last poll guard refused: ('terminal' | 'account', problem)
+        self._reconnects_done = 0
+
+    # ───────────────────── the trace (tracelog.py): read-only, never raises into the loop ─────────────────────
+    def _tracer(self, symbol):
+        """The symbol's TraceLog (made on first use, the lines logged before it written first); None without one."""
+        tr = self._tracers.get(symbol)
+        if tr is None and self.trace_enabled and _tracelog is not None:
+            try:
+                tr = _tracelog.TraceLog(self, symbol, self.trace_dir or OUTPUT_DIR, sys.modules[__name__])
+            except Exception as e:
+                print(f"[{symbol}] note: no trace / text log ({e!r}); trading goes on without them")
+                self.trace_enabled = False
+                return None
+            self._tracers[symbol] = tr
+            tr.boot(list(self._boot_lines))
+        return tr
+
+    def _trace(self, symbol, method, *args, **kwargs):
+        """Hand something to the symbol's trace. Never raises (the trace logs and swallows its own errors; this is a
+        second net): the trading loop must not notice it."""
+        try:
+            tr = self._tracer(symbol)
+            if tr is not None:
+                getattr(tr, method)(*args, **kwargs)
+        except Exception:
+            pass
+
+    def _boot(self, level, cat, msg, kv=None, exc=False):
+        """A line of the job's start (or of a reconnect): to every symbol's trace, or kept until the first one exists."""
+        try:
+            import traceback
+            rec = (time.time(), level, cat, msg, kv, traceback.format_exc() if exc else None)
+            if self._tracers:
+                for tr in list(self._tracers.values()):
+                    tr.boot([rec])
+            else:
+                self._boot_lines.append(rec)
+                del self._boot_lines[:-500]
+        except Exception:
+            pass
+
+    def _boot_flush(self):
+        """The job ends before any symbol's loop started: its lines go to the log of the symbol it was started for."""
+        if self._boot_lines and not self._tracers:
+            self._tracer(self.symbols[0] if self.symbols else (self.target_symbol or 'bot'))
+
+    def _order_observed(self, request, result, refused=False, ms=None):
+        """MT5PositionHelper._send: every order request and its result, to the trace of its symbol (inside mt5_lock)."""
+        self._trace(self._symbol_of((request or {}).get('symbol')), 'order', request, result, refused, ms)
+
+    def _write_failed(self, symbol, what, path, err):
+        """A file of the old dashboard could not be written (a full or missing disk): a WARN in the log, a console
+        line at most once a minute per file, and trading goes on -- a write error never reaches the decisions."""
+        try:
+            last = getattr(self, '_write_failed_t', {})
+            self._write_failed_t = last
+            now = time.time()
+            if now - last.get(path, -1e18) >= 60.0:
+                last[path] = now
+                print(f"[{symbol}] Error: could not write {path}: {err}")
+        except Exception:
+            pass
+        self._trace(symbol, 'write_failed', what, path, err)
 
     # ── Day-of-week mapping for trading_window config ──
     _DAY_NAME_TO_NUM = {
@@ -555,23 +631,27 @@ class MT5TradingBot:
         """Step 1: Load MT5 credentials from JSON file"""
         if DEMO_BRANCH and self.mode != 'demo':
             print(f"✗ This is the demo branch {DEMO_BRANCH}: mode '{self.mode}' is refused, it trades on demo only")
+            self._boot('ERROR', 'START', f"mode '{self.mode}' refused: the demo branch {DEMO_BRANCH} trades on demo only")
             return False
         try:
             json_path = Path(__file__).parent / 'mt5_credentials.json'
             with open(json_path, 'r') as f:
                 credentials = json.load(f)
-            
+
             if self.mode not in credentials:
                 raise ValueError(f"Invalid mode '{self.mode}'. Must be 'demo' or 'live'")
-            
+
             self.credentials = credentials[self.mode]
             print(f"✓ Credentials loaded for {self.mode.upper()} account")
+            self._boot('INFO', 'START', f'credentials loaded for the {self.mode} account')
             return True
         except FileNotFoundError:
             print(f"✗ Error: mt5_credentials.json not found")
+            self._boot('ERROR', 'START', 'mt5_credentials.json not found')
             return False
         except json.JSONDecodeError:
             print("✗ Error: Invalid JSON format in mt5_credentials.json")
+            self._boot('ERROR', 'START', 'mt5_credentials.json is not valid JSON')
             return False
     
     def load_symbols(self):
@@ -610,6 +690,8 @@ class MT5TradingBot:
                 if not matched:
                     print(f"✗ Error: Symbol '{self.target_symbol}' not found in symbols.json")
                     print(f"  Available: {', '.join(self.symbols)}")
+                    self._boot('ERROR', 'START', f"symbol {self.target_symbol!r} not in symbols.json "
+                               f"(active: {', '.join(self.symbols) or 'none'})")
                     return False
                 self.symbols = matched
                 self.symbol_configs = {s: self.symbol_configs[s] for s in matched}
@@ -617,15 +699,18 @@ class MT5TradingBot:
 
             if not self.symbols:
                 print("✗ Warning: No valid symbols in symbols.json")
+                self._boot('ERROR', 'START', 'no valid symbol in symbols.json')
                 return False
 
             print(f"✓ Loaded {len(self.symbols)} symbols: {', '.join(self.symbols)}")
             return True
         except FileNotFoundError:
             print(f"✗ Error: symbols.json not found")
+            self._boot('ERROR', 'START', 'symbols.json not found')
             return False
         except json.JSONDecodeError:
             print("✗ Error: Invalid JSON format in symbols.json")
+            self._boot('ERROR', 'START', 'symbols.json is not valid JSON')
             return False
     
     def initialize_mt5(self):
@@ -652,10 +737,12 @@ class MT5TradingBot:
         if not mt5.initialize(path=self.credentials['terminal_path']):
             self._init_problem = f'initialize failed: {mt5.last_error()}'
             print(f"✗ MT5 initialization failed: {mt5.last_error()}")
+            self._boot('ERROR', 'TERMINAL', f'MT5 initialize failed: {self._init_problem}')
             return False
 
         print(f"✓ MT5 initialized successfully")
         print(f"✓ MT5 version: {mt5.version()}")
+        self._boot('INFO', 'TERMINAL', 'MT5 initialized', {'version': mt5.version()})
 
         # The account the terminal holds before any login: a login switches the account of EVERY process attached
         # to the terminal (the bots of another slot, a live bot), so this bot logs in only on a terminal that shows
@@ -686,6 +773,7 @@ class MT5TradingBot:
                 error = mt5.last_error()
                 self._init_problem = f'login failed: {error}'
                 print(f"✗ Login failed: {error}")
+                self._boot('ERROR', 'ACCOUNT', f'login failed: {error}', {'server': self.credentials.get('server')})
                 mt5.shutdown()
                 return False
         else:
@@ -696,6 +784,7 @@ class MT5TradingBot:
         if account_info is None:
             self._init_problem = 'no account info'
             print("✗ Failed to get account info")
+            self._boot('ERROR', 'ACCOUNT', 'logged in, but account_info() returned None')
             mt5.shutdown()
             return False
 
@@ -704,11 +793,21 @@ class MT5TradingBot:
         if problem:
             self._init_problem = problem
             print(f"✗ Refused: {problem}")
+            self._boot('ERROR', 'ACCOUNT', f'refused, not trading: {problem}', {
+                'login': getattr(account_info, 'login', None), 'trade_mode': getattr(account_info, 'trade_mode', None),
+                'margin_mode': getattr(account_info, 'margin_mode', None)})
             mt5.shutdown()
             return False
         self._account_login = account_info.login
         self._init_problem = None
         self._limited_logged = {}
+        self._boot('INFO', 'ACCOUNT', f'logged in: account {account_info.login} on {account_info.server}; checks passed '
+                   '(a demo account, a hedging account, the login of the credentials)', {
+                       'login': account_info.login, 'server': account_info.server,
+                       'trade_mode': getattr(account_info, 'trade_mode', None),
+                       'margin_mode': getattr(account_info, 'margin_mode', None),
+                       'balance': account_info.balance, 'equity': account_info.equity,
+                       'leverage': account_info.leverage, 'currency': getattr(account_info, 'currency', None)})
 
         print(f"\n{'='*60}")
         print(f"  Login Successful - {self.mode.upper()} Account")
@@ -742,30 +841,40 @@ class MT5TradingBot:
                 matches = mt5.symbols_get(f"{prefix}*") or []
                 candidates = ', '.join(s.name for s in matches[:8]) if matches else 'none'
                 print(f"✗ Failed to subscribe {sym}: {mt5.last_error()} | candidates: {candidates}")
-        
+                self._boot('WARN', 'TERMINAL', f'could not subscribe {sym}: {mt5.last_error()}', {'candidates': candidates})
+        self._boot('INFO', 'TERMINAL', 'symbols: ' + ', '.join(f'{k} -> {v}' for k, v in self.symbol_map.items()),
+                   {'subscribed': subscribe_symbols})
+
         return True
     
     def _save_symbol_data(self, symbol, data):
-        """Save symbol data to JSON file on C: drive (thread-safe)"""
+        """Save symbol data to JSON file on C: drive (thread-safe). A write that fails is logged, not raised."""
         import os
         output_dir = OUTPUT_DIR
-        os.makedirs(output_dir, exist_ok=True)
         json_path = os.path.join(output_dir, f'{symbol}.json')
-        with self.thread_lock:
-            with open(json_path, 'w') as f:
-                json.dump(data, f, indent=2, default=str)
-    
-    def _save_account_data(self, account_info):
-        """Save account data to dedicated account.json (thread-safe)"""
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            with self.thread_lock:
+                with open(json_path, 'w') as f:
+                    json.dump(data, f, indent=2, default=str)
+        except Exception as e:
+            self._write_failed(symbol, f'{symbol}.json', json_path, e)
+
+    def _save_account_data(self, account_info, symbol=None):
+        """Save account data to dedicated account.json (thread-safe). A write that fails is logged, not raised: it is
+        made before the poll decides, so a full disk would otherwise stop the trading."""
         import os
         from datetime import datetime
         output_dir = OUTPUT_DIR
-        os.makedirs(output_dir, exist_ok=True)
         json_path = os.path.join(output_dir, 'account.json')
         account_info['last_updated'] = datetime.now(tz=timezone.utc).isoformat()
-        with self.thread_lock:
-            with open(json_path, 'w') as f:
-                json.dump(account_info, f, indent=2, default=str)
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            with self.thread_lock:
+                with open(json_path, 'w') as f:
+                    json.dump(account_info, f, indent=2, default=str)
+        except Exception as e:
+            self._write_failed(symbol or self._symbol_of(None), 'account.json', json_path, e)
     
     def _save_daily_trades(self, symbol, mt5_symbol=None):
         """Fetch today's closed deals for a symbol and save to per-symbol daily_trade folder (thread-safe)"""
@@ -868,22 +977,27 @@ class MT5TradingBot:
         }
 
         log_path = self._log_path(symbol)
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
-        with self.thread_lock:
-            # Load existing log
-            try:
-                with open(log_path, 'r') as f:
-                    log_data = json.load(f)
-            except (FileNotFoundError, json.JSONDecodeError):
-                log_data = []
+        try:
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with self.thread_lock:
+                # Load existing log
+                try:
+                    with open(log_path, 'r') as f:
+                        log_data = json.load(f)
+                except (FileNotFoundError, json.JSONDecodeError):
+                    log_data = []
 
-            # Prepend (newest first) and cap
-            log_data.insert(0, entry)
-            log_data = log_data[:STRATEGY_LOG_MAX_ENTRIES]
+                # Prepend (newest first) and cap
+                log_data.insert(0, entry)
+                log_data = log_data[:STRATEGY_LOG_MAX_ENTRIES]
 
-            with open(log_path, 'w') as f:
-                json.dump(log_data, f, indent=2, default=str)
+                with open(log_path, 'w') as f:
+                    json.dump(log_data, f, indent=2, default=str)
+        except Exception as e:
+            self._write_failed(symbol, 'the strategy log', log_path, e)
+        # the same event in the text log
+        self._trace(symbol, 'event', event, tag, details, server_time)
 
     @staticmethod
     def _log_path(symbol):
@@ -916,9 +1030,13 @@ class MT5TradingBot:
             return None
         except (OSError, ValueError) as e:
             print(f"[{symbol}] note: state file {path} unreadable ({e}); rebuilding it from the terminal")
+            self._trace(symbol, 'state_note', 'WARN', f'the state file {path} is unreadable ({e!r}): it is rebuilt from '
+                        'the terminal')
             return None
         if not isinstance(data, dict) or data.get('symbol') != symbol or data.get('magic') != MAGIC:
             print(f"[{symbol}] note: state file {path} is not this bot's (symbol/magic); rebuilding it from the terminal")
+            self._trace(symbol, 'state_note', 'WARN', f"the state file {path} is not this bot's (symbol / magic): it is "
+                        'rebuilt from the terminal')
             return None
         return {'basket': data.get('basket'), 'last_close': data.get('last_close')}
 
@@ -936,6 +1054,10 @@ class MT5TradingBot:
                 os.replace(tmp, path)
         except OSError as e:
             print(f"[{symbol}] Error: could not write the state file {path}: {e}")
+            self._trace(symbol, 'state_note', 'ERROR', f'could not write the state file {path}: {e!r} (a restart now '
+                        'would rebuild the basket from the terminal)')
+            return
+        self._trace(symbol, 'state_saved', state)
 
     def _usd_per_price_of(self, symbol, trade_symbol, mtqty):
         """USD per unit (mtqty lots) for a move of 1.0 in price = contract_size x mtqty (gold 100 x 0.01 = 1.0,
@@ -1317,6 +1439,7 @@ class MT5TradingBot:
         login = getattr(acct, 'login', None)
         demo = getattr(mt5, 'ACCOUNT_TRADE_MODE_DEMO', 0)
         mode = getattr(acct, 'trade_mode', None)
+        self._last_account = (login, mode, getattr(acct, 'margin_mode', None))     # the trace's health line
         if DEMO_BRANCH and mode != demo:
             return f'account {login} is not a demo account (trade_mode {mode}, demo is {demo})'
         if check_login:
@@ -1523,10 +1646,12 @@ class MT5TradingBot:
 
     def _install_order_guard(self):
         """_order_guard in front of every order_send of the helper the bot trades through (initialize_mt5 makes a
-        new helper; a replay brings its own)."""
+        new helper; a replay brings its own), and the trace's observer of every request and result behind it."""
         helper = self.position_helper
         if helper is not None and getattr(helper, 'order_guard', None) is None:
             helper.order_guard = self._order_guard
+        if helper is not None and getattr(helper, 'order_observer', False) is None:
+            helper.order_observer = self._order_observed
 
     def _poll_guard(self, symbol):
         """At the start of every poll: True when the poll may read the terminal and decide -- the terminal answers
@@ -1536,8 +1661,12 @@ class MT5TradingBot:
             problem, ipc_lost = self._terminal_problem()
         if problem is not None:
             self._poll_failed(symbol, problem, ipc_lost=ipc_lost)
+            self._guard_why = ('terminal', problem)
             return False
-        return self._account_ok(symbol)
+        if not self._account_ok(symbol):
+            self._guard_why = ('account', self._account_bad)
+            return False
+        return True
 
     def _terminal_problem(self):
         """Why the terminal cannot be used this poll: (problem, ipc_lost), (None, False) when it can. ipc_lost:
@@ -1585,6 +1714,7 @@ class MT5TradingBot:
         attempt = self._reconnects_failed + 1
         if self._reconnect(symbol):
             print(f"[{symbol}] note: connected to the terminal again (attempt {attempt}, after {self._outage_s()} s)")
+            self._reconnects_done += 1
             self._log_event(symbol, 'TERMINAL_RECONNECTED', 'SIGNAL', {
                 'attempt': attempt, 'failed_attempts': attempt - 1, 'outage_s': self._outage_s(),
                 'failed_polls': self._failed_polls, 'login': self._account_login})
@@ -1703,6 +1833,8 @@ class MT5TradingBot:
         state.setdefault('last_close', None)
         _block_logged = None                    # last entry-gate block written to the log (logged on change)
         _virtual_balance = None
+        # the trace: the start-up block of the text log (branch, design, every constant, the state found)
+        self._trace(symbol, 'loop_start', locals())
 
         while True:
             try:
@@ -1711,6 +1843,7 @@ class MT5TradingBot:
 
                 # ── The terminal must answer and hold this bot's demo account, else this poll decides nothing ──
                 if not self._poll_guard(symbol):
+                    self._trace(symbol, 'poll_skipped', 'guard')
                     time.sleep(1)
                     if self._stop_event.is_set():
                         return
@@ -1738,6 +1871,7 @@ class MT5TradingBot:
                 except TerminalReadError as e:
                     # The positions are not known this poll (not "none"): no sync, no bookkeeping, no decision.
                     self._poll_failed(symbol, str(e))
+                    self._trace(symbol, 'poll_skipped', 'positions', str(e))
                     time.sleep(1)
                     if self._stop_event.is_set():
                         return
@@ -1813,7 +1947,7 @@ class MT5TradingBot:
 
                 # Save account data regardless of candle availability
                 if account_info:
-                    self._save_account_data(account_info)
+                    self._save_account_data(account_info, symbol)
 
                 # ── Indicators & signals (only when candle data is available) ──
                 buy_signal = Signal.DO_NOTHING
@@ -1827,6 +1961,8 @@ class MT5TradingBot:
                 vol_now = None             # VOL_TF volatility unit, last closed bar (price units)
                 _no_data = []              # timeframes the terminal returned no bars for this poll (their votes unknown)
                 _short = []                # TREND_TF / VOL_TF with fewer than _MIN_CLOSED_BARS closed bars this poll
+                _frames = {}               # the trace: the bars this poll fetched per timeframe (read, never changed)
+                _signals = {}              # the trace: the forming bar's MACD signal line per slope timeframe
 
                 if not has_candle_data:
                     print(f"[{symbol}] WARNING: No candle data returned by MT5")
@@ -1890,6 +2026,7 @@ class MT5TradingBot:
                                 trade_symbol, getattr(mt5, tf_name), RSI_CANDLE_COUNT, simple=True
                             )
                         if tf_df is not None and len(tf_df) > 0:
+                            _frames[tf_name] = tf_df
                             rsi_s = self.indicator.calculate_rsi(
                                 tf_df['close'], length=RSI_LENGTH, ma_type=RSI_MA_TYPE
                             )
@@ -1912,6 +2049,7 @@ class MT5TradingBot:
                                 # selects the pivot side -> high (OB) when signal > 0,
                                 # low (OS) when signal < 0.
                                 _sig = float(macd_df['signal'].iloc[-1]) if len(macd_df) > 0 else 0.0
+                                _signals[tf_name] = _sig
                                 _macd_side = 'high' if _sig > 0 else ('low' if _sig < 0 else None)
                                 macd_slope = self.indicator.latest_pivot_slope(
                                     macd_df['hist'], lookback=PEAK_LOOKBACK, width=PIVOT_WIDTH,
@@ -2297,16 +2435,22 @@ class MT5TradingBot:
                             self._save_historical_summary(symbol, mt5_symbol=trade_symbol)
                             _last_hist_save = _now_ts
                     except Exception:
-                        pass  # Non-critical, don't break the main loop
-                
+                        # Non-critical, don't break the main loop (a WARN with the traceback in the text log)
+                        self._trace(symbol, 'exception', 'SAVE', 'the daily-trade / history-summary files could not be '
+                                    'saved (tried again next poll)', level='WARN')
+
+                # ── The trace (tracelog.py): reads this poll's locals, writes the dashboard's files and the text log ──
+                self._trace(symbol, 'poll', locals())
+
                 time.sleep(max(brake, 1))  # At least 1s between cycles
-                
+
                 # Check if supervisor requested shutdown (mode change)
                 if self._stop_event.is_set():
                     return
-                
+
             except Exception as e:
                 print(f"[{symbol}] Error: {e}")
+                self._trace(symbol, 'exception', 'LOOP', f'the poll failed: {e!r}; the loop goes on in 1 s')
                 time.sleep(1)
                 if self._stop_event.is_set():
                     return
@@ -2398,6 +2542,9 @@ class MT5TradingBot:
         print(f"#  JOB STARTED - {self.mode.upper()} MODE")
         print(f"{'#'*60}\n")
         print(f"✓ {design_summary()}")
+        self._boot('INFO', 'START', f'job started ({self.mode} mode) on the branch {DEMO_BRANCH}, design {DESIGN_NAME!r}', {
+            'mode': self.mode, 'branch': DEMO_BRANCH, 'design': DESIGN_NAME, 'strategy': STRATEGY, 'magic': MAGIC,
+            'symbol': self.target_symbol, 'pid': os.getpid(), 'python': sys.version.split()[0]})
 
         # Step 1: Load Credentials
         if not self.load_credentials():
@@ -2429,6 +2576,8 @@ class MT5TradingBot:
                 for _p in _problems:
                     print(f"✗ Design: {_p}")
                 print("\n✗ Job Failed: the design in constants.py is refused (see above)")
+                self._boot('ERROR', 'START', 'the design in constants.py is refused: ' + '; '.join(_problems))
+                self._boot_flush()
                 return False
 
             # ── Initialise (retry up to 3 times) ──
@@ -2436,9 +2585,12 @@ class MT5TradingBot:
                 if self._init_cycle():
                     break
                 print(f"\n⚠ Init attempt {_attempt}/3 failed, retrying in 5s...")
+                self._boot('WARN', 'START', f'start attempt {_attempt}/3 failed ({self._init_problem or "see above"})')
                 time.sleep(5)
             else:
                 print("\n✗ All init attempts failed. Restart start_job.bat to try again.")
+                self._boot('ERROR', 'START', 'all 3 start attempts failed: the job ends (the launcher starts it again)')
+                self._boot_flush()
                 return False
 
             # ── Run processing (blocks until Ctrl+C) ──
@@ -2448,15 +2600,20 @@ class MT5TradingBot:
             print(f"\n{'#'*60}")
             print(f"#  JOB COMPLETED SUCCESSFULLY")
             print(f"{'#'*60}\n")
+            self._boot('INFO', 'START', 'job completed')
             return True
 
         except KeyboardInterrupt:
             print("\n\n⚠ Job interrupted by user")
+            self._boot('WARN', 'START', 'job stopped by the user (Ctrl+C)')
+            self._boot_flush()
             self._stop_event.set()
             self.cleanup()
             return False
         except Exception as e:
             print(f"\n✗ Job Failed with exception: {e}")
+            self._boot('ERROR', 'START', f'the job failed: {e!r}', exc=True)
+            self._boot_flush()
             self._stop_event.set()
             self.cleanup()
             return False
