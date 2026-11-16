@@ -866,6 +866,8 @@ class MT5TradingBot:
                 return False
         else:
             print(f"✓ The terminal already holds this bot's account {held.login} ({held.server}): no login")
+            self._boot('INFO', 'ACCOUNT', f"no login: the terminal already holds this bot's account {held.login} "
+                       f"({held.server})", {'login': held.login, 'server': held.server})
 
         # Get account info
         account_info = mt5.account_info()
@@ -889,8 +891,9 @@ class MT5TradingBot:
         self._account_login = account_info.login
         self._init_problem = None
         self._limited_logged = {}
-        self._boot('INFO', 'ACCOUNT', f'logged in: account {account_info.login} on {account_info.server}; checks passed '
-                   '(a demo account, a hedging account, the login of the credentials)', {
+        self._boot('INFO', 'ACCOUNT', f"{'logged in: ' if held is None else ''}account {account_info.login} on "
+                   f'{account_info.server}; checks passed (a demo account, a hedging account, the login of the '
+                   'credentials)', {
                        'login': account_info.login, 'server': account_info.server,
                        'trade_mode': getattr(account_info, 'trade_mode', None),
                        'margin_mode': getattr(account_info, 'margin_mode', None),
@@ -1829,6 +1832,10 @@ class MT5TradingBot:
                 'outage_s': self._outage_s(), 'not_logged_since': unlogged})
         else:
             self._reconnect_logged[why] = (logged_at, unlogged + 1)
+        # the trace: every failed attempt (a WARN line for those the throttle above leaves out of the strategy log;
+        # logged = this attempt's RECONNECT_FAILED was written: its reason's entry was set to (now, 0) just above)
+        self._trace(symbol, 'reconnect_failed', attempt, self._init_problem, wait, self._outage_s(),
+                    self._reconnect_logged.get(why) == (now, 0))
 
     def _reconnect(self, symbol):
         """mt5.shutdown(), then initialize_mt5() again: the terminal, the login (only on a terminal that shows no
@@ -1969,6 +1976,7 @@ class MT5TradingBot:
                 if _account_bad is not None:
                     # Not this bot's account any more: the poll decides nothing, as _poll_guard refuses it.
                     self._account_refused(symbol, _account_bad)
+                    self._trace(symbol, 'poll_skipped', 'account_recheck', _account_bad)
                     time.sleep(1)
                     if self._stop_event.is_set():
                         return
@@ -2869,6 +2877,7 @@ class MT5TradingBot:
                 if account_bad is not None:
                     # Not this bot's account any more: the poll decides nothing, as _poll_guard refuses it.
                     self._account_refused(symbol, account_bad)
+                    self._trace(symbol, 'poll_skipped', 'account_recheck', account_bad)
                     time.sleep(1)
                     if self._stop_event.is_set():
                         return

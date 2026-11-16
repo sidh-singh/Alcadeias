@@ -739,3 +739,120 @@ def test_a_turtle_trace_that_fails_changes_nothing(tmp_path, untraced):
     i = lines.index(errs[0])
     assert lines[i + 1] == '    Traceback (most recent call last):' and 'in _poll_turtle' in '\n'.join(lines[i:i + 40])
     assert sum('| ORDER | ORDER |' in ln for ln in lines) == len(r.fake.orders)
+
+
+# ───────────────────── the paths of v3.9.2-demo.4 (the re-review's fixes) on the Turtle ─────────────────────
+
+CREDS = {'terminal_path': r'C:\fake\terminal64.exe', 'login_id': 1, 'login_pass': 'not-a-password',
+         'server': 'Fake-Demo'}
+
+
+@pytest.mark.slow
+def test_a_leg_closed_beyond_the_stop_while_the_terminal_is_down_is_in_the_trace(traced, tmp_path):
+    """The terminal is gone for 8 s; one tick spikes through the fourth leg's backstop and the price comes back above
+    the trade's stop (test_turtle_safety.py). Connected again, the bot closes the other three at once:
+    stop_passed_outside (v3.9.2-demo.4). The trace has the gate that decided and the headline; the log the leg
+    closed beyond the stop, then the end of the trade; trades.json and the journal the exit reason."""
+    sl = [o['sl'] for o in TB._opens(traced.fake)]
+    assert len(sl) == 4 and sl == sorted(sl)
+    a = START + 1590.0
+
+    def prepare(fake):
+        i = int((fake.t_ms >= (a + 4.0) * 1000).argmax())
+        spike = (sl[3] + sl[2]) / 2.0
+        fake.bid[i], fake.ask[i] = spike, spike + (fake.ask[i] - fake.bid[i])
+        fake.down(a, a + 8.0)
+
+    def creds(bot, n):
+        bot.credentials = dict(CREDS)
+    r = _replay(tmp_path, prepare=prepare, on_bot=creds)
+    fourth = [d for d in r.fake.deals if d.entry == 0][3].position_id
+    closes = TB._closes(r.fake)
+    assert len(closes) == 3 and fourth not in {c['position'] for c in closes} and not r.fake.positions
+    leg = next(e['details'] for e in r.run.events if e['event'] == 'TURTLE_LEG_CLOSED_OUTSIDE')
+    assert leg['tickets'] == [fourth] and leg['beyond_stop'] is True
+    snap = next(s for s in r.snaps if s['decision']['action'] == 'CLOSE_BUY')
+    dec = snap['decision']
+    g = {x['key']: x for x in dec['gates']}
+    assert dec['reason'] == 'stop_passed_outside' and dec['blocked_by'] == 'stop_passed' and 'close_retry' not in g
+    assert g['stop_passed']['ok'] is True and g['stop_passed']['value'] == [fourth] and g['stop']['ok'] is False
+    assert dec['headline'].startswith(f'Closing the rest of the BUY trade: leg(s) [{fourth}] were closed outside the bot '
+                                      'at or beyond its stop')
+    lines = _read_log(r.out)
+    text = '\n'.join(lines)
+    warn = [ln for ln in lines if f'| WARN | TRADE | leg(s) [{fourth}] of the BUY trade closed outside the bot' in ln]
+    assert len(warn) == 1 and 'at or beyond its stop' in warn[0] and 'beyond_stop=true' in warn[0]
+    assert ('(their broker backstop, the deal history shows): the stop was passed while the bot did not look, so the '
+            'other 3 leg(s) are closed at once') in warn[0]
+    orders = [k for k, ln in enumerate(lines) if '| ORDER | ORDER | close position' in ln]
+    assert len(orders) == 3 and lines.index(warn[0]) < orders[0]          # the reason first, then the closes
+    close = [m.group(4) for m in _lines(r.out) if m.group(2) == 'CLOSE']
+    assert len(close) == 1 and close[0].startswith(f'the BUY trade ended: leg(s) [{fourth}] were closed outside the bot '
+                                                   'at or beyond its stop')
+    assert 'so the other 3 leg(s) closed now at the bid' in close[0] and 'reason=stop_passed_outside' in close[0]
+    assert '| WARN | TRACE |' not in text                                     # the gates read as the bot did
+    with open(os.path.join(r.out, f'{SYMBOL}_trades.json'), encoding='utf-8') as f:
+        doc = json.load(f)
+    t = doc['closed'][-1]
+    assert t['exit_reason'] == 'stop_passed_outside' and len(t['legs']) == 4
+    assert t['exit_reason_text'] == 'the stop passed outside the bot (a leg closed beyond it), the rest closed by the bot'
+    assert t['turtle']['exit']['reason'] == 'stop_passed_outside' and t['turtle']['exit']['legs_outside'] == [fourth]
+    result = [m.group(4) for m in _lines(r.out) if m.group(3) == 'RESULT']
+    assert result and 'exit: the stop passed outside the bot' in result[-1]
+
+
+@pytest.mark.slow
+def test_a_leg_closed_by_hand_inside_the_stop_keeps_the_trade_in_the_log(traced, tmp_path):
+    """One leg closed from the terminal by hand, inside the stop: the deal history shows it (beyond_stop false), the
+    trade goes on with its stop kept (and adds again: the price is past the next add level), and the log says so."""
+    at = TB._opens(traced.fake)[2]['_t_ms'] / 1000.0 + 60.0              # after the second add (test_turtle_bot.py)
+    done = []
+
+    def prepare(fake):
+        done.extend([TB._close_by_hand(fake, at, newest_only=True)])
+    r = _replay(tmp_path, prepare=prepare)
+    assert done[0] and not r.run.errors, r.run.errors[:3]
+    leg = next(e['details'] for e in r.run.events if e['event'] == 'TURTLE_LEG_CLOSED_OUTSIDE')
+    assert leg['beyond_stop'] is False and leg['legs'] == 2
+    lines = _read_log(r.out)
+    warn = [ln for ln in lines if f"| WARN | TRADE | leg(s) {leg['tickets']} of the BUY trade closed outside the bot" in ln]
+    assert len(warn) == 1 and 'inside its stop' in warn[0] and 'by hand, the deal history shows' in warn[0]
+    assert 'the trade goes on with 2 leg(s)' in warn[0] and 'beyond_stop=false' in warn[0]
+    with open(os.path.join(r.out, f'{SYMBOL}_trades.json'), encoding='utf-8') as f:
+        doc = json.load(f)
+    assert doc['closed'][-1]['exit_reason'] == 'turtle_stop'               # the trade ended at its own stop
+
+
+@pytest.mark.slow
+def test_an_account_switch_just_before_the_turtles_positions_read_is_in_the_trace(tmp_path):
+    """A live bot logs the terminal into another account after the Turtle's account check, just before its positions
+    read (that account shows none of this bot's legs): the account read again right after the positions refuses the
+    poll (v3.9.2-demo.4). The trace says SKIPPED with the gate and keeps the trade; the log has ACCOUNT_REFUSED and
+    ACCOUNT_OK; no leg is taken as closed outside the bot."""
+    stash = {}
+
+    def prepare(fake):
+        def to_live(f):
+            stash['positions'], f.positions = f.positions, []
+            f.account_login, f.trade_mode = 99, f.ACCOUNT_TRADE_MODE_REAL
+
+        def back(f):
+            f.positions = stash['positions']
+            f.account_login, f.trade_mode = 1, f.ACCOUNT_TRADE_MODE_DEMO
+        fake.on_call('positions_get', START + 845.0, to_live)              # after the first add, before the second
+        fake.at(START + 905.0, back)
+    r = _replay(tmp_path, prepare=prepare)
+    events = [e['event'] for e in r.run.events]
+    assert not {'TURTLE_CLOSED_OUTSIDE', 'TURTLE_LEG_CLOSED_OUTSIDE', 'TURTLE_REBUILT'} & set(events)
+    assert events.count('ACCOUNT_REFUSED') == 1 and events.count('ACCOUNT_OK') == 1
+    re_ = [s for s, k in zip(r.snaps, r.kinds) if k == 'poll_skipped' and s['decision']['reason'] == 'account_recheck']
+    assert len(re_) == 1
+    dec = re_[0]['decision']
+    g = {x['key']: x for x in dec['gates']}
+    assert dec['blocked_by'] == 'account_recheck' and g['account_recheck']['ok'] is False and g['positions']['ok'] is True
+    assert "the account read again right after the positions is not this bot's (account 99" in dec['headline']
+    assert re_[0]['stale'] and re_[0]['turtle']['trade']['legs_count'] == 2          # the last good poll's trade
+    text = '\n'.join(_read_log(r.out))
+    assert '| ERROR | ACCOUNT | not trading: account 99 is not a demo account' in text
+    assert '| INFO | ACCOUNT | the terminal holds the demo account again: trading' in text
+    assert len(TB._opens(r.fake)) == 4 and len(TB._closes(r.fake)) == 4             # the trade as without the switch
