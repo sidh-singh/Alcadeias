@@ -10,6 +10,10 @@ The re-review: the account is read again right after the positions (finding 2), 
 at or beyond the trade's stop -- its backstop -- ends the trade at once, also when the price is back inside the
 stop by the time the bot sees it (finding 3, checked: with the price still beyond it the bot's own stop already
 closed the other legs right after); a leg closed by hand inside the stop leaves the trade on (test_turtle_bot.py).
+
+The third round (fix C): a close that closed nothing -- close_by_type's own positions read found none of this bot's
+legs, because another program switched the account just then -- no longer books the trade as exited; the close is
+decided again on the next poll.
 """
 import pytest
 
@@ -205,3 +209,74 @@ def test_where_a_leg_closed_outside_the_bot_is_read_from_the_deal_history(mods):
     assert bot._turtle_closed_beyond_stop([inside, 12345], 1, bid - 1.0, now - 600, now) is None   # not all there
     fake.history_none = True
     assert bot._turtle_closed_beyond_stop([inside], 1, bid - 1.0, now - 600, now) is None
+
+
+def _switch_inside_the_close(fake, clock, switched, inside):
+    """on_bot hook: `inside(f)` runs at the first close_by_type call, before it reads the positions again."""
+    def on_bot(bot, n):
+        close = bot.position_helper.close_by_type
+
+        def close_by_type(symbol, pos_type):
+            if not switched:
+                switched.append(clock.time())
+                inside(fake)
+            return close(symbol, pos_type)
+        bot.position_helper.close_by_type = close_by_type
+    return on_bot
+
+
+@pytest.mark.slow
+def test_a_switch_inside_the_close_decision_keeps_the_trade(reference, tmp_path):
+    """Fix C of the third review round: on the poll that decides the stop, another program logs the terminal into
+    another account after the poll's account re-read, just before close_by_type reads the positions again: it finds
+    none of this bot's legs (closed 0, failed 0). The book is not saved flat while the four legs are open (before: it
+    was, then the trade was rebuilt when the demo account was back, its kept stop and its exit time lost): the close
+    is decided again when the demo account is back and closes all four legs."""
+    t_ref = _closes(reference)[0]['_t_ms'] / 1000.0
+    fake, clock = _market(_long_trip())
+    stash, switched = {}, []
+
+    def to_live(f):
+        stash['positions'], f.positions = f.positions, []
+        f.account_login, f.trade_mode = 99, f.ACCOUNT_TRADE_MODE_REAL
+        f.at(clock.time() + 60, back)
+
+    def back(f):
+        f.positions = stash['positions']
+        f.account_login, f.trade_mode = 1, f.ACCOUNT_TRADE_MODE_DEMO
+    books = []
+    run = _run(fake, clock, tmp_path, books=books, on_bot=_switch_inside_the_close(fake, clock, switched, to_live))
+    assert switched and switched[0] == pytest.approx(t_ref, abs=0.01)
+    ok = next(e['t'] for e in run.events if e['event'] == 'ACCOUNT_OK') / 1000.0
+    closes = _closes(fake)
+    assert len(closes) == 4 and len({c['_t_ms'] for c in closes}) == 1 and not fake.positions     # all four at once
+    assert ok - 0.5 <= closes[0]['_t_ms'] / 1000.0 <= ok + 1.5
+    held = [b for b in books if switched[0] - 0.5 <= b['_t'] < ok - 0.5]
+    assert held and all(b['side'] == 1 and len(b['legs']) == 4 and b['closing'] for b in held)   # (before: flat)
+    assert not set(OUTSIDE) & {e['event'] for e in run.events}                                    # (before: rebuilt)
+    exits = [e['details'] for e in run.events if e['event'] == 'CLOSE_BUY']
+    assert [x['positions_closed'] for x in exits] == [0, 4] and exits[1]['reason'] == 'close_retry'
+    assert books[-1]['side'] == 0 and books[-1]['last_exit_time'] == pytest.approx(closes[0]['_t_ms'] / 1000.0,
+                                                                                  abs=1.0)
+
+
+@pytest.mark.slow
+def test_legs_gone_before_the_close_end_the_trade_on_the_next_poll(reference, tmp_path):
+    """(Checked.) The broker closes every leg between the poll's positions read and the close, so close_by_type finds
+    none (closed 0, failed 0): the next poll finds the legs gone and ends the trade -- not as closed outside the bot,
+    its close was decided -- and sends nothing."""
+    t_ref = _closes(reference)[0]['_t_ms'] / 1000.0
+    fake, clock = _market(_long_trip())
+    switched = []
+
+    def broker_closes_all(f):
+        for p in list(f.positions):
+            f.close_by_broker(p['ticket'])
+    books = []
+    run = _run(fake, clock, tmp_path, books=books,
+               on_bot=_switch_inside_the_close(fake, clock, switched, broker_closes_all))
+    assert switched and switched[0] == pytest.approx(t_ref, abs=0.01)
+    assert not _closes(fake) and len([d for d in fake.deals if d.reason == fake.DEAL_REASON_SL]) == 4
+    events = [e['event'] for e in run.events]
+    assert 'TURTLE_CLOSED_OUTSIDE' not in events and events.count('CLOSE_BUY') == 1
+    assert books[-1]['side'] == 0 and switched[0] <= books[-1]['last_exit_time'] <= switched[0] + 2.0
