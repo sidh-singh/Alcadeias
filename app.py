@@ -447,8 +447,8 @@ class MT5TradingBot:
         self._init_problem = None
         self._reconnect_logged = {}
         # Problems initialize_mt5 refuses to start on and that can last -- the terminal logged into another account
-        # (TERMINAL_IN_USE), terminal_path naming the live bots' MetaTrader 5 (LIVE_TERMINAL_PATH): for each event the
-        # problem last logged and when (_log_limited).
+        # (TERMINAL_IN_USE), terminal_path naming the live bots' MetaTrader 5 (LIVE_TERMINAL_PATH): for each event, each
+        # problem logged and when (_log_limited).
         self._limited_logged = {}
 
     # ── Day-of-week mapping for trading_window config ──
@@ -890,15 +890,15 @@ class MT5TradingBot:
         """The symbol's strategy log: OUTPUT_DIR/logs/<symbol>_<STRATEGY_LOG_FILENAME> (newest entry first)."""
         return os.path.join(OUTPUT_DIR, 'logs', f'{symbol}_{STRATEGY_LOG_FILENAME}')
 
-    def _newest_log_entry(self, symbol):
-        """The newest entry of the symbol's strategy log; None without a (readable) log."""
+    def _log_entries(self, symbol):
+        """The entries of the symbol's strategy log, newest first; [] without a (readable) log."""
         try:
             with self.thread_lock:
                 with open(self._log_path(symbol), 'r') as f:
                     data = json.load(f)
         except (OSError, ValueError):
-            return None
-        return data[0] if isinstance(data, list) and data and isinstance(data[0], dict) else None
+            return []
+        return data if isinstance(data, list) else []
 
     # ───────────────────── per-basket state, loss pause, virtual balance ─────────────────────
     def _state_path(self, symbol):
@@ -1437,27 +1437,44 @@ class MT5TradingBot:
                     f"({_LIVE_TERMINAL_PATHS[0]}): {todo}")
         return None
 
+    _LIMITED_EVENTS = ('TERMINAL_IN_USE', 'LIVE_TERMINAL_PATH')       # the events _log_limited writes
+
     def _log_limited(self, event, problem, details):
-        """An ERROR event `event` (details + problem) for a problem initialize_mt5 refuses to start on: when it starts
-        or changes, then at most every _LOG_REPEAT_S while it lasts -- also across the launcher's restarts of app.py
-        (a start reads the newest entry of the strategy log), so a problem that lasts does not fill the 200-entry
-        log. True when it was logged."""
+        """An ERROR event `event` (details + problem) for a problem initialize_mt5 refuses to start on: the first time
+        the problem is seen, then at most every _LOG_REPEAT_S while it lasts, for each problem on its own (a terminal
+        held in turn by two other accounts: each is logged, not every attempt) -- also across the launcher's restarts
+        of app.py (a start reads the entries refused starts left at the head of the strategy log), so a problem that
+        lasts does not fill the 200-entry log. True when it was logged."""
         symbol = self._symbol_of(None)
         now = time.time()
-        if event not in self._limited_logged:
-            last = self._newest_log_entry(symbol) or {}
-            if last.get('event') == event and (last.get('details') or {}).get('problem') == problem:
-                try:
-                    from datetime import datetime
-                    self._limited_logged[event] = (problem, datetime.fromisoformat(str(last.get('utc_time'))).timestamp())
-                except (TypeError, ValueError):
-                    pass
-        was, at = self._limited_logged.get(event, (None, 0.0))
-        if problem == was and now - float(at or 0.0) < _LOG_REPEAT_S:
+        seen = self._limited_logged.setdefault(event, {})        # problem -> when it was last logged
+        if problem not in seen:
+            at = self._logged_at(symbol, event, problem)
+            if at is not None:
+                seen[problem] = at
+        if problem in seen and now - float(seen[problem]) < _LOG_REPEAT_S:
             return False
-        self._limited_logged[event] = (problem, now)
+        if len(seen) >= 32:                    # (keep it small: a problem logged long ago is logged again anyway)
+            for k in [k for k, t in seen.items() if now - float(t) >= _LOG_REPEAT_S]:
+                del seen[k]
+        seen[problem] = now
         self._log_event(symbol, event, 'ERROR', dict(details, problem=problem))
         return True
+
+    def _logged_at(self, symbol, event, problem):
+        """When the strategy log last got `event` for `problem` (epoch seconds), among the entries refused starts leave
+        at its head (TERMINAL_IN_USE, LIVE_TERMINAL_PATH); None when it is not there: no log, or another entry comes
+        first (the bot ran in between, so this is a new occurrence)."""
+        from datetime import datetime
+        for e in self._log_entries(symbol):
+            if not isinstance(e, dict) or e.get('event') not in self._LIMITED_EVENTS:
+                return None
+            if e.get('event') == event and (e.get('details') or {}).get('problem') == problem:
+                try:
+                    return datetime.fromisoformat(str(e.get('utc_time'))).timestamp()
+                except (TypeError, ValueError):
+                    return None
+        return None
 
     def _account_refused(self, symbol, problem, request=None, server_time=None):
         """The account is not this bot's: a WARNING and an ERROR event when the problem starts or changes."""
