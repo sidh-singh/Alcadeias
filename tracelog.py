@@ -107,12 +107,14 @@ EXIT_TEXT = {
     'broker_target': 'broker target', 'stop_out': 'stop-out', 'closed_outside': 'closed outside the bot',
     'close_retry': 'close (retry)', 'unknown': 'closed by the bot (reason not recorded)',
     'turtle_stop': 'turtle stop',
+    'leg_closed_outside': 'a leg closed outside the bot, the rest closed by the bot',
+    'stop_passed_outside': 'the stop passed outside the bot (a leg closed beyond it), the rest closed by the bot',
 }
 # where the Turtle's one stop is (turtle.stop_origin): {origin: words} ({days} = the exit channel's length)
 STOP_ORIGIN_TEXT = {'2N': '2N from the best fill', 'channel': 'the {days}-day {extreme}',
                     'kept': 'kept where it was when a leg was closed outside the bot'}
 _BOT_REASON = {'target': 'target', 'stop_loss': 'stop', 'force_close': 'force_close', 'close_retry': 'close_retry',
-               'closed_outside': 'closed_outside'}
+               'closed_outside': 'closed_outside', 'leg_closed_outside': 'leg_closed_outside'}
 _TF = 'TIMEFRAME_'
 _DONE = (10009, 10010)
 
@@ -662,7 +664,8 @@ class TraceLog:
     """The trace of one symbol's trading loop. app.py makes one per symbol (MT5TradingBot._tracer) and calls:
     boot(), loop_start(locals), poll(locals) at the end of every poll, poll_skipped(kind, problem), order(request,
     result, refused, ms) from MT5PositionHelper._send, event(...) from _log_event, state_saved(state),
-    exception(cat, msg) from an except block, write_failed(what, path, error), log(level, cat, msg, kv)."""
+    exception(cat, msg) from an except block, write_failed(what, path, error), reconnect_failed(...) from
+    _try_reconnect, log(level, cat, msg, kv)."""
 
     def __init__(self, bot, symbol, out_dir, app_module):
         self.bot = bot
@@ -721,6 +724,8 @@ class TraceLog:
         self._vs_key = self._vs = None         # the M15 RSI / MACD lines, computed once per new M15 bar
         self._book_ref = None                  # the Turtle's book (the bot's own dict, read only): entry or add?
         self._closed_known = None              # the Turtle's closed trades already in trades.json (a RESULT line each)
+        self._legs_outside = {}                # the Turtle's legs closed outside the bot: ticket -> TURTLE_LEG_CLOSED_OUTSIDE
+        self._outside_logged = set()           # ... of those, the ones the log has a line for
 
     # ── plumbing ──
     def _now(self):
@@ -807,6 +812,18 @@ class TraceLog:
             self._rec('WARN', 'WRITE', f'could not write {what}: {err!r}; trading goes on{more}', kv={'path': path})
 
     @_guarded
+    def reconnect_failed(self, attempt, why, next_in_s=None, outage_s=None, logged=False):
+        """MT5TradingBot._try_reconnect: a reconnect attempt failed. The strategy log has RECONNECT_FAILED only when the
+        problem starts or changes, then at most every 15 min (logged: this attempt's event was written, and event()
+        made its ERROR line); every other attempt is a WARN line here, so the text log has each one."""
+        if logged:
+            return
+        self._rec('WARN', 'TERMINAL', f'reconnect attempt {attempt} failed ({why}); next one in {_num(next_in_s, 0)} s, '
+                  f'{_dur(outage_s)} without the terminal so far (the strategy log has RECONNECT_FAILED only when the '
+                  'problem starts or changes, then every 15 min)',
+                  kv={'attempt': attempt, 'why': why, 'next_in_s': next_in_s, 'outage_s': outage_s})
+
+    @_guarded
     def state_saved(self, state):
         b = (state or {}).get('basket')
         lc = (state or {}).get('last_close')
@@ -884,6 +901,7 @@ class TraceLog:
         'ACCOUNT_REFUSED': ('ERROR', 'ACCOUNT'), 'ACCOUNT_OK': ('INFO', 'ACCOUNT'),
         'TERMINAL_ERROR': ('WARN', 'TERMINAL'), 'TERMINAL_OK': ('INFO', 'TERMINAL'),
         'TERMINAL_RECONNECTED': ('INFO', 'TERMINAL'), 'RECONNECT_FAILED': ('ERROR', 'TERMINAL'),
+        'TERMINAL_IN_USE': ('ERROR', 'ACCOUNT'), 'LEG_CLOSED_OUTSIDE': ('WARN', 'BASKET'),
         # the Turtle's: covered by the trace's LEVELS / TRADE / STOP / CLOSE lines (they diff the book every poll)
         'TURTLE_LEVELS': None, 'TURTLE_REBUILT': None, 'TURTLE_CLOSED_OUTSIDE': None, 'TURTLE_LEG_CLOSED_OUTSIDE': None,
     }
@@ -897,6 +915,21 @@ class TraceLog:
             d = {k: v for k, v in (details or {}).items() if k != 'response'}
             note = str(d.pop('note', '') or 'note')
             self._rec('INFO' if note.lower().startswith('brake') else 'WARN', 'TURTLE', note, kv=d or None)
+            return
+        if event == 'TURTLE_LEG_CLOSED_OUTSIDE':
+            # its WARN TRADE line now, before the orders that close the other legs: closed at or beyond the stop
+            # (beyond_stop, from the deal history: the other legs are closed at once) or inside it (by hand); kept for
+            # the end of this poll's decision, CLOSE line, exit reasons and journal
+            d = dict(details or {}, t=self._now())
+            gone = [_i(k) for k in (d.get('tickets') or []) if _i(k) is not None]
+            for k in gone:
+                self._legs_outside[k] = d
+            if len(self._legs_outside) > 200:
+                self._legs_outside = dict(list(self._legs_outside.items())[-100:])
+            book = self._book_ref if isinstance(self._book_ref, dict) else {}
+            side = {1: 'BUY', -1: 'SELL'}.get(_i(book.get('side')))
+            if gone and side:
+                self._log_outside(gone, side, None, self._digits)
             return
         m = self._EVENTS.get(event, ('ERROR', 'EVENT') if tag == 'ERROR' else ('INFO', 'EVENT'))
         if m is None:
@@ -914,13 +947,29 @@ class TraceLog:
                'TERMINAL_ERROR': 'poll skipped, nothing decided: {note}',
                'TERMINAL_OK': 'the terminal answers again',
                'TERMINAL_RECONNECTED': 'connected to the terminal again',
-               'RECONNECT_FAILED': 'reconnect failed: {note}'}.get(event, f'{event}: {{note}}' if note else event)
-        self._rec(level, cat, msg.format(note=note), kv=d or None)
+               'RECONNECT_FAILED': 'reconnect failed: {note}',
+               # (the problem names TERMINAL_IN_USE itself; the strategy log has it once, then at most every 15 min)
+               'TERMINAL_IN_USE': '{note}; no login: the terminal and its account are left as they are'
+               }.get(event, f'{event}: {{note}}' if note else event)
+        msg = msg.format(note=note)
+        if event == 'TERMINAL_RECONNECTED' and d.get('outage_s') is not None:
+            msg += (f" (attempt {d.get('attempt')}, after {_dur(d.get('outage_s'))} without the terminal and "
+                    f"{d.get('failed_attempts')} failed attempt(s))")
+        elif event == 'RECONNECT_FAILED':
+            msg += (f"; next attempt in {_num(d.get('next_in_s'), 0)} s (the strategy log has this once, then again when the "
+                    'problem changes or after 15 min; every attempt is a line here)')
+        elif event == 'LEG_CLOSED_OUTSIDE':
+            msg = (f"leg(s) {d.get('legs_gone')} of the {d.get('side')} basket closed outside the bot (the broker's backstop, "
+                   f"a stop-out or by hand): the other {len(d.get('legs_left') or [])} leg(s) are closed at once and the "
+                   'whole basket is booked as closed outside the bot')
+        self._rec(level, cat, msg, kv=d or None)
 
     @_guarded
     def loop_start(self, ctx):
         """The start of the trading loop: who, what design, every effective constant, symbols.json, the state found."""
         c = _Ctx(ctx)
+        # (a trace made before the login -- by a TERMINAL_IN_USE event -- had no symbol map yet)
+        self.mt5_symbol = (getattr(self.bot, 'symbol_map', None) or {}).get(self.symbol, self.mt5_symbol)
         if self._is_turtle():
             return self._turtle_loop_start(c)
         bot = self.bot
@@ -957,43 +1006,63 @@ class TraceLog:
 
     @_guarded
     def poll_skipped(self, kind, problem=None):
-        """A poll that decided nothing: the terminal or the account was not right ('guard'), or the positions read
-        failed ('positions')."""
+        """A poll that decided nothing: the terminal or the account was not right ('guard'), the positions read
+        failed ('positions'), or the account read again right after the positions is not this bot's
+        ('account_recheck': the positions may be another account's)."""
         t0 = time.perf_counter()
         now = self._now()
         bot = self.bot
         self.polls += 1
         self.skipped += 1
+        reason = kind
         if kind == 'guard':
             why = getattr(bot, '_guard_why', None) or (None, None)
             kind, problem = why[0] or 'terminal', why[1] or problem
+            reason = kind
+        recheck = kind == 'account_recheck'
+        if recheck:
+            kind = 'account'
         if not problem:
             problem = getattr(bot, '_read_bad', None) if kind != 'account' else getattr(bot, '_account_bad', None)
         problem = problem or 'unknown'
         streak = _i(getattr(bot, '_failed_polls', 0)) or 0
+        login = getattr(bot, '_account_login', None)
         gates = [
             _gate('terminal', 'Terminal connected', kind != 'terminal', problem if kind == 'terminal' else 'answers',
                   'terminal_info() answers, connected to the trade server'),
-            _gate('account', 'Demo account', None if kind == 'terminal' else kind != 'account',
-                  problem if kind == 'account' else getattr(bot, '_account_login', None),
+            _gate('account', 'Demo account', None if kind == 'terminal' else (recheck or kind != 'account'),
+                  problem if (kind == 'account' and not recheck) else login,
                   'the demo, hedging account of the credentials'),
-            _gate('positions', 'Positions read', None if kind != 'positions' else False,
-                  problem if kind == 'positions' else None, "positions_get() answers (this bot's magic only)"),
+            _gate('positions', 'Positions read', True if recheck else (None if kind != 'positions' else False),
+                  'read, not used' if recheck else (problem if kind == 'positions' else None),
+                  "positions_get() answers (this bot's magic only)"),
         ]
+        if recheck:
+            gates.append(_gate('account_recheck', 'Demo account, read again after the positions', False, problem,
+                               'the same demo account right after the positions read',
+                               "a switch since the poll's first check: the positions just read may be another account's"))
         decided = _mark_checked(gates)
         if kind == 'terminal':
             after = _i(self._cfg('_RECONNECT_AFTER')) or 5
             at = _f(getattr(bot, '_reconnect_at', None))
             nxt = f'next reconnect attempt at {_hm(at)}' if at else f'the bot reconnects after {after} such polls in a row'
             head = f'Poll skipped, nothing decided: {problem}. {streak} poll(s) in a row; {nxt}.'
+            last = getattr(bot, '_init_problem', None)
+            fails = _i(getattr(bot, '_reconnects_failed', 0)) or 0
+            if fails and last:
+                head += f' The last of {fails} failed reconnect attempt(s): {last}.'
+        elif recheck:
+            head = (f"Poll skipped, nothing decided: the account read again right after the positions is not this bot's "
+                    f"({problem}). The positions just read may be another account's, so nothing is booked or sent until "
+                    f"the terminal holds the demo account {login} again.")
         elif kind == 'account':
             head = (f'Poll skipped, nothing decided: {problem}. No order is sent until the terminal holds the demo '
-                    f"account {getattr(bot, '_account_login', None)} again.")
+                    f"account {login} again.")
         else:
             head = (f'Poll skipped, nothing decided: {problem}. The positions are not known, so the '
                     + ('trade is neither managed nor booked this poll (its stop is checked again on the next good one).'
                        if self._is_turtle() else 'basket is neither managed nor booked this poll.'))
-        dec = {'action': 'SKIPPED', 'reason': kind, 'side': None, 'headline': head, 'gates': gates,
+        dec = {'action': 'SKIPPED', 'reason': reason, 'side': None, 'headline': head, 'gates': gates,
                'blocked_by': decided, 'signal': None, 'orders': self._take_orders()}
         health = self._health(None, now, skip=(kind, problem))
         prev = self._last_snapshot or {}
@@ -1099,6 +1168,16 @@ class TraceLog:
             'started_utc': _iso(self.started_at), 'uptime_s': round(now - self.started_at, 1),
             'log_write_failures': self.writer.failures,
         }
+        # the bot's reconnect after a lost terminal (app.py _poll_failed / _try_reconnect), read only: the failed attempts
+        # since the connection was lost, the next one, the outage so far, why the last start-up / reconnect failed
+        lost_at = _f(getattr(bot, '_ipc_lost_at', None))
+        nxt = _f(getattr(bot, '_reconnect_at', None))
+        why = getattr(bot, '_init_problem', None)
+        h.update(reconnect_failed_attempts=_i(getattr(bot, '_reconnects_failed', 0)) or 0,
+                 next_reconnect_t=nxt, next_reconnect_utc=_iso(nxt),
+                 outage_s=_f(now - lost_at, 1) if lost_at is not None else None,
+                 connect_problem=str(why) if why else None,
+                 terminal_in_use=bool(why) and str(why).startswith('TERMINAL_IN_USE'))
         if skip is not None:
             kind, problem = skip
             if kind == 'terminal':
@@ -1432,6 +1511,7 @@ class TraceLog:
             'first_t': first_t, 'first_utc': _iso(first_t),
             'age_s': _f(now - first_t, 1) if first_t else (_f(now - opened, 1) if opened else None),
             'levels_pending': b.get('levels_pending'), 'close_pending': b.get('close_pending'), 'ids': b.get('ids'),
+            'outside_ids': b.get('outside_ids'),
             'known_to_bot': bool(b),
         }
 
@@ -1595,7 +1675,12 @@ class TraceLog:
                            f"the terminal lists the position (waits {_f(self._cfg('_PENDING_FILL_S'))} s)",
                            'no new entry meanwhile; the basket keeps its unit'))
             return 'WAIT_FILL', None, side
-        if ov.get('close_pending'):
+        if ov.get('close_pending') and ov.get('outside_ids'):
+            G.append(_gate('legs_outside', 'Legs closed outside the bot', True, ov.get('outside_ids'),
+                           'a leg gone without a close of this bot (the broker\'s backstop, a stop-out or by hand)',
+                           'the other legs are closed at once; the whole basket is booked as closed outside the bot',
+                           role='exit'))
+        elif ov.get('close_pending'):
             G.append(_gate('close_retry', 'Earlier close finished', True, None,
                            'the positions an incomplete close left are closed first', role='exit'))
         sl, tg = ov.get('stop_usd'), ov.get('target_usd')
@@ -1675,7 +1760,7 @@ class TraceLog:
             fired = [x['key'] for x in dec['gates'] if x['role'] == 'exit' and x['ok'] is True]
             reads = bool(fired)
             signal = bs in ('CLOSE_BUY',) or ss in ('CLOSE_SELL',)
-            if g.get('close_retry'):
+            if g.get('close_retry') or g.get('legs_outside'):
                 return
         if reads != signal:
             write, n = self._repeat(('selfcheck', dec['action']))
@@ -1765,6 +1850,10 @@ class TraceLog:
                         f"(force-close at {_sc(-bk['force_close_s'] if side == 'BUY' else bk['force_close_s'])})." + res)
             if reason == 'close_retry':
                 return f'Closing the rest of the {side} basket (an earlier close left positions open).' + res
+            if reason == 'leg_closed_outside':
+                return (f"Closing the rest of the {side} basket: leg(s) {ov.get('outside_ids')} were closed outside the "
+                        "bot (the broker's backstop, a stop-out or by hand), so the whole basket is booked as closed "
+                        f"outside the bot; P/L {_usd(pnl)} on the legs left." + res)
             return f'Closing the {side} basket ({reason}): P/L {_usd(pnl)}.' + res
         if act in ('ADD_BUY', 'ADD_SELL', 'ADD_FAILED'):
             ld = ov.get('ladder') or {}
@@ -1876,7 +1965,15 @@ class TraceLog:
             ids = [l['id'] for l in ov.get('legs') or [] if l.get('id') is not None]
             if closed:                       # the reason is the one of the close that closed (the rest follows it)
                 self._record_exits(ids, reason, now, ov.get('pnl'))
-            if closed and not failed:
+            if closed and not failed and reason == 'leg_closed_outside':
+                self._pending_reason = None
+                self._rec('CLOSE', 'CLOSE', f"the rest of the {dec['side']} basket closed after leg(s) "
+                          f"{ov.get('outside_ids')} were closed outside the bot: {closed} position(s), P/L "
+                          f"{_usd(ov.get('pnl'))} at the decision; the whole basket is booked as closed outside the bot",
+                          kv={'side': dec['side'], 'reason': reason, 'decision_pnl': ov.get('pnl'),
+                              'outside_ids': ov.get('outside_ids'), 'positions': closed,
+                              'tickets': cr.get('closed_tickets'), 'held_s': ov.get('age_s')})
+            elif closed and not failed:
                 self._pending_reason = None
                 realised = lc.get('pnl') if lc.get('resolved') and lc.get('source') == 'history' else None
                 self._rec('CLOSE', 'CLOSE', f"{dec['side']} basket closed ({EXIT_TEXT.get(_BOT_REASON.get(reason, ''), reason)}): "
@@ -1919,15 +2016,27 @@ class TraceLog:
             self._rec('WARN', 'BASKET', f"the {bsum['side']} basket replaced the {pb['side']} one: {self._basket_words(b)}")
         if new_close and lsum.get('reason') == 'closed_outside':
             ids = list(lc.get('ids') or [])
+            outside = list(lc.get('outside_ids') or [])
             self._record_exits(ids, 'closed_outside', now, lc.get('pnl'))
             final = lc.get('resolved') and lc.get('source') == 'history'
-            self._rec('CLOSE', 'CLOSE', f"the {lc.get('side')} basket was closed outside the bot (the broker's backstop, "
-                      'the terminal, or while the bot was down): '
-                      + (f"realised {_usd(lc.get('pnl'))}, its last closing deal at {_hm(lc.get('time'))} (deal history)"
-                         if final else f"P/L last seen {_usd(lc.get('pnl'))}; the realised P/L and the closing time follow "
-                                       'from the deal history'),
-                      kv={'reason': 'closed_outside', 'ids': ids, 'pnl': lc.get('pnl'), 'final': bool(final),
-                          'closed_utc': _iso(lc.get('time'))})
+            if outside:                      # some legs closed outside the bot, the rest by the bot (_sync_basket)
+                head = (f"the {lc.get('side')} basket is booked as closed outside the bot: leg(s) {outside} were closed "
+                        f"outside it (the broker's backstop, a stop-out or by hand), the bot closed the other "
+                        f"{max(0, len(ids) - len(outside))}: ")
+                tail = (f"realised {_usd(lc.get('pnl'))} on every leg (deal history)" if final else
+                        f"{_usd(lc.get('pnl'))} so far (until the deal history shows every leg, the basket counts as a "
+                        'loss: the pause after a loss)')
+            else:
+                head = (f"the {lc.get('side')} basket was closed outside the bot (the broker's backstop, the terminal, "
+                        'or while the bot was down): ')
+                tail = (f"realised {_usd(lc.get('pnl'))}, its last closing deal at {_hm(lc.get('time'))} (deal history)"
+                        if final else f"P/L last seen {_usd(lc.get('pnl'))}; the realised P/L and the closing time follow "
+                                      'from the deal history')
+            kv = {'reason': 'closed_outside', 'ids': ids, 'pnl': lc.get('pnl'), 'final': bool(final),
+                  'closed_utc': _iso(lc.get('time'))}
+            if outside:
+                kv['outside_ids'] = outside
+            self._rec('CLOSE', 'CLOSE', head + tail, kv=kv)
             self._trades_dirty = True
         if new_close:
             p = bk['pause']
@@ -2817,6 +2926,45 @@ class TraceLog:
             'journal': jr,
         }
 
+    def _outside_of(self, tr, st):
+        """The legs of this trade app.py found closed outside the bot (its TURTLE_LEG_CLOSED_OUTSIDE events since the
+        trade's entry), oldest first; [] when the trace saw none."""
+        et = _f((tr or {}).get('entry_t'))
+        if et is None and isinstance(st, dict):
+            et = _f(st.get('entry_time'))
+        return sorted(k for k, ev in self._legs_outside.items()
+                      if k is not None and (et is None or (_f(ev.get('t')) or 0.0) >= et))
+
+    @staticmethod
+    def _legs_words(gone):
+        return f'leg(s) {gone} were' if gone else 'a leg was'
+
+    def _log_outside(self, gone, side, pb, d, cb=None):
+        """The WARN TRADE line of legs app.py found closed outside the bot (once per leg): at or beyond the trade's stop
+        (beyond_stop true: the deal history shows it; null: it does not show them yet) -- the stop was passed, the other
+        legs are closed at once -- or inside it (false: by hand), and the trade goes on."""
+        new = [g for g in gone if g not in self._outside_logged]
+        if not new:
+            return
+        self._outside_logged |= set(new)
+        evs = [self._legs_outside.get(_i(g)) or {} for g in new]
+        flags = [ev.get('beyond_stop') for ev in evs]
+        beyond = True if any(f is True for f in flags) else (None if any(f is None for f in flags) else False)
+        stop = next((_f(ev.get('stop')) for ev in evs if _f(ev.get('stop')) is not None), None)
+        stop = _f((pb or {}).get('stop')) if stop is None else stop
+        left = next((_i(ev.get('legs')) for ev in evs if ev.get('legs') is not None), None)   # (right after it)
+        if left is None and cb is not None:
+            left = len(cb.get('legs') or [])
+        if beyond is False:
+            msg = (f"leg(s) {new} of the {side} trade closed outside the bot inside its stop {_px(stop, d)} (by hand, the "
+                   f"deal history shows): the trade goes on with {left} leg(s); the stop stays at {_px(stop, d)}")
+        else:
+            msg = (f"leg(s) {new} of the {side} trade closed outside the bot at or beyond its stop {_px(stop, d)} "
+                   + ("(their broker backstop, the deal history shows)" if beyond else
+                      "(the deal history does not show them yet, so they count as closed beyond it)")
+                   + f": the stop was passed while the bot did not look, so the other {left} leg(s) are closed at once")
+        self._rec('WARN', 'TRADE', msg, kv={'gone': new, 'beyond_stop': beyond, 'stop': stop, 'legs_left': left})
+
     def _origin_of(self, bk):
         if isinstance(bk.get('origin'), str) or 'origin' in bk:
             return bk.get('origin')
@@ -2911,7 +3059,17 @@ class TraceLog:
         tr = tv.get('trade') or {}
         closing_now = bs == 'CLOSE_BUY' or ss == 'CLOSE_SELL'
         retry = closing_now and c.exit_reason == 'close_retry'
-        if retry or (st.get('closing') and not closing_now):
+        # a leg closed outside the bot at or beyond the stop (app.py _turtle_sync, from the deal history): the other legs
+        # are closed at once (this poll's close, exit reason stop_passed_outside; or the next live poll's)
+        passed = (c.exit_reason == 'stop_passed_outside' if closing_now else
+                  bool(st.get('closing')) and bool(getattr(self.bot, '_turtle_stop_passed', False)))
+        if passed:
+            gone = self._outside_of(tr, st)
+            G.append(_gate('stop_passed', 'Stop passed outside the bot', True, gone or None,
+                           'a leg closed outside the bot at or beyond the stop (its broker backstop; the deal history)',
+                           'the stop was passed while the bot did not look: the other legs are closed at once, whatever '
+                           'the price', role='exit'))
+        elif retry or (st.get('closing') and not closing_now):
             G.append(_gate('close_retry', 'Earlier close finished', True, None,
                            'the legs an incomplete close left are closed first, whatever the price', role='exit'))
         stop = tr.get('stop')
@@ -2923,7 +3081,7 @@ class TraceLog:
                        f"{_px(tr.get('to_stop'), d)} {'above' if buy else 'below'} the stop"
                        if tr.get('to_stop') is not None else None, role='exit'))
         if closing_now:
-            return f'CLOSE_{side}', ('close_retry' if retry else 'stop'), side
+            return f'CLOSE_{side}', ('close_retry' if retry else 'stop_passed_outside' if passed else 'stop'), side
         pending = bool(c.pending)
         G.append(_gate('fill_listed', 'Fill listed', not pending, None if not pending else 'not yet',
                        f"the terminal lists every leg (a new one waits up to {_num(p['pending_s'], 0)} s)",
@@ -3035,7 +3193,7 @@ class TraceLog:
             reads = all(g[k]['ok'] for k in ('armed', 'exit_bar', 'breakout', 'vote_known', 'vote', 'brake'))
             signal = bs == 'BUY' or ss == 'SELL'
         else:
-            if 'close_retry' in g:
+            if 'close_retry' in g or 'stop_passed' in g:
                 return
             close = g['stop']['ok'] is True
             add = (not close and bool(g.get('fill_listed', {}).get('ok'))
@@ -3063,6 +3221,10 @@ class TraceLog:
         if act == 'MARKET_CLOSED':
             mins = _num(ms.get('minutes_since_last'), 1)
             if tr.get('side'):
+                if bool(getattr(self.bot, '_turtle_stop_passed', False)) and tr.get('closing'):
+                    return (f"Market not live (no tick for {mins} min): a leg of the {tr['side']} trade was closed outside "
+                            f"the bot beyond its stop {_px(tr.get('stop'), d)}; the other {tr.get('legs_count')} leg(s) "
+                            'are closed as soon as it trades.')
                 return (f"Market not live (no tick for {mins} min): holding the {tr['side']} trade ({tr.get('legs_count')} "
                         f"legs, P/L {_usd(tr.get('pnl'))}); its stop {_px(tr.get('stop'), d)} is checked again when it "
                         'trades.')
@@ -3129,6 +3291,11 @@ class TraceLog:
                        f"({'; '.join(cr.get('errors') or [])}); the rest is closed next poll.")
             if reason == 'close_retry':
                 return f'Closing the rest of the {side} trade (an earlier close left legs open).' + res
+            if reason == 'stop_passed_outside':
+                return (f"Closing the rest of the {side} trade: {self._legs_words(self._outside_of(tr, c.st))} closed "
+                        f"outside the bot at or beyond its stop {_px(tr.get('stop'), d)} (the broker's backstop) while the "
+                        "bot did not look; the stop has been passed, so the other legs close now, whatever the price; P/L "
+                        f"{_usd(tr.get('pnl'))} at the decision." + res)
             return (f"Closing the {side} trade at the stop: {tr.get('judged_on')} {_px(tr.get('price_now'), d)} "
                     f"{'<=' if side == 'BUY' else '>='} the stop {_px(tr.get('stop'), d)} ({tr.get('stop_text')}); "
                     f"{tr.get('legs_count')} legs, P/L {_usd(tr.get('pnl'))} at the decision." + res)
@@ -3317,24 +3484,41 @@ class TraceLog:
             stop, origin = _f(c.stop), c.origin
             ids = [x['id'] for x in tr.get('legs') or [] if x.get('id') is not None]
             extra = {'origin': origin, 'stop': stop, 'side': side}
+            # a leg closed outside the bot beyond the stop (app.py _turtle_sync): the bot closes the others now
+            passed = dec['reason'] == 'stop_passed_outside'
+            gone = self._outside_of(tr, st) if passed else []
+            key = 'stop_passed_outside' if passed else 'turtle_stop'
+            if gone:
+                self._log_outside(gone, side, pb, d)
+                self._record_exits(gone, 'closed_outside', now, None, extra={'side': side})
             if closed:
-                self._record_exits(ids, 'turtle_stop', now, tr.get('pnl'), extra=extra)
+                self._record_exits([i for i in ids if i not in gone], key, now, tr.get('pnl'), extra=extra)
             if closed and not failed:
                 rec = self._journal_rec(ids)
                 if rec is not None:
-                    rec['exit'] = {'t': now, 'reason': 'turtle_stop', 'stop': stop, 'origin': origin,
+                    rec['exit'] = {'t': now, 'reason': key, 'stop': stop, 'origin': origin,
                                    'price': tr.get('price_now'), 'decision_pnl': tr.get('pnl')}
+                    if gone:
+                        rec['exit']['legs_outside'] = gone
                     jdirty = True
-                head = (f"the last {closed} leg(s) of the {side} trade closed (the close at the stop "
-                        f"{_px(stop, d)} had left them open)" if dec['reason'] == 'close_retry' else
-                        f"{side} trade closed at the stop ({self._origin_words(origin, side)}): {tr.get('judged_on')} "
-                        f"{_px(tr.get('price_now'), d)} {'<=' if side == 'BUY' else '>='} {_px(stop, d)}; {closed} leg(s)")
+                if dec['reason'] == 'close_retry':
+                    head = (f"the last {closed} leg(s) of the {side} trade closed (the close at the stop "
+                            f"{_px(stop, d)} had left them open)")
+                elif passed:
+                    head = (f"the {side} trade ended: {self._legs_words(gone)} closed outside the bot at or beyond its "
+                            f"stop {_px(stop, d)} ({self._origin_words(origin, side)}) while the bot did not look, so the "
+                            f"other {closed} leg(s) closed now at the {tr.get('judged_on')} {_px(tr.get('price_now'), d)}, "
+                            'whatever the price')
+                else:
+                    head = (f"{side} trade closed at the stop ({self._origin_words(origin, side)}): {tr.get('judged_on')} "
+                            f"{_px(tr.get('price_now'), d)} {'<=' if side == 'BUY' else '>='} {_px(stop, d)}; "
+                            f"{closed} leg(s)")
                 self._rec('CLOSE', 'CLOSE', f"{head}, P/L {_usd(tr.get('pnl'))} at the decision, held "
                           f"{_dur(tr.get('age_s'))}; the realised P/L follows from the deal history",
-                          kv={'side': side, 'reason': 'turtle_stop', 'stop': stop, 'stop_origin': origin,
+                          kv={'side': side, 'reason': key, 'stop': stop, 'stop_origin': origin,
                               'price': tr.get('price_now'), 'decision_pnl': tr.get('pnl'), 'legs': closed,
                               'tickets': cr.get('closed_tickets'), 'n_entry': tr.get('n_entry'), 'held_s': tr.get('age_s'),
-                              'retry': dec['reason'] == 'close_retry'})
+                              'retry': dec['reason'] == 'close_retry', **({'legs_outside': gone} if gone else {})})
             else:
                 self._rec('WARN', 'CLOSE', f"the close of the {side} trade is incomplete: {closed} closed, {failed} failed "
                           f"({'; '.join(cr.get('errors') or []) or cr.get('message')}); the rest is closed next poll, "
@@ -3382,10 +3566,14 @@ class TraceLog:
             gone = [x[0] for x in pb['legs'] if x[0] is not None and x[0] not in now_ids]
             if gone and act not in ('CLOSE_BUY', 'CLOSE_SELL'):
                 self._record_exits(gone, 'closed_outside', now, None, extra={'side': side_w[cb['side']]})
-                self._rec('WARN', 'TRADE', f"leg(s) {gone} of the {side_w[cb['side']]} trade closed outside the bot (the "
-                          f"broker's backstop, or by hand): {len(cb['legs'])} leg(s) left; the stop stays at "
-                          f"{_px(cb['stop'], d)} ({self._origin_words(cb['origin'], side_w[cb['side']])})",
-                          kv={'gone': gone, 'legs': len(cb['legs']), 'stop': cb['stop'], 'stop_origin': cb['origin']})
+                if gone[0] in self._legs_outside:     # (app.py's TURTLE_LEG_CLOSED_OUTSIDE: where they closed)
+                    self._log_outside(gone, side_w[cb['side']], pb, d, cb=cb)
+                else:
+                    self._rec('WARN', 'TRADE', f"leg(s) {gone} of the {side_w[cb['side']]} trade closed outside the bot "
+                              f"(the broker's backstop, or by hand): {len(cb['legs'])} leg(s) left; the stop stays at "
+                              f"{_px(cb['stop'], d)} ({self._origin_words(cb['origin'], side_w[cb['side']])})",
+                              kv={'gone': gone, 'legs': len(cb['legs']), 'stop': cb['stop'], 'stop_origin': cb['origin']})
+                    self._outside_logged |= set(gone)
                 self._trades_dirty = True
             if pb.get('stop') is not None and cb['stop'] is not None and abs(cb['stop'] - pb['stop']) > 1e-9:
                 jdirty |= self._log_stop_move(c, tv, pb, cb, act, d)
