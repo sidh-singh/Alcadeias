@@ -29,6 +29,13 @@ seen.
 
 ## How to run
 
+1. **First, install this slot's own MetaTrader 5.** Install a separate MetaTrader 5 for slot 6, in its own folder
+   (for example `C:\MT5\slot6`), and set `terminal_path` in `mt5_credentials.json` to its `terminal64.exe`. The
+   gold and BTC bots of slot 6 both use this one. `mt5_credentials.json` still names the live bots' MetaTrader 5
+   (`C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe`); until you change it, the bot does not start and writes
+   `LIVE_TERMINAL_PATH` in the strategy log.
+2. Start the bot and the dashboard:
+
 ```bat
 start_btcusd.bat           REM or: start_job.bat   (both default to demo)
 start_dashboard.bat
@@ -42,13 +49,23 @@ Both launchers start app.py again 30 s after it exits (a crash, a lost terminal)
   own folder; its `terminal64.exe` is the `terminal_path` in `mt5_credentials.json`) and let only the slot's two
   demo bots use it (`demo_hedging_xauusd6` and `demo_hedging_btcusd6`, on the slot's one account). Never point a
   demo bot at the terminal of a live bot or of another slot: a login switches the account of every program
-  attached to that terminal. The bot itself logs in only on a terminal that holds no account; a terminal that
-  holds its own account (the login and server of the credentials) it uses as it is; one logged into any other
+  attached to that terminal.
+- **The live bots' MetaTrader 5 is refused.** While `terminal_path` names
+  `C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe` (in any spelling: upper or lower case, `/` or `\`, its
+  folder) or is empty, the bot does not start. It stops before it attaches to any terminal and writes one ERROR line
+  `LIVE_TERMINAL_PATH` in the strategy log: "install a separate MetaTrader 5 for slot 6 and set terminal_path in
+  mt5_credentials.json to its terminal64.exe". While the launcher keeps restarting it, the line comes again every
+  15 minutes; nothing else happens.
+- **No login over another account.** The bot logs in only on a terminal that shows no account for 15 s. A terminal
+  that holds its own account (the login and server of the credentials) it uses as it is. One logged into any other
   account it leaves alone: no login, an ERROR line `TERMINAL_IN_USE` in the strategy log (once, then every 15
-  minutes), and it tries again (at start-up 3 times, then the launcher restarts it; on a reconnect every 60 s).
-  Only separate installations close the last gaps: a switch by another program in the microseconds between the
-  bot's account check and its order reaching the terminal, and a terminal that is still logging into its saved
-  account when the bot attaches (it reads as holding no account, and the bot logs in).
+  minutes), and it tries again (at start-up 3 times, then the launcher restarts it; on a reconnect every 60 s). A
+  first "no account" answer is not trusted: after an IPC error the bot detaches and tries again later; otherwise it
+  reads the account again every second for 15 s. **Guaranteed:** no login on a terminal that answers with another
+  account, or that is still starting within those 15 s. **Not covered:** a terminal that needs more than 15 s to log
+  into its saved account reads as holding none, and the bot logs in; and another program can switch the account in
+  the microseconds between the bot's account check and its order reaching the terminal. Only separate installations
+  close these two gaps.
 - **Demo account only.** The bot refuses to start unless the terminal is logged into a demo, hedging account with
   the login of the credentials, refuses `live` outright, and reads the account again before every poll, right
   after the poll reads its positions, and before every order: if another program logs the terminal into another
@@ -60,8 +77,8 @@ Both launchers start app.py again 30 s after it exits (a crash, a lost terminal)
   trade's stop, so when the bot finds it gone it closes the other legs at once, even if the price is back by then
   (the deal history tells it from a leg closed by hand inside the stop, which leaves the trade on).
 - **A terminal that restarts.** While the terminal does not answer the bot decides nothing; after 5 s it connects
-  again (5, 10, 30, then every 60 s while that fails; `RECONNECT_FAILED` in the strategy log once, then every 15
-  minutes, so a long outage does not push everything else out of it).
+  again (5, 10, 30, then every 60 s while that fails; `RECONNECT_FAILED` in the strategy log once for each reason,
+  then every 15 minutes, so a long outage does not push everything else out of it).
 - **No decision on data the poll does not have:** a positions read that fails skips the poll; an entry needs the M15
   vote of closed bars and 300 closed daily bars; a leg the terminal has not listed yet stays in the trade for 10 s.
 
