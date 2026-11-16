@@ -32,6 +32,8 @@ schema, branch, design, strategy ('basket' | 'turtle'), symbol, mt5_symbol, magi
 start), stale (true: this poll could not read the terminal; account / market / basket / turtle are the last good
 poll's), stale_since_utc, health, account, market, decision, basket (null on the Turtle), turtle (null on the basket)
 ```
+A stale (skipped) poll marks what it kept: `market.status` is 'UNKNOWN' (its `message` says the terminal was not read;
+bid / ask are the last ones read), `basket.fresh` is false, `health.market_live` null.
 
 ### health
 `connected`, `terminal_problem` · `account_ok`, `account_problem`, `login`, `demo_login`, `trade_mode` /
@@ -74,6 +76,7 @@ or the exit that fired), `orders` (this poll's order requests and results).
 | `ADD_BUY` / `ADD_SELL` / `ADD_FAILED` | a ladder add was sent |
 | `CLOSE_BUY` / `CLOSE_SELL` | the basket is closed (`reason` stop_loss / target / force_close / close_retry / leg_closed_outside: a leg was closed outside the bot, so the rest is closed at once and the whole basket is booked as closed outside the bot) |
 | `BOTH_SIDES` | a buy and a sell of this bot are open: the strategy holds still |
+| `TRACE_ERROR` | the trace could not work out this poll's decision: a step of `tracelog.py` failed (`reason` the step; the ERROR TRACE line of the log has its traceback). The trading is not affected; `gates` is empty |
 
 **Gates**, in the order the bot checks them: `{key, name, role, ok, value, need, note, checked}`.
 - `role` `need`: `ok` true = met; the first one not met blocks. `exit` / `add`: `ok` true = it fires (a fired stop
@@ -89,8 +92,11 @@ or the exit that fired), `orders` (this poll's order requests and results).
 | basket | (`fill_listed`), (`legs_outside`: legs closed outside the bot, value their ids, or `close_retry`), `stop`, `target`, `force_close`, then `ladder` (no adds) or `ladder_trigger`, `ladder_gate`, (`ladder_gap`) |
 | both sides open | `one_side` |
 
-**orders**: `{t, kind (open / add / close), side, symbol, volume, price, sl, tp, position, magic, comment, refused,
-retcode, retcode_text, done, result_price, result_volume, order, deal, result_comment, last_error, ms}`.
+**orders**: `{t, kind (open / add / close), side, order_side, symbol, volume, price, sl, tp, position, magic, comment,
+refused, retcode, retcode_text, done, result_price, result_volume, order, deal, result_comment, last_error, ms}`.
+`side` is the side of the trade: for a close, the side of the position it closes; `order_side` is the order's own
+type (a SELL position is closed with a BUY order). `kind` comes from the loop's own state (the basket loop's `state`,
+the Turtle's book): an order on the side of the open basket or trade is an `add`, also on the first poll after a start.
 
 ### basket (the basket strategy)
 - `fresh` (the poll computed votes), `weights` (`open`, `agreement`: `{TF: weight}`).
@@ -164,6 +170,19 @@ rewrites the chart can move the last bar with the trace's `market.bid`.
 quoted, lists and dicts are JSON). The message never holds ` | `. An ERROR from an exception is followed by its
 traceback, every line indented by 4 spaces.
 
+**When lines are written.** No file is written while the bot holds `mt5_lock` (it sends orders and reads the terminal
+inside it). The ORDER and FILL lines (made inside `MT5PositionHelper._send`) and any line made inside the lock (an
+event, a state save, a start-up line of a reconnect) wait in memory and are written at the end of the poll, by a
+skipped poll, the exception hook or the job's last lines; each keeps its own time and its place. If the process is
+killed in between (a fraction of a second after an order), those lines are lost; the order itself is in the deal
+history (`<SYMBOL>_trades.json`). A close's ORDER line: `close position 100001 (SELL 0.01 lot, with a BUY order) at
+1,781.644 -> done (10009) | kind=close side=SELL order_side=BUY ...`.
+
+**A step that fails.** The poll hook runs each step on its own (the sections, the decision, the trace file, the bars,
+the trades, the heartbeat, the bookkeeping): one that raises is an ERROR TRACE line ('the trace hook poll() failed in
+its step _bars: ...', again at most every 10 min with the count) and the others go on. The deal history is read again
+at most every 5 s after a failed read and every 60 s after a failed build.
+
 | level | lines |
 |---|---|
 | DEBUG | DECISION (every change of the action or of a checked gate, with all the gates), STATE (state saved), BASKET (a position listed, the ladder armed), SIGNAL |
@@ -172,7 +191,7 @@ traceback, every line indented by 4 spaces.
 | FILL | an entry or add filled |
 | CLOSE | a basket closed, with the reason and the P/L (also one closed outside the bot; after a leg closed outside the bot, the close of the rest and the booking of the whole basket) |
 | WARN | an order not filled, a terminal read error, missing bars, a file that could not be written, a slow poll, BASKET: legs of the basket closed outside the bot, TERMINAL: every failed reconnect attempt that the strategy log leaves out (it has RECONNECT_FAILED only when the problem starts or changes, then every 15 min) |
-| ERROR | an exception (with its traceback), the account refused (also by the account read again right after the positions), TERMINAL_IN_USE (the terminal holds another account: no login, the terminal is left as it is; once, then every 15 min), a reconnect that failed (as in the strategy log) |
+| ERROR | an exception (with its traceback), the account refused (also by the account read again right after the positions), TERMINAL_IN_USE (the terminal holds another account: no login, the terminal is left as it is; once, then every 15 min), a reconnect that failed (as in the strategy log), TRACE: a step of the trace that failed (the trading goes on) |
 
 A HEARTBEAT line comes every minute: a gap of more than a minute means the bot was not running. The same
 exception at the same place is written again at most every 10 minutes, with the count of the repeats. Past 50 MB
@@ -277,7 +296,7 @@ the manual brake). Prices the bot compares (`levels`, `stop`, `n`) are exact; th
 | INFO | STOP | every stop move and why (2N from a new leg, the exit channel of a new D1 bar, kept after a leg closed outside); WARN if it ever loosened |
 | CLOSE | CLOSE | the trade closed at the stop (where it came from, the price, the legs, the P/L at the decision), or ended after a leg closed outside the bot beyond the stop (`reason=stop_passed_outside`), or closed outside the bot; WARN: an incomplete close |
 | INFO | RESULT | the realised P/L of a closed trade from the deal history, its exit, the virtual balance after it (also, at a start, for a trade the journal knows that closed while the bot was down; never twice) |
-| INFO / WARN | TURTLE | the bot's own notes (too few D1 / M15 bars, a refused order, the brake), at most every 5 min each |
+| INFO / WARN | TURTLE | the bot's own notes (too few D1 / M15 bars, a refused order, the brake), at most every 5 min each; too few D1 bars after midnight, with the levels of the day before in force: 'the bot goes on with the levels and the stop of the D1 bar before and asks again every poll' (at a start, without levels: 'not trading') |
 | INFO / WARN | DATA / MARKET / ACCOUNT | daily levels missing / back, the D1 bar of the day late (WARN) / there, the market live / not, the unit changing |
 | DEBUG | STATE | the Turtle book saved (the book in the events file's `data`) |
 

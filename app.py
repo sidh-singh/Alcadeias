@@ -2904,8 +2904,13 @@ class MT5TradingBot:
                             self._turtle_note(symbol, 'd1_short', f'{got} closed D1 bars from the terminal (asked for '
                                               f'{TURTLE_D1_BARS}): N can differ from the backtest by a little', server_time)
                     else:
+                        # (wording only: without levels yet it does not trade; with the day before's it goes on with
+                        # them and their stop, and asks again every poll)
                         self._turtle_note(symbol, 'd1', f'{got} closed D1 bars from the terminal, at least '
-                                          f'{TURTLE_MIN_D1_BARS} needed: not trading', server_time)
+                                          f'{TURTLE_MIN_D1_BARS} needed: '
+                                          + ('not trading' if rows is None else
+                                             'the bot goes on with the levels and the stop of the D1 bar before '
+                                             'and asks again every poll'), server_time)
                 # ── the vote of the last closed M15 bar, read again when an M15 bar closes ──
                 _q = None if now is None else int((now - _TURTLE_SETTLE_S) // vote_s)
                 if _q is not None and _q != vote_q:
