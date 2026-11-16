@@ -4,7 +4,7 @@ The Turtle in the bot (STRATEGY = 'turtle'): app.py's loop on the fake terminal.
 breakout level with the vote, the adds every 0.5N from the actual fills, the one stop, every leg closed at it, no
 re-entry the same day, the orders (magic, comment, no broker SL / TP, unit x 0.01 lot), the closed-bar reads, the
 unit from the virtual balance, the brake, the book in the state file and its rebuild after a restart, the design
-checks and the dashboard.
+checks. (The Turtle on the dashboard: test_dashboard.py.)
 """
 import importlib.util
 import json
@@ -434,25 +434,3 @@ def test_the_two_turtle_example_blocks(mods):
         assert ns['STRATEGY'] == 'turtle' and ns['TURTLE_SYSTEM'] == int(name.split()[3])
         m = mods(**{k: v for k, v in ns.items() if k.isupper()})
         assert m.app.design_problems() == []
-
-
-def test_the_dashboard_draws_the_turtle(mods):
-    pytest.importorskip('dash')
-    sys.path.insert(0, str(ROOT))
-    try:
-        sys.modules.pop('dashboard', None)
-        mods(**TURTLE)
-        import dashboard
-        flat = {'strategy': 'turtle', 'design': 'btc_turtle_s2', 'entry_direction': 'BUY', 'open_score': 2,
-                'fc_score': 2, 'slopes': {'M15': {'rsi': {'sign': 1}, 'macd': {'sign': 1}}},
-                'turtle': {'system': 2, 'buy_level': 60804.32, 'sell_level': 59195.68, 'n': 613.09, 'armed': True,
-                           'vote': 1, 'side': None, 'legs': 0, 'max_legs': 4}}
-        text = str(dashboard.build_slope_panel(SYMBOL, flat))
-        assert 'Turtle S2' in text and 'buy ≥ 60,804.32' in text and 'M15 vote ▲' in text
-        trade = dict(flat, turtle=dict(flat['turtle'], side='BUY', legs=3, stop=60192.56, stop_origin='2N',
-                                       next_add=61725.29))
-        text = str(dashboard.build_slope_panel(SYMBOL, trade))
-        assert 'BUY 3/4 legs · stop 60,192.56 (2N) · next add 61,725.29' in text
-    finally:
-        sys.modules.pop('dashboard', None)
-        sys.path.remove(str(ROOT))

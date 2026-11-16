@@ -51,6 +51,38 @@ The tests need no terminal and write only into pytest's own tmp folders. Run the
 `python3 -B -m pytest tests_demo -q -p no:cacheprovider` (`-B` keeps Python's bytecode out of the branch; a run
 without it fails at its end).
 
+## The dashboard
+
+`start_dashboard.bat` (or `python dashboard.py`) serves it on port 8072 of this PC (`http://localhost:8072`). It only
+reads the files below (it never talks to the terminal), refreshes every 5 s, and shows times in UTC like the log. One
+`dashboard.py` serves the basket branches and the Turtle branches: it reads the strategy from the bot's trace.
+
+- **Status bar** (on every tab): the symbol, the design, the branch and its magic number; whether the bot's data is
+  fresh (red when it has not written for a minute), the demo-account check, the terminal, the market, errors in the
+  last hour; the virtual balance, the unit and lot, this bot's open and closed P/L and its equity, the shared demo
+  account, how long the bot has run.
+- **Live**: *what the bot is doing now*: the action and the bot's own one-sentence reason, every check in the order
+  the bot makes it (✓ passed, ✗ blocks, ⚡ fires, ○ not yet; the one that decided is marked) with its value against
+  the rule, and the strategy's numbers. For the Turtle: today's entry orders and how far the price is from each
+  level (in price and in N), N, 2N, 0.5N, the exit channel, the M15 vote of the last closed bar with its RSI and MACD
+  parts and a small chart of each, the D1 channels, System 1's filter, what a new trade would get. For a basket
+  branch: the open and agreement scores against their thresholds, every timeframe's RSI and MACD vote with its pivot
+  and slope, the trend, the volatility unit, the pause countdown, what a new basket would get. Then the **price
+  chart** (M1 / M5 / M15 / H1 / D1, bid): every entry (▲ buy, ▼ sell), every exit (✕, green won, red lost) with a
+  dotted line from its entries, the open trade's legs and its levels as labelled lines (the stop as it moved, the
+  broker backstops, the next add, the average price, the bid, today's buy and sell levels and the exit channel; on
+  D1 the channels as steps); hover any mark for its details. Then the **open position** (its legs, the distance to
+  the stop and to the next add, every stop move) and the **latest events**.
+- **Trades**: the summary (trades, win rate, net P/L, largest loss, max drawdown of the virtual balance, profit
+  factor), the virtual balance after every close, and every trade, newest first (click one for its legs, N at the
+  entry, the level of every add and every stop move).
+- **Log**: the events with level filters (ERROR, WARN, ORDER, FILL, CLOSE, INFO, DEBUG), a search, live or paused; the
+  raw text of any day; the path of today's text log to copy and a button that downloads a day's file.
+  **When something looks wrong, send that day's file.**
+- **History & settings**: the old views (daily trades, the lifetime summary, the old strategy log), the settings the
+  bot started with (a value `constants.py` has changed since is marked: the bot takes it at its next start), and the
+  raw files.
+
 ## What it writes for the dashboard, and its log
 
 Next to the files the old dashboard reads, the bot writes into its output folder (every field:

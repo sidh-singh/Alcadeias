@@ -1,6 +1,6 @@
 """
-constants.py: the live defaults, the four commented design examples, the design checks, and the dashboard's
-imports.
+constants.py: the live defaults, the four commented design examples and the design checks. (The dashboard, with its
+imports from constants.py: test_dashboard.py.)
 """
 import importlib.util
 import re
@@ -139,31 +139,3 @@ def test_a_refused_design_stops_the_job_before_it_connects(mods):
     bot = m.app.MT5TradingBot(mode='demo', target_symbol='XAUUSDm')
     assert bot.execute_job() is False
     assert called == []
-
-
-def test_dashboard_still_imports_and_draws_the_new_analysis(mods, tmp_path):
-    pytest.importorskip('dash')
-    import sys
-    sys.path.insert(0, str(ROOT))
-    try:
-        sys.modules.pop('dashboard', None)
-        m = mods()                                    # constants etc. from this branch
-        import dashboard
-        analysis = {'slopes': {'H1': {'rsi': {'sign': 1}, 'macd': {'sign': 1}},
-                               'M5': {'rsi': {'sign': 0}, 'macd': {'sign': -1}}},
-                    'entry_direction': 'WAIT', 'entry_allowed': False, 'exit_reason': 'stop_loss',
-                    'open_score': 2, 'fc_score': -1, 'design': 'xau_top1', 'trend': -1, 'force_close_enabled': False,
-                    'basket_levels': {'units': 1, 'target_usd': 94.0, 'stop_usd': 75.2, 'gap_px': 9.4,
-                                      'vol_unit': 9.4, 'ladder_armed': True},
-                    'pause_left_s': 3600.0, 'loss_pause_s': 14400, 'last_close_lost': True,
-                    'virtual_balance': 2034.5}
-        panel = dashboard.build_slope_panel('XAUUSDm', analysis)
-        text = str(panel)
-        for bit in ('design xau_top1', 'trend ▼ down', 'stop $75.20 · target $94.00 · add armed',
-                    'virtual balance $2,034.50', 'entry pause 1.0 h left (after a loss)',
-                    'FORCE-CLOSE OFF · ENTRY AGREEMENT ONLY'):
-            assert bit in text, bit
-        assert dashboard.build_slope_panel('XAUUSDm', {}) is not None          # an old / empty payload
-    finally:
-        sys.modules.pop('dashboard', None)
-        sys.path.remove(str(ROOT))
