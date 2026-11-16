@@ -1314,3 +1314,149 @@ def test_a_basket_close_that_closed_nothing_or_waits_for_an_unlisted_add_is_said
     assert not any('| CLOSE | CLOSE | BUY basket closed' in ln for ln in lines)
     assert not any('is incomplete: 0 closed, 0 failed' in ln for ln in lines)
     assert tr._pending_reason == 'stop_loss'                 # (the retry's close keeps the reason of the first one)
+
+
+def _gone_entry_polls(m, tmp_path, guarded=False, fail=None):
+    """The trace's transitions on the polls of round 3's fix E case, without a replay: an entry recorded from its order
+    (never listed), then gone -- app.py books it as closed outside the bot, realised -$5.50 from the deal history --,
+    five polls of the pause after the loss, then five with a SELL basket. guarded: through the poll hook's guarded step
+    (_transitions_step), else the bare step; fail(tr) may break the trace first. Returns, for each poll, whether its
+    transitions step failed, and the text log."""
+    bot = F.make_bot(m, m.fake, SYMBOL, F.Run(), trace_dir=tmp_path)
+    tr = bot._tracer(SYMBOL)
+    tl = m.tracelog
+    if fail is not None:
+        fail(tr)
+    now = m.clock.time()
+    pause = {'active': True, 'length_s': 240, 'left_s': 240, 'why': 'after a losing basket', 'until': now + 280,
+             'until_utc': None}
+    snap = {'basket': {'open': {}, 'pause': pause, 'trend': {}, 'vol': {}, 'force_close_enabled': False}, 'account': {}}
+
+    def poll(state, t):
+        c = tl._Ctx({'state': state, 'close_response': None, 'analysis_data': {}, 'has_candle_data': True,
+                     'candle_is_fresh': True})
+        dec = {'action': 'HOLD', 'reason': None, 'side': None, 'gates': []}
+        if guarded:
+            r = tr._transitions_step(tr._transitions, tr._keep_basket, c, snap, dec, [], t, 2)
+        else:
+            r = tr._step('poll', '_transitions', tr._transitions, c, snap, dec, [], t, 2)
+        tr._flush()
+        return r is tl._FAILED
+    entry = {'side': 'BUY', 'ids': [100001], 'units': 1, 'opened_by': 'bot', 'opened_at': now, 'first_time': None,
+             'unlisted': [{'id': 100001, 'time': now}], 'close_pending': False}
+    failed = [poll({'basket': entry, 'last_close': None}, now)]
+    lc = {'time': now + 40, 'pnl': -5.5, 'lost': True, 'resolved': True, 'source': 'history', 'reason': 'closed_outside',
+          'side': 'BUY', 'ids': [100001], 'open_time': now, 'attempts': 1, 'time_from_history': True}
+    failed += [poll({'basket': None, 'last_close': dict(lc)}, now + 41 + k) for k in range(5)]
+    sell = {'side': 'SELL', 'ids': [100002], 'units': 1, 'opened_by': 'bot', 'opened_at': now + 300,
+            'first_time': now + 300, 'close_pending': False}
+    failed += [poll({'basket': dict(sell), 'last_close': dict(lc)}, now + 301 + k) for k in range(5)]
+    return failed, _day_logs(tmp_path)
+
+
+def test_an_entry_gone_before_the_terminal_listed_it_is_one_close_line(mods, tmp_path):
+    """Round 3's fix E case: an entry whose id came from its order and that its backstop closed while the bot or the
+    terminal was down, before any positions read listed it. app.py books it as closed outside the bot. The log has one
+    CLOSE line that says so with the realised P/L, then the pause after the loss, and the polls after it are quiet.
+    (Before: that line raised UnboundLocalError on this poll and on every poll after it until the bot's next close --
+    an ERROR line, errors_1h counting each poll, no CLOSE and no PAUSE line, and a SELL basket after it 'replaced the
+    BUY one' on every poll.)"""
+    m = mods(OUTPUT_DIR=str(tmp_path))
+    failed, lines = _gone_entry_polls(m, tmp_path)
+    assert failed == [False] * 11
+    assert not [ln for ln in lines if '| ERROR | TRACE |' in ln]
+    gone = [ln for ln in lines if '| CLOSE | CLOSE | ' in ln]
+    assert len(gone) == 1, gone
+    assert ('| CLOSE | CLOSE | the BUY entry [100001] is gone before the terminal listed it (its broker backstop while '
+            'the bot or the terminal was down?): booked as closed outside the bot, with the pause after a loss if it '
+            'lost: realised -$5.50, its closing deal at ') in gone[0]
+    assert sum('| INFO | PAUSE | entry pause started: 4.0 min after a losing basket (loss -$5.50)' in ln
+               for ln in lines) == 1
+    assert not [ln for ln in lines if 'replaced the BUY one' in ln]
+
+
+def test_a_transitions_line_that_fails_is_not_tried_again_every_poll(mods, tmp_path):
+    """A bug in one line of the trace's transitions (here the booking of the exits raises): an ERROR line with its
+    traceback on that poll. The poll hook's step then keeps that poll's basket and last close for the next poll, so
+    the line is not tried again and nothing fails again. (Before: the same error on every poll until the bot's next
+    close -- hours in the pause after a loss.)"""
+    def broken(tr):
+        def raising(*a, **k):
+            raise ValueError('boom: a bug in a transitions line')
+        tr._record_exits = raising
+    m = mods(OUTPUT_DIR=str(tmp_path))
+    failed, lines = _gone_entry_polls(m, tmp_path, guarded=True, fail=broken)
+    assert failed == [False, True] + [False] * 9
+    errs = [ln for ln in lines if '| ERROR | TRACE |' in ln]
+    assert len(errs) == 1 and 'failed in its step _transitions: ValueError: boom: a bug in a transitions line' in errs[0]
+    assert not [ln for ln in lines if 'replaced the BUY one' in ln]
+
+def _start(m, wall, attempt=None):
+    """One start of the job by the launcher (a new process) on the fake terminal, then the launcher's 30 s.
+    attempt(k) runs at the start of the job's start attempt k (1 to 3)."""
+    bot = m.app.MT5TradingBot(mode='demo', target_symbol=SYMBOL)
+    bot.load_credentials = lambda: setattr(bot, 'credentials', dict(CREDS)) or True
+    k = [0]
+
+    def load_symbols():                       # (never the real files)
+        k[0] += 1
+        if attempt is not None:
+            attempt(k[0])
+        bot.symbols = [SYMBOL]
+        return True
+    bot.load_symbols = load_symbols
+    ok = bot.execute_job()
+    wall.sleep(30)
+    return ok
+
+
+def test_a_held_back_start_is_written_when_an_attempt_fails_another_way(mods, tmp_path, monkeypatch):
+    """The 15-minute limit holds back the text log of a start only when all its 3 attempts were refused on a problem it
+    held back. TERMINAL_IN_USE: the first start writes its block, the launcher's restarts after it add no line. A start
+    whose second attempt fails another way is written whole: the terminal shows no account for 15 s, the bot logs in
+    itself and the login fails; or mt5.initialize() raises. (Before: nothing of these starts was written -- the check
+    read only the problem of the last attempt, or of an attempt before the one that raised.)"""
+    m = mods(OUTPUT_DIR=str(tmp_path))
+    wall = _Wall()
+    monkeypatch.setattr(m.app, 'time', wall)
+    fake = m.fake
+    fake.account_login = 99                              # the terminal holds another account
+    assert _start(m, wall) is False
+    lines = _day_logs(tmp_path)
+    assert sum('| ERROR | ACCOUNT | TERMINAL_IN_USE: ' in ln for ln in lines) == 1
+    n = len(lines)
+    for _ in range(3):
+        assert _start(m, wall) is False                  # held back: no line
+    assert len(_day_logs(tmp_path)) == n
+    real_login = fake.login
+
+    def login_fails(k):
+        if k == 2:                                       # free for 15 s: the bot logs in itself, and the login fails
+            fake.logged_in, fake.account_login = False, 0
+            fake.login = lambda **kw: (fake.calls.append(('login', kw.get('login'))), False)[1]
+        else:
+            fake.logged_in, fake.account_login, fake.login = True, 99, real_login
+    assert _start(m, wall, login_fails) is False
+    lines = _day_logs(tmp_path)[n:]
+    assert sum('| WARN | ACCOUNT | the terminal showed no account for 15 s: the bot logs in itself (login 1 on '
+               'Fake-Demo)' in ln for ln in lines) == 1
+    assert sum('| ERROR | ACCOUNT | login failed: ' in ln for ln in lines) == 1
+    assert [ln.split(' | ')[-1][:26] for ln in lines if '| WARN | START | start attempt ' in ln] == [
+        'start attempt 1/3 failed (', 'start attempt 2/3 failed (', 'start attempt 3/3 failed (']
+    assert sum('| ERROR | START | all 3 start attempts failed (TERMINAL_IN_USE: ' in ln for ln in lines) == 1
+    assert [c[0] for c in fake.calls].count('login') == 1
+    n += len(lines)
+    real_init = fake.initialize
+
+    def raises(k):
+        fake.initialize = real_init
+        if k == 2:
+            def boom(*a, **kw):
+                raise RuntimeError('the terminal raised')
+            fake.initialize = boom
+    assert _start(m, wall, raises) is False
+    fake.initialize = real_init
+    lines = _day_logs(tmp_path)[n:]
+    assert sum('| ERROR | START | the job failed: RuntimeError: the terminal raised' in ln for ln in lines) == 1
+    assert sum('| WARN | START | start attempt 1/3 failed (TERMINAL_IN_USE: ' in ln for ln in lines) == 1
+    assert 'not-a-password' not in '\n'.join(_day_logs(tmp_path))
