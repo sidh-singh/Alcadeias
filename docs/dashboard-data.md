@@ -209,7 +209,9 @@ in a day the day's file takes only WARN and ERROR lines (the events file keeps e
   for slot N and set terminal_path in mt5_credentials.json to its terminal64.exe. The bot attached to no terminal and
   does not trade ...', then the three start attempts and 'all 3 start attempts failed (LIVE_TERMINAL_PATH: ...)'. It
   comes at most every 15 minutes, as in the strategy log: a launcher restart (every 30 s) that the limit holds back
-  writes no line at all (`_boot_flush`). The same holds for a start refused on `TERMINAL_IN_USE`.
+  writes no line at all (`_boot_flush`). The same holds for a start refused on `TERMINAL_IN_USE`. This needs
+  all 3 attempts of the start held back: a start whose other attempt failed another way (a login by the bot
+  that failed, an exception) is written whole.
 - The login rule: 'the terminal shows no account yet (account_info() answered None, last_error ...): the bot reads it
   again every second for up to 15 s before any login' (INFO ACCOUNT); 'no login: account not known: ... ; the bot
   detached and tries again later' (WARN ACCOUNT: an IPC error); 'the terminal showed no account for 15 s: the bot logs
