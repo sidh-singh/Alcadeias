@@ -2,6 +2,9 @@
 
 `tracelog.py` writes these files into the bot's output folder (`OUTPUT_DIR` in `constants.py`, here
 `C:\Alcadeias\demo_hedging_xauusd8`). The bot never reads them back; nothing it decides depends on them.
+`tracelog.py` is the same file on all six demo branches. Its Turtle part (the trace's `turtle` block, described in
+this file on the Turtle branches) never runs here: this branch runs only `STRATEGY = 'basket'` (`design_problems`
+refuses the Turtle), so `turtle` is always null.
 
 | file | what | when |
 |---|---|---|
