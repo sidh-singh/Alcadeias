@@ -276,6 +276,36 @@ def test_a_close_while_the_add_is_not_listed_yet_waits_for_it(mods, tmp_path):
     assert state['basket'] is None and lc['ids'] == [e, a] and lc['resolved'] and lc['pnl'] == realised
 
 
+def test_a_close_that_also_closed_the_unlisted_add_books_the_basket_at_once(mods, tmp_path):
+    """The final review of the third fix round: the poll's positions read does not list the add yet (filled 1 s ago),
+    but the close's own read does, so the bot's close closes both legs. That close is complete: the basket is booked at
+    once, with both legs and the close's own reason. (Before: the add, still waiting in `unlisted`, made the close look
+    partial -- close_pending, nothing booked -- and 9 s later the basket was booked as closed outside the bot.)"""
+    fake, clock = market(120)
+    m = mods(fake=fake, clock=clock, **SCALED)
+    bot = F.make_bot(m, fake, 'XAUUSDm', F.Run(), state_dir=tmp_path / 'state')
+    h = m.mt5_helper.MT5PositionHelper(fake)
+    now = clock.time()
+    e = fake.add_position(0, 0.01, 2000.0, now - 300, magic=MAGIC)
+    a = fake.add_position(0, 0.01, 1995.0, now, magic=MAGIC)                  # the add, filled just now
+    b = bot._new_basket('BUY', 1, m.app.basket_levels(5.0, 1.0), now - 300)
+    b.update(ids=[e], first_time=now - 300)
+    state = {'basket': b, 'last_close': None}
+    bot._record_fill(b, _done(a), now)
+    clock.sleep(1)
+    fake.list_delay_ms = 3000
+    pos = h.get_buy_positions('XAUUSDm')                                        # the poll's read: the entry only
+    assert pos['count'] == 1 and not _sync(bot, state, pos, clock.time())
+    fake.list_delay_ms = 0                                                      # listed when the close reads
+    res = h.close_by_type('XAUUSDm', 0)
+    assert res['closed_count'] == 2 and res['failed_count'] == 0 and sorted(res['closed_tickets']) == [e, a]
+    lc = bot._after_close('XAUUSDm', state, 'BUY', res, pos, 'stop_loss', clock.time())
+    realised = round(sum(d.profit for d in fake.deals if d.position_id in (e, a)), 2)
+    assert lc is not None and state['basket'] is None and state['last_close'] is lc
+    assert lc['reason'] == 'stop_loss' and lc['ids'] == [e, a] and 'outside_ids' not in lc
+    assert lc['resolved'] and lc['source'] == 'history' and lc['pnl'] == realised and lc['time'] == clock.time()
+
+
 @pytest.mark.slow
 def test_a_restart_right_after_the_add_closes_the_add(tmp_path, two_leg_reference):
     """The bot process dies 0.5 s after the add (in its sleep after the order, before the next positions read) and is
