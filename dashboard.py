@@ -1,17 +1,42 @@
-import base64
-import json
-import os
+"""
+Alcadeias dashboard (demo branches): what the bot sees, decides and does, read from the files it writes.
+
+It only reads OUTPUT_DIR (docs/dashboard-data.md lists every field) and never talks to the terminal. One page for
+both strategies of the demo branches, told apart by the trace (`strategy`: 'basket' or 'turtle'):
+
+  Live     the status bar; what the bot is doing now: its one-sentence headline, every check in the order the
+           bot makes it (passed / blocked / fired, the value against the rule), and the strategy's numbers
+           (basket: the votes per timeframe with their pivots and slopes, the scores against their thresholds,
+           the trend, the volatility unit, the pause, the levels a new basket would get; Turtle: N, the D1
+           channels, today's buy / sell levels and their orders, the M15 vote of closed bars, System 1's filter,
+           what a new trade would get); the OHLC chart with every entry, exit and the open trade's levels; the
+           open position; the latest events
+  Trades   the summary, the virtual balance after every close, every trade with its legs (newest first)
+  Log      the events of logs/<SYMBOL>_events.jsonl with level filters and a search, the text log's path to copy
+           and send, the raw text of the day's log
+  History  the old views that still apply (daily trades, the lifetime summary, the old strategy log), the
+           settings as constants.py has them, the raw files
+
+Times are UTC, as in the bot's log. Run:  python dashboard.py   (http://<host>:DASHBOARD_PORT)
+"""
+import functools
 import glob
+import json
+import math
+import os
 import re
-from datetime import datetime, timezone, timedelta
+import time
+import traceback
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 
 import dash
-from dash import dcc, html, callback_context
-from dash.dependencies import Input, Output
+from dash import dcc, html, no_update
+from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-
+import constants as _C
 from constants import (
     OUTPUT_DIR, DAILY_TRADE_SUBDIR,
     DASHBOARD_REFRESH_INTERVAL, DASHBOARD_HOST, DASHBOARD_PORT,
@@ -23,3128 +48,2787 @@ from constants import (
     OPEN_SCORE_WEIGHTS, FORCE_CLOSE_SCORE_WEIGHTS,
 )
 
-# ─── Configuration ───
-JSON_DIR = OUTPUT_DIR
-DAILY_TRADE_DIR = os.path.join(JSON_DIR, DAILY_TRADE_SUBDIR)
+# ───────────────────────────── configuration ─────────────────────────────
+
+JSON_DIR = OUTPUT_DIR                     # every path is built from this at call time (a test may point it elsewhere)
 REFRESH_INTERVAL = DASHBOARD_REFRESH_INTERVAL
+STATE_SUBDIR = getattr(_C, 'STATE_SUBDIR', 'state')
+TIMEFRAMES = ('M1', 'M5', 'M15', 'H1', 'D1')
+TF_SECONDS = {'M1': 60, 'M5': 300, 'M15': 900, 'M30': 1800, 'H1': 3600, 'H4': 14400, 'H6': 21600, 'D1': 86400}
+LOG_LEVELS = ('ERROR', 'WARN', 'ORDER', 'FILL', 'CLOSE', 'INFO', 'DEBUG')
+EVENTS_TAIL_BYTES = 3 * 2 ** 20           # the log tab parses the newest 3 MB of the events file
+TEXT_TAIL_BYTES = 512 * 2 ** 10           # ... and shows the newest 512 KB of the day's text log
+STALE_WARN_S = 15.0                       # the trace is rewritten after every poll (about 1 s): older is slow ...
+STALE_S = 60.0                            # ... and older than this the bot is not running (or cannot write)
 
-# ─── Mascot Image (base64 encoded for reliable loading) ───
-_MASCOT_IMG_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'alcadeias.png')
-try:
-    with open(_MASCOT_IMG_PATH, 'rb') as _f:
-        _MASCOT_B64 = 'data:image/png;base64,' + base64.b64encode(_f.read()).decode()
-except FileNotFoundError:
-    _MASCOT_B64 = ''
 
-# ─── Alcadeias Lord of Spirits — Blue / Gold / White Angel Theme ───
-COLORS = {
-    # Backgrounds — deep celestial navy
-    'bg': '#060b18',
-    'bg_secondary': '#0a1025',
-    'card': 'rgba(10, 16, 37, 0.88)',
-    'card_solid': '#0c1328',
-    'card_border': 'rgba(192, 168, 100, 0.14)',
-    'card_hover': 'rgba(192, 168, 100, 0.08)',
-    # Text — luminous white / gold
-    'text': '#f0ede4',
-    'text_secondary': '#b8b0a0',
-    'text_dim': '#5c6478',
-    'text_muted': '#3a4058',
-    # Accents — divine gold
-    'accent': '#d4a843',
-    'accent_glow': 'rgba(212, 168, 67, 0.30)',
-    'accent_soft': 'rgba(212, 168, 67, 0.12)',
-    # Signals — celestial green / ember red
-    'buy': '#3cc48e',
-    'buy_soft': 'rgba(60, 196, 142, 0.12)',
-    'buy_glow': 'rgba(60, 196, 142, 0.30)',
-    'sell': '#e05555',
-    'sell_soft': 'rgba(224, 85, 85, 0.12)',
-    'sell_glow': 'rgba(224, 85, 85, 0.30)',
-    # Status
-    'positive': '#3cc48e',
-    'negative': '#e05555',
-    'warning': '#f0c040',
-    'neutral': '#5c6478',
-    # UI — gold / royal blue
-    'header_bg': 'rgba(6, 11, 24, 0.96)',
-    'tab_bg': '#0a1025',
-    'tab_active': '#d4a843',
-    'chart_grid': 'rgba(192, 168, 100, 0.07)',
-    'divider': 'rgba(192, 168, 100, 0.10)',
-    'gradient_start': '#d4a843',
-    'gradient_end': '#4a8ecc',
+def _now():
+    """Wall-clock UTC seconds (a test or a screenshot run may replace this)."""
+    return time.time()
+
+
+def _path(*parts):
+    return os.path.join(JSON_DIR, *parts)
+
+
+# ───────────────────────────── colours (one accent; green / red only for profit-loss and pass-fail) ─────────────
+
+COL = {
+    'page': '#070b17', 'surface': '#0c1324', 'raised': '#111a2e', 'raised2': '#16213a',
+    'line': '#1f2a44', 'grid': '#162036',
+    'text': '#eef0f5', 'text2': '#aab3c5', 'muted': '#8b95aa', 'faint': '#5d6a85',
+    'accent': '#d4a843', 'pos': '#3cc48e', 'neg': '#e05555', 'warn': '#f0c040', 'blue': '#4a8ecc',
+    'candle_up': '#9aa6bd', 'candle_down': '#5d6a85',
 }
+FONT = 'Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif'
+MONO = '"JetBrains Mono", "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace'
 
 
-# ─── Shared Styles ───
-CARD_STYLE = {
-    'background': COLORS['card'],
-    'backdropFilter': 'blur(20px)',
-    'WebkitBackdropFilter': 'blur(20px)',
-    'border': f'1px solid {COLORS["card_border"]}',
-    'borderRadius': '16px',
-    'padding': '20px 24px',
-    'transition': 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-}
+# ───────────────────────────── reading the files ─────────────────────────────
 
-SECTION_TITLE_STYLE = {
-    'color': COLORS['text'],
-    'fontSize': '15px',
-    'marginBottom': '0px',
-    'fontWeight': '600',
-    'letterSpacing': '0.3px',
-}
+_CACHE = {}
 
 
-def load_symbol_data(symbol):
-    """Load JSON data for a symbol"""
-    path = os.path.join(JSON_DIR, f'{symbol}.json')
+def read_json(path):
+    """(data, problem): the parsed file, cached until it changes; (None, 'missing' / 'unreadable ...') else."""
     try:
-        with open(path, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return None
-
-
-def load_account_data():
-    """Load account data from dedicated account.json"""
-    path = os.path.join(JSON_DIR, 'account.json')
-    try:
-        with open(path, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-
-def get_available_symbols():
-    """Get list of symbols from JSON files in directory"""
-    pattern = os.path.join(JSON_DIR, '*.json')
-    files = glob.glob(pattern)
-    return [
-        os.path.splitext(os.path.basename(f))[0]
-        for f in files if os.path.basename(f) not in ('account.json', ACTIVE_CONFIG_FILENAME)
-    ]
-
-
-# ─── Active Config Management ───
-ACTIVE_CONFIG_PATH = os.path.join(JSON_DIR, ACTIVE_CONFIG_FILENAME)
-
-
-def load_symbols_config():
-    """Load symbols configuration from symbols.json (array-of-objects format)"""
-    try:
-        config_path = os.path.join(os.path.dirname(__file__), 'symbols.json')
-        with open(config_path, 'r') as f:
-            cfg = json.load(f)
-        # Extract symbol name list from the array for dashboard usage
-        sym_list = cfg.get('symbols', [])
-        cfg['_symbol_names'] = [s.get('symbol', '') for s in sym_list if s.get('symbol')]
-        return cfg
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {'symbols': [], '_symbol_names': []}
-
-
-def load_active_config():
-    """Load active configuration (mode + selected symbols)"""
-    try:
-        with open(ACTIVE_CONFIG_PATH, 'r') as f:
-            cfg = json.load(f)
-        # Migrate old per-mode format to single active_symbols list
-        if 'active_symbols' not in cfg:
-            mode = cfg.get('mode', 'demo')
-            cfg['active_symbols'] = cfg.get(f'{mode}_symbols', [])
-            save_active_config(cfg)
-        return cfg
-    except (FileNotFoundError, json.JSONDecodeError):
-        symbols_cfg = load_symbols_config()
-        all_syms = symbols_cfg.get('_symbol_names', [])
-        return {
-            'mode': 'demo',
-            'active_symbols': all_syms[:],
-        }
-
-
-def save_active_config(config):
-    """Save active configuration to JSON file"""
-    try:
-        config_dir = os.path.dirname(ACTIVE_CONFIG_PATH)
-        if config_dir:
-            os.makedirs(config_dir, exist_ok=True)
-        with open(ACTIVE_CONFIG_PATH, 'w') as f:
-            json.dump(config, f, indent=2)
+        st = os.stat(path)
     except OSError:
-        pass
-
-
-def make_signal_badge(status):
-    """Create a premium styled signal badge with glow effect"""
-    color_map = {
-        'BUY': (COLORS['buy'], COLORS['buy_glow']),
-        'SELL': (COLORS['sell'], COLORS['sell_glow']),
-        'CLOSE_BUY': (COLORS['warning'], 'rgba(255, 217, 61, 0.25)'),
-        'CLOSE_SELL': (COLORS['warning'], 'rgba(255, 217, 61, 0.25)'),
-        'BUY_MORE': (COLORS['buy'], COLORS['buy_glow']),
-        'SELL_MORE': (COLORS['sell'], COLORS['sell_glow']),
-        'DO_NOTHING': (COLORS['neutral'], 'transparent'),
-    }
-    color, glow = color_map.get(status, (COLORS['neutral'], 'transparent'))
-    return html.Span(status, style={
-        'background': f'linear-gradient(135deg, {color}, {color}dd)',
-        'color': '#fff',
-        'padding': '6px 18px',
-        'borderRadius': '24px',
-        'fontSize': '12px',
-        'fontWeight': '700',
-        'letterSpacing': '0.8px',
-        'boxShadow': f'0 0 20px {glow}, 0 2px 8px rgba(0,0,0,0.3)',
-        'textShadow': '0 1px 2px rgba(0,0,0,0.3)',
-        'display': 'inline-block',
-    })
-
-
-def make_metric_card(title, value, color=None, sub=None, icon=None):
-    """Create a compact metric card"""
-    accent = color or COLORS['text']
-    return html.Div([
-        html.Div([
-            html.Span(icon or '', style={
-                'fontSize': '11px',
-                'marginRight': '5px',
-                'opacity': '0.6',
-            }) if icon else None,
-            html.Span(title, style={
-                'fontSize': '9px',
-                'color': COLORS['text_dim'],
-                'textTransform': 'uppercase',
-                'letterSpacing': '1px',
-                'fontWeight': '500',
-            }),
-        ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '5px'}),
-        html.Div(value, style={
-            'fontSize': '16px',
-            'fontWeight': '700',
-            'color': accent,
-            'fontFamily': "'JetBrains Mono', 'SF Mono', monospace",
-            'letterSpacing': '-0.3px',
-            'lineHeight': '1.2',
-        }),
-        html.Div(sub, style={
-            'fontSize': '9px',
-            'color': COLORS['text_dim'],
-            'marginTop': '3px',
-        }) if sub else None,
-    ], style={
-        'background': COLORS['card'],
-        'border': f'1px solid {COLORS["card_border"]}',
-        'borderRadius': '10px',
-        'padding': '12px 14px',
-        'minWidth': '110px',
-        'flex': '1',
-    })
-
-
-def build_positions_section(data):
-    """Build compact positions section"""
-    pos = data.get('positions', {})
-    buy = pos.get('buy', {})
-    sell = pos.get('sell', {})
-    buy_count = buy.get('count', 0)
-    sell_count = sell.get('count', 0)
-
-    if buy_count == 0 and sell_count == 0:
-        return html.Div([
-            html.Div([
-                html.Span('📋', style={'fontSize': '14px'}),
-                html.Span('Open Positions', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
-            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
-            html.Div('No open positions', style={
-                'color': COLORS['text_dim'], 'fontSize': '12px',
-                'padding': '14px 16px', 'textAlign': 'center',
-                'background': COLORS['card'], 'borderRadius': '10px',
-                'border': f'1px solid {COLORS["card_border"]}',
-            }),
-        ])
-
-    def pos_row(label, p, color):
-        count = p.get('count', 0)
-        if count == 0:
-            return None
-        profit = p.get('total_profit', 0)
-        profit_color = COLORS['positive'] if profit >= 0 else COLORS['negative']
-        return html.Div([
-            html.Div([
-                html.Span('●', style={'color': color, 'fontSize': '9px', 'marginRight': '6px'}),
-                html.Span(label, style={'fontWeight': '600', 'fontSize': '12px'}),
-                html.Span(f'{count}', style={
-                    'marginLeft': '6px', 'color': COLORS['text_dim'],
-                    'fontSize': '10px', 'background': 'rgba(255,255,255,0.04)',
-                    'padding': '1px 7px', 'borderRadius': '8px',
-                }),
-            ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '8px'}),
-            html.Div([
-                make_metric_card('P/L', f"${profit:.2f}", profit_color),
-                make_metric_card('Volume', f"{p.get('total_volume', 0):.2f}"),
-                make_metric_card('First', f"${p.get('first_profit', 0):.2f}",
-                                 COLORS['positive'] if p.get('first_profit', 0) >= 0 else COLORS['negative']),
-                make_metric_card('Last', f"${p.get('last_profit', 0):.2f}",
-                                 COLORS['positive'] if p.get('last_profit', 0) >= 0 else COLORS['negative']),
-            ], style={'display': 'flex', 'gap': '8px', 'flexWrap': 'wrap'}),
-        ], style={
-            'background': COLORS['card'],
-            'border': f'1px solid {COLORS["card_border"]}',
-            'borderRadius': '10px',
-            'borderLeft': f'3px solid {color}55',
-            'padding': '12px 14px',
-            'flex': '1',
-        })
-
-    rows = [r for r in [pos_row('BUY', buy, COLORS['buy']), pos_row('SELL', sell, COLORS['sell'])] if r]
-
-    return html.Div([
-        html.Div([
-            html.Span('📋', style={'fontSize': '14px'}),
-            html.Span('Open Positions', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
-        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
-        html.Div(rows, style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap'}),
-    ])
-
-
-def build_signal_section(data):
-    """Build compact inline signal badges — minimal footprint"""
-    signal = data.get('signal', {})
-    buy_status = signal.get('buy_status', 'DO_NOTHING')
-    sell_status = signal.get('sell_status', 'DO_NOTHING')
-
-    def _mini_badge(label, status):
-        color_map = {
-            'BUY': COLORS['buy'], 'SELL': COLORS['sell'],
-            'CLOSE_BUY': COLORS['warning'], 'CLOSE_SELL': COLORS['warning'],
-            'BUY_MORE': COLORS['buy'], 'SELL_MORE': COLORS['sell'],
-            'DO_NOTHING': COLORS['text_muted'],
-        }
-        color = color_map.get(status, COLORS['text_muted'])
-        is_active = status != 'DO_NOTHING'
-        return html.Div([
-            html.Span(label, style={
-                'fontSize': '8px', 'color': COLORS['text_dim'],
-                'textTransform': 'uppercase', 'letterSpacing': '1px',
-                'fontWeight': '500', 'marginRight': '6px',
-            }),
-            html.Span(status, style={
-                'background': f'{color}22' if is_active else 'transparent',
-                'color': color,
-                'padding': '3px 10px',
-                'borderRadius': '12px',
-                'fontSize': '10px',
-                'fontWeight': '700',
-                'letterSpacing': '0.5px',
-                'border': f'1px solid {color}44' if is_active else f'1px solid {COLORS["card_border"]}',
-            }),
-        ], style={'display': 'flex', 'alignItems': 'center'})
-
-    return html.Div([
-        html.Span('⚡', style={'fontSize': '11px', 'marginRight': '6px', 'opacity': '0.6'}),
-        _mini_badge('B', buy_status),
-        _mini_badge('S', sell_status),
-    ], style={
-        'display': 'flex', 'alignItems': 'center', 'gap': '10px',
-        'background': COLORS['card'],
-        'border': f'1px solid {COLORS["card_border"]}',
-        'borderRadius': '10px',
-        'padding': '6px 14px',
-    })
-
-
-def _parse_order_response(order_resp):
-    """Parse MT5 OrderSendResult into clean fields"""
-    resp_str = str(order_resp)
-    fields = {}
-    for key in ('retcode', 'comment', 'deal', 'order', 'volume', 'price', 'symbol'):
-        if key == 'comment':
-            m = re.search(r"comment='([^']*)", resp_str)
-        else:
-            m = re.search(rf'{key}=([^,)]+)', resp_str)
-        if m:
-            fields[key] = m.group(1).strip()
-    return fields
-
-
-def build_activity_section(data):
-    """Build compact Recent Activity strip for order/close responses.
-    Always renders consistently regardless of content."""
-    order_resp = data.get('order_response')
-    close_resp = data.get('close_response')
-
-    if not order_resp and not close_resp:
-        return html.Div()  # Nothing to show
-
-    rows = []
-
-    # ── Order response row ──
-    if order_resp:
-        f = _parse_order_response(order_resp)
-        retcode = f.get('retcode', '?')
-        comment = f.get('comment', '')
-        symbol = f.get('symbol', '')
-        volume = f.get('volume', '')
-        is_ok = retcode == '10009'
-        rc_color = COLORS['positive'] if is_ok else COLORS['warning']
-        icon = '✓' if is_ok else '⚠'
-
-        detail_chips = []
-        if symbol:
-            detail_chips.append(html.Span(symbol, style={
-                'fontSize': '10px', 'color': COLORS['text_secondary'],
-                'background': 'rgba(255,255,255,0.04)', 'padding': '2px 8px',
-                'borderRadius': '6px', 'marginLeft': '8px',
-            }))
-        if volume and volume != '0.0':
-            detail_chips.append(html.Span(f'vol {volume}', style={
-                'fontSize': '10px', 'color': COLORS['text_secondary'],
-                'background': 'rgba(255,255,255,0.04)', 'padding': '2px 8px',
-                'borderRadius': '6px', 'marginLeft': '4px',
-            }))
-
-        rows.append(html.Div([
-            html.Span(icon, style={
-                'fontSize': '12px', 'marginRight': '10px', 'color': rc_color,
-                'width': '16px', 'textAlign': 'center',
-            }),
-            html.Span('ORDER', style={
-                'fontSize': '9px', 'fontWeight': '700', 'color': COLORS['text_dim'],
-                'letterSpacing': '1.5px', 'marginRight': '12px', 'minWidth': '42px',
-            }),
-            html.Span(comment or f'retcode={retcode}', style={
-                'fontSize': '12px', 'color': rc_color, 'fontWeight': '500',
-                'fontFamily': "'JetBrains Mono', monospace",
-            }),
-            html.Span(f'  RC {retcode}', style={
-                'fontSize': '10px', 'color': COLORS['text_dim'],
-                'fontFamily': "'JetBrains Mono', monospace", 'marginLeft': '6px',
-            }),
-            *detail_chips,
-        ], style={
-            'display': 'flex', 'alignItems': 'center',
-            'padding': '9px 16px',
-            'borderBottom': f'1px solid {COLORS["divider"]}' if close_resp else 'none',
-        }))
-
-    # ── Close response row ──
-    if close_resp:
-        success = close_resp.get('success', False)
-        closed = close_resp.get('closed_count', 0)
-        failed = close_resp.get('failed_count', 0)
-        total = close_resp.get('filtered_count', 0)
-        errors = close_resp.get('errors', [])
-        sc = COLORS['positive'] if success else COLORS['negative']
-        icon = '✓' if success else '✗'
-
-        summary = f'{closed}/{total} closed'
-        if failed > 0:
-            summary += f', {failed} failed'
-
-        err_chip = None
-        if errors:
-            err_text = errors[0] if len(errors) == 1 else f'{len(errors)} errors'
-            err_chip = html.Span(err_text, style={
-                'fontSize': '10px', 'color': COLORS['negative'],
-                'background': COLORS['sell_soft'], 'padding': '2px 8px',
-                'borderRadius': '6px', 'marginLeft': '8px',
-                'fontFamily': "'JetBrains Mono', monospace",
-            })
-
-        rows.append(html.Div([
-            html.Span(icon, style={
-                'fontSize': '12px', 'marginRight': '10px', 'color': sc,
-                'width': '16px', 'textAlign': 'center',
-            }),
-            html.Span('CLOSE', style={
-                'fontSize': '9px', 'fontWeight': '700', 'color': COLORS['text_dim'],
-                'letterSpacing': '1.5px', 'marginRight': '12px', 'minWidth': '42px',
-            }),
-            html.Span(summary, style={
-                'fontSize': '12px', 'color': sc, 'fontWeight': '500',
-                'fontFamily': "'JetBrains Mono', monospace",
-            }),
-            err_chip,
-        ], style={
-            'display': 'flex', 'alignItems': 'center',
-            'padding': '9px 16px',
-        }))
-
-    return html.Div([
-        html.Div([
-            html.Span('📌', style={'fontSize': '11px', 'marginRight': '6px'}),
-            html.Span('Recent Activity', style={
-                'fontSize': '9px', 'fontWeight': '600', 'color': COLORS['text_dim'],
-                'textTransform': 'uppercase', 'letterSpacing': '1.5px',
-            }),
-        ], style={
-            'display': 'flex', 'alignItems': 'center',
-            'padding': '8px 16px 4px',
-        }),
-        *rows,
-    ], style={
-        'background': COLORS['card'],
-        'border': f'1px solid {COLORS["card_border"]}',
-        'borderRadius': '10px',
-        'marginTop': '12px',
-        'overflow': 'hidden',
-    })
-
-
-def _crossover_badge(val):
-    """Compact colored badge for a crossover value — Ballom style."""
-    cfg = {
-        3:  ('🔥 +3', '#009d7a', 'rgba(0, 157, 122, 0.12)'),
-        2:  ('⚡ +2', '#00d2a0', 'rgba(0, 210, 160, 0.12)'),
-        1:  ('💨 +1', '#4de8c8', 'rgba(77, 232, 200, 0.12)'),
-        -1: ('💨 −1', '#ee7b6e', 'rgba(238, 123, 110, 0.12)'),
-        -2: ('⚡ −2', '#e74c3c', 'rgba(231, 76, 60, 0.12)'),
-        -3: ('🔥 −3', '#c0392b', 'rgba(192, 57, 43, 0.12)'),
-    }
-    emoji_txt, color, bg = cfg.get(val, (str(val), '#888', 'rgba(255,255,255,0.04)'))
-    return html.Span(emoji_txt, style={
-        'color': color, 'background': bg,
-        'padding': '3px 10px', 'borderRadius': '10px',
-        'fontSize': '0.78rem', 'fontWeight': '600',
-        'whiteSpace': 'nowrap',
-        'fontFamily': "'JetBrains Mono', monospace",
-    })
-
-
-def _power_bar(power, max_power=7):
-    """Compact inline power gauge with colored rectangular segments."""
-    dots = []
-    for i in range(max_power):
-        if i < power:
-            c = '#00d2a0' if power >= 5 else '#f39c12' if power >= 3 else '#e74c3c'
-        else:
-            c = 'rgba(255,255,255,0.06)'
-        dots.append(html.Span(style={
-            'display': 'inline-block', 'width': '8px', 'height': '16px',
-            'borderRadius': '2px', 'background': c, 'marginRight': '2px',
-        }))
-    p_color = '#00d2a0' if power >= 5 else '#f39c12' if power >= 3 else '#e74c3c'
-    return html.Div([
-        *dots,
-        html.Span(f' {power}', style={
-            'fontSize': '0.75rem', 'fontWeight': '700', 'marginLeft': '4px',
-            'color': p_color if power > 0 else COLORS['text_dim'],
-            'fontFamily': "'JetBrains Mono', monospace",
-        }),
-    ], style={'display': 'inline-flex', 'alignItems': 'center'})
-
-
-def _list_dots(lst, max_items=7):
-    """Render the bullish/bearish list as colored circle dots with fade."""
-    dots = []
-    for i, v in enumerate(lst[:max_items]):
-        c = '#00d2a0' if v == 1 else '#e74c3c'
-        opacity = max(0.35, 1.0 - (i * 0.09))
-        dots.append(html.Span(style={
-            'display': 'inline-block', 'width': '10px', 'height': '10px',
-            'borderRadius': '50%', 'background': c,
-            'marginRight': '3px', 'opacity': str(opacity),
-        }))
-    return html.Div(dots, style={'display': 'inline-flex', 'alignItems': 'center'})
-
-
-def _cross_dots(cross_list, max_items=7):
-    """Render crossover values as uniform circle dots with green/red light-medium-dark shading."""
-    green_map = {1: '#4de8c8', 2: '#00d2a0', 3: '#009d7a'}
-    red_map   = {1: '#ee7b6e', 2: '#e74c3c', 3: '#c0392b'}
-    dots = []
-    for i, v in enumerate(cross_list[:max_items]):
-        if v > 0:
-            c = green_map.get(v, '#81c784')
-        elif v < 0:
-            c = red_map.get(abs(v), '#e57373')
-        else:
-            c = '#555'
-        opacity = max(0.35, 1.0 - (i * 0.09))
-        dots.append(html.Span(style={
-            'display': 'inline-block', 'width': '10px', 'height': '10px',
-            'borderRadius': '50%', 'background': c,
-            'marginRight': '3px', 'opacity': str(opacity),
-        }))
-    return html.Div(dots, style={'display': 'inline-flex', 'alignItems': 'center'})
-
-
-def _cross_power_bar(cross_list, max_items=7):
-    """Power bar for crossover — each segment colored by its value's green/red shade."""
-    green_map = {1: '#4de8c8', 2: '#00d2a0', 3: '#009d7a'}
-    red_map   = {1: '#ee7b6e', 2: '#e74c3c', 3: '#c0392b'}
-    bull_count = sum(1 for v in cross_list[:max_items] if v > 0)
-    segs = []
-    for i in range(max_items):
-        if i < len(cross_list):
-            v = cross_list[i]
-            if v > 0:
-                c = green_map.get(v, '#81c784')
-            elif v < 0:
-                c = red_map.get(abs(v), '#e57373')
-            else:
-                c = 'rgba(255,255,255,0.06)'
-        else:
-            c = 'rgba(255,255,255,0.06)'
-        segs.append(html.Span(style={
-            'display': 'inline-block', 'width': '8px', 'height': '16px',
-            'borderRadius': '2px', 'background': c, 'marginRight': '2px',
-        }))
-    p_color = '#00d2a0' if bull_count >= 5 else '#f39c12' if bull_count >= 3 else '#e74c3c'
-    return html.Div([
-        *segs,
-        html.Span(f' {bull_count}', style={
-            'fontSize': '0.75rem', 'fontWeight': '700', 'marginLeft': '4px',
-            'color': p_color if bull_count > 0 else COLORS['text_dim'],
-            'fontFamily': "'JetBrains Mono', monospace",
-        }),
-    ], style={'display': 'inline-flex', 'alignItems': 'center'})
-
-
-def _signal_row(label, icon, color, power, lst):
-    """One compact row for SHA / Price in the signal card — grid layout."""
-    return html.Div(
-        style={
-            'display': 'grid',
-            'gridTemplateColumns': '64px 1fr 1fr',
-            'gap': '8px', 'alignItems': 'center',
-            'padding': '8px 0',
-        },
-        children=[
-            html.Span(f'{icon} {label}', style={
-                'fontWeight': '700', 'fontSize': '0.82rem', 'color': color,
-            }),
-            _power_bar(power),
-            _list_dots(lst),
-        ],
-    )
-
-
-def _build_rsi_row(rsi_value, rsi_mtf=None, rsi_mtf_blocked=False):
-    """Build a compact multi-timeframe RSI indicator section for the SHA analysis panel."""
-
-    def _rsi_color_label(rsi):
-        if rsi <= 30:
-            return '#e74c3c', 'OVERSOLD'
-        elif rsi >= 70:
-            return '#00d2a0', 'OVERBOUGHT'
-        elif rsi >= 50:
-            return '#5dade2', 'NEUTRAL'
-        else:
-            return '#f39c12', 'NEUTRAL'
-
-    def _rsi_mini_row(tf_label, rsi):
-        rsi = round(rsi, 2)
-        color, label = _rsi_color_label(rsi)
-        fill_pct = max(0, min(100, rsi))
-        return html.Div(
-            style={
-                'display': 'grid',
-                'gridTemplateColumns': '36px 1fr auto',
-                'gap': '8px', 'alignItems': 'center',
-                'padding': '3px 0',
-            },
-            children=[
-                html.Span(tf_label, style={
-                    'fontWeight': '600', 'fontSize': '0.7rem',
-                    'color': COLORS['text_secondary'],
-                    'fontFamily': "'JetBrains Mono', monospace",
-                }),
-                html.Div(style={
-                    'width': '100%', 'height': '12px',
-                    'background': 'rgba(255,255,255,0.06)',
-                    'borderRadius': '3px', 'overflow': 'hidden',
-                }, children=[
-                    html.Div(style={
-                        'width': f'{fill_pct}%', 'height': '100%',
-                        'background': color,
-                        'borderRadius': '3px',
-                        'transition': 'width 0.3s ease',
-                    }),
-                ]),
-                html.Div([
-                    html.Span(f'{rsi}', style={
-                        'fontWeight': '700', 'fontSize': '0.82rem',
-                        'color': color,
-                        'fontFamily': "'JetBrains Mono', monospace",
-                        'marginRight': '5px',
-                    }),
-                    html.Span(label, style={
-                        'fontSize': '0.55rem', 'fontWeight': '700',
-                        'color': color,
-                        'background': f'{color}18',
-                        'padding': '1px 6px', 'borderRadius': '6px',
-                        'border': f'1px solid {color}33',
-                    }),
-                ], style={'display': 'flex', 'alignItems': 'center', 'whiteSpace': 'nowrap'}),
-            ],
-        )
-
-    # Build timeframe rows
-    tf_display = {
-        'TIMEFRAME_M1': 'M1',
-        'TIMEFRAME_M5': 'M5',
-        'TIMEFRAME_M15': 'M15',
-        'TIMEFRAME_M30': 'M30',
-        'TIMEFRAME_H1': 'H1',
-        'TIMEFRAME_H4': 'H4',
-        'TIMEFRAME_H6': 'H6',
-    }
-    tf_rows = []
-    if rsi_mtf and len(rsi_mtf) > 0:
-        for tf_key in ['TIMEFRAME_M1', 'TIMEFRAME_M5', 'TIMEFRAME_M15', 'TIMEFRAME_M30',
-                       'TIMEFRAME_H1', 'TIMEFRAME_H4', 'TIMEFRAME_H6']:
-            if tf_key in rsi_mtf:
-                tf_rows.append(_rsi_mini_row(tf_display[tf_key], rsi_mtf[tf_key]))
-    else:
-        tf_rows.append(_rsi_mini_row('M1', rsi_value))
-
-    # Blocked badge
-    blocked_badge = None
-    if rsi_mtf_blocked:
-        blocked_badge = html.Div([
-            html.Span('⛔', style={'fontSize': '10px', 'marginRight': '4px'}),
-            html.Span('MTF RSI BLOCKED', style={
-                'fontSize': '0.6rem', 'fontWeight': '700',
-                'color': '#e74c3c',
-                'letterSpacing': '0.5px',
-            }),
-            html.Span(' — entry paused (one or more TFs at extreme)', style={
-                'fontSize': '0.58rem', 'color': COLORS['text_dim'],
-            }),
-        ], style={
-            'display': 'flex', 'alignItems': 'center',
-            'background': 'rgba(231, 76, 60, 0.08)',
-            'border': '1px solid rgba(231, 76, 60, 0.25)',
-            'borderRadius': '6px',
-            'padding': '4px 10px',
-            'marginTop': '4px',
-        })
-
-    return html.Div(
-        style={
-            'display': 'grid',
-            'gridTemplateColumns': '64px 1fr',
-            'gap': '8px', 'alignItems': 'start',
-            'padding': '8px 0',
-        },
-        children=[
-            html.Span('📊 RSI', style={
-                'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#a78bfa',
-                'paddingTop': '3px',
-            }),
-            html.Div(tf_rows + ([blocked_badge] if blocked_badge else [])),
-        ],
-    )
-
-
-def _slope_cell(sl):
-    """One slope cell: direction arrow + per-bar slope + latest-pivot side/age."""
-    sl = sl or {}
-    sign = sl.get('sign', 0) or 0
-    if sign > 0:
-        arrow, color = '▲', COLORS['buy']
-    elif sign < 0:
-        arrow, color = '▼', COLORS['sell']
-    else:
-        arrow, color = '—', COLORS['text_dim']
-    slope = sl.get('slope')
-    val = f'{slope:+.3f}' if isinstance(slope, (int, float)) else '—'
-    side = sl.get('side')
-    bars = sl.get('bars_ago')
-    sub = f'{side} · {bars}b ago' if side else 'no pivot'
-    return html.Div(
-        style={
-            'display': 'flex', 'flexDirection': 'column', 'gap': '2px',
-            'padding': '6px 10px', 'background': COLORS['bg'],
-            'borderRadius': '8px', 'border': f'1px solid {COLORS["card_border"]}',
-        },
-        children=[
-            html.Span(f'{arrow} {val}', style={
-                'color': color, 'fontWeight': '700', 'fontSize': '0.9rem'}),
-            html.Span(sub, style={'fontSize': '0.6rem', 'color': COLORS['text_muted']}),
-        ],
-    )
-
-
-def _fmt_pivot_val(v, clamp):
-    """Axis/label number format: RSI (clamp set) -> 1dp; MACD (clamp None) ->
-    signed, adaptive precision for the unbounded histogram."""
-    if clamp is not None:
-        return f'{v:.1f}'
-    a = abs(v)
-    if a == 0:
-        return '0'
-    if a < 1:
-        return f'{v:+.5f}'
-    if a < 1000:
-        return f'{v:+.3f}'
-    return f'{v:+.1f}'
-
-
-def _pivot_mini_graph(tf_label, g):
-    """
-    Compact pivot chart for one timeframe/indicator: the recent series line, the
-    latest pivot marker, a dotted line from that pivot to the current value (GREEN
-    if the slope is +ve, RED if -ve, dim if flat), the current-value marker, and
-    reference lines. Works for both RSI (g['clamp']=[0,100], bands=OB/OS)
-    and MACD-histogram (g['clamp']=None -> auto-range, bands=[0] zero line).
-    `g` = analysis['rsi_graphs'|'macd_graphs'][tf]. Wrapped so a bad payload can
-    never break the panel.
-    """
-    g = g or {}
-    name = g.get('name', 'RSI')
+        return None, 'missing'
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _CACHE.get(path)
+    if hit is not None and hit[0] == key:
+        return hit[1], hit[2]
     try:
-        series = [float(v) for v in (g.get('series') or [])]
-        if not series:
-            raise ValueError('no series')
-        cur_x = len(series) - 1
-        current = float(g.get('current', series[-1]))
-        sign = g.get('sign', 0) or 0
-        bands = [float(b) for b in (g.get('bands') or []) if isinstance(b, (int, float))]
-        clamp = g.get('clamp', [0, 100])  # [lo,hi] for RSI; None -> auto-range (MACD)
-        line_color = COLORS['buy'] if sign > 0 else (COLORS['sell'] if sign < 0 else COLORS['text_dim'])
-
-        fig = go.Figure()
-        # reference lines: the RSI OB/OS band, or the MACD zero line
-        for b in bands:
-            fig.add_hline(y=b, line_dash='dot', line_color=COLORS['text_muted'],
-                          line_width=0.8, opacity=0.5)
-        # series line
-        fig.add_trace(go.Scatter(
-            x=list(range(len(series))), y=series, mode='lines',
-            line=dict(color=COLORS['accent'], width=1.6),
-            hoverinfo='skip', showlegend=False,
-        ))
-        # latest pivot -> current dotted line + pivot marker (slope-coloured)
-        pba = g.get('pivot_bars_ago')
-        pv = g.get('pivot_value')
-        if isinstance(pba, int) and pv is not None and 0 <= (cur_x - pba) <= cur_x:
-            piv_x = cur_x - pba
-            fig.add_trace(go.Scatter(
-                x=[piv_x, cur_x], y=[float(pv), current], mode='lines',
-                line=dict(color=line_color, width=1.8, dash='dot'),
-                hoverinfo='skip', showlegend=False,
-            ))
-            fig.add_trace(go.Scatter(
-                x=[piv_x], y=[float(pv)], mode='markers',
-                marker=dict(color=line_color, size=9, symbol='circle',
-                            line=dict(width=1, color=COLORS['bg'])),
-                hoverinfo='skip', showlegend=False,
-            ))
-        # current-value marker
-        fig.add_trace(go.Scatter(
-            x=[cur_x], y=[current], mode='markers',
-            marker=dict(color=COLORS['text'], size=7, symbol='diamond',
-                        line=dict(width=1, color=COLORS['bg'])),
-            hoverinfo='skip', showlegend=False,
-        ))
-        # y-range: RSI clamps to [0,100]; MACD auto-ranges with padding (0 always
-        # in view via the zero band) so the histogram sign is readable.
-        pts = series + bands + [current]
-        pmin, pmax = min(pts), max(pts)
-        if clamp is not None:
-            lo = max(clamp[0], pmin - 5)
-            hi = min(clamp[1], pmax + 5)
-            if hi <= lo:
-                lo, hi = float(clamp[0]), float(clamp[1])
-            ydtick = 20
-        else:
-            span = pmax - pmin
-            pad = (span * 0.12) if span > 0 else (abs(pmax) * 0.12 or 1.0)
-            lo, hi = pmin - pad, pmax + pad
-            if hi <= lo:
-                lo, hi = pmin - 1.0, pmax + 1.0
-            ydtick = None
-        fig.update_layout(
-            height=118, margin=dict(l=38, r=8, t=4, b=4),
-            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(color=COLORS['text_dim'], size=9), showlegend=False,
-        )
-        fig.update_xaxes(visible=False, showgrid=False, range=[0, max(cur_x, 1)])
-        fig.update_yaxes(range=[lo, hi], showgrid=True, gridcolor=COLORS['chart_grid'],
-                         gridwidth=0.5, dtick=ydtick,
-                         tickfont=dict(size=8, color=COLORS['text_muted']))
-
-        arrow = '▲' if sign > 0 else ('▼' if sign < 0 else '—')
-        label = f'{tf_label}  ·  {name} {_fmt_pivot_val(current, clamp)}  {arrow}'
-        return html.Div([
-            html.Div(label, style={
-                'fontSize': '0.62rem', 'color': line_color, 'fontWeight': '700',
-                'padding': '2px 0 0 4px'}),
-            dcc.Graph(figure=fig, config={'displayModeBar': False},
-                      style={'height': '118px'}),
-        ])
-    except Exception:
-        return html.Div(f'{tf_label}: no {name} graph', style={
-            'fontSize': '0.6rem', 'color': COLORS['text_muted'], 'padding': '6px 4px'})
+        with open(path, 'r', encoding='utf-8') as f:
+            data, problem = json.load(f), None
+    except (OSError, ValueError) as e:
+        data, problem = None, f'unreadable ({e.__class__.__name__})'
+    _CACHE[path] = (key, data, problem)
+    return data, problem
 
 
-def _fmt_weights(weights):
-    """Render a section's {TF: weight} map as a compact formula, e.g. {'H4':1,'M5':1} -> '1·H4 + 1·M5'."""
-    return ' + '.join(f'{w:g}·{tf}' for tf, w in weights.items()) if weights else '—'
-
-
-def _score_axis(weights):
-    """Raw-score range for a section = ±(2·Σ|weight|) (e.g. {'H4':1,'M5':1} -> 4). The gauge axis is
-    scaled to this so the marker uses the full bar. Min 1 to avoid a zero-width gauge."""
-    return max(1.0, 2.0 * sum(abs(w) for w in (weights or {}).values()))
-
-
-def _score_gauge(score, axis):
-    """Horizontal −axis…+axis threshold-meter for the OPEN score (RAW weighted sum of config-driven
-    timeframes; see OPEN_SCORE_WEIGHTS) that drives fresh entry + the DCA ladder-add gate. `axis` =
-    ±(2·Σ|weight|) so the bar spans the section's real range. (The force-close runs off the fc_score —
-    see _exit_gauge; profit books on the +$unit target, not a score.)
-    Diverging meter: a grey 'no-open' band spans −ENTRY_S…+ENTRY_S, BUY (+ENTRY_S) and SELL
-    (−ENTRY_S) threshold lines mark where a position opens, the fill is coloured by zone
-    (green BUY / grey within / red SELL) with the current-score marker on top, and the scale
-    is labelled −axis … 0 … +axis. Colour is reinforced by position, the signed value and the zone
-    chip (never colour-alone)."""
-    try:
-        s = float(score)
-    except (TypeError, ValueError):
-        s = 0.0
-    thr = float(ENTRY_S)
-    ax = float(axis) if axis else 1.0
-
-    def pos(x):   # score -> % along the -ax..+ax track (clamped)
-        return max(0.0, min(100.0, (x + ax) / (2.0 * ax) * 100.0))
-
-    sell_pct, buy_pct, zero_pct, p = pos(-thr), pos(thr), pos(0), pos(s)
-    if s >= 0:                                   # diverging fill, anchored at the 0 centre
-        fill_left, fill_width = zero_pct, p - zero_pct
-    else:
-        fill_left, fill_width = p, zero_pct - p
-
-    if s >= thr:                                 # zone -> colour + label (opens only outside the band)
-        col, zone_txt, zone_icon = COLORS['buy'], 'BUY ZONE · opens', '🟢'
-    elif s <= -thr:
-        col, zone_txt, zone_icon = COLORS['sell'], 'SELL ZONE · opens', '🔴'
-    else:
-        col, zone_txt, zone_icon = COLORS['neutral'], f'WAIT · within ±{thr:.0f}', '⚪'
-
-    tip = f'score {s:+.0f}   ·   BUY ≥ +{thr:.0f}   ·   SELL ≤ −{thr:.0f}   ·   range −{ax:.0f}…+{ax:.0f}'
-
-    def _tick(x_pct, label, edge=None):          # axis data-label at a % position
-        st = {'position': 'absolute', 'fontSize': '0.5rem',
-              'color': COLORS['text_muted'], 'whiteSpace': 'nowrap'}
-        if edge == 'left':
-            st['left'] = '0'
-        elif edge == 'right':
-            st['right'] = '0'
-        else:
-            st['left'] = f'{x_pct}%'; st['transform'] = 'translateX(-50%)'
-        return html.Span(label, style=st)
-
-    def _thr_label(x_pct, label, colr):
-        return html.Span(label, style={
-            'position': 'absolute', 'left': f'{x_pct}%', 'transform': 'translateX(-50%)',
-            'fontSize': '0.5rem', 'fontWeight': '700', 'color': colr, 'whiteSpace': 'nowrap'})
-
-    return html.Div(
-        style={'padding': '8px 16px 10px', 'borderBottom': f'1px solid {COLORS["divider"]}'},
-        children=[
-            # header: label + open-threshold note + formula
-            html.Div(style={'display': 'flex', 'justifyContent': 'space-between',
-                            'alignItems': 'baseline', 'marginBottom': '7px'}, children=[
-                html.Span('OPEN SCORE', style={
-                    'fontSize': '0.62rem', 'fontWeight': '700',
-                    'color': COLORS['text_dim'], 'letterSpacing': '0.5px'}),
-                html.Span(f'opens at ±{thr:.0f} · {_fmt_weights(OPEN_SCORE_WEIGHTS)} · grey-filled', style={
-                    'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
-            ]),
-            # value + meter column + zone chip
-            html.Div(style={'display': 'flex', 'alignItems': 'center', 'gap': '10px'},
-                     title=tip, children=[
-                html.Span(f'{s:+.0f}', style={
-                    'fontWeight': '800', 'fontSize': '1.25rem', 'color': col,
-                    'minWidth': '42px', 'textAlign': 'right'}),
-                html.Div(style={'flex': '1'}, children=[
-                    # threshold labels (above the track)
-                    html.Div(style={'position': 'relative', 'height': '11px'}, children=[
-                        _thr_label(sell_pct, f'SELL −{thr:.0f}', COLORS['sell']),
-                        _thr_label(buy_pct, f'BUY +{thr:.0f}', COLORS['buy']),
-                    ]),
-                    # the track
-                    html.Div(style={
-                        'position': 'relative', 'height': '12px',
-                        'background': COLORS['bg'], 'borderRadius': '6px',
-                        'border': f'1px solid {COLORS["card_border"]}',
-                    }, children=[
-                        # grey no-open band (−ENTRY_S … +ENTRY_S)
-                        html.Div(style={'position': 'absolute', 'top': '0', 'bottom': '0',
-                                        'left': f'{sell_pct}%', 'width': f'{buy_pct - sell_pct}%',
-                                        'background': COLORS['neutral'], 'opacity': '0.18'}),
-                        # zone fill (rounded end, anchored at the 0 centre)
-                        html.Div(style={'position': 'absolute', 'top': '1px', 'bottom': '1px',
-                                        'left': f'{fill_left}%', 'width': f'{fill_width}%',
-                                        'background': col, 'borderRadius': '3px', 'opacity': '0.9'}),
-                        # 0 centre line (recessive)
-                        html.Div(style={'position': 'absolute', 'left': f'{zero_pct}%', 'top': '-2px',
-                                        'bottom': '-2px', 'width': '1px', 'background': COLORS['text_muted']}),
-                        # SELL / BUY threshold lines (2px)
-                        html.Div(style={'position': 'absolute', 'left': f'{sell_pct}%', 'top': '-3px',
-                                        'bottom': '-3px', 'width': '2px', 'background': COLORS['sell']}),
-                        html.Div(style={'position': 'absolute', 'left': f'{buy_pct}%', 'top': '-3px',
-                                        'bottom': '-3px', 'width': '2px', 'background': COLORS['buy']}),
-                        # current-score marker (>=8px, 2px surface ring so it reads over the fill)
-                        html.Div(style={'position': 'absolute', 'left': f'{p}%', 'top': '50%',
-                                        'transform': 'translate(-50%, -50%)', 'width': '11px',
-                                        'height': '11px', 'borderRadius': '50%', 'background': col,
-                                        'border': f'2px solid {COLORS["card_solid"]}',
-                                        'boxShadow': f'0 0 0 1px {col}'}),
-                    ]),
-                    # axis data-labels (below the track)
-                    html.Div(style={'position': 'relative', 'height': '12px', 'marginTop': '3px'}, children=[
-                        _tick(0, f'−{ax:.0f}', edge='left'),
-                        _tick(sell_pct, f'−{thr:.0f}'),
-                        _tick(zero_pct, '0'),
-                        _tick(buy_pct, f'+{thr:.0f}'),
-                        _tick(0, f'+{ax:.0f}', edge='right'),
-                    ]),
-                ]),
-                # zone chip (icon + label -> meaning is never colour-alone)
-                html.Span(f'{zone_icon} {zone_txt}', style={
-                    'fontSize': '0.55rem', 'fontWeight': '700', 'color': col,
-                    'background': COLORS['bg'], 'padding': '2px 8px', 'borderRadius': '9px',
-                    'border': f'1px solid {col}', 'whiteSpace': 'nowrap'}),
-            ]),
-        ],
-    )
-
-
-def _exit_gauge(value, title, formula, thr, col, icon, axis, entry_agree=None):
-    """Horizontal −axis…+axis meter for ONE exit section's score (book or force-close; RAW weighted sum
-    of config-driven timeframes). `axis` = ±(2·Σ|weight|) so the bar spans the section's real range.
-    One threshold pair is marked at ±thr in `col`: beyond it the section ACTS (closes), within it is
-    HOLD (grey). The negative side closes a LONG, the positive side a SHORT; the fill + marker show the
-    live score. `title` (e.g. 'FORCE-CLOSE SCORE') and `formula` label the section; `col`/`icon` give it
-    its colour. Colour is always paired with the signed value, the threshold number and the zone chip
-    (never colour-alone)."""
-    try:
-        s = float(value)
-    except (TypeError, ValueError):
-        s = 0.0
-    t = float(thr)
-    ax = float(axis) if axis else 1.0
-    name = title.split()[0]   # 'FORCE-CLOSE' / 'BOOK' for the chip
-
-    def pos(x):   # score -> % along the -ax..+ax track (clamped)
-        return max(0.0, min(100.0, (x + ax) / (2.0 * ax) * 100.0))
-
-    t_neg, t_pos = pos(-t), pos(t)
-    # entry-agreement marks (force-close meter only): a NEW trade may OPEN only where the force-close
-    # score FULLY agrees (|fc_score| >= ENTRY_AGREE_S) -- drawn in green at ±entry_agree, outside the
-    # red ±thr close lines.
-    _ea = float(entry_agree) if entry_agree is not None else None
-    ea_neg = pos(-_ea) if _ea is not None else None
-    ea_pos = pos(_ea) if _ea is not None else None
-    _buycol = COLORS['buy']
-    zero_pct, p = pos(0), pos(s)
-    if s >= 0:                                   # diverging fill, anchored at the 0 centre
-        fill_left, fill_width = zero_pct, p - zero_pct
-    else:
-        fill_left, fill_width = p, zero_pct - p
-
-    mag = abs(s)
-    side = 'LONG' if s < 0 else ('SHORT' if s > 0 else '')
-    if mag >= t:                                 # zone -> colour + label
-        zcol, zone_txt, zone_icon = col, f'{name} · closes {side}', icon
-    else:
-        zcol, zone_txt, zone_icon = COLORS['neutral'], 'HOLD · within ±%.0f' % t, '⚪'
-
-    tip = (f'{title.lower()} {s:+.0f}   ·   acts at ±{t:.0f}   ·   '
-           f'{("closes " + side) if side else "neutral"}   ·   range −{ax:.0f}…+{ax:.0f}')
-
-    def _tick(x_pct, label, edge=None):          # axis data-label at a % position
-        st = {'position': 'absolute', 'fontSize': '0.5rem',
-              'color': COLORS['text_muted'], 'whiteSpace': 'nowrap'}
-        if edge == 'left':
-            st['left'] = '0'
-        elif edge == 'right':
-            st['right'] = '0'
-        else:
-            st['left'] = f'{x_pct}%'; st['transform'] = 'translateX(-50%)'
-        return html.Span(label, style=st)
-
-    def _thr_label(x_pct, label, colr):
-        return html.Span(label, style={
-            'position': 'absolute', 'left': f'{x_pct}%', 'transform': 'translateX(-50%)',
-            'fontSize': '0.5rem', 'fontWeight': '700', 'color': colr, 'whiteSpace': 'nowrap'})
-
-    def _band(left_pct, width_pct, colr, op):    # background severity band
-        return html.Div(style={'position': 'absolute', 'top': '0', 'bottom': '0',
-                               'left': f'{left_pct}%', 'width': f'{width_pct}%',
-                               'background': colr, 'opacity': op})
-
-    def _line(x_pct, colr, w):                    # threshold / centre line
-        return html.Div(style={'position': 'absolute', 'left': f'{x_pct}%', 'top': '-3px',
-                               'bottom': '-3px', 'width': w, 'background': colr})
-
-    return html.Div(
-        style={'padding': '8px 16px 10px', 'borderBottom': f'1px solid {COLORS["divider"]}'},
-        children=[
-            # header: label + threshold note + formula
-            html.Div(style={'display': 'flex', 'justifyContent': 'space-between',
-                            'alignItems': 'baseline', 'marginBottom': '7px'}, children=[
-                html.Span(title, style={
-                    'fontSize': '0.62rem', 'fontWeight': '700',
-                    'color': COLORS['text_dim'], 'letterSpacing': '0.5px'}),
-                html.Span([
-                    f'closes at ±{t:.0f}',
-                    html.Span(f' · opens at ±{_ea:.0f}',
-                              style={'color': _buycol, 'fontWeight': '700'}) if _ea is not None else '',
-                    f' · {formula}',
-                ], style={'fontSize': '0.55rem', 'color': COLORS['text_muted']}),
-            ]),
-            # value + meter column + zone chip
-            html.Div(style={'display': 'flex', 'alignItems': 'center', 'gap': '10px'},
-                     title=tip, children=[
-                html.Span(f'{s:+.0f}', style={
-                    'fontWeight': '800', 'fontSize': '1.25rem', 'color': zcol,
-                    'minWidth': '42px', 'textAlign': 'right'}),
-                html.Div(style={'flex': '1'}, children=[
-                    # threshold labels (above the track), both sides
-                    html.Div(style={'position': 'relative', 'height': '11px'}, children=[
-                        _thr_label(t_neg, f'−{t:.0f}', col),
-                        _thr_label(t_pos, f'+{t:.0f}', col),
-                    ]),
-                    # the track
-                    html.Div(style={
-                        'position': 'relative', 'height': '12px',
-                        'background': COLORS['bg'], 'borderRadius': '6px',
-                        'border': f'1px solid {COLORS["card_border"]}',
-                    }, children=[
-                        # bands: grey hold (centre) · col = act zone (edges)
-                        _band(t_neg, t_pos - t_neg, COLORS['neutral'], '0.12'),
-                        _band(0, t_neg, col, '0.15'),
-                        _band(t_pos, 100 - t_pos, col, '0.15'),
-                        # zone fill (rounded end, anchored at the 0 centre)
-                        html.Div(style={'position': 'absolute', 'top': '1px', 'bottom': '1px',
-                                        'left': f'{fill_left}%', 'width': f'{fill_width}%',
-                                        'background': zcol, 'borderRadius': '3px', 'opacity': '0.9'}),
-                        # 0 centre line (recessive)
-                        html.Div(style={'position': 'absolute', 'left': f'{zero_pct}%', 'top': '-2px',
-                                        'bottom': '-2px', 'width': '1px', 'background': COLORS['text_muted']}),
-                        # threshold lines (2px): red = close (±thr); green = entry-agree (±ENTRY_AGREE_S,
-                        # where a new trade may OPEN) -- force-close meter only
-                        _line(t_neg, col, '2px'),
-                        _line(t_pos, col, '2px'),
-                        *([_line(ea_neg, _buycol, '2px'), _line(ea_pos, _buycol, '2px')]
-                          if _ea is not None else []),
-                        # current-score marker (2px surface ring so it reads over the fill)
-                        html.Div(style={'position': 'absolute', 'left': f'{p}%', 'top': '50%',
-                                        'transform': 'translate(-50%, -50%)', 'width': '11px',
-                                        'height': '11px', 'borderRadius': '50%', 'background': zcol,
-                                        'border': f'2px solid {COLORS["card_solid"]}',
-                                        'boxShadow': f'0 0 0 1px {zcol}'}),
-                    ]),
-                    # axis data-labels + side meaning (below the track)
-                    html.Div(style={'position': 'relative', 'height': '12px', 'marginTop': '3px'}, children=[
-                        _tick(0, f'◀ −{ax:.0f} LONG', edge='left'),
-                        _tick(zero_pct, '0'),
-                        _tick(0, f'SHORT +{ax:.0f} ▶', edge='right'),
-                    ]),
-                ]),
-                # zone chip (icon + label -> meaning is never colour-alone)
-                html.Span(f'{zone_icon} {zone_txt}', style={
-                    'fontSize': '0.55rem', 'fontWeight': '700', 'color': zcol,
-                    'background': COLORS['bg'], 'padding': '2px 8px', 'borderRadius': '9px',
-                    'border': f'1px solid {zcol}', 'whiteSpace': 'nowrap'}),
-            ]),
-        ],
-    )
-
-
-def build_slope_panel(symbol, analysis, last_updated=''):
-    """RSI+MACD slope panel — D1/15M/H1/H4 pivot slopes (feed the slow entry + fast exit scores) + the decision."""
-    slopes = analysis.get('slopes', {}) or {}
-    decision = analysis.get('entry_direction', analysis.get('slope_direction', 'WAIT')) or 'WAIT'
-    structural = analysis.get('slope_direction', 'WAIT') or 'WAIT'
-    entry_allowed = analysis.get('entry_allowed', True)
-    entry_chop_block = analysis.get('entry_chop_block', False)
-    exit_reason = analysis.get('exit_reason')
-    rsi_value = analysis.get('rsi_value', 50.0)
-    rsi_mtf = analysis.get('rsi_mtf', {})
-    rsi_graphs = analysis.get('rsi_graphs', {}) or {}
-    macd_graphs = analysis.get('macd_graphs', {}) or {}
-    open_score = analysis.get('open_score', 0)
-    fc_score = analysis.get('fc_score', 0)
-    iteration_ms = analysis.get('iteration_ms')
-    src_count = analysis.get('source_candle_count', 0)
-    src_last_time = analysis.get('last_source_candle_time', '-')
-
-    # slope rows shown slowest -> fastest, limited to the timeframes actually fetched (= the union of
-    # the section timeframe sets); adding a TF to a section auto-adds its row + pivot charts here.
-    _tf_order = [tf for tf in ('D1', 'H4', 'H1', 'M30', 'M15', 'M5', 'M1') if tf in (slopes or {})]
-
-    dec_color = {'BUY': COLORS['buy'], 'SELL': COLORS['sell']}.get(decision, COLORS['text_dim'])
-    dec_icon = {'BUY': '🟢', 'SELL': '🔴'}.get(decision, '⚪')
-
-    status_bits = []
-    if not entry_allowed:
-        _left = analysis.get('pause_left_s')
+def file_sig(*paths):
+    """A cheap fingerprint of files (size and modification time): it changes when any of them changes."""
+    out = []
+    for p in paths:
         try:
-            _left = float(_left) if _left is not None else None
-        except (TypeError, ValueError):
-            _left = None
-        if _left and _left > 0:
-            status_bits.append(f'⏳ entry pause {_left / 3600.0:.1f} h left'
-                               + (' (after a loss)' if analysis.get('last_close_lost') else ''))
-        else:
-            status_bits.append('⏳ entry cooldown')
-    if entry_chop_block:
-        status_bits.append('🌀 waiting: fast/slow disagree')
-    if exit_reason:
-        status_bits.append(f'exit: {exit_reason}')
-    # demo design (constants.py design levers): the name, the H1 trend and the open basket's fixed distances
-    _design = analysis.get('design')
-    if _design and _design != 'live':
-        status_bits.append(f'design {_design}')
-    _trend = analysis.get('trend')
-    if _trend is not None:
-        status_bits.append('trend ' + {1: '▲ up', -1: '▼ down'}.get(_trend, '– none'))
-    _lv = analysis.get('basket_levels') or {}
-    if isinstance(_lv, dict) and (_lv.get('stop_usd') is not None or _lv.get('target_usd') is not None):
-        _fmt = lambda x: '-' if x is None else f'${x:,.2f}'
-        status_bits.append(f"stop {_fmt(_lv.get('stop_usd'))} · target {_fmt(_lv.get('target_usd'))}"
-                           + (' · add armed' if _lv.get('ladder_armed') else ''))
-    _vb = analysis.get('virtual_balance')
-    if isinstance(_vb, (int, float)):
-        status_bits.append(f'virtual balance ${_vb:,.2f}')
-    # Structural 4H/1H/15M slope read, shown for comparison (the live entry uses the weighted score).
-    if structural != decision:
-        status_bits.append(f'structural {structural}')
-    status_text = '   ·   '.join(status_bits) if status_bits else 'idle'
-
-    col_hdr = {'fontSize': '0.62rem', 'color': COLORS['text_dim'], 'fontWeight': '600'}
-    row_lbl = {'fontWeight': '700', 'color': COLORS['text'], 'fontSize': '0.8rem'}
-    grid_style = {
-        'display': 'grid', 'gridTemplateColumns': '34px 1fr 1fr',
-        'gap': '8px', 'alignItems': 'center', 'padding': '10px 16px',
-    }
-
-    return html.Div(
-        style={
-            'background': COLORS['card_solid'], 'borderRadius': '12px',
-            'overflow': 'hidden', 'border': f'1px solid {COLORS["card_border"]}',
-        },
-        children=[
-            # Header: symbol + decision
-            html.Div(
-                style={
-                    'display': 'flex', 'justifyContent': 'space-between',
-                    'alignItems': 'center', 'padding': '10px 16px',
-                    'borderBottom': f'2px solid {dec_color}',
-                },
-                children=[
-                    html.Span(symbol, style={
-                        'fontWeight': '700', 'fontSize': '0.95rem',
-                        'color': COLORS['text'], 'letterSpacing': '1px'}),
-                    html.Span(f'{dec_icon} {decision}', style={
-                        'color': dec_color, 'fontWeight': '700', 'fontSize': '0.8rem',
-                        'background': COLORS['bg'], 'padding': '2px 10px',
-                        'borderRadius': '10px'}),
-                ],
-            ),
-            # OPEN score meter (config-driven timeframes -> fresh entry + DCA ladder-add gate)
-            _score_gauge(open_score, _score_axis(OPEN_SCORE_WEIGHTS)),
-            # FORCE-CLOSE score meter (config-driven -> force-close; +$unit target books profit)
-            _exit_gauge(fc_score,
-                        'FORCE-CLOSE SCORE' if analysis.get('force_close_enabled', True)
-                        else 'FORCE-CLOSE OFF · ENTRY AGREEMENT ONLY',
-                        _fmt_weights(FORCE_CLOSE_SCORE_WEIGHTS),
-                        FORCE_CLOSE_S, COLORS['sell'], '🔴', _score_axis(FORCE_CLOSE_SCORE_WEIGHTS),
-                        entry_agree=ENTRY_AGREE_S),
-            # slope grid (one row per fetched timeframe, slowest -> fastest; feeds the section scores)
-            html.Div(style=grid_style, children=[
-                html.Span(''), html.Span('RSI', style=col_hdr), html.Span('MACD', style=col_hdr),
-                *[cell for tf in _tf_order for cell in (
-                    html.Span(tf, style=row_lbl),
-                    _slope_cell((slopes.get(tf, {}) or {}).get('rsi')),
-                    _slope_cell((slopes.get(tf, {}) or {}).get('macd')),
-                )],
-            ]),
-            # Pivot mini-charts — RSI (left) + MACD-hist (right) per timeframe:
-            # series line + latest-pivot marker + dotted peak->current slope line
-            # (green +ve / red -ve) + reference lines (RSI OB/OS band; MACD 0).
-            html.Div(style={'padding': '2px 12px 2px'}, children=[
-                html.Div('Pivots — peak → current (green up · red down)   ·   RSI left · MACD right', style={
-                    'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                    'fontWeight': '600', 'padding': '4px 0 2px 4px'}),
-                html.Div(style={
-                    'display': 'grid', 'gridTemplateColumns': '1fr 1fr',
-                    'columnGap': '10px', 'rowGap': '2px',
-                }, children=[
-                    *[g for tf in _tf_order for g in (
-                        _pivot_mini_graph(tf, rsi_graphs.get(tf)),
-                        _pivot_mini_graph(tf, macd_graphs.get(tf)),
-                    )],
-                ]),
-            ]),
-            # Status (cooldown / exit reason)
-            html.Div(status_text, style={
-                'padding': '6px 16px', 'fontSize': '0.68rem',
-                'color': COLORS['warning'] if (not entry_allowed or exit_reason) else COLORS['text_dim'],
-                'borderTop': f'1px solid {COLORS["divider"]}'}),
-            # Multi-timeframe RSI (reused helper)
-            html.Div(style={'padding': '0 16px 8px'}, children=[
-                _build_rsi_row(rsi_value, rsi_mtf=rsi_mtf, rsi_mtf_blocked=False),
-            ]),
-            # Footer
-            html.Div(
-                f'{last_updated}  |  ITER:{(str(iteration_ms) + "ms") if iteration_ms is not None else "-"}  |  '
-                f'SRC:{src_count}  LAST:{src_last_time}',
-                style={
-                    'padding': '8px 16px', 'fontSize': '0.6rem',
-                    'color': COLORS['text_muted'],
-                    'borderTop': f'1px solid {COLORS["divider"]}'},
-            ),
-        ],
-    )
+            st = os.stat(p)
+            out.append(f'{st.st_size}:{st.st_mtime_ns}')
+        except OSError:
+            out.append('-')
+    return '|'.join(out)
 
 
-def build_sha_analysis_panel(symbol, analysis, last_updated=''):
-    """Build clean SHA analysis card — Ballom-inspired grid layout."""
-    sha_list = analysis.get('sha_power_list', [])
-    price_list = analysis.get('price_power_list', [])
-    crossover = analysis.get('crossover', [])
-    sha_buy = analysis.get('sha_buy_strength', 0)
-    sha_sell = analysis.get('sha_sell_strength', 0)
-    price_buy = analysis.get('price_buy_strength', 0)
-    price_sell = analysis.get('price_sell_strength', 0)
-
-    # Trend SHA data
-    trend_list = analysis.get('sha_trend_power_list', [])
-    trend_buy = analysis.get('sha_trend_buy_strength', 0)
-    trend_sell = analysis.get('sha_trend_sell_strength', 0)
-
-    # RSI data
-    rsi_value = analysis.get('rsi_value', 50.0)
-    rsi_mtf = analysis.get('rsi_mtf', {})
-    rsi_mtf_blocked = analysis.get('rsi_mtf_blocked', False)
-    lookback_used = analysis.get('lookback_used', len(sha_list))
-    src_count = analysis.get('source_candle_count', 0)
-    src_last_time = analysis.get('last_source_candle_time', '-')
-    rates_source = analysis.get('rates_source', 'unknown')
-    synthetic_bar = analysis.get('synthetic_bar', False)
-    tick_rebuilt = analysis.get('tick_rebuilt', False)
-    iteration_ms = analysis.get('iteration_ms')
-    sha_timeframe = analysis.get('sha_timeframe', '-')
-    sha_config = analysis.get('sha_config', '-')
-
-    # Overall bias (includes trend)
-    total_buy = sha_buy + price_buy + trend_buy
-    total_sell = sha_sell + price_sell + trend_sell
-    is_bullish = total_buy >= total_sell
-    bias_text = 'BULLISH' if is_bullish else 'BEARISH'
-    bias_icon = '📈' if is_bullish else '📉'
-    bias_color = '#00d2a0' if is_bullish else '#e74c3c'
-    trend_bg = 'rgba(0, 210, 160, 0.08)' if is_bullish else 'rgba(231, 76, 60, 0.08)'
-
-    # Column header style
-    col_hdr = {
-        'fontSize': '0.65rem', 'color': COLORS['text_dim'],
-        'fontWeight': '600', 'letterSpacing': '0.5px',
-    }
-
-    # Divider line
-    row_divider = html.Hr(style={
-        'border': 'none',
-        'borderTop': f'1px solid {COLORS["divider"]}',
-        'margin': '0',
-    })
-
-    # Crossover row — same 3-column grid as SHA / Price
-    cross_row = html.Div(
-        style={
-            'display': 'grid',
-            'gridTemplateColumns': '64px 1fr 1fr',
-            'gap': '8px', 'alignItems': 'center',
-            'padding': '8px 0',
-        },
-        children=[
-            html.Span('🔀 Cross', style={
-                'fontWeight': '700', 'fontSize': '0.82rem', 'color': '#f39c12',
-            }),
-            _cross_power_bar(crossover),
-            _cross_dots(crossover),
-        ],
-    )
-
-    return html.Div(
-        style={
-            'background': COLORS['card_solid'],
-            'borderRadius': '12px',
-            'overflow': 'hidden',
-            'border': f'1px solid {COLORS["card_border"]}',
-        },
-        children=[
-            # ── Header bar ──
-            html.Div(
-                style={
-                    'display': 'flex', 'justifyContent': 'space-between',
-                    'alignItems': 'center', 'padding': '10px 16px',
-                    'background': trend_bg,
-                    'borderBottom': f'2px solid {bias_color}',
-                },
-                children=[
-                    html.Span(symbol, style={
-                        'fontWeight': '700', 'fontSize': '0.95rem',
-                        'color': COLORS['text'], 'letterSpacing': '1px',
-                    }),
-                    html.Span(f'{bias_icon} {bias_text}', style={
-                        'color': bias_color, 'fontWeight': '700',
-                        'fontSize': '0.8rem',
-                        'background': COLORS['card_solid'],
-                        'padding': '2px 10px', 'borderRadius': '10px',
-                    }),
-                ],
-            ),
-            # ── Column headers ──
-            html.Div(
-                style={
-                    'display': 'grid',
-                    'gridTemplateColumns': '64px 1fr 1fr',
-                    'gap': '8px', 'padding': '8px 16px 0',
-                },
-                children=[
-                    html.Span(''),
-                    html.Span('POWER', style=col_hdr),
-                    html.Span('CANDLES', style=col_hdr),
-                ],
-            ),
-            # ── Signal + Trend + Price + Cross + Gap rows ──
-            html.Div(style={'padding': '0 16px 10px'}, children=[
-                _signal_row('Signal', '🔵', '#5dade2', sha_buy, sha_list),
-                row_divider,
-                _signal_row('Trend', '🟣', '#a78bfa', trend_buy, trend_list),
-                row_divider,
-                _signal_row('Price', '🔴', '#e74c3c', price_buy, price_list),
-                row_divider,
-                cross_row,
-                row_divider,
-                _build_rsi_row(rsi_value, rsi_mtf=rsi_mtf, rsi_mtf_blocked=rsi_mtf_blocked),
-            ]),
-            # ── Legend ──
-            html.Div(
-                style={
-                    'padding': '8px 16px 10px',
-                    'borderTop': f'1px solid {COLORS["divider"]}',
-                    'display': 'flex',
-                    'flexWrap': 'wrap',
-                    'gap': '16px',
-                    'alignItems': 'center',
-                },
-                children=[
-                    html.Span('LEGEND', style={
-                        'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                        'fontWeight': '700', 'letterSpacing': '1px',
-                        'marginRight': '4px',
-                    }),
-                    # Candle dots legend
-                    html.Div([
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#00d2a0',
-                            'marginRight': '4px', 'verticalAlign': 'middle',
-                        }),
-                        html.Span('Bullish', style={
-                            'fontSize': '0.65rem', 'color': COLORS['text_secondary'],
-                            'verticalAlign': 'middle',
-                        }),
-                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
-                    html.Div([
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#e74c3c',
-                            'marginRight': '4px', 'verticalAlign': 'middle',
-                        }),
-                        html.Span('Bearish', style={
-                            'fontSize': '0.65rem', 'color': COLORS['text_secondary'],
-                            'verticalAlign': 'middle',
-                        }),
-                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
-                    # Divider
-                    html.Span('│', style={
-                        'color': COLORS['text_muted'], 'fontSize': '0.75rem',
-                    }),
-                    # Crossover intensity legend
-                    html.Span('Cross:', style={
-                        'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                        'fontWeight': '600', 'letterSpacing': '0.5px',
-                    }),
-                    html.Div([
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#4de8c8',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('Light', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                            'marginRight': '8px',
-                        }),
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#00d2a0',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('Medium', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                            'marginRight': '8px',
-                        }),
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#009d7a',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('Strong', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                        }),
-                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
-                    html.Div([
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#ee7b6e',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('Light', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                            'marginRight': '8px',
-                        }),
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#e74c3c',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('Medium', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                            'marginRight': '8px',
-                        }),
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#c0392b',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('Strong', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                        }),
-                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
-                    # Divider
-                    html.Span('│', style={
-                        'color': COLORS['text_muted'], 'fontSize': '0.75rem',
-                    }),
-                    # RSI legend
-                    html.Span('RSI:', style={
-                        'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                        'fontWeight': '600', 'letterSpacing': '0.5px',
-                    }),
-                    html.Div([
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#e74c3c',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('≤30 Over-sold', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                            'marginRight': '8px',
-                        }),
-                        html.Span(style={
-                            'display': 'inline-block', 'width': '8px', 'height': '8px',
-                            'borderRadius': '50%', 'background': '#00d2a0',
-                            'marginRight': '3px',
-                        }),
-                        html.Span('≥70 Over-bought', style={
-                            'fontSize': '0.6rem', 'color': COLORS['text_dim'],
-                        }),
-                    ], style={'display': 'inline-flex', 'alignItems': 'center'}),
-                ],
-            ),
-            # ── Footer timestamp ──
-            html.Div(
-                f'{last_updated}  |  SHA:{sha_timeframe} {sha_config}  '
-                f'ITER:{(str(iteration_ms) + "ms") if iteration_ms is not None else "-"}  |  '
-                f'LKB:{lookback_used}  SRC:{src_count}  LAST:{src_last_time}  |  '
-                f'SRC_API:{rates_source}  SYN:{synthetic_bar}  REBUILD:{tick_rebuilt}',
-                style={
-                'fontSize': '0.65rem', 'color': COLORS['text_muted'],
-                'padding': '4px 16px 8px', 'textAlign': 'right',
-                'fontFamily': "'JetBrains Mono', monospace",
-            }),
-        ],
-    )
+def trace_path(sym):
+    return _path(f'{sym}_trace.json')
 
 
-# ─── Daily Trade Functions ───
+def bars_path(sym):
+    return _path(f'{sym}_bars.json')
 
-def load_daily_trade_data(symbol):
-    """Load the most recent daily trade log for a specific symbol."""
+
+def trades_path(sym):
+    return _path(f'{sym}_trades.json')
+
+
+def events_path(sym):
+    return _path('logs', f'{sym}_events.jsonl')
+
+
+def text_log_path(sym, day):
+    return _path('logs', f'{sym}_{day}.log')
+
+
+def load(sym):
+    """Everything the Live and Trades tabs read for one symbol; a file that is missing or unreadable is None."""
+    out = {'symbol': sym}
+    for key, path in (('trace', trace_path(sym)), ('bars', bars_path(sym)), ('trades', trades_path(sym)),
+                      ('old', _path(f'{sym}.json')), ('account', _path('account.json'))):
+        data, problem = read_json(path)
+        out[key] = data if isinstance(data, dict) else None
+        out[key + '_problem'] = problem if data is None else (None if isinstance(data, dict) else 'not an object')
+    return out
+
+
+def symbols():
+    """The symbols with a trace file in OUTPUT_DIR, else those of symbols.json."""
     try:
-        symbol_dir = os.path.join(DAILY_TRADE_DIR, symbol)
-        if not os.path.isdir(symbol_dir):
-            return None
-        pattern = os.path.join(symbol_dir, '*.json')
-        files = [
-            f for f in glob.glob(pattern)
-            if os.path.basename(f) != HISTORICAL_SUMMARY_FILENAME
-        ]
-        if not files:
-            return None
-        latest = max(files, key=os.path.getmtime)
-        with open(latest, 'r') as f:
-            data = json.load(f)
-
-        symbol_json = load_symbol_data(symbol)
-        market_is_open = True
-        if symbol_json:
-            market_is_open = symbol_json.get('market_status', {}).get('is_open', True)
-
-        if not market_is_open:
-            file_server_date = data.get('server_date', '')
-            try:
-                file_date = datetime.strptime(file_server_date, '%Y-%m-%d').date()
-                if file_date != datetime.now(tz=timezone.utc).date():
-                    return None
-            except (ValueError, TypeError):
-                pass
-
-        return data
-    except (FileNotFoundError, json.JSONDecodeError, ValueError):
-        return None
-
-
-def load_daily_trade_data_for_date(symbol, date_str):
-    """Load daily trade data for a specific date (YYYY-MM-DD) for a symbol."""
+        found = sorted(os.path.basename(p)[:-len('_trace.json')] for p in glob.glob(_path('*_trace.json')))
+    except OSError:
+        found = []
+    if found:
+        return found
     try:
-        symbol_dir = os.path.join(DAILY_TRADE_DIR, symbol)
-        if not os.path.isdir(symbol_dir):
-            return None
-        # Try matching by server_date inside each JSON file
-        pattern = os.path.join(symbol_dir, '*.json')
-        files = [
-            f for f in glob.glob(pattern)
-            if os.path.basename(f) != HISTORICAL_SUMMARY_FILENAME
-        ]
-        for fpath in files:
-            try:
-                with open(fpath, 'r') as f:
-                    data = json.load(f)
-                if data.get('server_date', '') == date_str:
-                    return data
-            except (json.JSONDecodeError, IOError):
-                continue
-        return None
-    except Exception:
-        return None
-
-
-def get_available_daily_dates(symbol, max_days=7):
-    """Return a list of (date_str, label) for the last `max_days` days."""
-    today = datetime.now(tz=timezone.utc).date()
-    result = []
-    for i in range(max_days):
-        d = today - timedelta(days=i)
-        ds = d.strftime('%Y-%m-%d')
-        if d == today:
-            label = f'Today ({ds})'
-        else:
-            label = ds
-        result.append({'label': label, 'value': ds})
-    return result
-
-
-def load_historical_summary(symbol):
-    """Load the historical summary (last 10 years) for a specific symbol"""
-    path = os.path.join(DAILY_TRADE_DIR, symbol, HISTORICAL_SUMMARY_FILENAME)
-    try:
-        with open(path, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return None
-
-
-def load_today_all_symbols_pl():
-    """Calculate today's total P/L across all symbols by scanning per-symbol folders"""
-    total_pl = 0.0
-    total_deals = 0
-    try:
-        if not os.path.isdir(DAILY_TRADE_DIR):
-            return 0, 0
-        for entry in os.listdir(DAILY_TRADE_DIR):
-            folder_path = os.path.join(DAILY_TRADE_DIR, entry)
-            if not os.path.isdir(folder_path):
-                continue
-            data = load_daily_trade_data(entry)
-            if data:
-                total_pl += data.get('total_profit', 0)
-                total_deals += data.get('deal_count', 0)
-    except Exception:
-        pass
-    return round(total_pl, 2), total_deals
-
-
-def _build_daily_chart(deals):
-    """Build the Plotly chart (bar + cumulative) from a list of deals. Returns a Dash component."""
-    if not deals:
-        return html.Div([
-            html.Div('📭', style={'fontSize': '32px', 'marginBottom': '8px', 'opacity': '0.5'}),
-            html.Div('No closed deals for this day', style={
-                'color': COLORS['text_dim'], 'fontSize': '13px',
-            }),
-        ], style={'textAlign': 'center', 'padding': '48px 0'})
-
-    sorted_deals = sorted(deals, key=lambda d: d.get('time', ''))
-
-    labels = []
-    profits = []
-    volumes = []
-    colors = []
-    hover_texts = []
-    cumulative_profit = 0
-    cum_profits = []
-    peak = 0
-    peaks = []
-    drawdowns = []
-    dd_pcts = []
-
-    for i, deal in enumerate(sorted_deals, 1):
-        try:
-            t = datetime.fromisoformat(deal['time']).strftime('%H:%M')
-        except (ValueError, TypeError):
-            t = f'#{i}'
-        labels.append(f'{t}')
-        profit = deal.get('net_profit', deal.get('profit', 0))
-        profits.append(profit)
-        vol = deal.get('volume', 0)
-        volumes.append(vol)
-        colors.append(COLORS['buy'] if profit >= 0 else COLORS['sell'])
-        cumulative_profit += profit
-        cum_profits.append(round(cumulative_profit, 2))
-        if cumulative_profit > peak:
-            peak = cumulative_profit
-        peaks.append(round(peak, 2))
-        dd = peak - cumulative_profit
-        drawdowns.append(round(dd, 2))
-        dd_pct = (dd / peak * 100) if peak > 0 else 0
-        dd_pcts.append(round(dd_pct, 2))
-        raw_profit = deal.get('profit', 0)
-        commission = deal.get('commission', 0)
-        swap = deal.get('swap', 0)
-        fee = deal.get('fee', 0)
-        hover_texts.append(
-            f"Time: {t}<br>"
-            f"Type: {deal.get('type', 'N/A')}<br>"
-            f"Volume: {vol}<br>"
-            f"Gross Profit: ${raw_profit:.2f}<br>"
-            f"Commission: ${commission:.2f}<br>"
-            f"Swap: ${swap:.2f}<br>"
-            f"Fee: ${fee:.2f}<br>"
-            f"Net P/L: ${profit:.2f}<br>"
-            f"Cumulative: ${cumulative_profit:.2f}<br>"
-            f"Peak: ${peak:.2f}<br>"
-            f"Drawdown: ${dd:.2f} ({dd_pct:.1f}%)"
-        )
-
-    max_dd = max(drawdowns) if drawdowns else 0
-    max_dd_pct = max(dd_pcts) if dd_pcts else 0
-
-    fig = make_subplots(
-        rows=2, cols=1,
-        row_heights=[0.45, 0.55],
-        vertical_spacing=0.14,
-        subplot_titles=['Profit/Loss per Deal', 'Cumulative P/L & Drawdown'],
-    )
-
-    n_deals = len(sorted_deals)
-    show_bar_text = n_deals <= GRAPH_TEXT_LABEL_THRESHOLD
-    show_cum_text = n_deals <= GRAPH_CUM_LABEL_THRESHOLD
-
-    fig.add_trace(go.Bar(
-        x=labels, y=profits,
-        marker=dict(color=colors, line=dict(width=0)),
-        text=[f'${p:.2f}' for p in profits] if show_bar_text else None,
-        textposition='outside' if show_bar_text else None,
-        textfont=dict(size=10, color=COLORS['text_secondary'], family="'Inter', sans-serif") if show_bar_text else None,
-        hovertext=hover_texts,
-        hoverinfo='text',
-        showlegend=False,
-    ), row=1, col=1)
-
-    cum_color = COLORS['positive'] if cumulative_profit >= 0 else COLORS['negative']
-    _r, _g, _b = int(cum_color[1:3], 16), int(cum_color[3:5], 16), int(cum_color[5:7], 16)
-    cum_fill = f'rgba({_r},{_g},{_b},0.05)'
-
-    cum_mode = 'lines+markers+text' if show_cum_text else 'lines'
-    cum_marker = dict(size=5, color=cum_color, line=dict(width=1, color=COLORS['bg'])) if show_cum_text else dict(size=0)
-    fig.add_trace(go.Scatter(
-        x=labels, y=cum_profits,
-        mode=cum_mode,
-        line=dict(color=cum_color, width=2, shape='spline'),
-        marker=cum_marker,
-        text=[f'${c:.0f}' for c in cum_profits] if show_cum_text else None,
-        textposition='top center' if show_cum_text else None,
-        textfont=dict(size=9, color=COLORS['text_dim'], family="'Inter', sans-serif") if show_cum_text else None,
-        showlegend=False,
-        fill='tozeroy',
-        fillcolor=cum_fill,
-        name='Cumulative P/L',
-    ), row=2, col=1)
-
-    # Peak line (gold dashed)
-    fig.add_trace(go.Scatter(
-        x=labels, y=peaks,
-        mode='lines',
-        line=dict(color=COLORS['accent'], width=1.5, dash='dot'),
-        showlegend=False,
-        name='Peak',
-        hoverinfo='skip',
-    ), row=2, col=1)
-
-    # Drawdown fill — shade between peak and cumulative P/L
-    fig.add_trace(go.Scatter(
-        x=labels, y=peaks,
-        mode='lines',
-        line=dict(width=0),
-        showlegend=False,
-        hoverinfo='skip',
-    ), row=2, col=1)
-    fig.add_trace(go.Scatter(
-        x=labels, y=cum_profits,
-        mode='lines',
-        line=dict(width=0),
-        fill='tonexty',
-        fillcolor='rgba(224, 85, 85, 0.15)',
-        showlegend=False,
-        hoverinfo='skip',
-        name='Drawdown',
-    ), row=2, col=1)
-
-    fig.add_hline(y=0, line_dash='dot', line_color=COLORS['text_muted'],
-                   opacity=0.5, row=2, col=1)
-
-    fig.update_layout(
-        height=480,
-        margin=dict(l=50, r=20, t=30, b=30),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color=COLORS['text_secondary'], size=11, family="'Inter', sans-serif"),
-    )
-    tick_step = max(1, n_deals // 30) if n_deals > 40 else None
-    for i in range(1, 3):
-        fig.update_xaxes(showgrid=False, row=i, col=1,
-                         tickfont=dict(size=9, color=COLORS['text_dim']),
-                         dtick=tick_step,
-                         tickangle=-45 if n_deals > 40 else 0)
-        fig.update_yaxes(
-            showgrid=True, gridcolor=COLORS['chart_grid'],
-            gridwidth=0.5, zeroline=True,
-            zerolinecolor=COLORS['text_muted'], zerolinewidth=0.5,
-            row=i, col=1,
-            tickfont=dict(size=10, color=COLORS['text_dim']),
-        )
-    for ann in fig['layout']['annotations']:
-        ann['font'] = dict(size=11, color=COLORS['text_dim'], family="'Inter', sans-serif")
-
-    # Max drawdown summary strip
-    dd_summary = html.Div([
-        html.Span('Max Drawdown: ', style={'color': COLORS['text_dim'], 'fontSize': '11px'}),
-        html.Span(f'${max_dd:.2f}', style={'color': COLORS['sell'], 'fontSize': '12px', 'fontWeight': '700',
-                                            'fontFamily': "'JetBrains Mono', monospace"}),
-        html.Span(f'  ({max_dd_pct:.1f}%)', style={'color': COLORS['text_dim'], 'fontSize': '11px', 'marginLeft': '4px'}),
-    ], style={'padding': '6px 14px 2px', 'display': 'flex', 'alignItems': 'center', 'gap': '2px'}) if max_dd > 0 else None
-
-    return html.Div([
-        dcc.Graph(
-            figure=fig,
-            config={'displayModeBar': False},
-            style={'height': '480px'},
-        ),
-        dd_summary,
-    ]) if dd_summary else dcc.Graph(
-        figure=fig,
-        config={'displayModeBar': False},
-        style={'height': '480px'},
-    )
-
-
-def build_daily_trades_section(symbol, selected_date=None):
-    """Build daily trades chart and metrics for a symbol — premium version with day selector"""
-    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
-    active_date = selected_date if selected_date else today_str
-    is_today = (active_date == today_str)
-
-    if is_today:
-        daily_data = load_daily_trade_data(symbol)
-    else:
-        daily_data = load_daily_trade_data_for_date(symbol, active_date)
-
-    historical = load_historical_summary(symbol)
-
-    deals = daily_data.get('deals', []) if daily_data else []
-    sym_total = daily_data.get('total_profit', 0) if daily_data else 0
-    sym_avg = daily_data.get('avg_profit', 0) if daily_data else 0
-    sym_count = daily_data.get('deal_count', 0) if daily_data else 0
-    hist_total = historical.get('total_profit', 0) if historical else 0
-    hist_count = historical.get('total_deals', 0) if historical else 0
-
-    all_sym_pl, all_sym_deals = load_today_all_symbols_pl()
-
-    if is_today:
-        day_label = 'Today'
-    else:
-        try:
-            d = datetime.strptime(active_date, '%Y-%m-%d')
-            day_label = d.strftime('%d %b')
-        except (ValueError, TypeError):
-            day_label = active_date
-
-    metrics_row = html.Div([
-        make_metric_card(
-            f'{symbol} P/L {day_label}',
-            f'${sym_total:,.2f}',
-            COLORS['positive'] if sym_total >= 0 else COLORS['negative'],
-            f'{sym_count} deals', icon='📊',
-        ),
-        make_metric_card(
-            f'{symbol} Avg Profit',
-            f'${sym_avg:,.2f}',
-            COLORS['positive'] if sym_avg >= 0 else COLORS['negative'],
-            'per deal', icon='📉',
-        ),
-        make_metric_card(
-            f'{symbol} Lifetime P/L',
-            f'${hist_total:,.2f}',
-            COLORS['positive'] if hist_total >= 0 else COLORS['negative'],
-            f'{hist_count} deals (10y)', icon='🏦',
-        ),
-        make_metric_card(
-            'All Symbols Today',
-            f'${all_sym_pl:,.2f}',
-            COLORS['positive'] if all_sym_pl >= 0 else COLORS['negative'],
-            f'{all_sym_deals} deals total', icon='🌐',
-        ),
-    ], style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap', 'marginBottom': '16px'})
-
-    # Build the chart for the selected date
-    chart = _build_daily_chart(deals)
-
-    # Day selector dropdown — last 7 days
-    available_dates = get_available_daily_dates(symbol, max_days=7)
-    default_date = active_date
-
-    day_dropdown = dcc.Dropdown(
-        id='daily-day-selector',
-        options=available_dates,
-        value=default_date,
-        clearable=False,
-        searchable=True,
-        placeholder='Select day...',
-        style={
-            'width': '260px',
-            'fontSize': '13px',
-        },
-    )
-
-    return html.Div([
-        html.Div([
-            html.Div([
-                html.Span('📈', style={'fontSize': '14px'}),
-                html.Span('Daily Trade Log', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
-            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px'}),
-            day_dropdown,
-        ], style={
-            'display': 'flex', 'justifyContent': 'space-between',
-            'alignItems': 'center', 'marginBottom': '10px',
-        }),
-        html.Div(id='daily-metrics-container', children=[metrics_row]),
-        html.Div([chart], id='daily-chart-container', style={
-            'background': COLORS['card'],
-            'border': f'1px solid {COLORS["card_border"]}',
-            'borderRadius': '10px',
-            'padding': '12px 14px',
-        }),
-    ])
-
-
-# ─── Strategy Log Functions ───
-
-def load_strategy_log(symbol):
-    """Load strategy log entries for a symbol"""
-    log_path = os.path.join(JSON_DIR, 'logs', f'{symbol}_{STRATEGY_LOG_FILENAME}')
-    try:
-        with open(log_path, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'symbols.json'), encoding='utf-8') as f:
+            cfg = json.load(f)
+        return [s.get('symbol') for s in cfg.get('symbols', []) if isinstance(s, dict) and s.get('symbol')]
+    except (OSError, ValueError, AttributeError):
         return []
 
 
-def _event_badge_config(event):
-    """Return (color, bg, icon) for a strategy log event"""
-    mapping = {
-        'BUY_EXECUTED':       (COLORS['buy'],     COLORS['buy_soft'],  '⚡'),
-        'SELL_EXECUTED':      (COLORS['sell'],     COLORS['sell_soft'], '⚡'),
-        'BUY_MORE_EXECUTED':  (COLORS['buy'],     COLORS['buy_soft'],  '⚡'),
-        'SELL_MORE_EXECUTED': (COLORS['sell'],     COLORS['sell_soft'], '⚡'),
-        'CLOSE_BUY':          (COLORS['warning'],  'rgba(255,217,61,0.12)', '✕'),
-        'CLOSE_SELL':         (COLORS['warning'],  'rgba(255,217,61,0.12)', '✕'),
-        'BUY_SIGNAL':         ('#5dade2',          'rgba(93,173,226,0.12)',  '◦'),
-        'SELL_SIGNAL':        ('#e57373',          'rgba(229,115,115,0.12)', '◦'),
-    }
-    return mapping.get(event, (COLORS['text_dim'], 'rgba(255,255,255,0.04)', '•'))
+# ───────────────────────────── small helpers ─────────────────────────────
+
+def g(d, *keys, default=None):
+    """d[k1][k2]... or `default` when any step is missing or None (lists take integer keys)."""
+    for k in keys:
+        if isinstance(d, dict):
+            d = d.get(k)
+        elif isinstance(d, (list, tuple)) and isinstance(k, int) and -len(d) <= k < len(d):
+            d = d[k]
+        else:
+            return default
+        if d is None:
+            return default
+    return d
 
 
-def _tag_color(tag):
-    """Return color for a log tag"""
-    return {
-        'ENTRY': COLORS['buy'],
-        'EXIT': COLORS['warning'],
-        'SIGNAL': COLORS['accent'],
-        'ERROR': COLORS['sell'],
-    }.get(tag, COLORS['text_dim'])
-
-
-def build_strategy_log_section(symbol):
-    """Build the Strategy Log panel with clickable/hoverable entries"""
-    log_entries = load_strategy_log(symbol)
-
-    if not log_entries:
-        return html.Div([
-            html.Div([
-                html.Span('📋', style={'fontSize': '14px'}),
-                html.Span('Strategy Log', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
-            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
-            html.Div([
-                html.Div('📭', style={'fontSize': '24px', 'marginBottom': '6px', 'opacity': '0.4'}),
-                html.Div('No strategy events yet', style={
-                    'color': COLORS['text_dim'], 'fontSize': '12px',
-                }),
-            ], style={
-                'textAlign': 'center', 'padding': '32px 0',
-                'background': COLORS['card'],
-                'border': f'1px solid {COLORS["card_border"]}',
-                'borderRadius': '10px',
-            }),
-        ])
-
-    rows = []
-    for entry in log_entries:
-        event = entry.get('event', '')
-        tag = entry.get('tag', '')
-        details = entry.get('details', {})
-        evt_color, evt_bg, evt_icon = _event_badge_config(event)
-        t_color = _tag_color(tag)
-
-        # Parse time
-        try:
-            dt = datetime.fromisoformat(entry.get('time', ''))
-            time_str = dt.strftime('%H:%M:%S')
-        except (ValueError, TypeError):
-            time_str = '--:--:--'
-
-        # Build detail chips for inline preview
-        chips = []
-        if details.get('qty'):
-            chips.append(f"qty: {details['qty']}")
-        if details.get('fibo_level'):
-            chips.append(f"fibo: {details['fibo_level']}")
-        if details.get('total_profit') is not None and tag == 'EXIT':
-            chips.append(f"P/L: ${details['total_profit']}")
-        if details.get('positions_closed'):
-            chips.append(f"closed: {details['positions_closed']}")
-        if details.get('note'):
-            chips.append(details['note'])
-
-        chip_text = '  •  '.join(chips) if chips else ''
-
-        # Build full-detail key-value rows for the expandable section
-        # Show only meaningful fields, skip nested dicts like raw response
-        _detail_display_keys = [
-            ('symbol', 'Symbol'),
-            ('qty', 'Volume'),
-            ('fibo_level', 'Fibo Level'),
-            ('total_volume', 'Total Volume'),
-            ('total_profit', 'Total P/L'),
-            ('first_profit', 'First P/L'),
-            ('positions_closed', 'Positions Closed'),
-            ('note', 'Note'),
-            ('message', 'Message'),
-            ('comment', 'Comment'),
-        ]
-        detail_rows = []
-        for key, label in _detail_display_keys:
-            val = details.get(key)
-            if val is None:
-                continue
-            # Format money values
-            if 'profit' in key.lower():
-                val_str = f'${val}'
-                val_color = COLORS['positive'] if float(val) >= 0 else COLORS['negative']
-            else:
-                val_str = str(val)
-                val_color = COLORS['text_secondary']
-            detail_rows.append(
-                html.Div([
-                    html.Span(label, style={
-                        'fontSize': '10px', 'color': COLORS['text_dim'],
-                        'minWidth': '100px', 'flexShrink': '0',
-                        'fontWeight': '500', 'letterSpacing': '0.3px',
-                    }),
-                    html.Span(val_str, style={
-                        'fontSize': '11px', 'color': val_color,
-                        'fontFamily': "'JetBrains Mono', monospace",
-                        'fontWeight': '500',
-                    }),
-                ], style={'display': 'flex', 'gap': '12px', 'padding': '3px 0'})
-            )
-        # Parse response string for retcode / comment if present
-        resp_raw = details.get('response', '')
-        if isinstance(resp_raw, str) and 'retcode' in resp_raw:
-            for rk, rl in [('retcode', 'Retcode'), ('comment', 'Comment')]:
-                if rk == 'comment':
-                    m = re.search(r"comment='([^']*)", resp_raw)
-                else:
-                    m = re.search(rf'{rk}=([^,)]+)', resp_raw)
-                if m:
-                    detail_rows.append(
-                        html.Div([
-                            html.Span(rl, style={
-                                'fontSize': '10px', 'color': COLORS['text_dim'],
-                                'minWidth': '100px', 'flexShrink': '0',
-                                'fontWeight': '500',
-                            }),
-                            html.Span(m.group(1).strip(), style={
-                                'fontSize': '11px', 'color': COLORS['text_secondary'],
-                                'fontFamily': "'JetBrains Mono', monospace",
-                            }),
-                        ], style={'display': 'flex', 'gap': '12px', 'padding': '3px 0'})
-                    )
-        # If response is a dict (close_response), extract key fields
-        if isinstance(resp_raw, dict):
-            for rk, rl in [('message', 'Message'), ('closed_count', 'Closed'), ('failed_count', 'Failed')]:
-                rv = resp_raw.get(rk)
-                if rv is not None:
-                    detail_rows.append(
-                        html.Div([
-                            html.Span(rl, style={
-                                'fontSize': '10px', 'color': COLORS['text_dim'],
-                                'minWidth': '100px', 'flexShrink': '0',
-                                'fontWeight': '500',
-                            }),
-                            html.Span(str(rv), style={
-                                'fontSize': '11px', 'color': COLORS['text_secondary'],
-                                'fontFamily': "'JetBrains Mono', monospace",
-                            }),
-                        ], style={'display': 'flex', 'gap': '12px', 'padding': '3px 0'})
-                    )
-
-        row = html.Div([
-            # Timestamp
-            html.Span(time_str, style={
-                'fontSize': '11px', 'color': COLORS['text_dim'],
-                'fontFamily': "'JetBrains Mono', monospace",
-                'minWidth': '60px', 'flexShrink': '0',
-            }),
-            # Event badge
-            html.Span(f'{evt_icon} {event}', style={
-                'background': evt_bg,
-                'color': evt_color,
-                'padding': '3px 10px',
-                'borderRadius': '10px',
-                'fontSize': '11px',
-                'fontWeight': '700',
-                'letterSpacing': '0.3px',
-                'whiteSpace': 'nowrap',
-                'flexShrink': '0',
-            }),
-            # Tag
-            html.Span(tag, style={
-                'fontSize': '9px',
-                'fontWeight': '700',
-                'color': t_color,
-                'letterSpacing': '1px',
-                'flexShrink': '0',
-            }),
-            # Inline summary chips
-            html.Span(chip_text, style={
-                'fontSize': '11px',
-                'color': COLORS['text_secondary'],
-                'fontFamily': "'JetBrains Mono', monospace",
-                'overflow': 'hidden',
-                'textOverflow': 'ellipsis',
-                'whiteSpace': 'nowrap',
-                'flex': '1',
-                'minWidth': '0',
-            }) if chip_text else html.Span(),
-        ], style={
-            'display': 'flex', 'alignItems': 'center', 'gap': '10px',
-            'padding': '8px 14px',
-            'borderBottom': f'1px solid {COLORS["divider"]}',
-            'cursor': 'pointer',
-            'transition': 'background 0.15s',
-        },
-        # The detail block is in a sibling <details> below
-        )
-
-        # Expandable detail block (click to expand on desktop, tap on touch)
-        detail_block = html.Details([
-            html.Summary(row, style={
-                'listStyleType': 'none',
-                'outline': 'none',
-            }),
-            html.Div(detail_rows, style={
-                'background': 'rgba(0,0,0,0.25)',
-                'borderRadius': '8px',
-                'padding': '10px 14px',
-                'margin': '0 14px 8px 14px',
-                'maxHeight': '180px',
-                'overflow': 'auto',
-            }) if detail_rows else html.Div(),
-        ], style={'margin': '0'})
-
-        rows.append(detail_block)
-
-    return html.Div([
-        html.Div([
-            html.Span('📋', style={'fontSize': '14px'}),
-            html.Span('Strategy Log', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
-            html.Span(f'{len(log_entries)} events', style={
-                'fontSize': '9px', 'color': COLORS['text_dim'],
-                'marginLeft': '8px', 'background': 'rgba(255,255,255,0.04)',
-                'padding': '2px 8px', 'borderRadius': '8px',
-            }),
-        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
-        html.Div(rows, style={
-            'background': COLORS['card'],
-            'border': f'1px solid {COLORS["card_border"]}',
-            'borderRadius': '10px',
-            'maxHeight': '400px',
-            'overflowY': 'auto',
-            'overflowX': 'hidden',
-        }),
-    ])
-
-
-def build_symbol_tab_content(symbol, selected_date=None):
-    """Build complete content for a single symbol tab — premium version"""
-    data = load_symbol_data(symbol)
-
-    if data is None:
-        skeleton_bar = lambda w: html.Div(style={
-            'height': '12px', 'width': w, 'borderRadius': '8px',
-            'background': f'linear-gradient(90deg, {COLORS["card_border"]}00, {COLORS["card_border"]}, {COLORS["card_border"]}00)',
-            'marginBottom': '12px',
-        })
-        return html.Div([
-            html.Div([
-                html.H2(symbol, style={
-                    'margin': '0 0 24px 0', 'fontSize': '28px', 'fontWeight': '700',
-                    'color': COLORS['text'],
-                    'background': f'linear-gradient(135deg, {COLORS["text"]}, {COLORS["accent"]})',
-                    'WebkitBackgroundClip': 'text',
-                    'WebkitTextFillColor': 'transparent',
-                }),
-                html.Div([
-                    skeleton_bar('60%'), skeleton_bar('45%'), skeleton_bar('80%'),
-                    html.Div(style={'height': '20px'}),
-                    skeleton_bar('50%'), skeleton_bar('70%'),
-                ]),
-                html.Div(f'Connecting to {symbol}...', style={
-                    'textAlign': 'center', 'color': COLORS['text_dim'],
-                    'fontSize': '13px', 'marginTop': '40px',
-                    'fontStyle': 'italic',
-                }),
-            ], className='skeleton-pulse', style={'marginTop': '40px'}),
-        ])
-
-    analysis = data.get('analysis', {})
-    last_updated = data.get('last_updated', '')
-
+def num(x):
+    """float(x), or None for None / NaN / inf / text / booleans."""
+    if x is None or isinstance(x, bool):
+        return None
     try:
-        dt = datetime.fromisoformat(last_updated)
-        time_str = dt.strftime('%H:%M:%S')
-        date_str = dt.strftime('%d %b %Y')
-    except (ValueError, TypeError):
-        time_str = '--:--:--'
-        date_str = ''
+        v = float(x)
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) else None
 
-    mkt = data.get('market_status', {})
-    mkt_is_open = mkt.get('is_open', False)
-    mkt_status = mkt.get('status', 'UNKNOWN')
-    mkt_minutes = mkt.get('minutes_since_last')
-    mkt_color = COLORS['buy'] if mkt_is_open else COLORS['sell']
-    mkt_glow = COLORS['buy_glow'] if mkt_is_open else COLORS['sell_glow']
-    mkt_sub = f'{mkt_minutes}m since last candle' if mkt_minutes is not None else ''
 
-    return html.Div([
-        # ── Header row ──
-        html.Div([
-            html.Div([
-                html.H2(symbol, style={
-                    'margin': '0', 'fontSize': '22px', 'fontWeight': '800',
-                    'color': COLORS['text'],
-                    'letterSpacing': '1px',
-                }),
-                html.Span(f'{date_str}  •  {time_str}', style={
-                    'fontSize': '11px', 'color': COLORS['text_dim'],
-                    'marginLeft': '14px', 'fontWeight': '400',
-                    'fontFamily': "'JetBrains Mono', monospace",
-                }),
-            ], style={'display': 'flex', 'alignItems': 'baseline'}),
-            # Market status badge
-            html.Div([
-                html.Div(style={
-                    'width': '8px', 'height': '8px', 'borderRadius': '50%',
-                    'background': mkt_color,
-                    'boxShadow': f'0 0 10px {mkt_glow}',
-                    'marginRight': '10px',
-                }),
-                html.Span(mkt_status, style={
-                    'background': f'{mkt_color}18',
-                    'color': mkt_color,
-                    'padding': '5px 16px',
-                    'borderRadius': '24px',
-                    'fontSize': '11px',
-                    'fontWeight': '700',
-                    'letterSpacing': '1px',
-                    'border': f'1px solid {mkt_color}33',
-                }),
-                html.Span(f'  {mkt_sub}', style={
-                    'fontSize': '11px', 'color': COLORS['text_dim'], 'marginLeft': '10px',
-                }) if mkt_sub else None,
-            ], style={'display': 'flex', 'alignItems': 'center'}),
-        ], style={
-            'display': 'flex', 'justifyContent': 'space-between',
-            'alignItems': 'center', 'marginBottom': '16px',
-            'paddingBottom': '14px',
-            'borderBottom': f'1px solid {COLORS["divider"]}',
-        }),
+def lst(x):
+    """x when it is a list, else [] (every field of the files can be null)."""
+    return x if isinstance(x, list) else []
 
-        # ── Top row: Signal badges + Positions ──
-        html.Div([
-            build_signal_section(data),
-            html.Div(style={'flex': '1'}),
-        ], style={'display': 'flex', 'gap': '12px', 'alignItems': 'center', 'marginBottom': '12px'}),
 
-        build_positions_section(data),
+def dl(x):
+    """The dicts of a list (a malformed or null element is skipped)."""
+    return [i for i in x if isinstance(i, dict)] if isinstance(x, list) else []
 
-        # ── Recent Activity (order / close responses) ──
-        build_activity_section(data),
 
-        html.Div(style={'height': '16px'}),
+def dd(x):
+    return x if isinstance(x, dict) else {}
 
-        # ── RSI+MACD Slope Analysis (15M/H1/H4 direction) ──
-        html.Div([
-            html.Div([
-                html.Span('🎯', style={'fontSize': '14px'}),
-                html.Span('RSI+MACD Slope Analysis', style={**SECTION_TITLE_STYLE, 'fontSize': '13px'}),
-            ], style={'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'marginBottom': '10px'}),
-            build_slope_panel(symbol, analysis, last_updated),
+
+def money(x, signed=False, dp=2):
+    v = num(x)
+    if v is None:
+        return '—'
+    body = f'{abs(v):,.{dp}f}'
+    if v < 0:
+        return f'-${body}'
+    return f'+${body}' if signed and v > 0 else f'${body}'
+
+
+def px(x, digits=2):
+    v = num(x)
+    return '—' if v is None else f'{v:,.{max(0, int(digits))}f}'
+
+
+def fnum(x, dp=2, signed=False):
+    v = num(x)
+    if v is None:
+        return '—'
+    s = f'{v:,.{dp}f}'
+    return ('+' + s) if signed and v > 0 else s
+
+
+def pct(x, dp=1):
+    v = num(x)
+    return '—' if v is None else f'{v * 100:.{dp}f}%'
+
+
+_ISO = re.compile(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d')
+
+
+def ts(x):
+    """Epoch seconds from a number or an ISO text ('2026-11-17T08:00:01.500Z'); None otherwise."""
+    v = num(x)
+    if v is not None:
+        return v
+    if isinstance(x, str) and _ISO.match(x):
+        try:
+            return datetime.fromisoformat(x.replace('Z', '+00:00')).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
+def utc(t):
+    return datetime.fromtimestamp(t, tz=timezone.utc)
+
+
+def when(t, seconds=True):
+    """'08:07:37 UTC', with the day in front when it is not today (UTC)."""
+    t = ts(t)
+    if t is None:
+        return '—'
+    d = utc(t)
+    clock = d.strftime('%H:%M:%S' if seconds else '%H:%M')
+    if d.date() != utc(_now()).date():
+        return f'{d.strftime("%d %b")} {clock} UTC'
+    return f'{clock} UTC'
+
+
+def stamp(t):
+    """'2026-11-17 08:07:37 UTC'."""
+    t = ts(t)
+    return '—' if t is None else utc(t).strftime('%Y-%m-%d %H:%M:%S UTC')
+
+
+def dur(s):
+    """A length of time in words: '12 s', '4.6 min', '2.3 h', '3.1 d'."""
+    v = num(s)
+    if v is None:
+        return '—'
+    v = abs(v)
+    if v < 1:
+        return '<1 s'
+    if v < 90:
+        return f'{v:.0f} s'
+    if v < 5400:
+        return f'{v / 60:.1f} min'
+    if v < 172800:
+        return f'{v / 3600:.1f} h'
+    return f'{v / 86400:.1f} d'
+
+
+def countdown(s):
+    v = num(s)
+    if v is None or v <= 0:
+        return '0:00'
+    v = int(round(v))
+    h, rem = divmod(v, 3600)
+    m, sec = divmod(rem, 60)
+    return f'{h}:{m:02d}:{sec:02d}' if h else f'{m}:{sec:02d}'
+
+
+def smart(v, digits=None):
+    """A gate's value or any loose number as text: adaptive decimals, times as clock times."""
+    if v is None:
+        return '—'
+    if isinstance(v, bool):
+        return 'yes' if v else 'no'
+    if isinstance(v, (int, float)):
+        f = num(v)
+        if f is None:
+            return '—'
+        if f == int(f) and abs(f) < 1e7:
+            return f'{int(f):,}'
+        if digits is not None and abs(f) >= 100:          # a price: the symbol's digits
+            return f'{f:,.{digits}f}'
+        a = abs(f)
+        if a >= 100:
+            return f'{f:,.2f}'
+        if a >= 1:
+            return f'{f:,.3f}'.rstrip('0').rstrip('.')
+        return f'{f:.4g}'
+    if isinstance(v, str):
+        if _ISO.match(v):
+            return when(v)
+        return v
+    if isinstance(v, (list, tuple)):
+        return ', '.join(smart(x, digits) for x in v)
+    if isinstance(v, dict):
+        return json.dumps(v, default=str)
+    return str(v)
+
+
+def signed(x):
+    """A score or a contribution with its sign: '+2', '-0.5', '0'."""
+    v = num(x)
+    return '—' if v is None else ('+' if v > 0 else '') + smart(v)
+
+
+def vote_glyph(v):
+    """+1 / -1 / 0 as an arrow and a signed number (never colour alone)."""
+    v = num(v)
+    if v is None:
+        return '?'
+    return '▲ +1' if v > 0 else ('▼ -1' if v < 0 else '– 0')
+
+
+def side_glyph(side):
+    s = str(side or '').upper()
+    return '▲ BUY' if s == 'BUY' else ('▼ SELL' if s == 'SELL' else (s or '—'))
+
+
+def pl_class(x):
+    v = num(x)
+    return 'pos' if v is not None and v > 0 else ('neg' if v is not None and v < 0 else '')
+
+
+def digits_of(d):
+    v = num(g(d, 'trace', 'market', 'digits'))
+    if v is None:
+        v = num(g(d, 'bars', 'digits'))
+    return int(v) if v is not None else 2
+
+
+# ───────────────────────────── building blocks ─────────────────────────────
+
+def card(title=None, body=None, right=None, sub=None, cls='', cid=None):
+    head = None
+    if title is not None or right is not None:
+        head = html.Div(className='card-head', children=[
+            html.Div([html.H2(title, className='card-title') if title else None,
+                      html.Div(sub, className='card-sub') if sub else None]),
+            html.Div(right, className='card-right') if right is not None else None,
+        ])
+    kw = {'id': cid} if cid else {}
+    return html.Section(className=('card ' + cls).strip(), children=[head, body], **kw)
+
+
+def badge(text, kind='neutral', title=None):
+    kw = {'title': title} if title else {}
+    return html.Span(text, className=f'badge badge-{kind}', **kw)
+
+
+CHIP_ICON = {'pos': '●', 'neg': '■', 'warn': '▲'}
+
+
+def chip(text, kind='', title=None, icon=None):
+    """A rounded label; pass/fail chips carry a shape as well as a colour (● ok, ▲ warning, ■ problem)."""
+    kw = {'title': title} if title else {}
+    icon = CHIP_ICON.get(kind) if icon is None else icon
+    kids = [html.Span(icon, className='chip-ic'), text] if icon else text
+    return html.Span(kids, className=('chip ' + (f'chip-{kind}' if kind else '')).strip(), **kw)
+
+
+def kv(label, value, cls='', title=None):
+    kw = {'title': title} if title else {}
+    return html.Div(className=('kv ' + cls).strip(), children=[
+        html.Span(label, className='kv-k'), html.Span(value, className='kv-v', **kw)])
+
+
+def tile(label, value, sub=None, cls='', vcls=''):
+    return html.Div(className=('tile ' + cls).strip(), children=[
+        html.Div(label, className='tile-k'),
+        html.Div(value, className=('tile-v ' + vcls).strip()),
+        html.Div(sub, className='tile-sub') if sub else None,
+    ])
+
+
+def pl(x, signed=True):
+    return html.Span(money(x, signed=signed), className=('mono ' + pl_class(x)).strip())
+
+
+def empty(text, sub=None):
+    return html.Div(className='empty', children=[html.Div(text), html.Div(sub, className='empty-sub') if sub else None])
+
+
+def table(head, rows, cls='', num_cols=()):
+    """A plain table: `head` = column names; `rows` = lists of cells; columns in num_cols are right-aligned."""
+    def cell(tag, i, c):
+        return tag(c, className='num' if i in num_cols else None)
+    return html.Table(className=('tbl ' + cls).strip(), children=[
+        html.Thead(html.Tr([cell(html.Th, i, h) for i, h in enumerate(head)])),
+        html.Tbody([html.Tr([cell(html.Td, i, c) for i, c in enumerate(r)]) for r in rows]),
+    ])
+
+
+def meter(lo, hi, value, marks=(), bands=(), lo_label=None, hi_label=None, kind='accent'):
+    """A horizontal track from lo to hi: shaded `bands` [(a, b, cls)], tick `marks` [(x, label, cls)] with their
+    labels above the track, the value's marker on it; the two end labels below. Positions are clamped to the
+    track; a label near an end is anchored inside it."""
+    lo, hi, v = num(lo), num(hi), num(value)
+    if lo is None or hi is None or hi <= lo:
+        return html.Div(className='meter meter-empty', children='—')
+
+    def at(x):
+        return max(0.0, min(100.0, (x - lo) / (hi - lo) * 100.0))
+    kids = []
+    for a, b, bcls in bands:
+        a, b = num(a), num(b)
+        if a is None or b is None:
+            continue
+        left, right = at(min(a, b)), at(max(a, b))
+        kids.append(html.Div(className=f'm-band {bcls}', style={'left': f'{left}%', 'width': f'{right - left}%'}))
+    tops = []
+    for x, label, mcls in marks:
+        x = num(x)
+        if x is None:
+            continue
+        p = at(x)
+        kids.append(html.Div(className=f'm-tick {mcls}', style={'left': f'{p}%'}))
+        if label:
+            shift = '0' if p < 12 else ('-100%' if p > 88 else '-50%')
+            tops.append(html.Span(label, className=f'm-tlabel {mcls}',
+                                  style={'left': f'{p}%', 'transform': f'translateX({shift})'}))
+    if v is not None:
+        kids.append(html.Div(className=f'm-dot m-dot-{kind}', style={'left': f'{at(v)}%'}))
+    return html.Div(className='meter', children=[
+        html.Div(tops, className='m-top'),
+        html.Div(kids, className='m-track'),
+        html.Div(className='m-bottom', children=[html.Span(lo_label or '', className='m-lo'),
+                                                 html.Span(hi_label or '', className='m-hi')]),
+    ])
+
+
+def safe(kind='view'):
+    """Wrap a view builder: an exception (a file of an unexpected shape) becomes a card with the traceback, or an
+    empty figure with the error, so the rest of the page still shows."""
+    def wrap(fn):
+        @functools.wraps(fn)
+        def run(*a, **k):
+            try:
+                return fn(*a, **k)
+            except Exception as e:  # noqa: BLE001 -- the page must not die on one bad field
+                tb = traceback.format_exc()
+                if kind == 'figure':
+                    fig = go.Figure()
+                    fig.add_annotation(text=f'This chart could not be drawn: {e.__class__.__name__}: {e}', x=0.5, y=0.5,
+                                       xref='paper', yref='paper', showarrow=False, font=dict(color=COL['neg']))
+                    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
+                    fig.update_xaxes(visible=False)
+                    fig.update_yaxes(visible=False)
+                    return fig
+                return card(f'{fn.__name__}: could not be shown',
+                            html.Div([html.Div(f'{e.__class__.__name__}: {e} — the rest of the page is not affected; '
+                                               f'send this text if it stays.', className='line'),
+                                      html.Pre(tb[-4000:], className='pre pre-err')]), cls='card-error')
+        return run
+    return wrap
+
+
+# ───────────────────────────── the status bar ─────────────────────────────
+
+def freshness(tr):
+    """(kind, text) of the trace's age: live / slow / stale / none."""
+    t = ts(g(tr, 't'))
+    if t is None:
+        return 'neg', 'No trace file: the bot has not written yet'
+    age = _now() - t
+    if age < -5:
+        return 'warn', f'Updated {when(t)} (the clock of this PC is behind)'
+    if age < STALE_WARN_S:
+        return 'pos', f'Updated {dur(age)} ago'
+    if age < STALE_S:
+        return 'warn', f'Updated {dur(age)} ago (slow)'
+    return 'neg', f'Stale: last update {dur(age)} ago — is the bot running?'
+
+
+@safe()
+def status_bar(sym, d):
+    tr = dd(d.get('trace'))
+    h, acc, mk = dd(tr.get('health')), dd(tr.get('account')), dd(tr.get('market'))
+    strategy = tr.get('strategy') or getattr(_C, 'STRATEGY', None)
+    design = tr.get('design') or getattr(_C, 'DESIGN_NAME', None)
+    branch = tr.get('branch') or getattr(_C, 'DEMO_BRANCH', None)
+    magic = tr.get('magic') if tr.get('magic') is not None else getattr(_C, 'MAGIC', None)
+    if strategy == 'turtle':
+        what = f"Turtle System {g(tr, 'turtle', 'system') or getattr(_C, 'TURTLE_SYSTEM', '?')} + bot votes"
+    else:
+        what = 'Basket: the bot\'s RSI / MACD votes'
+    fk, ftext = freshness(tr)
+    chips = [chip(ftext, fk, title=f"trace written {stamp(tr.get('t'))}, poll {smart(tr.get('poll'))}")]
+    if tr:
+        demo = h.get('account_ok') and str(h.get('trade_mode_name') or '').lower() == 'demo'
+        if demo:
+            chips.append(chip(f"Demo account {smart(h.get('login'))} · {h.get('margin_mode_name') or '?'}", 'pos', icon='✓',
+                              title='the bot trades only on the demo, hedging account of its credentials'))
+        else:
+            chips.append(chip(f"Account refused: {h.get('account_problem') or h.get('trade_mode_name') or 'unknown'}",
+                              'neg', icon='✗', title='the bot sends nothing until the demo account is back'))
+        if h.get('connected'):
+            chips.append(chip('Terminal connected' + (f" · {h.get('reconnects')} reconnects" if h.get('reconnects') else ''),
+                              'pos'))
+        else:
+            chips.append(chip(f"Terminal: {h.get('terminal_problem') or 'not connected'}", 'neg'))
+        if h.get('market_live'):
+            chips.append(chip(f"Market open · last tick {dur(h.get('last_tick_age_s'))} ago", 'pos'))
+        else:
+            chips.append(chip(f"Market closed ({mk.get('status') or 'no tick'})", 'warn', title=mk.get('message') or ''))
+        errs = num(h.get('errors_1h')) or 0
+        if errs:
+            chips.append(chip(f'{int(errs)} error(s) in the last hour', 'neg', title='see the Log tab, level ERROR'))
+        else:
+            chips.append(chip('No errors in the last hour', 'pos'))
+        if tr.get('stale'):
+            chips.append(chip(f"Last poll could not read the terminal (since {when(tr.get('stale_since_utc'))})", 'warn'))
+    ident = html.Div(className='ident', children=[
+        html.Div(className='ident-top', children=[
+            html.Span(sym or '—', className='sym'),
+            html.Span(what, className='what'),
         ]),
+        html.Div(className='ident-sub', children=[
+            html.Span(['design ', html.B(design or '—')]),
+            html.Span(['branch ', html.B(branch or '—')]),
+            html.Span(['magic ', html.B(smart(magic))]),
+            html.Span(['strategy ', html.B(strategy or '—')]),
+        ]),
+    ])
+    vb, vstart = acc.get('virtual_balance'), acc.get('virtual_start_balance')
+    money_row = html.Div(className='money', children=[
+        tile('Virtual balance', money(vb), f"start {money(vstart, dp=0)} · {acc.get('virtual_start_date') or '—'}"
+             if acc.get('virtual') else 'the account balance (no virtual balance)'),
+        tile('Unit · lot', f"{smart(acc.get('units'))} · {fnum(acc.get('lot'), 2)} lot",
+             f"next unit at {money(acc.get('next_unit_at'), dp=0)}" if acc.get('next_unit_at') else acc.get('unit_rule')),
+        tile('Open P/L (this bot)', pl(acc.get('own_open_pl')), 'floating, its magic only'),
+        tile('Closed P/L (this bot)', pl(acc.get('own_closed_pl')), 'since the virtual start'),
+        tile('This bot\'s equity', money(acc.get('own_equity')), 'virtual balance + open P/L'),
+        tile('Demo account (shared)', f"{money(acc.get('balance'), dp=0)} / {money(acc.get('equity'), dp=0)}",
+             'balance / equity, all 6 bots'),
+        tile('Bot running', f"{dur(h.get('uptime_s'))}" if h.get('uptime_s') is not None else '—',
+             f"poll {smart(tr.get('poll'))} · loop {fnum(h.get('loop_ms'), 1)} ms · trace {fnum(h.get('trace_ms'), 1)} ms"
+             + (f" · {smart(h.get('skipped_polls'))} skipped" if h.get('skipped_polls') else '')),
+    ])
+    if not tr:
+        money_row = html.Div('The balance, the unit and the P/L appear here once the bot writes its trace.',
+                             className='line muted')
+    return [html.Div(className='status-top', children=[ident, html.Div(chips, className='chips')]), money_row]
 
-        html.Div(style={'height': '16px'}),
 
-        # Daily Trade Log section
-        build_daily_trades_section(symbol, selected_date=selected_date),
+# ───────────────────────────── what the bot is doing now ─────────────────────────────
 
-        html.Div(style={'height': '16px'}),
+ACTION_KIND = {
+    'WAIT': 'neutral', 'MARKET_CLOSED': 'neutral', 'PAUSED': 'warn', 'BLOCKED': 'warn', 'NO_DATA': 'warn',
+    'SKIPPED': 'neg', 'OPEN_FAILED': 'neg', 'ADD_FAILED': 'neg', 'BOTH_SIDES': 'warn', 'UNMANAGED': 'warn',
+    'OPEN_BUY': 'accent', 'OPEN_SELL': 'accent', 'WAIT_FILL': 'accent', 'HOLD': 'accent', 'ADD_BUY': 'accent',
+    'ADD_SELL': 'accent', 'CLOSE_BUY': 'accent', 'CLOSE_SELL': 'accent',
+}
+ACTION_WORDS = {
+    'WAIT': 'waiting for an entry', 'PAUSED': 'paused after a close', 'BLOCKED': 'an entry is blocked',
+    'SKIPPED': 'this poll decided nothing', 'NO_DATA': 'not enough data', 'MARKET_CLOSED': 'the market is closed',
+    'OPEN_BUY': 'opened a buy', 'OPEN_SELL': 'opened a sell', 'OPEN_FAILED': 'an entry was not filled',
+    'WAIT_FILL': 'waiting for the terminal to list the fill', 'HOLD': 'holding the position',
+    'ADD_BUY': 'added to the buy', 'ADD_SELL': 'added to the sell', 'ADD_FAILED': 'an add was not filled',
+    'CLOSE_BUY': 'closing the buy', 'CLOSE_SELL': 'closing the sell', 'BOTH_SIDES': 'a buy and a sell are open',
+    'UNMANAGED': 'positions it cannot take over',
+}
 
-        # Strategy Log section
-        build_strategy_log_section(symbol),
 
-        html.Div(style={'height': '16px'}),
+def order_line(o, digits):
+    ok = o.get('done')
+    kind = 'pos' if ok else 'neg'
+    what = f"{(o.get('kind') or '').upper()} {o.get('side') or ''} {fnum(o.get('volume'), 2)} lot"
+    if o.get('position'):
+        what += f" (position {o.get('position')})"
+    res = o.get('retcode_text') or ('refused by the bot' if o.get('refused') else '—')
+    return html.Div(className='order', children=[
+        badge('✓ done' if ok else '✗ ' + str(res), kind),
+        html.Span(what, className='order-what'),
+        html.Span(f"requested {px(o.get('price'), digits)} · sl {px(o.get('sl'), digits) if num(o.get('sl')) else 'none'}"
+                  f" · filled {px(o.get('result_price'), digits)} · retcode {smart(o.get('retcode'))}"
+                  + (f" · {o.get('result_comment')}" if o.get('result_comment') else '')
+                  + (f" · {fnum(o.get('ms'), 0)} ms" if num(o.get('ms')) else ''), className='order-det mono'),
+    ])
 
-        # Raw JSON
-        html.Details([
-            html.Summary('Raw JSON Data', style={
-                'color': COLORS['text_dim'], 'cursor': 'pointer', 'fontSize': '12px',
-                'padding': '10px 0', 'fontWeight': '500', 'letterSpacing': '0.5px',
-                'outline': 'none',
-            }),
-            html.Pre(
-                json.dumps(data, indent=2, default=str),
-                style={
-                    **CARD_STYLE,
-                    'fontSize': '11px',
-                    'color': COLORS['text_dim'],
-                    'maxHeight': '300px',
-                    'overflow': 'auto',
-                    'marginTop': '8px',
-                    'fontFamily': "'JetBrains Mono', 'SF Mono', monospace",
-                    'lineHeight': '1.6',
-                },
-            ),
+
+@safe()
+def now_header(d):
+    tr = dd(d.get('trace'))
+    dec = dd(tr.get('decision'))
+    act = dec.get('action') or '—'
+    digits = digits_of(d)
+    chips = []
+    if dec.get('reason'):
+        chips.append(chip(f"reason: {dec['reason']}"))
+    if dec.get('side'):
+        chips.append(chip(f"side: {side_glyph(dec['side'])}"))
+    if dec.get('blocked_by'):
+        gate = next((x for x in dl(dec.get('gates')) if x.get('key') == dec['blocked_by']), None)
+        chips.append(chip(f"decided by: {(gate or {}).get('name') or dec['blocked_by']}", 'accent'))
+    sig = dd(dec.get('signal'))
+    if sig:
+        chips.append(chip(f"signals: buy {sig.get('buy') or '—'} · sell {sig.get('sell') or '—'}",
+                          title='the strategy\'s own signals (the old dashboard\'s BUY / SELL / DO_NOTHING)'))
+    orders = dl(dec.get('orders'))
+    head = html.Div(className='now-head', children=[
+        html.Div(className='now-title', children=[
+            html.Span('What the bot is doing now', className='eyebrow'),
+            badge(act, ACTION_KIND.get(act, 'neutral')),
+            html.Span(ACTION_WORDS.get(act, ''), className='now-words'),
+        ]),
+        html.Span(f"decided {when(tr.get('t'))} · poll {smart(tr.get('poll'))}", className='now-meta'),
+    ])
+    banner = None
+    if tr.get('stale'):
+        banner = html.Div(className='banner banner-warn', children=(
+            f"This poll could not read the terminal (since {when(tr.get('stale_since_utc'))}): the account, market "
+            f"and position numbers below are those of the last good poll."))
+    return html.Div([
+        head,
+        html.P(dec.get('headline') or 'No decision yet.', className='headline'),
+        html.Div(chips, className='chips chips-left') if chips else None,
+        banner,
+        html.Div(className='orders', children=[html.Div("This poll's orders", className='mini-title')]
+                 + [order_line(o, digits) for o in orders]) if orders else None,
+    ])
+
+
+GATE_SECTION = {
+    'need': ('Conditions', 'the first one not met decides what the bot does'),
+    'exit': ('Exits', 'any one that fires closes the position'),
+    'add': ('Adds', 'every condition must hold for an add'),
+    'info': ('For information', 'shown, not checked'),
+}
+
+
+def gate_icon(role, ok):
+    if ok is None:
+        return ('–', 'gi-na', 'does not apply')
+    if role == 'exit':
+        return ('⚡', 'gi-fire', 'fires') if ok else ('○', 'gi-idle', 'not hit')
+    if role == 'add':
+        return ('✓', 'gi-pass', 'met') if ok else ('○', 'gi-idle', 'not met yet')
+    if role == 'info':
+        return ('i', 'gi-na', 'information')
+    return ('✓', 'gi-pass', 'passed') if ok else ('✗', 'gi-fail', 'not met: blocks')
+
+
+def gate_row(gt, decides, digits):
+    role = gt.get('role') or 'need'
+    glyph, gcls, word = gate_icon(role, gt.get('ok'))
+    checked = gt.get('checked', True) is not False
+    tags = []
+    if decides:
+        tags.append(html.Span('decides', className='gtag gtag-accent'))
+    if not checked:
+        tags.append(html.Span('not reached this poll', className='gtag'))
+    return html.Div(className='gate' + (' gate-decides' if decides else '') + ('' if checked else ' gate-idle'),
+                    title=f'{word} — {gt.get("key")}', children=[
+        html.Span(glyph, className=f'gi {gcls}'),
+        html.Div(className='gate-main', children=[
+            html.Div(className='gate-top', children=[
+                html.Span(gt.get('name') or gt.get('key') or '?', className='gate-name'),
+                *tags,
+                html.Span(smart(gt.get('value'), digits), className='gate-val mono'),
+            ]),
+            html.Div(gt.get('need'), className='gate-need') if gt.get('need') else None,
+            html.Div(gt.get('note'), className='gate-note') if gt.get('note') else None,
         ]),
     ])
 
 
-# ─── App Setup ───
-app = dash.Dash(
-    __name__,
-    title='Alcadeias Trading Dashboard',
-    update_title=None,
-    suppress_callback_exceptions=True,
-    assets_folder='assets',
-)
-app.index_string = '''<!DOCTYPE html>
+@safe()
+def gates_view(d):
+    tr = dd(d.get('trace'))
+    dec = dd(tr.get('decision'))
+    gates = dl(dec.get('gates'))
+    digits = digits_of(d)
+    if not gates:
+        return card('Checks', empty('No checks in the trace yet.'))
+    rows, last = [], None
+    for gt in gates:
+        role = gt.get('role') or 'need'
+        if role != last:
+            title, sub = GATE_SECTION.get(role, (role, ''))
+            rows.append(html.Div(className='gsec', children=[html.Span(title), html.Span(sub, className='gsec-sub')]))
+            last = role
+        rows.append(gate_row(gt, gt.get('key') == dec.get('blocked_by'), digits))
+    legend = html.Div(className='glegend', children=[
+        html.Span([html.B('✓', className='gi-pass'), ' passed / met']),
+        html.Span([html.B('✗', className='gi-fail'), ' blocks']),
+        html.Span([html.B('⚡', className='gi-fire'), ' fires']),
+        html.Span([html.B('○', className='gi-idle'), ' not yet']),
+        html.Span([html.B('–', className='gi-na'), ' does not apply']),
+        html.Span([html.B('▌', className='gi-fire'), ' decided this poll']),
+    ])
+    return card('The bot\'s checks', html.Div(rows, className='gates'),
+                sub=html.Div([html.Div(f'{len(gates)} checks this poll, in the order the bot makes them'), legend]))
+
+
+# ── the basket strategy ──
+
+TF_ORDER = ('D1', 'H6', 'H4', 'H1', 'M30', 'M15', 'M5', 'M1')
+
+
+def _spark(series, pivot_ago=None, pivot=None, bands=(), zero=False, height=86, extra=None):
+    """A small line chart of an indicator's last values: the latest pivot (accent dot), the slope from it to the
+    current value (accent dashes), the current value (white dot), reference lines (RSI bands / MACD zero)."""
+    ys = [num(v) for v in lst(series)]
+    if not any(v is not None for v in ys):
+        return html.Div('no series', className='spark-empty')
+    n = len(ys)
+    xs = list(range(n))
+    fig = go.Figure()
+    for b in (bands if isinstance(bands, (list, tuple)) else ()):
+        if num(b) is not None:
+            fig.add_hline(y=float(b), line_color=COL['line'], line_width=1)
+    if zero:
+        fig.add_hline(y=0, line_color=COL['line'], line_width=1)
+    if lst(extra):
+        fig.add_trace(go.Scatter(x=xs, y=[num(v) for v in lst(extra)], mode='lines', hoverinfo='skip',
+                                 line=dict(color=COL['faint'], width=1)))
+    fig.add_trace(go.Scatter(x=xs, y=ys, mode='lines', hoverinfo='skip', line=dict(color=COL['text2'], width=1.6)))
+    last = ys[-1]
+    ago = num(pivot_ago)
+    if ago is not None and num(pivot) is not None and 0 <= n - 1 - int(ago) < n and last is not None:
+        xi = n - 1 - int(ago)
+        fig.add_trace(go.Scatter(x=[xi, n - 1], y=[float(pivot), last], mode='lines', hoverinfo='skip',
+                                 line=dict(color=COL['accent'], width=1.6, dash='dash')))
+        fig.add_trace(go.Scatter(x=[xi], y=[float(pivot)], mode='markers', hoverinfo='skip',
+                                 marker=dict(size=8, color=COL['accent'], line=dict(color=COL['surface'], width=2))))
+    if last is not None:
+        fig.add_trace(go.Scatter(x=[n - 1], y=[last], mode='markers', hoverinfo='skip',
+                                 marker=dict(size=7, color=COL['text'], line=dict(color=COL['surface'], width=2))))
+    fig.update_layout(height=height, margin=dict(l=34, r=6, t=4, b=4), showlegend=False,
+                      paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                      font=dict(family=FONT, size=9, color=COL['muted']))
+    fig.update_xaxes(visible=False, range=[-0.5, n - 0.5])
+    fig.update_yaxes(showgrid=False, zeroline=False, nticks=3, tickfont=dict(size=9, color=COL['muted']))
+    return dcc.Graph(figure=fig, config={'displayModeBar': False, 'staticPlot': True}, className='spark',
+                     style={'height': f'{height}px'})
+
+
+def _part_text(p, kind):
+    """One indicator's vote in words: 'pivot high 64.62, 11 bars ago, slope +0.687/bar'."""
+    if not isinstance(p, dict):
+        return '—'
+    if p.get('pivot') is None:
+        return 'no qualifying pivot in the window'
+    return (f"pivot {p.get('pivot_side') or '?'} {smart(p.get('pivot'))}, {smart(p.get('bars_ago'))} bars ago, "
+            f"slope {fnum(p.get('slope'), 4 if kind == 'rsi' else 6, signed=True)}/bar")
+
+
+def score_block(label, score, thr, rng, weights, wants_text, sub=None):
+    """A score against its thresholds: the track from -range to +range, the no-side band between -thr and +thr."""
+    s, t, r = num(score), num(thr), num(rng)
+    r = r if r and r > 0 else max(1.0, abs(s or 0), abs(t or 0))
+    marks = []
+    if t is not None:
+        if t > 0:
+            marks = [(-t, f'SELL ≤ -{smart(t)}', 'mk-sell'), (t, f'BUY ≥ +{smart(t)}', 'mk-buy')]
+        else:
+            marks = [(0, 'any side ≥ 0 / ≤ 0', 'mk-zero')]
+    return html.Div(className='score', children=[
+        html.Div(className='score-head', children=[
+            html.Span(label, className='score-label'),
+            html.Span(weights, className='score-w'),
+            html.Span(signed(s), className='score-v'),
+        ]),
+        meter(-r, r, s, marks=marks, bands=[(-t, t, 'band-none')] if t else [],
+              lo_label=f'-{smart(r)}', hi_label=f'+{smart(r)}'),
+        html.Div(wants_text, className='score-sub'),
+        html.Div(sub, className='score-sub muted') if sub else None,
+    ])
+
+
+def _weights_text(w):
+    return ' + '.join(f'{smart(v)}×{k}' for k, v in dd(w).items()) or '—'
+
+
+def basket_panel(d):
+    tr = dd(d.get('trace'))
+    bk = dd(tr.get('basket'))
+    digits = digits_of(d)
+    if not bk:
+        return card('The basket strategy', empty('No basket data in the trace.'))
+    ow, aw = g(bk, 'weights', 'open') or OPEN_SCORE_WEIGHTS, g(bk, 'weights', 'agreement') or FORCE_CLOSE_SCORE_WEIGHTS
+    entry_s = bk.get('entry_s') if bk.get('entry_s') is not None else ENTRY_S
+    agree_s = bk.get('entry_agree_s') if bk.get('entry_agree_s') is not None else ENTRY_AGREE_S
+    os_, fc = num(bk.get('open_score')), num(bk.get('fc_score'))
+    if os_ is None:
+        wants = 'no score this poll'
+    elif num(entry_s) is not None and os_ >= num(entry_s):
+        wants = f'wants a BUY (≥ +{smart(entry_s)})'
+    elif num(entry_s) is not None and os_ <= -num(entry_s):
+        wants = f'wants a SELL (≤ -{smart(entry_s)})'
+    else:
+        wants = f'no side: between -{smart(entry_s)} and +{smart(entry_s)}'
+    ag = num(agree_s) or 0
+    if fc is None:
+        agree = 'no score this poll'
+    elif ag > 0:
+        agree = (f'lets a BUY in (≥ +{smart(ag)})' if fc >= ag else f'lets a SELL in (≤ -{smart(ag)})' if fc <= -ag
+                 else f'lets neither side in (between -{smart(ag)} and +{smart(ag)})')
+    else:
+        agree = 'not against a BUY or a SELL' if fc == 0 else ('lets only a BUY in' if fc > 0 else 'lets only a SELL in')
+    fc_on = bk.get('force_close_enabled')
+    fc_sub = (f"force-close ON: a basket closes when this score is {smart(bk.get('force_close_s') or FORCE_CLOSE_S)} or "
+              f"more against it" if fc_on else 'force-close is off in this design: these votes only gate entries')
+    scores = html.Div(className='scores', children=[
+        score_block('Open score', os_, entry_s, bk.get('open_range'), _weights_text(ow), wants),
+        score_block('Agreement score', fc, agree_s, bk.get('fc_range'), _weights_text(aw), agree, fc_sub),
+    ])
+    votes = dd(bk.get('votes'))
+    order = [tf for tf in TF_ORDER if tf in votes] + [tf for tf in votes if tf not in TF_ORDER]
+    rows, sparks = [], []
+    for tf in order:
+        v = dd(votes.get(tf))
+        r, m = dd(v.get('rsi')), dd(v.get('macd'))
+        roles = ' · '.join(str(x) for x in lst(v.get('roles'))) or '—'
+        contrib = []
+        if v.get('open_weight') is not None:
+            contrib.append(f"open {signed(v.get('open_contrib'))}"
+                           + (f" (grey {v['grey_filled']} filled)" if v.get('grey_filled') else ''))
+        if v.get('fc_weight') is not None:
+            contrib.append(f"agreement {signed(v.get('fc_contrib'))}")
+        rows.append([html.Div([html.B(tf), html.Div(roles, className='tf-roles')]), vote_glyph(r.get('vote')),
+                     smart(r.get('now')), _part_text(r, 'rsi'), vote_glyph(m.get('vote')), smart(m.get('now')),
+                     _part_text(m, 'macd'), ' · '.join(contrib) or '—'])
+        sparks.append(html.Div(className='spark-pair', children=[
+            html.Div([html.Div(f'{tf} RSI {smart(r.get("now"))} · vote {vote_glyph(r.get("vote"))}', className='spark-t'),
+                      _spark(r.get('series'), r.get('bars_ago'), r.get('pivot'), bands=r.get('bands') or ())]),
+            html.Div([html.Div(f'{tf} MACD hist {smart(m.get("now"))} · vote {vote_glyph(m.get("vote"))} · pivots: '
+                               f'{m.get("side_rule") or "?"}s', className='spark-t'),
+                      _spark(m.get('series'), m.get('bars_ago'), m.get('pivot'), zero=True)]),
+        ]))
+    votes_box = html.Div([
+        html.Div(className='mini-title', children=['Votes per timeframe ',
+                                                   html.Span('(the forming bar; +1 / -1 when the slope from the latest '
+                                                             'pivot points that way)', className='muted')]),
+        table(['TF · role', 'RSI', 'RSI now', 'RSI pivot → slope', 'MACD', 'hist now', 'MACD pivot → slope',
+               'adds to the scores'], rows, cls='tbl-votes') if rows else empty('No votes this poll.'),
+        html.Div(sparks, className='sparks') if sparks else None,
+        html.Div(className='spark-legend', children=[
+            html.Span([html.I(className='lk lk-line'), 'indicator']),
+            html.Span([html.I(className='lk lk-dot-accent'), 'latest pivot']),
+            html.Span([html.I(className='lk lk-dash-accent'), 'slope pivot → now']),
+            html.Span([html.I(className='lk lk-dot-white'), 'now (forming bar)']),
+        ]) if sparks else None,
+    ])
+    tiles = html.Div(className='tiles3', children=[_trend_tile(bk), _vol_tile(bk, digits), _pause_tile(bk)])
+    return card('The basket strategy, this poll', html.Div([scores, votes_box, tiles, _new_basket(bk, digits),
+                                                            _rsi_row(bk)]),
+                sub=f"design levers as the bot runs them · votes {'fresh this poll' if bk.get('fresh') else 'kept from the last poll'}")
+
+
+def _trend_tile(bk):
+    t = dd(bk.get('trend'))
+    if not t.get('on'):
+        return tile('Trend gate', 'off', 'TREND_TF = None: no trend filter in this design')
+    word = {'up': '▲ up: buys only', 'down': '▼ down: sells only'}.get(t.get('text'), '– flat: neither side')
+    return tile(f"{t.get('tf') or '?'} trend", word,
+                f"MACD signal {smart(t.get('signal'))} on the closed bar of {when(t.get('bar_utc') or t.get('bar_t'), seconds=False)}"
+                + (f" · {t.get('rule')}" if t.get('rule') else ''), cls='tile-wide')
+
+
+def _vol_tile(bk, digits):
+    v = dd(bk.get('vol'))
+    if not v.get('on'):
+        return tile('Volatility unit', 'off', 'VOL_TF = None: target / stop in $ per unit')
+    cap = (f" · cap {money(v.get('cap_usd_per_unit'))}/unit" + (' (binds)' if v.get('cap_binds') else '')) \
+        if num(v.get('cap_usd_per_unit')) else ' · no cap'
+    known = v.get('known')
+    return tile(f"{v.get('tf') or '?'} volatility unit",
+                smart(v.get('capped') if v.get('capped') is not None else v.get('raw'), None) if known else 'not known yet',
+                f"raw {smart(v.get('raw'))}{cap} · {smart(v.get('bars_used'))} closed bars (needs {smart(v.get('min_bars'))})"
+                f" · = {money(v.get('usd_per_unit'))} per unit", cls='tile-wide')
+
+
+def _pause_tile(bk):
+    p = dd(bk.get('pause'))
+    lc = dd(p.get('last_close'))
+    last = (f"last close {when(lc.get('utc') or lc.get('t'))}: {lc.get('side') or ''} {lc.get('reason') or ''} "
+            f"{money(lc.get('pnl'), signed=True)}") if lc else 'no close yet'
+    if p.get('active'):
+        return tile('Entry pause', countdown(p.get('left_s')) + ' left',
+                    f"until {when(p.get('until_utc') or p.get('until'))} ({p.get('why') or ''}, {dur(p.get('length_s'))}) · {last}",
+                    cls='tile-wide tile-warn')
+    return tile('Entry pause', 'none', f"{dur(p.get('pause_s'))} after a close, {dur(p.get('loss_pause_s'))} after a loss · {last}",
+                cls='tile-wide')
+
+
+def _new_basket(bk, digits):
+    nb = dd(bk.get('new_basket'))
+    if not nb:
+        return None
+    rows = []
+    for side in ('buy', 'sell'):
+        s = dd(nb.get(side))
+        rows.append([side_glyph(side), px(s.get('entry'), digits), px(s.get('target'), digits), px(s.get('stop'), digits),
+                     px(s.get('backstop'), digits), s.get('judged_on') or '—'])
+    parts = [f"{smart(nb.get('units'))} unit = {fnum(nb.get('lots'), 2)} lot"]
+    if nb.get('target_usd') is not None:
+        parts.append(f"target {money(nb.get('target_usd'), signed=True)} ({smart(nb.get('target_px'))} price)")
+    else:
+        parts.append('no target')
+    if nb.get('stop_usd') is not None:
+        parts.append(f"stop -{money(nb.get('stop_usd'))} ({smart(nb.get('stop_px'))} price)")
+    else:
+        parts.append('no stop')
+    if nb.get('gap_px') is not None:
+        parts.append(f"add gap {smart(nb.get('gap_px'))}")
+    if nb.get('backstop_px') is not None:
+        parts.append(f"broker backstop {smart(nb.get('backstop_px'))} beyond the entry")
+    return html.Div([
+        html.Div(className='mini-title', children=['A basket opened now would get ',
+                                                   html.Span('(fixed at the open for its life)', className='muted')]),
+        html.Div(' · '.join(parts), className='line'),
+        table(['side', 'entry', 'target', 'stop', 'backstop', 'P/L judged on'], rows, num_cols=(1, 2, 3, 4)),
+    ])
+
+
+def _rsi_row(bk):
+    r = dd(bk.get('rsi'))
+    if not r:
+        return None
+    order = [tf for tf in TF_ORDER[::-1] if tf in r] + [tf for tf in r if tf not in TF_ORDER]
+    return html.Div(className='rsi-row', children=[html.Span('RSI by timeframe', className='mini-title')]
+                    + [chip(f'{tf} {smart(r.get(tf))}') for tf in order])
+
+
+# ── the Turtle ──
+
+def turtle_panel(d):
+    tr = dd(d.get('trace'))
+    tt = dd(tr.get('turtle'))
+    digits = digits_of(d)
+    if not tt:
+        return card('The Turtle', empty('No Turtle data in the trace.'))
+    lv = dd(tt.get('levels'))
+    orders = dd(tt.get('orders'))
+    n = num(tt.get('n')) or num(lv.get('n'))
+    parts = [_orders_box(tt, lv, orders, n, digits),
+             html.Div(className='tiles4', children=[
+                 tile('N (20-day ATR)', smart(n, 2) if n else '—',
+                      f"{fnum(lv.get('n_pct'), 2)}% of the price · from the D1 bar of {(lv.get('bar_utc') or '')[:10] or '—'}"),
+                 tile('Stop distance 2N', smart(lv.get('stop_dist'), 2), 'a new trade\'s stop from its fill'),
+                 tile('Add step 0.5N', smart(lv.get('add_step'), 2), f"up to {smart(g(tt, 'params', 'max_legs'))} legs"),
+                 _exit_tile(tt, lv, digits),
+             ]),
+             _vote_box(tt),
+             _channels_box(tt, digits),
+             _filter_box(tt, digits),
+             _new_trade_box(tt, digits)]
+    return card('The Turtle, this poll', html.Div(parts),
+                sub=tt.get('rules') or f"System {tt.get('system')}")
+
+
+def _exit_tile(tt, lv, digits):
+    days = smart(g(tt, 'channels', 'exit', 'days'))
+    if str(g(tt, 'trade', 'side') or '').upper() == 'SELL':
+        return tile(f'Exit channel ({days}-day high)', px(lv.get('trail_short'), digits),
+                    f"a short's stop moves down to it · the low {px(lv.get('trail_long'), digits)} is a long's")
+    return tile(f'Exit channel ({days}-day low)', px(lv.get('trail_long'), digits),
+                f"a long's stop moves up to it · the high {px(lv.get('trail_short'), digits)} is a short's")
+
+
+def _orders_box(tt, lv, orders, n, digits):
+    state = orders.get('state') or ('armed' if orders.get('armed') else 'none')
+    b, s = dd(orders.get('buy')), dd(orders.get('sell'))
+    if state == 'armed':
+        st = badge('ARMED', 'accent')
+        txt = f"until the next D1 close {when(orders.get('until_utc') or orders.get('until_t'))}"
+    elif state == 'used':
+        st = badge('USED', 'neutral')
+        txt = (f"by the {orders.get('used_by') or ''} trade of {when(orders.get('used_utc') or orders.get('used_t'))}; "
+               f"new orders at the next D1 close {when(orders.get('until_utc') or orders.get('until_t'))}")
+    else:
+        st = badge('NONE', 'warn')
+        txt = 'no daily levels: no orders'
+    lo, hi = num(s.get('level')), num(b.get('level'))
+    bid_now, ask_now = num(s.get('price_now')), num(b.get('price_now'))
+
+    def gap(o, quote, name):
+        dist, dn = num(o.get('distance')), num(o.get('distance_n'))
+        if dist is None:
+            return f'{name} {px(quote, digits)}'
+        how = 'away' if dist > 0 else 'beyond it'
+        return f"{name} {px(quote, digits)}: {smart(abs(dist), digits)} {how} ({fnum(abs(dn) if dn is not None else None, 2)} N)"
+    gauge = None
+    if lo is not None and hi is not None and hi > lo:
+        mid = None
+        if bid_now is not None and ask_now is not None:
+            mid = (bid_now + ask_now) / 2.0
+        span = hi - lo
+        gauge = meter(lo - span * 0.04, hi + span * 0.04, mid, marks=[(lo, 'SELL level', 'mk-sell'), (hi, 'BUY level', 'mk-buy')],
+                      lo_label=f"sell at ≤ {px(lo, digits)} · " + gap(s, bid_now, 'bid'),
+                      hi_label=f"buy at ≥ {px(hi, digits)} · " + gap(b, ask_now, 'ask'))
+    extra = []
+    for side, o in (('buy', b), ('sell', s)):
+        if o.get('reached'):
+            extra.append(chip(f"{side.upper()} level reached ({o.get('judged_on')} {px(o.get('price_now'), digits)}); "
+                              f"needs the M15 vote {vote_glyph(o.get('vote_needed'))}", 'accent'))
+    if orders.get('in_exit_bar'):
+        extra.append(chip('in the M1 bar of the last exit: no entry this minute', 'warn'))
+    if orders.get('last_exit_utc'):
+        extra.append(chip(f"last exit {when(orders.get('last_exit_utc'))}"))
+    return html.Div(className='box', children=[
+        html.Div(className='box-head', children=[html.Span("Today's entry orders", className='mini-title'), st,
+                                                  html.Span(txt, className='muted')]),
+        gauge,
+        html.Div(className='line muted', children=(
+            f"BUY level = the {g(tt, 'channels', 'entry', 'days') or '?'}-day high {px(g(tt, 'channels', 'entry', 'high'), digits)} + "
+            f"{smart(g(tt, 'params', 'tick'))} ({b.get('channel') or '—'}), SELL level = the low {px(g(tt, 'channels', 'entry', 'low'), digits)} "
+            f"- {smart(g(tt, 'params', 'tick'))}; one entry per D1 bar")),
+        html.Div(extra, className='chips chips-left') if extra else None,
+    ])
+
+
+def _vote_box(tt):
+    v = dd(tt.get('vote'))
+    if not v:
+        return None
+    r, m = dd(v.get('rsi')), dd(v.get('macd'))
+    val = v.get('value')
+    allows = v.get('allows')
+    head = html.Div(className='box-head', children=[
+        html.Span(f"{v.get('tf') or 'M15'} vote of the last closed bar", className='mini-title'),
+        badge(vote_glyph(val) if val is not None else 'unknown', 'accent' if val in (1, -1) else 'neutral'),
+        html.Span((f"allows a {allows}" if allows else 'allows neither side') +
+                  f" · bar {when(v.get('bar_utc') or v.get('bar_t'), seconds=False)}–{when(v.get('bar_close_utc') or v.get('bar_close_t'), seconds=False)}"
+                  f" · next read {when(v.get('next_read_utc') or v.get('next_read_t'))}"
+                  f" · {smart(v.get('bars'))} closed bars", className='muted'),
+    ])
+    rows = [
+        ['RSI', vote_glyph(r.get('vote')), smart(r.get('now')), _part_text(r, 'rsi'),
+         f"highs count ≥ {smart(r.get('ob'))}, lows ≤ {smart(r.get('os'))}"],
+        ['MACD hist', vote_glyph(m.get('vote')), smart(m.get('now')), _part_text(m, 'macd'),
+         f"line {smart(m.get('line'))}, signal {smart(m.get('signal'))}: {m.get('side_rule') or '?'} pivots count"],
+    ]
+    sparks = html.Div(className='spark-pair', children=[
+        html.Div([html.Div(f"RSI {smart(r.get('now'))}", className='spark-t'),
+                  _spark(r.get('series'), r.get('bars_ago'), r.get('pivot'), bands=[r.get('os'), r.get('ob')])]),
+        html.Div([html.Div(f"MACD histogram {smart(m.get('now'))} (grey: the signal line)", className='spark-t'),
+                  _spark(m.get('series'), m.get('bars_ago'), m.get('pivot'), zero=True, extra=m.get('signal_series'))]),
+    ])
+    return html.Div(className='box', children=[
+        head,
+        table(['part', 'vote', 'now', 'latest pivot → slope', 'rule'], rows),
+        sparks,
+        html.Div(v.get('rule'), className='line muted') if v.get('rule') else None,
+    ])
+
+
+def _channels_box(tt, digits):
+    ch = dd(tt.get('channels'))
+    allc = dd(ch.get('all'))
+    rows = []
+    for days in ('10', '20', '55'):
+        c = dd(allc.get(days) or allc.get(int(days)))
+        if not c:
+            continue
+        rows.append([f'{days}-day', px(c.get('high'), digits), (c.get('high_utc') or '')[:10] or '—',
+                     px(c.get('low'), digits), (c.get('low_utc') or '')[:10] or '—'])
+    bar = dd(ch.get('bar'))
+    d1 = dd(tt.get('d1'))
+    d1_line = (f"{smart(d1.get('bars'))} closed D1 bars used (asked {smart(d1.get('asked'))}, needs {smart(d1.get('min_bars'))})"
+               f" · last D1 bar {(d1.get('last_bar_utc') or '')[:10] or '—'} · next D1 close {when(d1.get('next_close_utc') or d1.get('next_close_t'))}"
+               + (f" (in {dur((ts(d1.get('next_close_t') or d1.get('next_close_utc')) or 0) - _now())})"
+                  if ts(d1.get('next_close_t') or d1.get('next_close_utc')) else ''))
+    kids = [html.Div(className='box-head', children=[html.Span('The D1 channels', className='mini-title'),
+                                                    html.Span(d1_line, className='muted')])]
+    if d1.get('stale'):
+        kids.append(html.Div('The D1 bar that closed at 00:00 UTC is not there yet: the bot goes on with the levels and '
+                             'the stop of the bar before and asks again every poll.', className='banner banner-warn'))
+    if rows:
+        kids.append(table(['channel', 'high', 'made on', 'low', 'made on'], rows, num_cols=(1, 3)))
+    if bar:
+        kids.append(html.Div(className='line', children=(
+            f"Last closed D1 bar {(bar.get('utc') or '')[:10]}: O {px(bar.get('o'), digits)} · H {px(bar.get('h'), digits)} · "
+            f"L {px(bar.get('l'), digits)} · C {px(bar.get('c'), digits)} · true range {smart(bar.get('true_range'), 2)}")))
+    for key in ('entry', 'exit'):
+        rule = g(ch, key, 'rule')
+        if rule:
+            kids.append(html.Div(rule, className='line muted'))
+    return html.Div(kids, className='box')
+
+
+def _filter_box(tt, digits):
+    f = tt.get('filter')
+    if not isinstance(f, dict):
+        return None
+    hyp = dd(f.get('hypothetical'))
+    rows = [[side_glyph(x.get('side')), (x.get('entry_utc') or '')[:10], px(x.get('entry'), digits),
+             (x.get('exit_utc') or '')[:10], px(x.get('exit'), digits), 'win' if x.get('win') else 'loss']
+            for x in dl(hyp.get('trades'))]
+    return html.Div(className='box', children=[
+        html.Div(className='box-head', children=[
+            html.Span("System 1's filter", className='mini-title'),
+            badge('20-day breakouts' if f.get('use20') else '55-day failsafe', 'accent' if f.get('use20') else 'neutral'),
+            html.Span(f"levels from the {f.get('levels_from') or '?'} channel · the filter's own trade: "
+                      f"{hyp.get('state') or 'flat'} · last one {'won' if hyp.get('last_win') else 'lost or none'}",
+                      className='muted')]),
+        table(['side', 'entry day', 'entry', 'exit day', 'exit', 'result'], rows, num_cols=(2, 4)) if rows else None,
+        html.Div(f.get('rule'), className='line muted') if f.get('rule') else None,
+    ])
+
+
+def _new_trade_box(tt, digits):
+    nt = tt.get('new_trade')
+    if not isinstance(nt, dict):
+        return None
+    rows = []
+    for side in ('buy', 'sell'):
+        s = dd(nt.get(side))
+        rows.append([side_glyph(side), f"{px(s.get('entry'), digits)} ({s.get('at') or '?'})",
+                     f"{px(s.get('stop'), digits)} ({s.get('stop_origin') or '?'})", px(s.get('next_add'), digits),
+                     px(s.get('backstop'), digits), pl(s.get('pnl_at_stop'))])
+    return html.Div(className='box', children=[
+        html.Div(className='box-head', children=[
+            html.Span('A trade opened now would get', className='mini-title'),
+            html.Span(f"{smart(nt.get('units'))} unit = {fnum(nt.get('lots'), 2)} lot a leg · N {smart(nt.get('n'), 2)} frozen · "
+                      f"stop 2N {smart(nt.get('stop_dist'), 2)} · add every {smart(nt.get('add_step'), 2)} · "
+                      f"{smart(nt.get('max_legs'))} legs at most · balance {money(nt.get('balance'))}", className='muted')]),
+        table(['side', 'entry', 'stop', 'first add', 'broker backstop', 'P/L at the stop (1 leg)'], rows,
+              num_cols=(1, 2, 3, 4, 5)),
+    ])
+
+
+@safe()
+def strategy_panel(d):
+    tr = dd(d.get('trace'))
+    if tr.get('strategy') == 'turtle' or (tr.get('turtle') and not tr.get('basket')):
+        return turtle_panel(d)
+    return basket_panel(d)
+
+
+# ───────────────────────────── the open position ─────────────────────────────
+
+def legs_table(legs, digits, turtle=False):
+    rows = []
+    for i, lg in enumerate(dl(legs)):
+        rows.append([smart(lg.get('n') or i + 1), smart(lg.get('ticket') or lg.get('id')), when(lg.get('open_utc') or lg.get('open_t')),
+                     px(lg.get('price'), digits), fnum(lg.get('lots'), 2), pl(lg.get('profit')), money(lg.get('swap')),
+                     px(lg.get('backstop'), digits) if num(lg.get('backstop')) else 'none',
+                     '✓' if lg.get('listed', True) else 'not listed yet'])
+    return table(['leg', 'ticket', 'opened', 'price', 'lots', 'P/L', 'swap', 'broker sl (backstop)', 'listed'], rows,
+                 num_cols=(3, 4, 5, 6, 7))
+
+
+@safe()
+def position_view(d):
+    tr = dd(d.get('trace'))
+    digits = digits_of(d)
+    if (tr.get('strategy') or getattr(_C, 'STRATEGY', 'basket')) == 'turtle' or tr.get('turtle'):
+        return _turtle_position(d, dd(tr.get('turtle')), digits)
+    return _basket_position(d, g(tr, 'basket', 'open'), digits)
+
+
+def _last_closed_line(d, digits):
+    closed = dl(g(d, 'trades', 'closed'))
+    if not closed:
+        return 'No closed trade yet.'
+    c = closed[-1]
+    return (f"Last trade: {side_glyph(c.get('side'))} {smart(len(lst(c.get('legs'))))} leg(s), {fnum(c.get('lots'), 2)} lot, "
+            f"opened {when(c.get('open_utc') or c.get('open_t'))} at {px(c.get('open_price'), digits)}, closed "
+            f"{when(c.get('close_utc') or c.get('close_t'))} at {px(c.get('close_price'), digits)} "
+            f"({c.get('exit_reason_text') or c.get('exit_reason') or '?'}): {money(c.get('pnl'), signed=True)}, "
+            f"{dur(_now() - (ts(c.get('close_t') or c.get('close_utc')) or _now()))} ago.")
+
+
+def _basket_position(d, op, digits):
+    if not isinstance(op, dict):
+        return card('Open position', html.Div([html.Div('Flat: no basket open.', className='flat'),
+                                               html.Div(_last_closed_line(d, digits), className='line muted')]))
+    side = op.get('side')
+    pnl = num(op.get('pnl'))
+    stop_usd, tgt_usd = num(op.get('stop_usd')), num(op.get('target_usd'))
+    lo = -stop_usd if stop_usd else min(-1.0, (pnl or 0) * 1.5)
+    hi = tgt_usd if tgt_usd else max(1.0, (pnl or 0) * 1.5)
+    gauge = meter(lo * 1.08, hi * 1.08, pnl, marks=[(lo, 'STOP' if stop_usd else '', 'mk-sell'), (0, '0', 'mk-zero'),
+                                                     (hi, 'TARGET' if tgt_usd else '', 'mk-buy')],
+                  bands=[(lo * 1.08, lo, 'band-neg'), (hi, hi * 1.08, 'band-pos')],
+                  lo_label=(f"stop -{money(stop_usd)} at {op.get('judged_on') or ''} {px(op.get('stop_price'), digits)} · "
+                            f"{money(op.get('to_stop_usd'))} away") if stop_usd else 'no stop',
+                  hi_label=(f"target +{money(tgt_usd)} at {op.get('judged_on') or ''} {px(op.get('target_price'), digits)} · "
+                            f"{money(op.get('to_target_usd'))} to go") if tgt_usd else 'no target',
+                  kind='pos' if (pnl or 0) > 0 else 'neg' if (pnl or 0) < 0 else 'accent')
+    ld = dd(op.get('ladder'))
+    if ld.get('on') is False or not ld:
+        ladder = ld.get('note') or 'no ladder in this design'
+    elif ld.get('exhausted'):
+        ladder = f"all adds made ({smart(ld.get('count'))} legs)"
+    else:
+        ladder = (f"next add: leg {smart((num(ld.get('count')) or 0) + 1)} on a {ld.get('tier_tf') or '?'} {ld.get('trigger') or ''}"
+                  f" ({'armed' if ld.get('armed') else 'not armed yet'}), {ld.get('judged_on') or ''} at "
+                  f"{px(ld.get('next_add_price'), digits)} or better (now {px(ld.get('price_now'), digits)}), "
+                  f"{fnum(ld.get('next_add_lots'), 2)} lot")
+    flags = []
+    for key, text, kind in (('levels_pending', 'levels pending', 'warn'), ('close_pending', 'close pending', 'warn'),
+                            ('closing', 'closing this poll', 'accent'), ('known_to_bot', None, None)):
+        if key == 'known_to_bot':
+            if op.get('known_to_bot') is False:
+                flags.append(chip('taken over from the terminal (no state file)', 'warn'))
+        elif op.get(key):
+            flags.append(chip(text, kind))
+    info = html.Div(className='kvs', children=[
+        kv('Average price', px(op.get('avg_price'), digits)),
+        kv(f"Price now ({op.get('judged_on') or '?'})", px(op.get('price_now'), digits)),
+        kv('Stop', f"{px(op.get('stop_price'), digits)} (-{money(stop_usd)})" if stop_usd else 'none'),
+        kv('Target', f"{px(op.get('target_price'), digits)} (+{money(tgt_usd)})" if tgt_usd else 'none'),
+        kv('Broker backstops', ', '.join(px(x, digits) for x in lst(op.get('backstop_prices'))) or 'none'),
+        kv('Volatility unit', f"{smart(op.get('vol_unit'))} ({op.get('vol_source') or '?'})"),
+        kv('Add gap', smart(op.get('gap_px'))),
+        kv('Opened', f"{when(op.get('opened_utc') or op.get('opened_at'))} by {op.get('opened_by') or '?'} · {dur(op.get('age_s'))} ago"),
+    ])
+    body = html.Div([
+        html.Div(className='pos-head', children=[
+            badge(side_glyph(side), 'accent'),
+            html.Span(f"{smart(len(dl(op.get('legs'))))} leg(s) · {fnum(op.get('lots'), 2)} lot · unit {smart(op.get('units'))}",
+                      className='pos-what'),
+            html.Span(money(pnl, signed=True), className=f'pos-pl {pl_class(pnl)}'),
+            *flags,
+        ]),
+        gauge,
+        html.Div(ladder, className='line'),
+        info,
+        legs_table(op.get('legs'), digits),
+    ])
+    return card('Open basket', body, sub='its stop, target and add gap were fixed when it opened')
+
+
+def _turtle_position(d, tt, digits):
+    trd = tt.get('trade')
+    if not isinstance(trd, dict):
+        return card('Open position', html.Div([html.Div('Flat: no Turtle trade open.', className='flat'),
+                                               html.Div(_last_closed_line(d, digits), className='line muted')]))
+    if trd.get('both_sides'):
+        return card('Open position', html.Div('A buy and a sell of this bot are open: it holds still (BOTH_SIDES).',
+                                               className='banner banner-warn'))
+    side = trd.get('side')
+    pnl = num(trd.get('pnl'))
+    stop, nxt, now_px = num(trd.get('stop')), num(trd.get('next_add')), num(trd.get('price_now'))
+    long_ = str(side).upper() == 'BUY'
+    gauge = None
+    if stop is not None and now_px is not None:
+        far = nxt if nxt is not None else (now_px + (now_px - stop) * 0.3)
+        lo, hi = (stop, far) if long_ else (far, stop)
+        span = (hi - lo) or 1.0
+        marks = [(stop, 'STOP', 'mk-sell')]
+        if nxt is not None:
+            marks.append((nxt, 'NEXT ADD', 'mk-accent'))
+        for lg in dl(trd.get('legs')):
+            if num(lg.get('price')) is not None:
+                marks.append((lg['price'], '', 'mk-leg'))
+        stop_txt = (f"stop {px(stop, digits)} ({trd.get('stop_text') or trd.get('stop_origin') or ''}) · "
+                    f"{smart(trd.get('to_stop'), digits)} away · P/L there {money(trd.get('pnl_at_stop'), signed=True)}")
+        add_txt = (f"next add {px(nxt, digits)} at {trd.get('next_add_judged_on') or 'ask'} · "
+                   f"{smart(trd.get('to_next_add'), digits)} to go") if nxt is not None else 'the trade is full: no more adds'
+        gauge = meter(lo - span * 0.04, hi + span * 0.04, now_px, marks=marks,
+                      lo_label=stop_txt if long_ else add_txt, hi_label=add_txt if long_ else stop_txt,
+                      kind='pos' if (pnl or 0) > 0 else 'neg' if (pnl or 0) < 0 else 'accent')
+    info = html.Div(className='kvs', children=[
+        kv('Entry level', px(trd.get('entry_level'), digits), title=f"the levels of the D1 bar of {(trd.get('entry_d1_utc') or '')[:10]}"),
+        kv('Average price', px(trd.get('avg_price'), digits)),
+        kv(f"Price now ({trd.get('judged_on') or '?'})", px(now_px, digits)),
+        kv('N at the entry', smart(trd.get('n_entry'), 2)),
+        kv('Stop', f"{px(stop, digits)} · {trd.get('stop_origin') or '?'}"),
+        kv('2N from the best fill', px(trd.get('stop_2n'), digits)),
+        kv('Exit channel', f"{px(trd.get('stop_channel'), digits)} (now {px(trd.get('exit_channel_now'), digits)})"),
+        kv('Broker backstops', ', '.join(px(x, digits) for x in lst(trd.get('backstop_prices'))) or 'none'),
+        kv('Adds left', smart(trd.get('adds_left'))),
+        kv('Entered', f"{when(trd.get('entry_utc') or trd.get('entry_t'))} · {dur(trd.get('age_s'))} ago"),
+    ])
+    stops = dl(g(trd, 'journal', 'stops'))
+    stop_rows = [[when(s.get('utc') or s.get('t')), px(s.get('stop'), digits), s.get('origin') or '—', s.get('why') or '—']
+                 for s in stops]
+    flags = []
+    if trd.get('known_to_bot') is False:
+        flags.append(chip('positions it could not take over', 'warn'))
+    if trd.get('pending_fill'):
+        flags.append(chip('a leg is not listed yet', 'warn'))
+    if trd.get('closing'):
+        flags.append(chip('closing this poll', 'accent'))
+    if g(trd, 'journal', 'rebuilt'):
+        flags.append(chip('rebuilt from the terminal after a start without the state file', 'warn'))
+    body = html.Div([
+        html.Div(className='pos-head', children=[
+            badge(side_glyph(side), 'accent'),
+            html.Span(f"{smart(trd.get('legs_count'))}/{smart(trd.get('max_legs'))} legs · {fnum(trd.get('lots'), 2)} lot · "
+                      f"unit {smart(trd.get('units'))}", className='pos-what'),
+            html.Span(money(pnl, signed=True), className=f'pos-pl {pl_class(pnl)}'),
+            *flags,
+        ]),
+        gauge,
+        info,
+        legs_table(trd.get('legs'), digits, turtle=True),
+        html.Div([html.Div('Every stop move', className='mini-title'),
+                  table(['time', 'stop', 'from', 'why'], stop_rows, num_cols=(1,))]) if stop_rows else None,
+    ])
+    return card('Open Turtle trade', body, sub='one stop for every leg, never loosened; no target')
+
+
+# ───────────────────────────── the chart ─────────────────────────────
+
+def _bars(d, tf):
+    """The bars of one timeframe as lists (t, o, h, l, c), the forming bar moved with the trace's bid."""
+    b = dd(g(d, 'bars', 'tf', tf))
+    cols = [lst(b.get(k)) for k in ('t', 'o', 'h', 'l', 'c')]
+    n = min(len(c) for c in cols) if all(isinstance(c, list) for c in cols) else 0
+    t, o, h, l, c = [], [], [], [], []
+    for i in range(n):
+        vals = [num(cols[j][i]) for j in range(5)]
+        if any(v is None for v in vals):
+            continue
+        t.append(vals[0]); o.append(vals[1]); h.append(vals[2]); l.append(vals[3]); c.append(vals[4])
+    bid = num(g(d, 'trace', 'market', 'bid'))
+    tick_t = ts(g(d, 'trace', 'market', 'tick_t')) or ts(g(d, 'trace', 't'))
+    tf_s = TF_SECONDS.get(tf, 60)
+    if t and bid is not None and tick_t is not None and t[-1] <= tick_t < t[-1] + tf_s:
+        c[-1] = bid
+        h[-1] = max(h[-1], bid)
+        l[-1] = min(l[-1], bid)
+    return t, o, h, l, c
+
+
+def _ms(t):
+    """A time for a plotly date axis: the UTC wall-clock time as text. (Numbers would be shown in the browser's own
+    time zone; the bot and its log work in UTC.)"""
+    if t is None:
+        return None
+    return utc(float(t)).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+
+
+def _result_col(pnl):
+    v = num(pnl)
+    return COL['pos'] if v is not None and v > 0 else (COL['neg'] if v is not None and v < 0 else COL['muted'])
+
+
+@safe('figure')
+def price_figure(d, tf):
+    """Candles (bid) with this bot's entries (▲ buy / ▼ sell), exits (✕, green win / red loss), a dotted line
+    from every entry to its exit, and the open trade's levels as labelled lines (Turtle: also today's levels)."""
+    tf = tf if tf in TF_SECONDS else 'M15'
+    tf_s = TF_SECONDS[tf]
+    digits = digits_of(d)
+    t, o, h, l, c = _bars(d, tf)
+    fig = go.Figure()
+    base_layout = dict(
+        height=600, margin=dict(l=70, r=168, t=36, b=36), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family=FONT, size=11, color=COL['text2']), hovermode='closest', dragmode='pan',
+        hoverlabel=dict(bgcolor=COL['raised'], bordercolor=COL['line'], font=dict(family=FONT, size=12, color=COL['text'])),
+        legend=dict(orientation='h', x=0, y=1.0, xanchor='left', yanchor='bottom', font=dict(size=11, color=COL['text2']),
+                    bgcolor='rgba(0,0,0,0)', itemclick='toggle', itemdoubleclick='toggleothers'),
+        uirevision=f"{d.get('symbol')}-{tf}",
+    )
+    if not t:
+        fig.update_layout(**dict(base_layout, height=260))
+        fig.add_annotation(text=f'No {tf} bars yet ({d.get("bars_problem") or "the bars file has none"}).',
+                           x=0.5, y=0.5, xref='paper', yref='paper', showarrow=False, font=dict(size=14, color=COL['muted']))
+        fig.update_xaxes(visible=False)
+        fig.update_yaxes(visible=False)
+        return fig
+    x = [_ms(v) for v in t]
+    fig.add_trace(go.Candlestick(
+        x=x, open=o, high=h, low=l, close=c, name=f'{tf} bars (bid)',
+        increasing=dict(line=dict(color=COL['candle_up'], width=1), fillcolor=COL['candle_up']),
+        decreasing=dict(line=dict(color=COL['candle_down'], width=1), fillcolor=COL['candle_down']),
+        whiskerwidth=0, hoverlabel=dict(bgcolor=COL['raised']),
+    ))
+    t0, t_end = t[0], t[-1] + tf_s
+    now_x = _ms(t[-1])
+
+    def snap(v):
+        v = ts(v)
+        return None if v is None else _ms(math.floor(v / tf_s) * tf_s)
+
+    def visible(v):
+        v = ts(v)
+        return v is not None and t0 <= v < t_end
+
+    y_lo, y_hi = min(l), max(h)
+    keep = []          # prices that must stay in view
+    trades = dl(g(d, 'trades', 'closed'))
+    tr = dd(d.get('trace'))
+    # ── closed trades: entries, exits, the lines between ──
+    ent = {'BUY': ([], [], []), 'SELL': ([], [], [])}
+    ex = {'win': ([], [], []), 'loss': ([], [], [])}
+    lines = {'win': ([], []), 'loss': ([], [])}
+    for k, tr_ in enumerate(trades):
+        legs = dl(tr_.get('legs'))
+        pnl = num(tr_.get('pnl'))
+        res = 'win' if (pnl or 0) > 0 else 'loss'
+        reason = tr_.get('exit_reason_text') or tr_.get('exit_reason') or '?'
+        close_t, close_px = ts(tr_.get('close_t') or tr_.get('close_utc')), num(tr_.get('close_price'))
+        side = str(tr_.get('side') or '').upper()
+        for i, lg in enumerate(legs):
+            ot, op_ = ts(lg.get('open_t')), num(lg.get('open_price'))
+            if ot is None or op_ is None:
+                continue
+            lt, lp = ts(lg.get('close_t')) or close_t, num(lg.get('close_price')) or close_px
+            if visible(ot):
+                bucket = ent.get(side) or ent['BUY']
+                bucket[0].append(snap(ot)); bucket[1].append(op_)
+                bucket[2].append(f"<b>{side_glyph(side)} · leg {i + 1} of {len(legs)}{' (add)' if i else ''}</b><br>"
+                                 f"{stamp(ot)}<br>{px(op_, digits)} · {fnum(lg.get('lots'), 2)} lot<br>"
+                                 f"trade {tr_.get('id')}: {reason}, {money(pnl, signed=True)} · leg {money(lg.get('net'), signed=True)}")
+            if lt is not None and lp is not None and (visible(ot) or visible(lt)):
+                lines[res][0].extend([snap(max(ot, t0)), snap(min(lt, t_end - 1)), None])
+                lines[res][1].extend([op_, lp, None])
+        if close_t is not None and close_px is not None and visible(close_t):
+            ex[res][0].append(snap(close_t)); ex[res][1].append(close_px)
+            ex[res][2].append(f"<b>✕ EXIT · {reason}</b><br>{stamp(close_t)} · {px(close_px, digits)}<br>"
+                              f"{len(legs)} leg(s) · {fnum(tr_.get('lots'), 2)} lot · held {dur(tr_.get('hold_s'))}<br>"
+                              f"P/L <b>{money(pnl, signed=True)}</b> · balance after {money(tr_.get('balance_after'))}")
+    for res, (lx, ly) in lines.items():
+        if lx:
+            fig.add_trace(go.Scatter(x=lx, y=ly, mode='lines', name='trade (won)' if res == 'win' else 'trade (lost)',
+                                     line=dict(color=COL['pos'] if res == 'win' else COL['neg'], width=1.5, dash='dot'),
+                                     hoverinfo='skip', legendgroup=res, showlegend=False))
+    # ── the open position ──
+    open_legs, open_side, open_pnl, levels = [], None, None, []
+    bk_open = g(tr, 'basket', 'open')
+    trd = g(tr, 'turtle', 'trade')
+    price_now = None
+    if isinstance(bk_open, dict):
+        open_legs, open_side, open_pnl = dl(bk_open.get('legs')), bk_open.get('side'), bk_open.get('pnl')
+        price_now = num(bk_open.get('price_now'))
+        jo = bk_open.get('judged_on') or ''
+        t_from = ts(bk_open.get('first_t') or bk_open.get('opened_at'))
+        levels += [
+            dict(y=bk_open.get('target_price'), name='TARGET', col=COL['pos'], dash='solid', t_from=t_from, key=True,
+                 hover=f"target +{money(bk_open.get('target_usd'))} (P/L > target, judged on the {jo}) · "
+                       f"{money(bk_open.get('to_target_usd'))} to go"),
+            dict(y=bk_open.get('stop_price'), name='STOP', col=COL['neg'], dash='solid', t_from=t_from, key=True,
+                 hover=f"stop -{money(bk_open.get('stop_usd'))} (judged on the {jo}) · {money(bk_open.get('to_stop_usd'))} away"),
+            dict(y=bk_open.get('avg_price'), name='AVG', col=COL['muted'], dash='dashdot', t_from=t_from, key=True,
+                 hover='the basket\'s lot-weighted average price'),
+        ]
+        for i, b_ in enumerate(lst(bk_open.get('backstop_prices'))):
+            levels.append(dict(y=b_, name='BACKSTOP' if i == 0 else '', col=COL['neg'], dash='dot', t_from=t_from, key=False,
+                               width=1, hover=f"broker backstop (the sl of leg {i + 1}): only acts while the bot is down"))
+        ld = dd(bk_open.get('ladder'))
+        if ld.get('on') and not ld.get('exhausted') and num(ld.get('next_add_price')) is not None:
+            levels.append(dict(y=ld.get('next_add_price'), name='NEXT ADD', col=COL['accent'], dash='dash', t_from=t_from,
+                               key=True, hover=f"next add: {ld.get('tier_tf')} {ld.get('trigger')} "
+                                               f"({'armed' if ld.get('armed') else 'not armed'}), {ld.get('judged_on')} at this price or better"))
+    elif isinstance(trd, dict) and not trd.get('both_sides'):
+        open_legs, open_side, open_pnl = dl(trd.get('legs')), trd.get('side'), trd.get('pnl')
+        price_now = num(trd.get('price_now'))
+        t_from = ts(trd.get('entry_t') or trd.get('entry_utc'))
+        # the stop as it moved: a step line from the entry to now
+        stops = [s for s in dl(g(trd, 'journal', 'stops')) if ts(s.get('t') or s.get('utc')) and num(s.get('stop'))]
+        if len({snap(max(ts(s.get('t') or s.get('utc')), t0)) for s in stops}) < 2:
+            stops = []                  # every move inside one bar of this timeframe: the stop as a plain line
+        if stops and t_from is not None:
+            sx, sy = [], []
+            for s in stops:
+                st_t = max(ts(s.get('t') or s.get('utc')), t0)
+                sx.append(snap(st_t)); sy.append(num(s.get('stop')))
+            sx.append(_ms(t_end)); sy.append(num(trd.get('stop')) or sy[-1])
+            fig.add_trace(go.Scatter(x=sx, y=sy, mode='lines', line=dict(color=COL['neg'], width=2, shape='hv'),
+                                     name='stop (as it moved)', hovertemplate='stop %{y:,.' + str(digits) + 'f}<extra></extra>'))
+        levels.append(dict(y=trd.get('stop'), name='STOP', col=COL['neg'], dash='solid', t_from=None if stops else t_from,
+                           key=True, line=not stops,
+                           hover=f"the one stop of every leg: {trd.get('stop_text') or trd.get('stop_origin')} · "
+                                 f"{smart(trd.get('to_stop'), digits)} away · P/L there {money(trd.get('pnl_at_stop'), signed=True)}"))
+        if num(trd.get('next_add')) is not None:
+            levels.append(dict(y=trd.get('next_add'), name='NEXT ADD', col=COL['accent'], dash='dash', t_from=t_from, key=True,
+                               hover=f"next leg at {trd.get('next_add_judged_on') or 'ask'} ≥ this (the last fill + 0.5N)"))
+        for i, b_ in enumerate(lst(trd.get('backstop_prices'))):
+            levels.append(dict(y=b_, name='BACKSTOP' if i == 0 else '', col=COL['neg'], dash='dot', t_from=t_from, key=False,
+                               width=1, hover=f"broker backstop of leg {i + 1} (1 N beyond the stop at its fill)"))
+        levels.append(dict(y=trd.get('avg_price'), name='AVG', col=COL['muted'], dash='dashdot', t_from=t_from, key=True,
+                           hover='the trade\'s average price'))
+    # ── the Turtle's levels ──
+    lv = g(tr, 'turtle', 'levels')
+    ov = g(d, 'bars', 'overlay', 'turtle')
+    if tf == 'D1' and isinstance(ov, dict) and ov.get('from_t'):
+        steps = {'buy': ('BUY LEVEL', 'dash'), 'sell': ('SELL LEVEL', 'dash'), 'exit_long': ('EXIT (long)', 'dot'),
+                 'exit_short': ('EXIT (short)', 'dot')}
+        ft = lst(ov.get('from_t'))
+        for key, (name, dash_) in steps.items():
+            ys = lst(ov.get(key))
+            pts = [(ts(a), num(b_)) for a, b_ in zip(ft, ys)]
+            pts = [(a, b_) for a, b_ in pts if a is not None and b_ is not None and a >= t0 - 86400]
+            if not pts:
+                continue
+            fig.add_trace(go.Scatter(x=[_ms(a) for a, _ in pts] + [_ms(t_end)], y=[b_ for _, b_ in pts] + [pts[-1][1]],
+                                     mode='lines', line=dict(color=COL['blue'], width=1.4 if dash_ == 'dash' else 1,
+                                                             dash=dash_, shape='hv'),
+                                     name=name.lower(),
+                                     hovertemplate=name.lower() + ' %{y:,.' + str(digits) + 'f}<extra></extra>'))
+            levels.append(dict(y=pts[-1][1], name=name.split(' (')[0] if 'EXIT' not in name else name, col=COL['blue'],
+                               dash=dash_, key=False, line=False, hover=name.lower()))
+    elif isinstance(lv, dict) and lv.get('ok') is not False:
+        day_from = ts(lv.get('from_time') or lv.get('from_utc'))
+        long_ = str(open_side or '').upper() == 'BUY'
+        short_ = str(open_side or '').upper() == 'SELL'
+        days = g(tr, 'turtle', 'channels', 'entry', 'days') or '?'
+        xdays = g(tr, 'turtle', 'channels', 'exit', 'days') or '?'
+        levels += [
+            dict(y=lv.get('buy'), name='BUY LEVEL', col=COL['blue'], dash='dash', t_from=day_from, key=not open_side, width=1.4,
+                 hover=f"today's buy level (the {days}-day high + tick): an entry when the ask reaches it with the M15 vote +1"),
+            dict(y=lv.get('sell'), name='SELL LEVEL', col=COL['blue'], dash='dash', t_from=day_from, key=not open_side, width=1.4,
+                 hover=f"today's sell level (the {days}-day low - tick): an entry when the bid reaches it with the M15 vote -1"),
+        ]
+        if long_:
+            levels.append(dict(y=lv.get('trail_long'), name='EXIT CHANNEL', col=COL['blue'], dash='dot', t_from=day_from,
+                               key=False, width=1,
+                               hover=f"the {xdays}-day low: the long's stop is raised to it at a D1 close when it is tighter"))
+        if short_:
+            levels.append(dict(y=lv.get('trail_short'), name='EXIT CHANNEL', col=COL['blue'], dash='dot', t_from=day_from,
+                               key=False, width=1,
+                               hover=f"the {xdays}-day high: the short's stop is lowered to it at a D1 close when it is tighter"))
+    # ── the open legs ──
+    if open_legs:
+        ox, oy, ot_ = [], [], []
+        lx, ly = [], []
+        side = str(open_side or '').upper()
+        for i, lg in enumerate(open_legs):
+            t_in, p_in = ts(lg.get('open_t') or lg.get('open_utc')), num(lg.get('price'))
+            if t_in is None or p_in is None:
+                continue
+            if visible(t_in):
+                ox.append(snap(t_in)); oy.append(p_in)
+                ot_.append(f"<b>{side_glyph(side)} · open leg {i + 1} of {len(open_legs)}{' (add)' if i else ''}</b><br>"
+                           f"{stamp(t_in)}<br>{px(p_in, digits)} · {fnum(lg.get('lots'), 2)} lot · P/L {money(lg.get('profit'), signed=True)}")
+            if price_now is not None:
+                lx.extend([snap(max(t_in, t0)), now_x, None]); ly.extend([p_in, price_now, None])
+        if lx:
+            fig.add_trace(go.Scatter(x=lx, y=ly, mode='lines', line=dict(color=_result_col(open_pnl), width=1.5, dash='dash'),
+                                     hoverinfo='skip', name='open trade', showlegend=False))
+        if ox:
+            fig.add_trace(go.Scatter(x=ox, y=oy, mode='markers', name='open legs', text=ot_,
+                                     hovertemplate='%{text}<extra></extra>',
+                                     marker=dict(symbol='triangle-up' if side == 'BUY' else 'triangle-down', size=14,
+                                                 color=COL['accent'], line=dict(color=COL['text'], width=1.5))))
+            keep += oy
+    for side, (xs, ys, txt) in ent.items():
+        if xs:
+            fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers', name=f'{side.lower()} entries', text=txt,
+                                     hovertemplate='%{text}<extra></extra>',
+                                     marker=dict(symbol='triangle-up' if side == 'BUY' else 'triangle-down', size=12,
+                                                 color=COL['accent'], line=dict(color=COL['surface'], width=1.5))))
+    for res, (xs, ys, txt) in ex.items():
+        if xs:
+            fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers', name='exits (won)' if res == 'win' else 'exits (lost)',
+                                     text=txt, hovertemplate='%{text}<extra></extra>', legendgroup=res,
+                                     marker=dict(symbol='x', size=12, color=COL['pos'] if res == 'win' else COL['neg'],
+                                                 line=dict(color=COL['surface'], width=1.5))))
+    # ── the price now ──
+    bid = num(g(tr, 'market', 'bid'))
+    if bid is not None:
+        levels.append(dict(y=bid, name='BID', col=COL['text2'], dash='dot', t_from=t[max(0, len(t) - 1 - max(6, len(t) // 10))],
+                           key=True, width=1, line=True,
+                           hover=f"the bid now · ask {px(g(tr, 'market', 'ask'), digits)} · spread {smart(g(tr, 'market', 'spread'))}"))
+    # ── y range: the candles and the levels that matter; the others get a tag at the edge ──
+    reach = (y_hi - y_lo) * 0.6          # a level this far beyond the candles still widens the range; farther: a tag
+    for lvl in levels:
+        y = num(lvl.get('y'))
+        if lvl.get('key') and y is not None and y_lo - reach <= y <= y_hi + reach:
+            keep.append(y)
+    lo_v, hi_v = min([y_lo] + keep), max([y_hi] + keep)
+    pad = (hi_v - lo_v) * 0.06 or max(abs(hi_v) * 0.001, 1.0)
+    lo_v, hi_v = lo_v - pad, hi_v + pad
+    tags = []
+    for lvl in levels:
+        y = num(lvl.get('y'))
+        if y is None:
+            continue
+        inside = lo_v <= y <= hi_v
+        if lvl.get('line', True) and inside:
+            x_from = snap(max(lvl['t_from'], t0)) if lvl.get('t_from') else _ms(t0)
+            fig.add_trace(go.Scatter(x=[x_from, _ms(t_end)], y=[y, y], mode='lines', showlegend=False,
+                                     line=dict(color=lvl['col'], width=lvl.get('width', 1.6), dash=lvl['dash']),
+                                     hovertemplate=f"<b>{lvl['name'] or 'level'} {px(y, digits)}</b><br>{lvl.get('hover', '')}<extra></extra>"))
+        if lvl.get('name'):
+            tags.append((y if inside else (hi_v if y > hi_v else lo_v), lvl, inside, y))
+    # price tags at the right edge (over the price axis), spread so that none covers another: an upward pass,
+    # then a downward one from the top edge, so every tag stays as close to its line as the others allow
+    plot_h = 600 - 36 - 36
+    per_px = (hi_v - lo_v) / plot_h
+    gap = 18 * per_px
+    tags.sort(key=lambda z: z[0])
+    ys = [z[0] for z in tags]
+    for i in range(1, len(ys)):
+        ys[i] = max(ys[i], ys[i - 1] + gap)
+    top = hi_v - gap * 0.5
+    if ys and ys[-1] > top:
+        ys[-1] = top
+        for i in range(len(ys) - 2, -1, -1):
+            ys[i] = min(ys[i], ys[i + 1] - gap)
+    for y_draw, (y_at, lvl, inside, y_true) in zip(ys, tags):
+        arrow = '' if inside else ('▲ ' if y_true > hi_v else '▼ ')
+        fig.add_annotation(x=1.0, xref='paper', xanchor='left', y=y_draw, yref='y', showarrow=False,
+                           text=f"{arrow}{lvl['name']} {px(y_true, digits)}", align='left',
+                           font=dict(family=MONO, size=10.5, color=COL['text']),
+                           bgcolor=COL['raised'], bordercolor=lvl['col'], borderwidth=1, borderpad=3,
+                           hovertext=lvl.get('hover'), xshift=4)
+    # gaps in the bars (a weekend, gold's daily break on D1) are left out of the time axis
+    gap_s = 1.5 * tf_s if tf_s >= 86400 else max(3 * tf_s, 3 * 3600)
+    breaks = []
+    for i in range(1, len(t)):
+        if t[i] - t[i - 1] > gap_s:
+            breaks.append(dict(bounds=[_ms(t[i - 1] + tf_s), _ms(t[i])]))
+    fig.update_layout(**base_layout)
+    fig.update_xaxes(type='date', range=[_ms(t0 - tf_s), _ms(t_end + (t_end - t0) * 0.02)], showgrid=True,
+                     gridcolor=COL['grid'], linecolor=COL['line'], tickfont=dict(color=COL['muted']),
+                     showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikecolor=COL['faint'],
+                     spikedash='solid', rangeslider=dict(visible=False),
+                     rangebreaks=[dict(bounds=b['bounds']) for b in breaks[-20:]] or None)
+    step = (hi_v - lo_v) / 7.0
+    tick_dp = max(0, min(digits, -int(math.floor(math.log10(step))) if step > 0 else digits))
+    fig.update_yaxes(side='left', range=[lo_v, hi_v], showgrid=True, gridcolor=COL['grid'], zeroline=False,
+                     tickformat=f',.{tick_dp}f', tickfont=dict(family=MONO, color=COL['muted'], size=10),
+                     showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikecolor=COL['faint'],
+                     spikedash='solid')
+    return fig
+
+
+@safe()
+def chart_note(d, tf):
+    t, _, _, _, _ = _bars(d, tf)
+    src = g(d, 'bars', 'source', tf)
+    if not t:
+        return 'No bars for this timeframe yet.'
+    return (f"{len(t)} {tf} bars (bid), {stamp(t[0])} → {stamp(t[-1])} (the last one is forming"
+            f"{', moved with the bid of the trace' if g(d, 'trace', 'market', 'bid') is not None else ''}); bars file "
+            f"written {when(g(d, 'bars', 't'))}{f', from the {src}' if src else ''}. Drag to pan, scroll to zoom, "
+            f"double-click to reset; click a legend item to hide it.")
+
+
+# ───────────────────────────── the latest events (Live) and the log tab ─────────────────────────────
+
+_EVENTS_CACHE = {}
+
+
+def read_events(sym, tail=EVENTS_TAIL_BYTES):
+    """(events, cut, problem): the events of logs/<SYMBOL>_events.jsonl in its last `tail` bytes, oldest first;
+    cut = the file is longer. Cached until the file changes."""
+    path = events_path(sym)
+    try:
+        st = os.stat(path)
+    except OSError:
+        return [], False, 'missing'
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _EVENTS_CACHE.get((path, tail))
+    if hit is not None and hit[0] == key:
+        return hit[1], hit[2], None
+    cut = st.st_size > tail
+    try:
+        with open(path, 'rb') as f:
+            if cut:
+                f.seek(st.st_size - tail)
+            raw = f.read()
+    except OSError as e:
+        return [], False, f'unreadable ({e.__class__.__name__})'
+    lines = raw.split(b'\n')
+    if cut and lines:
+        lines = lines[1:]               # the first line is cut in the middle
+    out = []
+    for ln in lines:
+        if not ln.strip():
+            continue
+        try:
+            ev = json.loads(ln.decode('utf-8', 'replace'))
+        except ValueError:
+            continue
+        if isinstance(ev, dict):
+            out.append(ev)
+    for k in list(_EVENTS_CACHE):           # a copy: callbacks run in several threads
+        if k[0] != path:
+            _EVENTS_CACHE.pop(k, None)
+    _EVENTS_CACHE[(path, tail)] = (key, out, cut)
+    return out, cut, None
+
+
+def _ev_text(ev):
+    kv_ = dd(ev.get('kv'))
+    return ' '.join([str(ev.get('cat') or ''), str(ev.get('msg') or ''),
+                     ' '.join(f'{k}={v}' for k, v in kv_.items()) if isinstance(kv_, dict) else str(kv_)]).lower()
+
+
+def event_row(ev, compact=False):
+    lvl = str(ev.get('level') or 'INFO').upper()
+    t = ts(ev.get('t')) or ts(ev.get('time'))
+    clock = utc(t).strftime('%H:%M:%S.%f')[:-3] if t is not None else (ev.get('time') or '—')
+    summary = html.Summary(className='ev-sum', children=[
+        html.Span(clock, className='ev-t mono'),
+        html.Span(lvl, className=f'lvl lvl-{lvl.lower()}'),
+        html.Span(ev.get('cat') or '', className='ev-cat'),
+        html.Span(ev.get('msg') or '', className='ev-msg'),
+    ])
+    if compact:
+        return html.Div(className='ev ev-compact', children=summary.children)
+    body = []
+    kv_ = ev.get('kv')
+    if isinstance(kv_, dict) and kv_:
+        body.append(html.Div(className='ev-kv', children=[
+            html.Div([html.Span(k, className='kv-k'), html.Span(v if isinstance(v, str) else json.dumps(v, default=str),
+                                                                className='kv-v mono')], className='kv')
+            for k, v in kv_.items()]))
+    if ev.get('data') is not None:
+        body.append(html.Pre(json.dumps(ev.get('data'), indent=1, default=str)[:20000], className='pre'))
+    if ev.get('traceback'):
+        tb = ev['traceback']
+        body.append(html.Pre(tb if isinstance(tb, str) else '\n'.join(map(str, tb)), className='pre pre-err'))
+    body.append(html.Div(f"{ev.get('time') or stamp(t)} | {lvl} | {ev.get('cat')} | {ev.get('msg')}", className='ev-raw mono'))
+    return html.Details(className=f'ev ev-{lvl.lower()}', children=[summary, html.Div(body, className='ev-body')])
+
+
+_GATES_ONLY = re.compile(r'^[A-Z_]+ \(gates changed')
+
+
+@safe()
+def latest_events(sym, n=12):
+    evs, _, problem = read_events(sym, tail=256 * 1024)
+    keep = [e for e in evs if str(e.get('cat')) not in ('HEARTBEAT', 'CONFIG')
+            and (str(e.get('level')).upper() != 'DEBUG'
+                 or (str(e.get('cat')) == 'DECISION' and not _GATES_ONLY.match(str(e.get('msg') or ''))))]
+    rows = [event_row(e, compact=True) for e in reversed(keep[-n:])]
+    today = utc(_now()).strftime('%Y-%m-%d')
+    path = os.path.abspath(text_log_path(sym, today))
+    right = html.Div(className='pathbox', children=[
+        html.Span("Today's text log:", className='muted'),
+        html.Code(path, id='live-log-path', className='path'),
+        dcc.Clipboard(target_id='live-log-path', className='copy', title='copy the path'),
+    ])
+    return card('Latest events', html.Div(rows, className='evlist evlist-compact') if rows else empty(
+        'No events yet.' if problem is None else f'The events file is {problem}: {events_path(sym)}'),
+        right=right, sub='orders, fills, closes, warnings, errors and every change of action; the Log tab has every line')
+
+
+def log_files(sym):
+    """[(day, path, size)] of the text logs of this symbol, newest first."""
+    out = []
+    for p in glob.glob(_path('logs', f'{sym}_????-??-??.log')):
+        day = os.path.basename(p)[len(sym) + 1:-4]
+        try:
+            out.append((day, p, os.path.getsize(p)))
+        except OSError:
+            continue
+    return sorted(out, reverse=True)
+
+
+def _size(b):
+    b = num(b) or 0
+    return f'{b / 2 ** 20:.1f} MB' if b >= 2 ** 20 else f'{b / 1024:.0f} KB'
+
+
+def text_tail(path, nbytes=TEXT_TAIL_BYTES):
+    try:
+        size = os.path.getsize(path)
+        with open(path, 'rb') as f:
+            if size > nbytes:
+                f.seek(size - nbytes)
+            raw = f.read().decode('utf-8', 'replace')
+    except OSError as e:
+        return None, f'{e.__class__.__name__}'
+    lines = raw.split('\n')
+    if size > nbytes:
+        lines = lines[1:]
+    return lines, None
+
+
+# ───────────────────────────── trades ─────────────────────────────
+
+def drawdown(curve):
+    """(max drawdown in $, in % of the peak, peak time, trough time) of a balance curve [{t, v}]."""
+    peak, peak_t, best = None, None, (0.0, 0.0, None, None)
+    for p in dl(curve):
+        v, t = num(p.get('v')), ts(p.get('t'))
+        if v is None:
+            continue
+        if peak is None or v > peak:
+            peak, peak_t = v, t
+        fall = peak - v
+        if fall > best[0]:
+            best = (fall, fall / peak if peak else 0.0, peak_t, t)
+    return best
+
+
+@safe()
+def trades_kpis(d):
+    trd = dd(d.get('trades'))
+    s = dd(trd.get('summary'))
+    curve = dl(trd.get('balance_curve'))
+    mdd, mdd_p, _, mdd_t = drawdown(curve)
+    start = num(trd.get('virtual_start_balance')) or num(g(curve, 0, 'v'))
+    now_bal = num(s.get('balance_now')) or num(g(curve, -1, 'v'))
+    gw, gl = num(s.get('gross_win')) or 0.0, num(s.get('gross_loss')) or 0.0
+    pf = (gw / abs(gl)) if gl else None
+    ret = ((now_bal - start) / start) if (start and now_bal is not None) else None
+    reasons = dd(s.get('exit_reasons'))
+    return html.Div([
+        html.Div(className='kpis', children=[
+            tile('Closed trades', smart(s.get('closed') or 0), f"{smart(s.get('wins') or 0)} won · {smart(s.get('losses') or 0)} lost"),
+            tile('Win rate', pct(s.get('win_rate'), 0) if s.get('closed') else '—', 'trades with a profit'),
+            tile('Net P/L', pl(s.get('net')), f"won {money(gw)} · lost {money(gl)}"),
+            tile('Largest loss', pl(s.get('worst')) if num(s.get('worst')) is not None and num(s.get('worst')) < 0 else '—',
+                 f"best {money(s.get('best'), signed=True)}"),
+            tile('Max drawdown', html.Span(f'-{money(mdd)}' if mdd else '$0.00', className='neg' if mdd else ''),
+                 f"{pct(mdd_p)} of the peak" + (f" · deepest {when(mdd_t)}" if mdd_t else '')),
+            tile('Virtual balance', money(now_bal), f"start {money(start)} · {pct(ret, 2) if ret is not None else '—'}"),
+            tile('Profit factor', fnum(pf, 2) if pf is not None else '—', 'money won / money lost'),
+            tile('Average hold', dur(s.get('avg_hold_s')), f"{smart(s.get('deals'))} deals in the history"),
+        ]),
+        html.Div(className='chips chips-left', children=[html.Span('Exits:', className='muted')]
+                 + [chip(f'{k.replace("_", " ")} × {v}') for k, v in sorted(reasons.items(), key=lambda kv_: -kv_[1])])
+        if reasons else None,
+    ])
+
+
+@safe('figure')
+def equity_figure(d):
+    trd = dd(d.get('trades'))
+    curve = [p for p in dl(trd.get('balance_curve')) if ts(p.get('t')) is not None and num(p.get('v')) is not None]
+    fig = go.Figure()
+    layout = dict(height=300, margin=dict(l=10, r=70, t=10, b=30), paper_bgcolor='rgba(0,0,0,0)',
+                  plot_bgcolor='rgba(0,0,0,0)', font=dict(family=FONT, size=11, color=COL['text2']), showlegend=False,
+                  hovermode='x unified', hoverlabel=dict(bgcolor=COL['raised'], bordercolor=COL['line'],
+                                                         font=dict(family=FONT, color=COL['text'])))
+    if not curve:
+        fig.update_layout(**layout)
+        fig.add_annotation(text='No closed trade yet.', x=0.5, y=0.5, xref='paper', yref='paper', showarrow=False,
+                           font=dict(size=13, color=COL['muted']))
+        fig.update_xaxes(visible=False)
+        fig.update_yaxes(visible=False)
+        return fig
+    tx = [ts(p['t']) for p in curve]
+    ys = [num(p['v']) for p in curve]
+    start = ys[0]
+    # the start value holds until the first trade: draw it from that trade's open, not from the start date's midnight
+    first_open = ts(g(dl(trd.get('closed')), 0, 'open_t'))
+    if len(tx) > 1 and first_open is not None and tx[0] < first_open < tx[1]:
+        tx[0] = first_open
+    xs = [_ms(v) for v in tx]
+    peak, peaks = None, []
+    for v in ys:
+        peak = v if peak is None else max(peak, v)
+        peaks.append(peak)
+    fig.add_trace(go.Scatter(x=xs, y=peaks, mode='lines', line=dict(width=0, shape='hv'), hoverinfo='skip'))
+    fig.add_trace(go.Scatter(x=xs, y=ys, mode='lines', line=dict(width=0, shape='hv'), fill='tonexty',
+                             fillcolor='rgba(224,85,85,0.12)', hoverinfo='skip'))
+    fig.add_trace(go.Scatter(x=xs, y=ys, mode='lines', line=dict(color=COL['accent'], width=2, shape='hv'),
+                             name='virtual balance', hovertemplate='%{y:$,.2f}<extra>balance</extra>'))
+    hover = [f"{p.get('id') or 'start'} · {money(p.get('pnl'), signed=True) if p.get('pnl') is not None else 'start'}"
+             for p in curve]
+    fig.add_trace(go.Scatter(x=xs[1:], y=ys[1:], mode='markers', text=hover[1:],
+                             marker=dict(size=8, color=[_result_col(p.get('pnl')) for p in curve[1:]],
+                                         line=dict(color=COL['surface'], width=2)),
+                             hovertemplate='%{text}<extra>trade</extra>'))
+    eq = num(g(d, 'trace', 'account', 'own_equity'))
+    t_now = ts(g(d, 'trace', 't'))
+    if eq is not None and t_now is not None and t_now > ts(curve[-1]['t']):
+        fig.add_trace(go.Scatter(x=[xs[-1], _ms(t_now)], y=[ys[-1], eq], mode='lines+markers',
+                                 line=dict(color=COL['accent'], width=1.5, dash='dot'),
+                                 marker=dict(size=[0, 8], color=COL['accent'], line=dict(color=COL['surface'], width=2)),
+                                 hovertemplate='%{y:$,.2f}<extra>now, with the open P/L</extra>'))
+    fig.add_hline(y=start, line_color=COL['line'], line_width=1)
+    fig.update_layout(**layout)
+    fig.update_xaxes(type='date', showgrid=False, linecolor=COL['line'], tickfont=dict(color=COL['muted']))
+    fig.update_yaxes(side='right', showgrid=True, gridcolor=COL['grid'], zeroline=False, tickprefix='$',
+                     tickformat=',.0f', tickfont=dict(color=COL['muted']))
+    return fig
+
+
+def _journal_view(j, digits):
+    if not isinstance(j, dict):
+        return None
+    lines = [f"N at the entry {smart(j.get('n_entry'), 2)} · stop distance {smart(j.get('stop_dist'), 2)} · add step "
+             f"{smart(j.get('add_step'), 2)} · entry level {px(j.get('entry_level'), digits)} (D1 bar {(j.get('entry_d1_utc') or '')[:10]})"
+             f" · M15 vote {vote_glyph(j.get('vote'))} · unit {smart(j.get('units'))} from {money(j.get('balance'))}"
+             + (' · rebuilt from the terminal' if j.get('rebuilt') else '')]
+    legs = [[smart(x.get('id')), when(x.get('t')), px(x.get('price'), digits), px(x.get('level'), digits),
+             px(x.get('backstop'), digits)] for x in dl(j.get('legs'))]
+    stops = [[when(s.get('utc') or s.get('t')), px(s.get('stop'), digits), s.get('origin') or '—', s.get('why') or '—']
+             for s in dl(j.get('stops'))]
+    ex = dd(j.get('exit'))
+    return html.Div([
+        html.Div(lines, className='line muted'),
+        html.Div(className='two', children=[
+            html.Div([html.Div('Legs and their add levels', className='mini-title'),
+                      table(['position', 'time', 'fill', 'add level', 'backstop'], legs, num_cols=(2, 3, 4))]) if legs else None,
+            html.Div([html.Div('Stop moves', className='mini-title'),
+                      table(['time', 'stop', 'from', 'why'], stops, num_cols=(1,))]) if stops else None,
+        ]),
+        html.Div(f"Exit {when(ex.get('t'))}: {ex.get('reason') or '?'} at {px(ex.get('price'), digits)} (stop {px(ex.get('stop'), digits)}, "
+                 f"{ex.get('origin') or '?'}), P/L at the decision {money(ex.get('decision_pnl'), signed=True)}",
+                 className='line muted') if ex else None,
+    ])
+
+
+TRADE_HEAD = ['#', 'opened', 'side', 'legs', 'lots', 'entry', 'closed', 'exit price', 'held', 'P/L', 'exit', 'balance after']
+
+
+def trade_row(i, tr_, digits, live=False):
+    legs = dl(tr_.get('legs'))
+    pnl = tr_.get('pnl')
+    reason = 'open' if live else (tr_.get('exit_reason_text') or tr_.get('exit_reason') or '?')
+    cells = [smart(i), when(tr_.get('open_utc') or tr_.get('open_t') or tr_.get('first_utc') or tr_.get('entry_utc')),
+             side_glyph(tr_.get('side')), smart(len(legs)), fnum(tr_.get('lots'), 2),
+             px(tr_.get('open_price') or tr_.get('avg_price'), digits),
+             '—' if live else when(tr_.get('close_utc') or tr_.get('close_t')),
+             px(tr_.get('price_now'), digits) if live else px(tr_.get('close_price'), digits),
+             dur(tr_.get('age_s')) if live else dur(tr_.get('hold_s')), pl(pnl),
+             badge(reason, 'accent') if live else reason, '—' if live else money(tr_.get('balance_after'))]
+    leg_rows = [[smart(lg.get('position_id') or lg.get('ticket') or lg.get('id')), side_glyph(lg.get('side') or tr_.get('side')),
+                 fnum(lg.get('lots'), 2), when(lg.get('open_t') or lg.get('open_utc')), px(lg.get('open_price') or lg.get('price'), digits),
+                 when(lg.get('close_t')) if lg.get('close_t') else '—', px(lg.get('close_price'), digits),
+                 pl(lg.get('net') if lg.get('net') is not None else lg.get('profit')),
+                 ', '.join(str(x) for x in lst(lg.get('deal_reasons'))) or '—']
+                for lg in legs]
+    body = [table(['position', 'side', 'lots', 'opened', 'open price', 'closed', 'close price', 'net P/L', 'deal reasons'],
+                  leg_rows, num_cols=(2, 4, 6, 7))]
+    extra = []
+    if not live:
+        extra.append(f"profit {money(tr_.get('profit'))} · swap {money(tr_.get('swap'))} · commission {money(tr_.get('commission'))}"
+                     f" · the bot recorded: {tr_.get('bot_reason') or '—'}"
+                     + (f" · stop {px(tr_.get('exit_stop'), digits)} ({tr_.get('exit_detail')})" if tr_.get('exit_stop') else ''))
+    body.append(html.Div(extra, className='line muted') if extra else None)
+    body.append(_journal_view(tr_.get('turtle') or tr_.get('journal'), digits))
+    return html.Details(className='trow' + (' trow-live' if live else ''), children=[
+        html.Summary(className='trow-sum', children=[html.Span(c, className='tc' + (' num' if j in (4, 5, 7, 9, 11) else ''))
+                                                     for j, c in enumerate(cells)]),
+        html.Div(body, className='trow-body'),
+    ])
+
+
+@safe()
+def trades_list(d, limit=200):
+    trd = dd(d.get('trades'))
+    digits = digits_of(d)
+    closed = dl(trd.get('closed'))
+    live = []
+    tr = dd(d.get('trace'))
+    op = g(tr, 'basket', 'open') or g(tr, 'turtle', 'trade')
+    if isinstance(op, dict) and not op.get('both_sides'):
+        live = [dict(op, legs=dl(op.get('legs')))]
+    else:
+        live = [x for x in trd.get('open') or [] if isinstance(x, dict)]
+    rows = [trade_row('open', x, digits, live=True) for x in live]
+    n = len(closed)
+    for k, tr_ in enumerate(reversed(closed[-limit:])):
+        rows.append(trade_row(n - k, tr_, digits))
+    head = html.Div(className='trow-head', children=[html.Span(h, className='tc' + (' num' if j in (4, 5, 7, 9, 11) else ''))
+                                                    for j, h in enumerate(TRADE_HEAD)])
+    note = (f"{n} closed trade(s) since {(trd.get('since_utc') or '')[:10] or '—'} (this bot's magic {smart(trd.get('magic'))}); "
+            f"click a row for its legs" + ('' if n <= limit else f'; the newest {limit} shown'))
+    return card('Every trade, newest first', html.Div([head] + rows, className='trows') if rows else empty('No trade yet.'),
+                sub=note)
+
+
+# ───────────────────────────── history (the old views) ─────────────────────────────
+
+def daily_dir(sym):
+    return _path(DAILY_TRADE_SUBDIR, sym)
+
+
+def daily_files(sym):
+    """{server_date 'YYYY-MM-DD': path} of the old daily-trade files."""
+    out = {}
+    for p in glob.glob(os.path.join(daily_dir(sym), '*.json')):
+        if os.path.basename(p) == HISTORICAL_SUMMARY_FILENAME:
+            continue
+        data, _ = read_json(p)
+        day = g(data, 'server_date')
+        if isinstance(day, str):
+            out[day] = p
+    return out
+
+
+def daily_figure(deals):
+    deals = sorted([x for x in deals or [] if isinstance(x, dict)], key=lambda x: str(x.get('time') or ''))
+    fig = make_subplots(rows=2, cols=1, row_heights=[0.45, 0.55], vertical_spacing=0.16,
+                        subplot_titles=['P/L of every closing deal', 'Cumulative P/L'])
+    labels, pnl, cum, hover = [], [], [], []
+    run = 0.0
+    for i, x in enumerate(deals, 1):
+        t = ts(x.get('time'))
+        label = utc(t).strftime('%H:%M:%S') if t is not None else f'#{i}'
+        if label in labels:                     # two deals of one close: one bar each
+            label = f'{label} ({sum(1 for v in labels if v.split(" (")[0] == label) + 1})'
+        labels.append(label)
+        v = num(x.get('net_profit')) if num(x.get('net_profit')) is not None else (num(x.get('profit')) or 0.0)
+        pnl.append(v)
+        run += v
+        cum.append(round(run, 2))
+        hover.append(f"{x.get('type') or ''} {x.get('volume') or ''} lot at {x.get('price')}<br>net {money(v, signed=True)} "
+                     f"(profit {money(x.get('profit'))}, commission {money(x.get('commission'))}, swap {money(x.get('swap'))})"
+                     f"<br>cumulative {money(run, signed=True)}")
+    show_text = len(deals) <= GRAPH_TEXT_LABEL_THRESHOLD
+    width = min(0.6, 24.0 / (1400.0 / max(1, len(deals))))        # bars about 24 px wide at most
+    fig.add_trace(go.Bar(x=labels, y=pnl, width=width, marker=dict(color=[_result_col(v) for v in pnl], line=dict(width=0)),
+                         text=[money(v, signed=True) for v in pnl] if show_text else None, textposition='outside',
+                         cliponaxis=False, textfont=dict(size=10, color=COL['text2']), hovertext=hover, hoverinfo='text',
+                         showlegend=False),
+                  row=1, col=1)
+    lo_b, hi_b = min(pnl + [0.0]), max(pnl + [0.0])
+    pad_b = (hi_b - lo_b) * 0.3 or 1.0
+    fig.update_yaxes(range=[lo_b - pad_b, hi_b + pad_b], row=1, col=1)
+    fig.add_trace(go.Scatter(x=labels, y=cum, mode='lines+markers' if len(deals) <= GRAPH_CUM_LABEL_THRESHOLD else 'lines',
+                             line=dict(color=COL['accent'], width=2), marker=dict(size=7, color=COL['accent'],
+                                                                                 line=dict(color=COL['surface'], width=2)),
+                             hovertext=hover, hoverinfo='text', showlegend=False), row=2, col=1)
+    fig.add_hline(y=0, line_color=COL['line'], line_width=1, row=2, col=1)
+    fig.update_layout(height=440, margin=dict(l=50, r=20, t=30, b=30), paper_bgcolor='rgba(0,0,0,0)',
+                      plot_bgcolor='rgba(0,0,0,0)', font=dict(family=FONT, size=11, color=COL['text2']), bargap=0.35)
+    fig.update_xaxes(showgrid=False, tickfont=dict(size=9, color=COL['muted']), type='category')
+    fig.update_yaxes(showgrid=True, gridcolor=COL['grid'], zeroline=False, tickprefix='$', tickfont=dict(color=COL['muted']))
+    for ann in fig.layout.annotations:
+        ann.font = dict(size=11, color=COL['muted'], family=FONT)
+    return fig
+
+
+@safe()
+def history_daily(sym, day):
+    files = daily_files(sym)
+    path = files.get(day)
+    data, _ = read_json(path) if path else (None, None)
+    hist, _ = read_json(os.path.join(daily_dir(sym), HISTORICAL_SUMMARY_FILENAME))
+    deals = lst(g(data, 'deals'))
+    tiles_ = html.Div(className='kpis', children=[
+        tile(f'P/L on {day}', pl(g(data, 'total_profit')) if data else '—', f"{smart(g(data, 'deal_count') or 0)} closing deals"),
+        tile('Average per deal', pl(g(data, 'avg_profit')) if data else '—', f"{fnum(g(data, 'total_volume'), 2)} lot in all"),
+        tile('Lifetime P/L', pl(g(hist, 'total_profit')) if hist else '—',
+             f"{smart(g(hist, 'total_deals') or 0)} deals · {g(hist, 'period') or 'last 10 years'}"),
+        tile('Lifetime average', pl(g(hist, 'avg_profit')) if hist else '—', f"updated {when(g(hist, 'last_updated'))}"),
+    ])
+    chart = dcc.Graph(figure=daily_figure(deals), config={'displayModeBar': False}) if deals else empty(
+        f'No closing deal of this bot on {day}.')
+    return html.Div([tiles_, chart])
+
+
+@safe()
+def history_strategy_log(sym):
+    data, problem = read_json(_path('logs', f'{sym}_{STRATEGY_LOG_FILENAME}'))
+    if not isinstance(data, list) or not data:
+        return empty('No old strategy log.' if problem in (None, 'missing') else f'The old strategy log is {problem}.')
+    rows = []
+    for e in data[:200]:
+        det = dd(e.get('details'))
+        bits = [f'{k} {smart(v)}' for k, v in det.items() if k not in ('response', 'mt5_symbol')
+                and not isinstance(v, (dict, list))][:8]
+        rows.append([when(e.get('time')), e.get('event') or '—', e.get('tag') or '—', ' · '.join(bits)])
+    return table(['time (server)', 'event', 'tag', 'details'], rows, cls='tbl-log')
+
+
+_CONFIG_CACHE = {}
+_CONST_LINE = re.compile(r'^([A-Z][A-Z0-9_]*) = (.*)$')
+DESIGN_KEYS = ('DESIGN_NAME', 'STRATEGY', 'OPEN_SCORE_WEIGHTS', 'FORCE_CLOSE_SCORE_WEIGHTS', 'ENTRY_S', 'ENTRY_AGREE_S',
+               'LADDER_S', 'FORCE_CLOSE_ENABLED', 'FORCE_CLOSE_S', 'TREND_TF', 'VOL_TF', 'VOL_LEN', 'TARGET_USD_PER_UNIT',
+               'STRATEGY_HEDGE', 'STOP_LOSS_USD_PER_UNIT', 'TARGET_VOL', 'STOP_VOL', 'BACKSTOP_FACTOR',
+               'VOL_CAP_USD_PER_UNIT', 'LOSS_COOLDOWN_S', 'REENTRY_COOLDOWN_SECONDS', 'MAX_ADDS', 'LADDER_TRIGGER',
+               'LADDER_TFS', 'LADDER_GAP_VOL', 'LADDER_MULTIPLIERS', 'RSI_OVERSOLD', 'RSI_OVERBOUGHT')
+DEPLOY_KEYS = ('DEMO_BRANCH', 'MAGIC', 'ORDER_COMMENT', 'VIRTUAL_START_BALANCE', 'VIRTUAL_START_DATE', 'OUTPUT_DIR',
+               'DASHBOARD_PORT', 'MARKET_LOOKBACK_MINUTES')
+
+
+def bot_config(sym, d):
+    """(when, {NAME: text}, notes) from the CONFIG lines the bot wrote when it started (the text log of its start
+    day); (None, {}, []) when they cannot be found. Read once per start of the bot."""
+    started = ts(g(d, 'trace', 'health', 'started_utc'))
+    if started is None:
+        return None, {}, []
+    path = text_log_path(sym, utc(started).strftime('%Y-%m-%d'))
+    key = (path, started)
+    if key in _CONFIG_CACHE:
+        return _CONFIG_CACHE[key]
+    blocks, cur = [], None
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            for ln in f:
+                if ' | START | ' in ln and 'trading loop started' in ln:
+                    cur = {'t': ts(ln[:23].replace(' ', 'T') + 'Z'), 'consts': {}, 'notes': []}
+                    blocks.append(cur)
+                elif cur is not None and ' | CONFIG | ' in ln:
+                    msg = ln.split(' | ', 4)[3] if ln.count(' | ') >= 3 else ''
+                    m = _CONST_LINE.match(msg.strip())
+                    if m:
+                        cur['consts'][m.group(1)] = m.group(2)
+                    elif msg.strip():
+                        cur['notes'].append(msg.strip())
+    except OSError:
+        return None, {}, []
+    blocks = [b for b in blocks if b['t'] is not None and b['t'] <= started + 120 and b['consts']]
+    out = (blocks[-1]['t'], blocks[-1]['consts'], blocks[-1]['notes']) if blocks else (None, {}, [])
+    if len(_CONFIG_CACHE) > 8:
+        _CONFIG_CACHE.clear()
+    _CONFIG_CACHE[key] = out
+    return out
+
+
+def _as_value(text):
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
+
+
+def _same(a, b):
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool) and not isinstance(b, bool):
+        return abs(float(a) - float(b)) < 1e-12
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    return a == b
+
+
+@safe()
+def settings_view(sym='', d=None):
+    """The settings the bot started with (its CONFIG lines), grouped: the design and its levers, this deployment,
+    everything else; a value constants.py has changed since is marked. Without those lines: constants.py as the
+    dashboard read it at its start. 'design' marks what the branch's design block sets."""
+    d = d or {}
+    design_names = set()
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'constants.py'), encoding='utf-8') as f:
+            tail = f.read().split('# ─── Design of this branch', 1)
+        if len(tail) == 2:
+            design_names = set(re.findall(r'^([A-Z][A-Z0-9_]*)\s*=', tail[1], flags=re.M))
+    except OSError:
+        pass
+    when_, consts, notes = bot_config(sym, d)
+    here = {n: getattr(_C, n) for n in vars(_C) if n.isupper()}
+    from_bot = bool(consts)
+    values = {k: _as_value(v) for k, v in consts.items()} if from_bot else here
+    strategy = values.get('STRATEGY') or g(d, 'trace', 'strategy')
+    turtle_keys = tuple(k for k in values if k.startswith('TURTLE_'))
+    design = [k for k in (DESIGN_KEYS[:2] + (turtle_keys if strategy == 'turtle' else DESIGN_KEYS[2:])) if k in values]
+    deploy = [k for k in DEPLOY_KEYS if k in values]
+    rest = [k for k in values if k not in design and k not in deploy]
+
+    def row(name):
+        v = values.get(name)
+        text = consts[name] if from_bot else (json.dumps(v, default=str) if isinstance(v, (dict, list, tuple)) else repr(v))
+        tags = []
+        if name in design_names:
+            tags.append(badge('design', 'accent', title="set in this branch's design block of constants.py"))
+        if from_bot and name in here and not _same(_as_value(consts[name]), here[name]):
+            tags.append(badge(f'constants.py now: {here[name]!r}'[:60], 'warn',
+                              title='constants.py has another value now: the bot uses it after its next start'))
+        return html.Div(className='set-row', children=[html.Code(name, className='set-k'),
+                                                       html.Span(text[:300], className='set-v mono'),
+                                                       html.Span(tags, className='set-tags')])
+
+    head = (f"as the bot logged them when it started, {stamp(when_)}" if from_bot else
+            "constants.py as the dashboard read it at its start (the bot's start-up lines were not found)")
+    return html.Div([
+        html.Div(head, className='line muted'),
+        html.Div("The design and its levers" + (" (the Turtle)" if strategy == 'turtle' else ''), className='mini-title set-h'),
+        html.Div([row(k) for k in design], className='set-grid'),
+        html.Div('This deployment', className='mini-title set-h'),
+        html.Div([row(k) for k in deploy], className='set-grid'),
+        html.Details(className='raw', children=[
+            html.Summary([html.B(f'Every other setting ({len(rest)})'),
+                          html.Span('  indicator lengths, timeframes, files, the old live levers', className='muted')]),
+            html.Div([row(k) for k in rest], className='set-grid'),
+        ]),
+        html.Details(className='raw', children=[
+            html.Summary([html.B(f'The start-up notes ({len(notes)})'),
+                          html.Span('  the design in words, symbols.json, the symbol\'s facts', className='muted')]),
+            html.Div([html.Div(n_, className='line mono small') for n_ in notes]),
+        ]) if notes else None,
+    ])
+
+
+@safe()
+def raw_view(sym):
+    items = [('trace', trace_path(sym)), ('trades', trades_path(sym)), ('old status', _path(f'{sym}.json')),
+             ('account', _path('account.json')), ('basket state', _path(STATE_SUBDIR, f'{sym}_state.json')),
+             ('Turtle book', _path(STATE_SUBDIR, f'{sym}_turtle.json')),
+             ('exit reasons', _path(STATE_SUBDIR, f'{sym}_exit_reasons.json'))]
+    kids = []
+    for label, path in items:
+        data, problem = read_json(path)
+        if data is None and problem == 'missing':
+            continue
+        text = json.dumps(data, indent=1, default=str) if data is not None else problem
+        kids.append(html.Details(className='raw', children=[
+            html.Summary([html.B(label), html.Span(f'  {path} · {_size(len(text))}', className='muted')]),
+            html.Pre(text[:300000], className='pre'),
+        ]))
+    bars, _ = read_json(bars_path(sym))
+    if isinstance(bars, dict):
+        meta = {k: v for k, v in bars.items() if k not in ('tf', 'overlay')}
+        meta['bars'] = {tf: len(g(bars, 'tf', tf, 't') or []) for tf in (dd(bars.get('tf')))}
+        kids.append(html.Details(className='raw', children=[
+            html.Summary([html.B('bars (without the columns)'), html.Span(f'  {bars_path(sym)}', className='muted')]),
+            html.Pre(json.dumps(meta, indent=1, default=str), className='pre')]))
+    return html.Div(kids) if kids else empty('No files yet.')
+
+
+# ───────────────────────────── the page ─────────────────────────────
+
+CSS = """
+:root{--page:#070b17;--surface:#0c1324;--raised:#111a2e;--raised2:#16213a;--line:#1f2a44;--grid:#162036;
+--text:#eef0f5;--text2:#aab3c5;--muted:#8b95aa;--faint:#5d6a85;--accent:#d4a843;--accent-soft:rgba(212,168,67,.13);
+--accent-line:rgba(212,168,67,.5);--pos:#3cc48e;--pos-soft:rgba(60,196,142,.13);--neg:#e05555;--neg-soft:rgba(224,85,85,.13);
+--warn:#f0c040;--warn-soft:rgba(240,192,64,.12);--blue:#4a8ecc;
+--sans:Inter,"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+--mono:"JetBrains Mono","Cascadia Mono","SF Mono",Menlo,Consolas,monospace}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--text);font:13px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
+b{font-weight:600}
+code,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:.94em}
+.muted{color:var(--muted)}
+.pos{color:var(--pos)}.neg{color:var(--neg)}
+::selection{background:rgba(212,168,67,.3)}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:#263252;border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+._dash-loading,._dash-loading-callback{display:none!important}
+/* top bar */
+.topbar{background:linear-gradient(180deg,#0a1122,#080d1b);border-bottom:1px solid var(--line);padding:14px 28px 12px}
+.top-row{display:flex;gap:18px;align-items:flex-start}
+.brand{display:flex;align-items:center;gap:10px;min-width:150px;padding-top:2px}
+.brand img{width:38px;height:38px;object-fit:contain}
+.brand-name{font-weight:800;letter-spacing:.22em;font-size:13px;color:var(--accent)}
+.brand-sub{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:1px}
+.status{flex:1;min-width:0}
+.status-top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.ident-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.sym{font-size:22px;font-weight:700;letter-spacing:.02em}
+.what{font-size:13px;color:var(--text2)}
+.ident-sub{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:2px}
+.ident-sub b{color:var(--text2);font-family:var(--mono);font-weight:500}
+.chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+.chips-left{justify-content:flex-start;margin:8px 0 0}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);
+background:var(--raised);color:var(--text2);font-size:12px;white-space:nowrap}
+.chip-ic{font-size:10px;line-height:1}
+.chip-pos{border-color:rgba(60,196,142,.4);color:var(--text)}.chip-pos .chip-ic{color:var(--pos)}
+.chip-neg{border-color:rgba(224,85,85,.55);background:var(--neg-soft);color:var(--text)}.chip-neg .chip-ic{color:var(--neg)}
+.chip-warn{border-color:rgba(240,192,64,.5);background:var(--warn-soft);color:var(--text)}.chip-warn .chip-ic{color:var(--warn)}
+.chip-accent{border-color:var(--accent-line);background:var(--accent-soft);color:var(--text)}
+.money{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:12px}
+/* tabs */
+.tabbar{display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid var(--line);
+background:#080d1b;position:sticky;top:0;z-index:20}
+.tabbar-right{display:flex;gap:12px;align-items:center;color:var(--muted);font-size:12px}
+/* page */
+.page{max-width:1640px;margin:0 auto;padding:18px 28px 40px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:16px}
+.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px}
+.card-title{margin:0;font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--text2)}
+.card-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.card-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.grid-2{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:16px;align-items:start}
+.grid-2>.card{margin-bottom:0}
+@media (max-width:1180px){.grid-2{grid-template-columns:1fr}.money{grid-template-columns:repeat(3,1fr)}}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--text2)}
+.now{border-color:#2a3656;background:linear-gradient(180deg,#0e1730,#0c1324 60%)}
+.now-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.now-title{display:flex;align-items:center;gap:10px}
+.now-words{color:var(--muted)}
+.now-meta{color:var(--muted);font-size:12px;font-family:var(--mono)}
+.headline{font-size:21px;line-height:1.4;font-weight:600;margin:10px 0 2px;max-width:1250px;color:var(--text)}
+.now-grid{margin-top:14px}
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:700;
+letter-spacing:.04em;border:1px solid var(--line);background:var(--raised);color:var(--text2);white-space:nowrap}
+.badge-accent{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.badge-pos{background:var(--pos-soft);border-color:rgba(60,196,142,.45);color:var(--pos)}
+.badge-neg{background:var(--neg-soft);border-color:rgba(224,85,85,.5);color:var(--neg)}
+.badge-warn{background:var(--warn-soft);border-color:rgba(240,192,64,.45);color:var(--warn)}
+.banner{border-radius:8px;padding:8px 12px;margin-top:10px;font-size:12.5px}
+.banner-warn{background:var(--warn-soft);border:1px solid rgba(240,192,64,.4)}
+.orders{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.order{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:4px 0}
+.order-what{font-weight:600}.order-det{color:var(--muted)}
+.mini-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);margin:0 0 6px}
+.line{margin:6px 0;color:var(--text2)}
+.line.muted{color:var(--muted);font-size:12px}
+.flat{font-size:15px;font-weight:600}
+/* tiles */
+.tile{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:9px 12px;min-width:0}
+.tile-k{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile-v{font-size:16px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile-sub{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35}
+.tile-warn{border-color:rgba(240,192,64,.45)}
+.tiles3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}
+.tiles4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
+.kpis{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}
+.kpis .tile-v{font-size:20px}
+@media (max-width:1180px){.kpis{grid-template-columns:repeat(4,1fr)}.tiles4{grid-template-columns:repeat(2,1fr)}}
+/* key-values */
+.kvs{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:4px 28px;margin:12px 0}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:4px 0;border-bottom:1px solid var(--grid);min-width:0}
+.kv-k{color:var(--muted);white-space:nowrap}
+.kv-v{color:var(--text);text-align:right;overflow-wrap:anywhere;font-family:var(--mono);font-size:12px}
+/* gates */
+.gates{display:flex;flex-direction:column}
+.gsec{display:flex;gap:8px;align-items:baseline;margin:12px 0 4px;font-size:11px;font-weight:700;letter-spacing:.08em;
+text-transform:uppercase;color:var(--text2)}
+.gsec:first-child{margin-top:0}
+.gsec-sub{font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted)}
+.gate{display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;padding:7px 8px;border-top:1px solid var(--grid);
+border-left:2px solid transparent}
+.gate-decides{background:var(--accent-soft);border-left-color:var(--accent);border-radius:0 6px 6px 0}
+.gate-idle{opacity:.5}
+.gi{font-weight:700;text-align:center;font-size:14px;line-height:20px}
+.gi-pass{color:var(--pos)}.gi-fail{color:var(--neg)}.gi-fire{color:var(--accent)}.gi-idle{color:var(--muted)}
+.gi-na{color:var(--faint)}
+.gate-top{display:flex;align-items:baseline;gap:8px;min-width:0}
+.gate-name{font-weight:600}
+.gate-val{margin-left:auto;color:var(--text);text-align:right;padding-left:8px;white-space:nowrap}
+.gtag{font-size:10.5px;padding:0 6px;border-radius:4px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.gtag-accent{border-color:var(--accent-line);color:var(--accent)}
+.gate-need{color:var(--text2);font-size:12px;margin-top:1px}
+.gate-note{color:var(--muted);font-size:12px}
+.glegend{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}
+.glegend b{font-size:13px}
+/* scores / meters */
+.scores{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.score{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.score-head{display:flex;align-items:baseline;gap:8px}
+.score-label{font-weight:600}
+.score-w{color:var(--muted);font-family:var(--mono);font-size:12px}
+.score-v{margin-left:auto;font-size:20px;font-weight:700}
+.score-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.meter{position:relative;margin:4px 0 2px}
+.m-top{position:relative;height:16px}
+.m-tlabel{position:absolute;transform:translateX(-50%);font-size:10.5px;font-weight:600;white-space:nowrap;color:var(--text2)}
+.m-track{position:relative;height:10px;border-radius:5px;background:#0a1020;border:1px solid var(--line)}
+.m-band{position:absolute;top:0;bottom:0}
+.band-none{background:rgba(139,149,170,.16)}
+.band-neg{background:var(--neg-soft)}.band-pos{background:var(--pos-soft)}
+.m-tick{position:absolute;top:-4px;bottom:-4px;width:2px;transform:translateX(-1px);background:var(--muted)}
+.mk-buy,.mk-sell,.mk-zero{background:var(--text2)}
+.mk-accent{background:var(--accent)}
+.mk-leg{background:var(--faint);top:0;bottom:0}
+.m-tlabel.mk-buy,.m-tlabel.mk-sell,.m-tlabel.mk-zero,.m-tlabel.mk-accent,.m-tlabel.mk-leg{background:none}
+.m-tlabel.mk-accent{color:var(--accent)}
+.m-dot{position:absolute;top:50%;width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%);
+border:3px solid var(--surface);box-shadow:0 0 0 1px var(--text2)}
+.m-dot-accent{background:var(--accent)}.m-dot-pos{background:var(--pos)}.m-dot-neg{background:var(--neg)}
+.m-bottom{display:flex;justify-content:space-between;gap:16px;margin-top:5px;font-size:11.5px;color:var(--muted)}
+.m-hi{text-align:right}
+.meter-empty{color:var(--muted)}
+/* tables */
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 8px}
+.tbl th{font-size:11px;font-weight:600;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);
+white-space:nowrap}
+.tbl td{padding:6px 8px;border-bottom:1px solid var(--grid);color:var(--text);vertical-align:top}
+.tbl .num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl tr:hover td{background:rgba(255,255,255,.015)}
+.tbl-votes td:nth-child(2),.tbl-votes td:nth-child(5){white-space:nowrap;font-weight:600}
+.tbl-votes td:nth-child(4),.tbl-votes td:nth-child(7){color:var(--text2);font-size:12px}
+.tf-roles{font-size:11px;color:var(--muted);white-space:nowrap}
+.tbl-settings td{padding:4px 8px}.tbl-settings code{color:var(--text)}
+.tbl-log td:first-child{white-space:nowrap;font-family:var(--mono)}
+/* sparks */
+.sparks{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.spark-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.spark-t{font-size:11.5px;color:var(--text2);margin:2px 0 0 4px}
+.spark-empty{color:var(--faint);font-size:12px;padding:10px}
+.spark-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:4px}
+.lk{display:inline-block;vertical-align:middle;margin-right:5px}
+.lk-line{width:16px;height:2px;background:var(--text2)}
+.lk-dot-accent{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.lk-dash-accent{width:16px;height:0;border-top:2px dashed var(--accent)}
+.lk-dot-white{width:7px;height:7px;border-radius:50%;background:var(--text)}
+.rsi-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.rsi-row .mini-title{margin:0 6px 0 0}
+.box{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0}
+.box-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.box-head .mini-title{margin:0}
+.box .tbl td{border-bottom-color:#1a2440}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+/* the open position */
+.pos-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.pos-what{color:var(--text2)}
+.pos-pl{margin-left:auto;font-size:24px;font-weight:700}
+/* chart */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--raised)}
+.seg label{padding:5px 12px;cursor:pointer;color:var(--text2);font-weight:600;font-size:12px;border-right:1px solid var(--line);
+margin:0;display:inline-flex;align-items:center;user-select:none}
+.seg label:last-child{border-right:0}
+.seg input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--accent-soft);color:var(--accent)}
+.chart-note{font-size:12px;color:var(--muted);margin-top:4px}
+/* events */
+.evlist{display:flex;flex-direction:column}
+.ev{border-top:1px solid var(--grid)}
+.ev-sum{display:grid;grid-template-columns:96px 62px 104px minmax(0,1fr);gap:10px;padding:6px 6px;cursor:pointer;
+list-style:none;align-items:baseline}
+.ev-sum::-webkit-details-marker{display:none}
+.ev-compact{display:grid;grid-template-columns:96px 62px 104px minmax(0,1fr);gap:10px;padding:5px 6px;align-items:baseline}
+.ev[open]>.ev-sum{background:rgba(255,255,255,.02)}
+.ev-t{color:var(--muted);font-size:12px}
+.ev-cat{color:var(--text2);font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev-msg{color:var(--text);overflow-wrap:anywhere}
+.ev-body{padding:4px 8px 10px 112px}
+.ev-kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:2px 18px}
+.ev-raw{color:var(--faint);font-size:11px;margin-top:6px;overflow-wrap:anywhere}
+.lvl{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-align:center;padding:1px 0;border-radius:4px;border:1px solid var(--line);
+color:var(--text2)}
+.lvl-error{color:var(--neg);border-color:rgba(224,85,85,.55);background:var(--neg-soft)}
+.lvl-warn{color:var(--warn);border-color:rgba(240,192,64,.45);background:var(--warn-soft)}
+.lvl-order,.lvl-fill,.lvl-close{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
+.lvl-debug{color:var(--muted);border-color:var(--grid)}
+.ev-error .ev-msg{color:#f3b0b0}
+.pre{background:#080d1b;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:11.5px;
+color:var(--text2);white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;margin:6px 0}
+.pre-err{color:#f3b0b0;border-color:rgba(224,85,85,.4)}
+.pre-log{max-height:900px;font-size:11px;line-height:1.5}
+.dayrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+.pathbox{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.path{background:#080d1b;border:1px solid var(--line);border-radius:6px;padding:3px 8px;color:var(--text);font-size:12px}
+.copy{cursor:pointer;color:var(--accent);font-size:14px;display:inline-flex}
+.logbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.chk{display:inline-flex;gap:4px;flex-wrap:wrap}
+.chk label{display:inline-flex!important;align-items:center;gap:6px;padding:3px 11px;border:1px solid var(--line);
+border-radius:999px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;margin:0;user-select:none;
+background:transparent}
+.chk input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.chk label::before{content:'○';font-size:10px}
+.chk label:has(input:checked){color:var(--text);border-color:#34426a;background:var(--raised)}
+.chk label:has(input:checked)::before{content:'✓';color:var(--accent)}
+.search input,.search{background:#080d1b;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:6px 10px;
+font:13px var(--sans);min-width:280px;outline:none}
+.search:focus{border-color:var(--accent-line)}
+.btn{background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);border-radius:8px;padding:5px 12px;
+font:600 12px var(--sans);cursor:pointer}
+.btn:hover{background:rgba(212,168,67,.22)}
+.filesgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:8px}
+.count{color:var(--muted);font-size:12px;margin:2px 0 8px}
+.daysep{padding:8px 6px 4px;color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.08em}
+/* trades */
+.trows{display:flex;flex-direction:column}
+.trow-head,.trow-sum{display:grid;grid-template-columns:48px 150px 76px 40px 52px 110px 150px 110px 76px 96px minmax(150px,1fr) 104px;
+gap:18px;align-items:baseline;padding:7px 10px}
+.trow-head{font-size:11px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line)}
+.trow{border-bottom:1px solid var(--grid)}
+.trow-sum{cursor:pointer;list-style:none}
+.trow-sum::-webkit-details-marker{display:none}
+.trow[open]>.trow-sum,.trow-sum:hover{background:rgba(255,255,255,.02)}
+.trow-live>.trow-sum{background:var(--accent-soft)}
+.tc{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.trow-body{padding:4px 10px 12px 52px}
+details.raw{border-top:1px solid var(--grid);padding:6px 0}
+details.raw>summary{cursor:pointer;list-style:none}
+details.raw>summary::-webkit-details-marker{display:none}
+.empty{padding:22px;text-align:center;color:var(--muted)}
+.empty-sub{font-size:12px;margin-top:4px}
+.footer{color:var(--faint);font-size:11.5px;text-align:center;padding:10px 0 26px}
+.set-h{margin-top:14px}
+.set-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:28px}
+.set-row{display:grid;grid-template-columns:minmax(200px,auto) minmax(0,1fr) auto;gap:12px;align-items:baseline;
+padding:5px 2px;border-bottom:1px solid var(--grid)}
+.set-k{color:var(--text2);font-size:12px}
+.set-v{color:var(--text);overflow-wrap:anywhere}
+.set-tags{display:flex;gap:4px}
+.small{font-size:12px}
+"""
+
+INDEX = """<!DOCTYPE html>
 <html>
 <head>
 {%metas%}
 <title>{%title%}</title>
 <link rel="icon" type="image/png" href="/assets/alcadeias.png">
-<link rel="shortcut icon" type="image/png" href="/assets/alcadeias.png">
 {%css%}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-    /* === Reset & Base — Alcadeias Angel Theme === */
-    *, *::before, *::after { box-sizing: border-box; }
-    body {
-        margin: 0;
-        padding: 0;
-        background: #060b18;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-    }
-
-    /* === Hide Dash Loading === */
-    ._dash-loading-callback,
-    .dash-loading,
-    ._dash-loading,
-    div._dash-loading-callback--is-loading {
-        visibility: hidden !important;
-    }
-
-    /* === Custom Scrollbar — gold accent === */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb {
-        background: rgba(212, 168, 67, 0.30);
-        border-radius: 10px;
-    }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(212, 168, 67, 0.55); }
-
-    /* === Animations === */
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(8px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes pulse {
-        0%, 100% { opacity: 0.3; }
-        50% { opacity: 0.7; }
-    }
-    @keyframes shimmer {
-        0% { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
-    }
-    @keyframes glow {
-        0%, 100% { opacity: 0.6; }
-        50% { opacity: 1; }
-    }
-    @keyframes haloRotate {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-    @keyframes divinePulse {
-        0%, 100% { box-shadow: 0 0 8px rgba(212,168,67,0.2), 0 0 20px rgba(74,142,204,0.1); }
-        50% { box-shadow: 0 0 16px rgba(212,168,67,0.4), 0 0 40px rgba(74,142,204,0.2); }
-    }
-
-    #tab-content {
-        animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .skeleton-pulse {
-        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-    }
-
-    /* === Gradient Top Bar — gold / royal blue shimmer === */
-    .gradient-bar {
-        height: 3px;
-        background: linear-gradient(90deg, #d4a843, #4a8ecc, #f0e6c0, #4a8ecc, #d4a843);
-        background-size: 300% auto;
-        animation: shimmer 5s linear infinite;
-    }
-
-    /* === Text Selection — golden === */
-    ::selection {
-        background: rgba(212, 168, 67, 0.3);
-        color: #f0ede4;
-    }
-
-    /* === Details Marker === */
-    details > summary { list-style-type: none; }
-    details > summary::-webkit-details-marker { display: none; }
-    details > summary::before {
-        content: '▸ ';
-        color: #5c6478;
-        transition: transform 0.2s;
-    }
-    details[open] > summary::before {
-        content: '▾ ';
-    }
-
-    /* === Strategy Log Row Hover === */
-    details > summary > div:hover {
-        background: rgba(192, 168, 100, 0.06) !important;
-    }
-
-    /* === Plotly Tooltips === */
-    .plotly .hoverlayer .hovertext {
-        font-family: 'Inter', sans-serif !important;
-    }
-
-    /* === Dark Dropdown Override — Alcadeias Gold Theme === */
-    .dash-dropdown,
-    .dash-dropdown * {
-        box-sizing: border-box !important;
-    }
-    /* Main dropdown container / input area */
-    .dash-dropdown .Select-control,
-    :not(#daily-day-selector) > .Select > .Select-control {
-        background-color: #0a1025 !important;
-        background: #0a1025 !important;
-        border: 1px solid rgba(192, 168, 100, 0.25) !important;
-        color: #f0ede4 !important;
-    }
-    .dash-dropdown .Select-multi-value-wrapper {
-        background: transparent !important;
-    }
-    /* Menu / dropdown list */
-    .dash-dropdown .Select-menu-outer,
-    :not(#daily-day-selector) > .Select > .Select-menu-outer,
-    .dash-dropdown [class*="menu"] {
-        background-color: #0c1328 !important;
-        background: #0c1328 !important;
-        border: 1px solid rgba(192, 168, 100, 0.25) !important;
-        z-index: 999 !important;
-    }
-    /* Options in the list */
-    .dash-dropdown .Select-option,
-    :not(#daily-day-selector) > .Select .Select-option,
-    :not(#daily-day-selector) > .Select .VirtualizedSelectOption {
-        background-color: #0c1328 !important;
-        background: #0c1328 !important;
-        color: #f0ede4 !important;
-    }
-    :not(#daily-day-selector) > .Select .VirtualizedSelectFocusedOption,
-    :not(#daily-day-selector) > .Select .Select-option.is-focused {
-        background-color: #1a2540 !important;
-        background: #1a2540 !important;
-    }
-    /* Selected value chips / tags */
-    .dash-dropdown .Select-value,
-    :not(#daily-day-selector) > .Select .Select-value {
-        background-color: #162040 !important;
-        background: #162040 !important;
-        border: 1px solid rgba(212, 168, 67, 0.40) !important;
-        color: #ffffff !important;
-    }
-    /* Value labels */
-    .dash-dropdown .Select-value-label,
-    :not(#daily-day-selector) > .Select .Select-value-label {
-        color: #ffffff !important;
-        font-weight: 600 !important;
-        font-size: 12px !important;
-    }
-    /* Input text */
-    .dash-dropdown .Select-input input,
-    :not(#daily-day-selector) > .Select .Select-input input {
-        color: #f0ede4 !important;
-        background: transparent !important;
-    }
-    /* Placeholder */
-    :not(#daily-day-selector) > .Select .Select-placeholder {
-        color: #5c6478 !important;
-    }
-    /* Arrow / chevron */
-    :not(#daily-day-selector) > .Select .Select-arrow-zone .Select-arrow {
-        border-color: #5c6478 transparent transparent !important;
-    }
-    /* Clear button */
-    :not(#daily-day-selector) > .Select .Select-clear-zone {
-        color: #5c6478 !important;
-    }
-    /* No results text */
-    :not(#daily-day-selector) > .Select .Select-noresults {
-        background-color: #0c1328 !important;
-        background: #0c1328 !important;
-        color: #5c6478 !important;
-    }
-
-    /* === ALL Dropdowns and selects on page — global dark theme === */
-    .Select, .Select div, .Select span,
-    [class*="dropdown"] [class*="control"],
-    [class*="dropdown"] [class*="menu"],
-    [class*="dropdown"] [class*="option"],
-    select {
-        font-family: 'Inter', sans-serif !important;
-    }
-    select, select option {
-        background-color: #0c1328 !important;
-        background: #0c1328 !important;
-        color: #f0ede4 !important;
-        border-color: rgba(192, 168, 100, 0.25) !important;
-    }
-
-    /* === Mode Toggle Buttons === */
-    /* (removed — mode is now read-only, set via start_job.bat) */
-
-    /* === Mascot container glow === */
-    .mascot-container {
-        animation: divinePulse 3s ease-in-out infinite;
-        border-radius: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    /* === Daily Day Selector — FULL WHITE THEME (like clean dropdown) === */
-    #daily-day-selector,
-    #daily-day-selector * {
-        box-sizing: border-box !important;
-    }
-    #daily-day-selector .Select-control {
-        background-color: #0d1530 !important;
-        background: #0d1530 !important;
-        border: 1px solid rgba(192, 168, 100, 0.3) !important;
-        border-radius: 20px !important;
-        cursor: pointer !important;
-        min-height: 36px !important;
-    }
-    #daily-day-selector .Select-value {
-        background: transparent !important;
-        background-color: transparent !important;
-        border: none !important;
-    }
-    #daily-day-selector .Select-value-label {
-        color: #f0ede4 !important;
-        font-weight: 600 !important;
-        font-size: 13px !important;
-    }
-    #daily-day-selector .Select-placeholder {
-        color: #5c6478 !important;
-    }
-    #daily-day-selector .Select-input,
-    #daily-day-selector .Select-input > input,
-    #daily-day-selector input {
-        color: #1a1a2e !important;
-        background: transparent !important;
-    }
-    #daily-day-selector .Select-multi-value-wrapper {
-        background: transparent !important;
-    }
-    #daily-day-selector .Select-arrow-zone .Select-arrow {
-        border-color: #7a7060 transparent transparent !important;
-    }
-    /* WHITE menu & options */
-    #daily-day-selector .Select-menu-outer {
-        background-color: #ffffff !important;
-        background: #ffffff !important;
-        border: 1px solid #d0d0d0 !important;
-        border-radius: 10px !important;
-        z-index: 99999 !important;
-        box-shadow: 0 6px 24px rgba(0   ,0,0,0.18) !important;
-        margin-top: 4px !important;
-        overflow: hidden !important;
-    }
-    #daily-day-selector .Select-menu {
-        background-color: #ffffff !important;
-        background: #ffffff !important;
-        max-height: 300px !important;
-    }
-    #daily-day-selector .Select-option,
-    #daily-day-selector .VirtualizedSelectOption {
-        background-color: #ffffff !important;
-        background: #ffffff !important;
-        color: #1a1a2e !important;
-        font-size: 14px !important;
-        font-weight: 500 !important;
-        padding: 11px 16px !important;
-        border-bottom: 1px solid #f0f0f0 !important;
-        cursor: pointer !important;
-    }
-    #daily-day-selector .VirtualizedSelectFocusedOption,
-    #daily-day-selector .Select-option.is-focused,
-    #daily-day-selector .Select-option:hover,
-    #daily-day-selector .VirtualizedSelectOption:hover {
-        background-color: #f3f0ff !important;
-        background: #f3f0ff !important;
-        color: #5b21b6 !important;
-    }
-    #daily-day-selector .Select-option.is-selected {
-        background-color: #f3f0ff !important;
-        background: #f3f0ff !important;
-        color: #5b21b6 !important;
-        font-weight: 600 !important;
-    }
-    #daily-day-selector .Select-noresults {
-        background: #ffffff !important;
-        color: #999 !important;
-    }
-    /* ARIA role targets (for portaled menus) */
-    #daily-day-selector div[role="listbox"],
-    #daily-day-selector div[role="listbox"] * {
-        background-color: #ffffff !important;
-        background: #ffffff !important;
-    }
-    #daily-day-selector div[role="option"] {
-        background-color: #ffffff !important;
-        background: #ffffff !important;
-        color: #1a1a2e !important;
-        font-size: 14px !important;
-        padding: 11px 16px !important;
-    }
-    #daily-day-selector div[role="option"]:hover,
-    #daily-day-selector div[role="option"][class*="isFocused"] {
-        background-color: #f3f0ff !important;
-        background: #f3f0ff !important;
-        color: #5b21b6 !important;
-    }
-    #daily-day-selector div[role="option"][aria-selected="true"] {
-        background-color: #f3f0ff !important;
-        background: #f3f0ff !important;
-        color: #5b21b6 !important;
-        font-weight: 600 !important;
-    }
-    /* Scrollbar inside dropdown */
-    #daily-day-selector .Select-menu::-webkit-scrollbar {
-        width: 6px !important;
-    }
-    #daily-day-selector .Select-menu::-webkit-scrollbar-track {
-        background: #f5f5f5 !important;
-    }
-    #daily-day-selector .Select-menu::-webkit-scrollbar-thumb {
-        background: #ccc !important;
-        border-radius: 10px !important;
-    }
-    #daily-day-selector .Select-menu-outer::-webkit-scrollbar {
-        width: 6px !important;
-    }
-    #daily-day-selector .Select-menu-outer::-webkit-scrollbar-track {
-        background: #f5f5f5 !important;
-    }
-    #daily-day-selector .Select-menu-outer::-webkit-scrollbar-thumb {
-        background: #ccc !important;
-        border-radius: 10px !important;
-    }
-</style>
+<style>""" + CSS + """</style>
 </head>
 <body>
 {%app_entry%}
 <footer>{%config%}{%scripts%}{%renderer%}</footer>
 </body>
-</html>
-'''
+</html>"""
 
-# ─── Load symbols configuration at startup ───
-_symbols_config = load_symbols_config()
-_all_symbols = _symbols_config.get('_symbol_names', [])
-_active_config = load_active_config()
-_current_mode = _active_config.get('mode', 'demo')
+TAB_STYLE = {'background': 'transparent', 'border': 'none', 'borderBottom': '2px solid transparent', 'padding': '12px 18px',
+             'color': COL['muted'], 'fontWeight': '600', 'fontSize': '13px', 'fontFamily': FONT, 'width': 'auto',
+             'flex': '0 0 auto'}
+TAB_SELECTED = dict(TAB_STYLE, color=COL['text'], borderBottom=f"2px solid {COL['accent']}")
+TABS = (('live', 'Live'), ('trades', 'Trades'), ('log', 'Log'), ('history', 'History & settings'))
 
-
-def _build_tabs(symbols):
-    """Build the dcc.Tabs component for the given symbol list"""
-    _TAB_STYLE = {
-        'background': 'transparent',
-        'color': COLORS['text_dim'],
-        'border': 'none',
-        'borderBottom': '2px solid transparent',
-        'padding': '14px 28px',
-        'fontSize': '12px',
-        'fontWeight': '600',
-        'letterSpacing': '1.5px',
-        'transition': 'all 0.3s ease',
-        'fontFamily': "'Inter', sans-serif",
-    }
-    _TAB_SELECTED = {
-        'background': 'transparent',
-        'color': COLORS['text'],
-        'border': 'none',
-        'borderBottom': f'2px solid {COLORS["tab_active"]}',
-        'padding': '14px 28px',
-        'fontSize': '12px',
-        'fontWeight': '700',
-        'letterSpacing': '1.5px',
-        'fontFamily': "'Inter', sans-serif",
-        'boxShadow': f'0 2px 12px {COLORS["accent_glow"]}',
-    }
-    if not symbols:
-        return dcc.Tabs(
-            id='symbol-tabs',
-            value='',
-            children=[],
-            style={'display': 'none'},
-        )
-    return dcc.Tabs(
-        id='symbol-tabs',
-        value=symbols[0],
-        children=[
-            dcc.Tab(label=s, value=s, style=_TAB_STYLE, selected_style=_TAB_SELECTED)
-            for s in symbols
-        ],
-        style={'borderBottom': f'1px solid {COLORS["divider"]}', 'background': COLORS['tab_bg']},
-    )
+app = dash.Dash(__name__, title=f"{getattr(_C, 'DEMO_BRANCH', None) or 'demo bot'} · Alcadeias", update_title=None,
+                suppress_callback_exceptions=True)
+app.index_string = INDEX
+server = app.server
 
 
-app.layout = html.Div([
-    # Auto-refresh
-    dcc.Interval(id='refresh-interval', interval=REFRESH_INTERVAL, n_intervals=0),
-    # Cache to skip redundant DOM rebuilds
-    dcc.Store(id='data-hash', data=''),
-    # Persist selected daily date across refreshes
-    dcc.Store(id='selected-daily-date', data=None),
-
-    # ── Top gradient accent line — divine gold/blue ──
-    html.Div(className='gradient-bar'),
-
-    # ── Header — Alcadeias Mascot + Branding ──
-    html.Div([
-        html.Div([
-            # Alcadeias, Lord of Spirits — mascot image
-            html.Div(
-                html.Img(
-                    src=_MASCOT_B64,
-                    style={
-                        'width': '64px', 'height': '64px',
-                        'objectFit': 'contain',
-                        'display': 'block',
-                        'filter': 'drop-shadow(0 0 8px rgba(212,168,67,0.35))',
-                    },
-                ),
-                className='mascot-container',
-                style={
-                    'width': '68px', 'height': '68px',
-                    'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center',
-                    'background': 'radial-gradient(circle, rgba(212,168,67,0.08) 0%, rgba(74,142,204,0.04) 50%, transparent 75%)',
-                    'marginRight': '14px', 'flexShrink': '0',
-                },
-            ),
-            html.Div([
-                html.Span('ALCADEIAS', style={
-                    'fontSize': '19px', 'fontWeight': '800', 'letterSpacing': '3.5px',
-                    'background': 'linear-gradient(135deg, #f0e6c0, #d4a843, #4a8ecc)',
-                    'WebkitBackgroundClip': 'text',
-                    'WebkitTextFillColor': 'transparent',
-                }),
-                html.Div('Lord of Spirits · Trading Dashboard', style={
-                    'fontSize': '9px', 'color': '#7a7060',
-                    'letterSpacing': '2px', 'textTransform': 'uppercase',
-                    'marginTop': '2px', 'fontWeight': '500',
-                }),
+def _pane_live():
+    return html.Div(id='pane-live', children=[
+        html.Section(className='card now', children=[
+            html.Div(id='live-now'),
+            html.Div(className='grid-2 now-grid', children=[html.Div(id='live-gates'), html.Div(id='live-strategy')]),
+        ]),
+        html.Section(className='card', children=[
+            html.Div(className='card-head', children=[
+                html.Div([html.H2('Price chart', className='card-title'),
+                          html.Div('this bot\'s entries ▲ ▼, exits ✕ (green: won, red: lost) and the open trade\'s levels; '
+                                   'hover for the details', className='card-sub')]),
+                dcc.RadioItems(id='tf', options=[{'label': t, 'value': t} for t in TIMEFRAMES], value='M15',
+                               className='seg', persistence=True, persistence_type='local', inline=True),
             ]),
-        ], style={'display': 'flex', 'alignItems': 'center'}),
-        html.Div(id='account-info', style={
-            'display': 'flex', 'gap': '24px', 'alignItems': 'center',
-        }),
-        html.Div(id='header-time', style={
-            'fontSize': '11px', 'color': '#7a7060',
-            'fontFamily': "'JetBrains Mono', monospace",
-            'fontWeight': '400',
-        }),
-    ], style={
-        'display': 'flex',
-        'justifyContent': 'space-between',
-        'alignItems': 'center',
-        'padding': '12px 32px',
-        'background': 'linear-gradient(180deg, rgba(6,11,24,0.97) 0%, rgba(10,16,37,0.95) 100%)',
-        'backdropFilter': 'blur(20px)',
-        'WebkitBackdropFilter': 'blur(20px)',
-        'borderBottom': f'1px solid {COLORS["divider"]}',
-        'color': COLORS['text'],
-    }),
-
-    # ── Control Bar: Mode Badge (read-only) + Symbol Selector ──
-    html.Div([
-        # Left: Mode badge (read-only — set by start_job.bat)
-        html.Div([
-            html.Span('MODE', style={
-                'fontSize': '9px', 'fontWeight': '600', 'color': COLORS['text_dim'],
-                'letterSpacing': '1.5px', 'marginRight': '12px',
-            }),
-            html.Span(_current_mode.upper(), id='mode-indicator', style={
-                'fontSize': '11px', 'fontWeight': '700', 'letterSpacing': '1.2px',
-                'color': COLORS['buy'] if _current_mode == 'demo' else COLORS['sell'],
-                'background': f'{COLORS["buy"] if _current_mode == "demo" else COLORS["sell"]}18',
-                'padding': '4px 14px', 'borderRadius': '8px',
-                'border': f'1px solid {COLORS["buy"] if _current_mode == "demo" else COLORS["sell"]}33',
-            }),
-        ], style={'display': 'flex', 'alignItems': 'center'}),
-
-        # Right: Symbols badge (read-only — set by symbols.json)
-        html.Div([
-            html.Span('SYMBOLS', style={
-                'fontSize': '9px', 'fontWeight': '600', 'color': COLORS['text_dim'],
-                'letterSpacing': '1.5px', 'marginRight': '12px', 'flexShrink': '0',
-                'whiteSpace': 'nowrap',
-            }),
-            html.Span(
-                ', '.join(_all_symbols),
-                style={
-                    'fontSize': '11px', 'fontWeight': '600', 'letterSpacing': '0.5px',
-                    'color': COLORS['text'],
-                    'background': 'rgba(192, 168, 100, 0.10)',
-                    'padding': '6px 16px', 'borderRadius': '8px',
-                    'border': '1px solid rgba(192, 168, 100, 0.25)',
-                },
-            ),
-        ], style={'display': 'flex', 'alignItems': 'center'}),
-    ], style={
-        'display': 'flex',
-        'justifyContent': 'space-between',
-        'alignItems': 'center',
-        'padding': '10px 32px',
-        'background': COLORS['bg_secondary'],
-        'borderBottom': f'1px solid {COLORS["divider"]}',
-        'gap': '24px',
-    }),
-
-    # ── Tabs (always shows all symbols from symbols.json) ──
-    html.Div(
-        _build_tabs(_all_symbols),
-        id='tabs-container',
-        style={'padding': '0 32px', 'background': COLORS['tab_bg']},
-    ),
-
-    # ── Content ──
-    html.Div(id='tab-content', style={
-        'padding': '28px 32px 48px 32px',
-        'maxWidth': '1280px',
-        'margin': '0 auto',
-    }),
-
-    # ── Footer — angelic divider ──
-    html.Div([
-        html.Div(style={
-            'height': '1px',
-            'background': f'linear-gradient(90deg, transparent, rgba(212,168,67,0.18), rgba(74,142,204,0.12), transparent)',
-            'marginBottom': '16px',
-        }),
-        html.Div([
-            html.Span('✦', style={'color': '#d4a843', 'fontSize': '10px', 'marginRight': '8px', 'opacity': '0.5'}),
-            html.Span('Alcadeias · Lord of Spirits', style={
-                'fontSize': '10px',
-                'background': 'linear-gradient(90deg, #d4a843, #4a8ecc)',
-                'WebkitBackgroundClip': 'text',
-                'WebkitTextFillColor': 'transparent',
-                'letterSpacing': '2.5px',
-                'textTransform': 'uppercase',
-                'fontWeight': '600',
-            }),
-            html.Span('✦', style={'color': '#4a8ecc', 'fontSize': '10px', 'marginLeft': '8px', 'opacity': '0.5'}),
-        ], style={
-            'textAlign': 'center',
-            'paddingBottom': '18px',
-            'display': 'flex', 'justifyContent': 'center', 'alignItems': 'center',
-        }),
-    ], style={'padding': '0 32px'}),
-
-], style={
-    'background': COLORS['bg'],
-    'minHeight': '100vh',
-    'fontFamily': "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    'color': COLORS['text'],
-})
+            dcc.Graph(id='chart', config={'displaylogo': False, 'scrollZoom': True,
+                                          'modeBarButtonsToRemove': ['lasso2d', 'select2d', 'autoScale2d']}),
+            html.Div(id='chart-note', className='chart-note'),
+        ]),
+        html.Div(id='live-position'),
+        html.Div(id='live-events'),
+    ])
 
 
-# ─── Daily Day Selector Callback ───
+def _pane_trades():
+    return html.Div(id='pane-trades', style={'display': 'none'}, children=[
+        card('Summary', html.Div(id='trades-kpis'), sub='this bot\'s closed trades from the deal history (its magic number)'),
+        card('Virtual balance', dcc.Graph(id='equity', config={'displayModeBar': False}, style={'height': '300px'}),
+             sub='after every close (a dot per trade: green won, red lost; shaded: below the running peak); dotted: now, '
+                 'with the open P/L'),
+        html.Div(id='trades-list'),
+    ])
+
+
+def _pane_log():
+    return html.Div(id='pane-log', style={'display': 'none'}, children=[
+        card('Log files', html.Div([
+            html.Div(id='log-files'),
+            html.Div(className='dayrow', children=[
+                html.Span('Days:', className='muted'),
+                dcc.RadioItems(id='log-day', options=[], value=None, className='seg', inline=True),
+                html.Button('Download the selected day', id='log-dl-btn', className='btn'),
+                dcc.Download(id='log-dl'),
+            ]),
+        ]), sub='one text file per UTC day (kept 30 days) and the same lines as JSON; when something looks wrong, '
+                'send the day\'s text file'),
+        html.Section(className='card', children=[
+            html.Div(className='logbar', children=[
+                dcc.Checklist(id='log-levels', options=[{'label': lv_, 'value': lv_} for lv_ in LOG_LEVELS],
+                              value=list(LOG_LEVELS), className='chk', inline=True, persistence=True,
+                              persistence_type='local'),
+                dcc.Input(id='log-search', type='text', placeholder='search the message, category and values…',
+                          debounce=True, className='search'),
+                dcc.Checklist(id='log-hb', options=[{'label': 'show heartbeats', 'value': 'hb'},
+                                                    {'label': 'show start-up settings', 'value': 'cfg'}],
+                              value=[], className='chk', inline=True, persistence=True, persistence_type='local'),
+                dcc.RadioItems(id='log-limit', options=[{'label': str(n), 'value': n} for n in (200, 500, 2000)],
+                               value=200, className='seg', inline=True, persistence=True, persistence_type='local'),
+                dcc.RadioItems(id='log-view', options=[{'label': 'events', 'value': 'events'},
+                                                       {'label': 'raw text', 'value': 'text'}],
+                               value='events', className='seg', inline=True),
+                dcc.RadioItems(id='log-follow', options=[{'label': '● live', 'value': 'live'},
+                                                         {'label': 'Ⅱ paused', 'value': 'paused'}],
+                               value='live', className='seg', inline=True),
+            ]),
+            html.Div(id='log-count', className='count'),
+            html.Div(id='log-list'),
+        ]),
+    ])
+
+
+def _pane_history():
+    return html.Div(id='pane-history', style={'display': 'none'}, children=[
+        card('Daily trades', html.Div([
+            dcc.RadioItems(id='hist-day', options=[], value=None, className='seg', inline=True),
+            html.Div(id='hist-daily', style={'marginTop': '12px'}),
+        ]), sub='this bot\'s closing deals per server day (the old dashboard\'s view: daily_trade/<SYMBOL>/)'),
+        card('Old strategy log', html.Div(id='hist-slog'), sub='logs/<SYMBOL>_strategy_log.json, newest first (the '
+                                                               'detailed log is on the Log tab)'),
+        card('Settings', html.Div(id='hist-settings'), sub='what the bot runs with; "design" marks what the branch\'s '
+                                                           'design block sets'),
+        card('Raw files', html.Div(id='hist-raw'), sub='what the bot wrote, as it is (click to open)'),
+    ])
+
+
+def serve_layout():
+    syms = symbols()
+    first = syms[0] if syms else ''
+    return html.Div([
+        dcc.Location(id='url', refresh=False),
+        dcc.Interval(id='tick', interval=REFRESH_INTERVAL, n_intervals=0),
+        dcc.Store(id='sig-live'), dcc.Store(id='sig-trades'), dcc.Store(id='sig-log'), dcc.Store(id='sig-hist'),
+        html.Header(className='topbar', children=[html.Div(className='top-row', children=[
+            html.Div(className='brand', children=[
+                html.Img(src=app.get_asset_url('alcadeias.png'), alt=''),
+                html.Div([html.Div('ALCADEIAS', className='brand-name'), html.Div('demo bot', className='brand-sub')]),
+            ]),
+            html.Div(id='status', className='status'),
+        ])]),
+        html.Nav(className='tabbar', children=[
+            dcc.Tabs(id='tabs', value='live', children=[dcc.Tab(label=lbl, value=val, style=TAB_STYLE,
+                                                               selected_style=TAB_SELECTED) for val, lbl in TABS],
+                     style={'borderBottom': 'none', 'background': 'transparent'}, parent_style={'flex': '1'}),
+            html.Div(className='tabbar-right', children=[
+                dcc.RadioItems(id='symbol', options=[{'label': s, 'value': s} for s in syms], value=first,
+                               className='seg', inline=True, style={} if len(syms) > 1 else {'display': 'none'}),
+                html.Span(f'refreshes every {REFRESH_INTERVAL / 1000:g} s · times in UTC'),
+            ]),
+        ]),
+        html.Main(className='page', children=[_pane_live(), _pane_trades(), _pane_log(), _pane_history()]),
+        html.Div(f'Alcadeias · reads {os.path.abspath(JSON_DIR)} · never sends anything to the terminal', className='footer'),
+    ])
+
+
+app.layout = serve_layout
+
+
+# ───────────────────────────── callbacks ─────────────────────────────
+
+def _query(search):
+    out = {}
+    for part in (search or '').lstrip('?').split('&'):
+        if '=' in part:
+            k, v = part.split('=', 1)
+            out[k] = v
+    return out
+
+
+@app.callback(Output('tabs', 'value'), Output('tf', 'value'), Input('url', 'search'))
+def _from_url(search):
+    """?tab=trades&tf=M1 opens a tab / a timeframe (a bookmark, a screenshot)."""
+    q = _query(search)
+    tab = q.get('tab') if q.get('tab') in dict(TABS) else no_update
+    tf = q.get('tf') if q.get('tf') in TIMEFRAMES else no_update
+    return tab, tf
+
+
+@app.callback([Output(f'pane-{k}', 'style') for k, _ in TABS], Input('tabs', 'value'))
+def _show_tab(tab):
+    return [{} if k == tab else {'display': 'none'} for k, _ in TABS]
+
+
+def _triggered():
+    try:
+        return [t['prop_id'] for t in dash.callback_context.triggered]
+    except Exception:
+        return []
+
+
+@app.callback(Output('status', 'children'), Input('tick', 'n_intervals'), Input('symbol', 'value'))
+def _status(_n, sym):
+    return status_bar(sym, load(sym or ''))
+
+
 @app.callback(
-    [Output('daily-metrics-container', 'children'),
-     Output('daily-chart-container', 'children'),
-     Output('selected-daily-date', 'data')],
-    [Input('daily-day-selector', 'value'),
-     Input('symbol-tabs', 'value')],
-    prevent_initial_call=True,
-)
-def update_daily_day(selected_date, selected_symbol):
-    """Update daily trade chart and metrics when a different day is selected."""
-    if not selected_symbol:
-        return dash.no_update, dash.no_update, dash.no_update
-
-    today_str = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
-    is_today = (not selected_date) or (selected_date == today_str)
-
-    if is_today:
-        daily_data = load_daily_trade_data(selected_symbol)
-    else:
-        daily_data = load_daily_trade_data_for_date(selected_symbol, selected_date)
-
-    historical = load_historical_summary(selected_symbol)
-
-    deals = daily_data.get('deals', []) if daily_data else []
-    sym_total = daily_data.get('total_profit', 0) if daily_data else 0
-    sym_avg = daily_data.get('avg_profit', 0) if daily_data else 0
-    sym_count = daily_data.get('deal_count', 0) if daily_data else 0
-    hist_total = historical.get('total_profit', 0) if historical else 0
-    hist_count = historical.get('total_deals', 0) if historical else 0
-
-    all_sym_pl, all_sym_deals = load_today_all_symbols_pl()
-
-    # Date label for the metrics cards
-    if is_today:
-        day_label = 'Today'
-    else:
-        try:
-            d = datetime.strptime(selected_date, '%Y-%m-%d')
-            day_label = d.strftime('%d %b')
-        except (ValueError, TypeError):
-            day_label = selected_date
-
-    metrics_row = html.Div([
-        make_metric_card(
-            f'{selected_symbol} P/L {day_label}',
-            f'${sym_total:,.2f}',
-            COLORS['positive'] if sym_total >= 0 else COLORS['negative'],
-            f'{sym_count} deals', icon='📊',
-        ),
-        make_metric_card(
-            f'{selected_symbol} Avg Profit',
-            f'${sym_avg:,.2f}',
-            COLORS['positive'] if sym_avg >= 0 else COLORS['negative'],
-            'per deal', icon='📉',
-        ),
-        make_metric_card(
-            f'{selected_symbol} Lifetime P/L',
-            f'${hist_total:,.2f}',
-            COLORS['positive'] if hist_total >= 0 else COLORS['negative'],
-            f'{hist_count} deals (10y)', icon='🏦',
-        ),
-        make_metric_card(
-            'All Symbols Today',
-            f'${all_sym_pl:,.2f}',
-            COLORS['positive'] if all_sym_pl >= 0 else COLORS['negative'],
-            f'{all_sym_deals} deals total', icon='🌐',
-        ),
-    ], style={'display': 'flex', 'gap': '12px', 'flexWrap': 'wrap', 'marginBottom': '16px'})
-
-    chart = _build_daily_chart(deals)
-
-    return [metrics_row], [chart], selected_date
+    Output('live-now', 'children'), Output('live-gates', 'children'), Output('live-strategy', 'children'),
+    Output('chart', 'figure'), Output('chart-note', 'children'), Output('live-position', 'children'),
+    Output('live-events', 'children'), Output('sig-live', 'data'),
+    Input('tick', 'n_intervals'), Input('tabs', 'value'), Input('tf', 'value'), Input('symbol', 'value'),
+    State('sig-live', 'data'))
+def _live(_n, tab, tf, sym, prev):
+    if tab != 'live':
+        return [no_update] * 8
+    sym = sym or ''
+    sig = '|'.join([sym, str(tf), file_sig(trace_path(sym), bars_path(sym), trades_path(sym), events_path(sym)),
+                    str(int(_now() // 60))])
+    if sig == prev and any(p.startswith('tick.') for p in _triggered()):
+        return [no_update] * 8
+    d = load(sym)
+    if not d.get('trace'):
+        msg = html.Div([
+            html.Div(className='now-head', children=[html.Div(className='now-title', children=[
+                html.Span('What the bot is doing now', className='eyebrow'), badge('NO DATA', 'warn')])]),
+            html.P('No trace from the bot yet.', className='headline'),
+            html.Div(f"{os.path.abspath(trace_path(sym))} is {d.get('trace_problem')}. The bot writes it after every "
+                     f"poll: start the bot (start_btcusd.bat / start_job.bat) and this page fills in.", className='line muted'),
+        ])
+        return (msg, None, None, price_figure(d, tf), chart_note(d, tf), position_view(d), latest_events(sym), sig)
+    return (now_header(d), gates_view(d), strategy_panel(d), price_figure(d, tf), chart_note(d, tf), position_view(d),
+            latest_events(sym), sig)
 
 
-# ─── Main Content Callback ───
-@app.callback(
-    [Output('tab-content', 'children'),
-     Output('account-info', 'children'),
-     Output('header-time', 'children'),
-     Output('data-hash', 'data'),
-     Output('mode-indicator', 'children'),
-     Output('mode-indicator', 'style')],
-    [Input('symbol-tabs', 'value'),
-     Input('refresh-interval', 'n_intervals')],
-    [dash.State('data-hash', 'data'),
-     dash.State('selected-daily-date', 'data')],
-)
-def update_content(selected_symbol, n, prev_hash, stored_date):
-    """Single callback: refreshes content only when data changes or tab switches"""
-    import hashlib
+@app.callback(Output('trades-kpis', 'children'), Output('equity', 'figure'), Output('trades-list', 'children'),
+              Output('sig-trades', 'data'),
+              Input('tick', 'n_intervals'), Input('tabs', 'value'), Input('symbol', 'value'), State('sig-trades', 'data'))
+def _trades(_n, tab, sym, prev):
+    if tab != 'trades':
+        return [no_update] * 4
+    sym = sym or ''
+    # trades.json changes after every fill and close (and every minute); the open row's P/L follows every 30 s, so
+    # a row opened to read its legs stays open
+    sig = '|'.join([sym, file_sig(trades_path(sym)), str(int(_now() // 30))])
+    if sig == prev and any(p.startswith('tick.') for p in _triggered()):
+        return [no_update] * 4
+    d = load(sym)
+    return trades_kpis(d), equity_figure(d), trades_list(d), sig
 
-    # Read current mode from active_config (bot writes this)
-    _cfg = load_active_config()
-    _mode = _cfg.get('mode', 'demo')
-    _mode_color = COLORS['buy'] if _mode == 'demo' else COLORS['sell']
-    _mode_style = {
-        'fontSize': '11px', 'fontWeight': '700', 'letterSpacing': '1.2px',
-        'color': _mode_color,
-        'background': f'{_mode_color}18',
-        'padding': '4px 14px', 'borderRadius': '8px',
-        'border': f'1px solid {_mode_color}33',
-    }
 
-    if not selected_symbol:
-        return html.Div([
-            html.Div('⚠', style={'fontSize': '48px', 'marginBottom': '12px', 'opacity': '0.4'}),
-            html.Div('No symbols configured', style={
-                'color': COLORS['text_dim'], 'fontSize': '16px',
-            }),
-        ], style={
-            'textAlign': 'center', 'marginTop': '120px',
-        }), html.Div(), '', '', _mode.upper(), _mode_style
+@app.callback(Output('log-files', 'children'), Output('log-day', 'options'), Output('log-day', 'value'),
+              Input('tick', 'n_intervals'), Input('tabs', 'value'), Input('symbol', 'value'), State('log-day', 'value'))
+def _log_files(_n, tab, sym, day):
+    if tab != 'log':
+        return [no_update] * 3
+    sym = sym or ''
+    today = utc(_now()).strftime('%Y-%m-%d')
+    today_path = os.path.abspath(text_log_path(sym, today))
+    files = log_files(sym)
+    rows = [html.Div(className='pathbox', children=[
+        html.Span("Today's text log (UTC day):", className='muted'),
+        html.Code(today_path, id='log-path-today', className='path'),
+        dcc.Clipboard(target_id='log-path-today', className='copy', title='copy the path'),
+        html.Span(_size(os.path.getsize(today_path)) if os.path.exists(today_path) else 'not written yet today',
+                  className='muted'),
+    ]), html.Div(className='pathbox', style={'marginTop': '6px'}, children=[
+        html.Span('The same lines as JSON:', className='muted'),
+        html.Code(os.path.abspath(events_path(sym)), id='log-path-events', className='path'),
+        dcc.Clipboard(target_id='log-path-events', className='copy', title='copy the path'),
+        html.Span('(rotated at 10 MB into _events.1.jsonl … _events.5.jsonl)', className='muted'),
+    ])]
+    opts = [{'label': f'{d_} · {_size(size)}', 'value': d_} for d_, _, size in files[:30]]
+    if day not in [o['value'] for o in opts]:
+        day = opts[0]['value'] if opts else None
+    return rows, opts, day
 
-    # Load raw data to check if anything changed
-    symbol_data = load_symbol_data(selected_symbol)
-    account = load_account_data()
-    daily = load_daily_trade_data(selected_symbol)
-    historical = load_historical_summary(selected_symbol)
-    strategy_log = load_strategy_log(selected_symbol)
 
-    # Build a quick hash of the data to detect changes
-    raw = json.dumps({'s': symbol_data, 'a': account, 'd': daily, 'h': historical, 'l': strategy_log},
-                     default=str, sort_keys=True)
-    current_hash = hashlib.md5(raw.encode()).hexdigest()
+@app.callback(Output('log-count', 'children'), Output('log-list', 'children'), Output('sig-log', 'data'),
+              Input('tick', 'n_intervals'), Input('tabs', 'value'), Input('symbol', 'value'), Input('log-levels', 'value'),
+              Input('log-search', 'value'), Input('log-hb', 'value'), Input('log-limit', 'value'), Input('log-view', 'value'),
+              Input('log-day', 'value'), Input('log-follow', 'value'), State('sig-log', 'data'))
+def _log(_n, tab, sym, levels, search, hb, limit, view, day, follow, prev):
+    """The events (or the raw text) filtered; 'paused' keeps the list as it is while new lines come in (an open
+    line stays open), a filter still applies at once."""
+    if tab != 'log':
+        return [no_update] * 3
+    if follow == 'paused' and prev and any(p.startswith('tick.') for p in _triggered()):
+        return [no_update] * 3
+    sym = sym or ''
+    today = utc(_now()).strftime('%Y-%m-%d')
+    text_path = text_log_path(sym, day or today)
+    sig = '|'.join([sym, file_sig(events_path(sym), text_path), json.dumps([levels, search, hb, limit, view, day])])
+    if sig == prev and any(p.startswith('tick.') for p in _triggered()):
+        return [no_update] * 3
+    levels = set(levels or [])
+    q = (search or '').strip().lower()
+    hb = set(hb or [])
+    if view == 'text':
+        lines, problem = text_tail(text_path)
+        if lines is None:
+            return f'The text log {text_path} is not readable ({problem}).', None, sig
+        keep = [ln for ln in lines if ln.strip() and (not q or q in ln.lower())
+                and (len(ln.split(' | ', 2)) < 2 or ln.split(' | ', 2)[1].strip() in levels or ln.startswith('    '))
+                and ('hb' in hb or ' | HEARTBEAT | ' not in ln) and ('cfg' in hb or ' | CONFIG | ' not in ln)]
+        shown = keep[-int(limit or 200):]
+        return (f'The last {len(shown)} of {len(keep)} matching lines of {os.path.basename(text_path)} (its newest '
+                f'{_size(TEXT_TAIL_BYTES)} at most), oldest first as in the file; the level and heartbeat filters and '
+                f'the search apply.'), html.Pre('\n'.join(shown), className='pre pre-log'), sig
+    evs, cut, problem = read_events(sym)
+    if problem:
+        return f'The events file is {problem}: {events_path(sym)}', None, sig
+    counts = Counter(str(e.get('level') or '').upper() for e in evs)
+    keep = []
+    for e in reversed(evs):
+        lvl = str(e.get('level') or '').upper()
+        cat = str(e.get('cat') or '')
+        if lvl not in levels or (cat == 'HEARTBEAT' and 'hb' not in hb) or (cat == 'CONFIG' and 'cfg' not in hb):
+            continue
+        if q and q not in _ev_text(e):
+            continue
+        keep.append(e)
+    shown = keep[:int(limit or 200)]
+    items, last_day = [], None
+    for e in shown:
+        t = ts(e.get('t'))
+        dday = utc(t).strftime('%A %d %B %Y') if t is not None else None
+        if dday != last_day:
+            items.append(html.Div(dday or '—', className='daysep'))
+            last_day = dday
+        items.append(event_row(e))
+    count = (f"{len(shown)} of {len(keep)} matching events, newest first, from "
+             f"{'the newest ' + _size(EVENTS_TAIL_BYTES) + ' of ' if cut else ''}{os.path.basename(events_path(sym))}: " +
+             ' · '.join(f'{lv_} {counts.get(lv_, 0)}' for lv_ in LOG_LEVELS) + '. Click a line for its values.')
+    return count, html.Div(items, className='evlist') if items else empty('Nothing matches.'), sig
 
-    # Check if this is a tab switch or data actually changed
-    triggered = callback_context.triggered[0]['prop_id'] if callback_context.triggered else ''
-    is_tab_switch = 'symbol-tabs' in triggered
 
-    if not is_tab_switch and current_hash == prev_hash:
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, _mode.upper(), _mode_style
+@app.callback(Output('log-dl', 'data'), Input('log-dl-btn', 'n_clicks'), State('log-day', 'value'),
+              State('symbol', 'value'), prevent_initial_call=True)
+def _download(_clicks, day, sym):
+    if not day:
+        return no_update
+    path = text_log_path(sym or '', day)
+    if not os.path.exists(path):
+        return no_update
+    return dcc.send_file(path)
 
-    # Build account info display
-    balance = account.get('balance', 0)
-    equity = account.get('equity', 0)
-    margin = account.get('margin', 0)
-    drawdown = account.get('drawdown', 0)
 
-    equity_color = COLORS['positive'] if equity >= balance else COLORS['negative']
-    drawdown_color = COLORS['negative'] if drawdown > 5 else COLORS['text_secondary']
-
-    def account_stat(label, val, color=COLORS['text']):
-        return html.Div([
-            html.Div(label, style={
-                'fontSize': '9px', 'color': COLORS['text_dim'],
-                'textTransform': 'uppercase', 'letterSpacing': '1px',
-                'fontWeight': '500',
-            }),
-            html.Div(val, style={
-                'fontSize': '14px', 'fontWeight': '700', 'color': color,
-                'fontFamily': "'JetBrains Mono', monospace",
-                'letterSpacing': '-0.3px',
-            }),
-        ], style={'textAlign': 'right'})
-
-    account_display = html.Div([
-        account_stat('Balance', f'${balance:,.2f}'),
-        html.Div(style={
-            'width': '1px', 'height': '28px',
-            'background': COLORS['divider'],
-        }),
-        account_stat('Equity', f'${equity:,.2f}', equity_color),
-        html.Div(style={
-            'width': '1px', 'height': '28px',
-            'background': COLORS['divider'],
-        }),
-        account_stat('Margin', f'${margin:,.2f}'),
-        html.Div(style={
-            'width': '1px', 'height': '28px',
-            'background': COLORS['divider'],
-        }),
-        account_stat('Drawdown', f'{drawdown:.2f}%', drawdown_color),
-    ], style={'display': 'flex', 'gap': '20px', 'alignItems': 'center'})
-
-    # On tab switch reset to today, otherwise preserve selected date
-    active_date = None if is_tab_switch else stored_date
-    content = build_symbol_tab_content(selected_symbol, selected_date=active_date)
-
-    # Use server time from symbol data if available
-    server_time_str = symbol_data.get('server_time') if symbol_data else None
-    if server_time_str:
-        try:
-            server_dt = datetime.fromisoformat(server_time_str)
-            time_display = server_dt.strftime('Server  %d %b %Y  •  %H:%M:%S UTC')
-        except (ValueError, TypeError):
-            time_display = datetime.now().strftime('Refresh  %H:%M:%S')
-    else:
-        time_display = datetime.now().strftime('Refresh  %H:%M:%S')
-
-    return content, account_display, time_display, current_hash, _mode.upper(), _mode_style
+@app.callback(Output('hist-day', 'options'), Output('hist-day', 'value'), Output('hist-daily', 'children'),
+              Output('hist-slog', 'children'), Output('hist-settings', 'children'), Output('hist-raw', 'children'),
+              Output('sig-hist', 'data'),
+              Input('tick', 'n_intervals'), Input('tabs', 'value'), Input('symbol', 'value'), Input('hist-day', 'value'),
+              State('sig-hist', 'data'))
+def _history(_n, tab, sym, day, prev):
+    if tab != 'history':
+        return [no_update] * 7
+    sym = sym or ''
+    files = daily_files(sym)
+    days = sorted(files, reverse=True)[:14]
+    if day not in days:
+        day = days[0] if days else None
+    sig = '|'.join([sym, str(day), file_sig(*(files[k] for k in days[:1]), _path('logs', f'{sym}_{STRATEGY_LOG_FILENAME}')),
+                    str(int(_now() // 60))])
+    if sig == prev and any(p.startswith('tick.') for p in _triggered()):
+        return [no_update] * 7
+    opts = [{'label': k, 'value': k} for k in days]
+    daily = history_daily(sym, day) if day else empty('No daily-trade file yet.')
+    return opts, day, daily, history_strategy_log(sym), settings_view(sym, load(sym)), raw_view(sym), sig
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host=DASHBOARD_HOST, port=DASHBOARD_PORT)
+    print(f"Alcadeias dashboard of {getattr(_C, 'DEMO_BRANCH', None) or 'this bot'}: http://localhost:{DASHBOARD_PORT} "
+          f"(reads {os.path.abspath(JSON_DIR)})", flush=True)
+    app.run(debug=False, host=DASHBOARD_HOST, port=DASHBOARD_PORT)
