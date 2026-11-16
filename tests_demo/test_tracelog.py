@@ -1179,10 +1179,10 @@ class _Wall:
 
 
 def _refused_start(m, wall):
-    """One start of the job by the launcher (a new process) while terminal_path names the live bots' MetaTrader 5,
-    then the launcher's 30 s before the next one."""
+    """One start of the job by the launcher (a new process) while terminal_path is empty (refused before any
+    terminal call), then the launcher's 30 s before the next one."""
     bot = m.app.MT5TradingBot(mode='demo', target_symbol=SYMBOL)
-    bot.load_credentials = lambda: setattr(bot, 'credentials', dict(CREDS, terminal_path=LIVE)) or True
+    bot.load_credentials = lambda: setattr(bot, 'credentials', dict(CREDS, terminal_path='')) or True
     bot.load_symbols = lambda: setattr(bot, 'symbols', [SYMBOL]) or True     # (never the real files)
     assert bot.execute_job() is False
     wall.sleep(30)
@@ -1211,8 +1211,9 @@ def test_a_start_refused_on_the_live_terminal_is_in_the_log_once_per_the_limit(m
     text = '\n'.join(lines)
     err = [ln for ln in lines if '| ERROR | START | LIVE_TERMINAL_PATH: terminal_path ' in ln]
     assert len(err) == 1 and 'LIVE_TERMINAL_PATH: LIVE_TERMINAL_PATH' not in text
-    assert f'is the MetaTrader 5 of the live bots ({LIVE}): install a separate MetaTrader 5 for slot' in err[0]
-    assert 'The bot attached to no terminal and does not trade; the launcher starts it again every 30 s' in err[0]
+    assert 'terminal_path in mt5_credentials.json is empty, so initialize() would attach' in err[0]
+    assert 'install a separate MetaTrader 5 for slot' in err[0]
+    assert 'The bot does not trade and does not log in; the launcher starts it again every 30 s' in err[0]
     assert sum('| WARN | START | start attempt ' in ln and 'LIVE_TERMINAL_PATH' in ln for ln in lines) == 3
     assert sum('| ERROR | START | all 3 start attempts failed (LIVE_TERMINAL_PATH: ' in ln for ln in lines) == 1
     n = len(lines)
