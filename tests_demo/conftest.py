@@ -2,11 +2,21 @@
 Tests of the demo-branch port: the design levers (trend, volatility unit, target / stop / cap, loss pause,
 macd_turn ladder), the demo isolation (magic, comment, virtual balance) and restart recovery.
 
-Run from the branch root:  python3 -m pytest tests_demo -q -p no:cacheprovider
+Run from any folder:  python3 -m pytest <branch>/tests_demo -q -p no:cacheprovider
 Nothing here talks to a terminal: MetaTrader5 is replaced by tests_demo/fake_mt5.py.
+Nothing here writes outside pytest's tmp folders: every bot the tests build (this branch's and the live baseline
+of test_live_equivalence.py) has its OUTPUT_DIR -- its state, logs and JSON files -- in the test's tmp_path, and a
+write into the real output folder (C:\\Alcadeias\\...: on the server the running demo bot's own files) is refused
+and fails the run (see the end of this file).
 """
+import builtins
+import functools
+import ntpath
+import os
 import subprocess
 import sys
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -43,6 +53,73 @@ DEMO_BRANCH = DEFAULTS['DEMO_BRANCH']
 COMMENT = str(DEFAULTS['ORDER_COMMENT'] if DEFAULTS['ORDER_COMMENT'] is not None else DEMO_BRANCH)[:31]
 
 
+# ───────────────────────── every bot the tests build writes in a tmp folder ─────────────────────────
+# The branch's OUTPUT_DIR is an absolute Windows path (C:\Alcadeias\<branch>). On the server a test that leaves it
+# there writes the running demo bot's own state file (a fake loss blocks its entries for hours) and logs; on macOS it
+# makes a folder literally named 'C:\Alcadeias\<branch>' in the working folder. So every load of the bot's modules
+# (F.bot_modules: the mods fixture, run_bot, the live baseline, a test's own load) gets an OUTPUT_DIR in a tmp folder
+# -- and with it the state folder (OUTPUT_DIR/state, also the Turtle's) and the logs -- unless the test gives one that
+# is not the real one.
+
+REAL_OUTPUT_DIR = DEFAULTS['OUTPUT_DIR']
+
+
+def _top_folder(path):
+    """'C:\\Alcadeias\\demo_hedging_xauusd6' -> 'C:\\Alcadeias': the folder every bot's output is in on the server."""
+    drive, rest = ntpath.splitdrive(ntpath.normpath(str(path)))
+    parts = [p for p in rest.split('\\') if p]
+    return drive + '\\' + parts[0] if parts else ntpath.normpath(str(path))
+
+
+REAL_OUTPUT_ROOT = _top_folder(REAL_OUTPUT_DIR)
+
+
+def is_real_output(path):
+    """True for a path in the server's output folders (C:\\Alcadeias\\...): on Windows in that folder; elsewhere a
+    name that starts with 'C:\\Alcadeias' (what the Windows path becomes there, relative to the working folder)."""
+    try:
+        p = os.path.abspath(os.fspath(path))
+    except TypeError:
+        return False                                   # (a file descriptor)
+    if os.name == 'nt':
+        p, r = os.path.normcase(p), os.path.normcase(REAL_OUTPUT_ROOT).rstrip('\\')
+        return p == r or p.startswith(r + '\\')
+    root = REAL_OUTPUT_ROOT.casefold()
+    return any(part.casefold().startswith(root) for part in p.split(os.sep))
+
+
+class _BotOutput:
+    current = None        # the running test's folder for the bots' output: tmp_path / 'bot_output'
+    factory = None        # pytest's tmp_path_factory (a module fixture's bot: a new tmp folder for each load)
+
+
+def bot_output_dir():
+    """Where a bot loaded now writes: the running test's tmp_path / 'bot_output'; outside a test (a module-scoped
+    fixture) a new folder under pytest's basetemp; outside pytest (a probe script) a new temporary folder."""
+    if _BotOutput.current is not None:
+        return _BotOutput.current
+    if _BotOutput.factory is not None:
+        return _BotOutput.factory.mktemp('bot_output')
+    return Path(tempfile.mkdtemp(prefix='bot_output_'))
+
+
+def _bot_modules_in_tmp(load):
+    @contextmanager
+    def bot_modules(root, fake, clock, overrides=None):
+        ov = dict(overrides or {})
+        out = ov.get('OUTPUT_DIR')
+        if out is None or is_real_output(out) or not os.path.isabs(str(out)):
+            ov['OUTPUT_DIR'] = str(bot_output_dir())
+        with load(root, fake, clock, ov) as mods:
+            yield mods
+    bot_modules.in_tmp = True
+    return bot_modules
+
+
+if not getattr(F.bot_modules, 'in_tmp', False):
+    F.bot_modules = _bot_modules_in_tmp(F.bot_modules)     # (run_bot finds it here too)
+
+
 def run_bot(fake, clock, overrides=None, symbol='XAUUSDm', **kw):
     """Replay this branch's bot from its default constants plus `overrides`."""
     return F.run_bot(ROOT, fake, clock, symbol, overrides={**DEFAULTS, **(overrides or {})}, **kw)
@@ -52,6 +129,76 @@ _LIVE_FILES = ('app.py', 'strategy.py', 'indicator.py', 'mt5_helper.py', 'consta
 
 def pytest_configure(config):
     config.addinivalue_line('markers', 'slow: replays the whole bot loop over a synthetic market (tens of seconds)')
+
+
+# The check: while the tests run, a write into the real output folder (open for writing, makedirs, mkdir, replace,
+# rename) is refused -- it never happens -- and recorded; at the end the run fails if any was tried, or if a
+# 'C:\Alcadeias...' folder appeared in the working folder.
+REFUSED_WRITES = []
+_REAL_FS = {'open': builtins.open, 'makedirs': os.makedirs, 'mkdir': os.mkdir, 'replace': os.replace,
+            'rename': os.rename}
+
+
+def _refuse(what, path):
+    REFUSED_WRITES.append(f'{what} {path}')
+    raise PermissionError(f'tests_demo: {what} {str(path)!r} refused: a test must not write in the real output '
+                          f'folder {REAL_OUTPUT_DIR} (its bot belongs in tmp_path)')
+
+
+@functools.wraps(_REAL_FS['open'])
+def _guarded_open(file, mode='r', *a, **k):
+    if any(c in str(mode) for c in 'wax+') and is_real_output(file):
+        _refuse('open', file)
+    return _REAL_FS['open'](file, mode, *a, **k)
+
+
+def _guarded(name):
+    real = _REAL_FS[name]
+
+    @functools.wraps(real)
+    def call(*paths, **k):
+        for p in paths[:2]:
+            if isinstance(p, (str, bytes, os.PathLike)) and is_real_output(p):
+                _refuse(name, p)
+        return real(*paths, **k)
+    return call
+
+
+_GUARDS = {'open': _guarded_open, **{n: _guarded(n) for n in ('makedirs', 'mkdir', 'replace', 'rename')}}
+
+
+def _install(fs):
+    builtins.open = fs['open']
+    os.makedirs, os.mkdir, os.replace, os.rename = fs['makedirs'], fs['mkdir'], fs['replace'], fs['rename']
+
+
+@pytest.fixture(scope='session', autouse=True)
+def _nothing_outside_tmp(tmp_path_factory):
+    """The whole run writes nothing outside pytest's tmp folders: no write into the real output folder, no
+    'C:\\Alcadeias...' folder left in the working folder."""
+    cwd = Path.cwd()
+    before = {p.name for p in cwd.iterdir()}
+    _BotOutput.factory = tmp_path_factory
+    _install(_GUARDS)
+    try:
+        yield
+    finally:
+        _install(_REAL_FS)
+        _BotOutput.factory = None
+    left = sorted(p.name for p in cwd.iterdir() if p.name not in before and is_real_output(p))
+    problems = list(REFUSED_WRITES) + [f'left in the working folder {cwd}: {n}' for n in left]
+    if problems:
+        pytest.fail('tests_demo wrote outside its tmp folders:\n  ' + '\n  '.join(problems[:20]), pytrace=False)
+
+
+@pytest.fixture(autouse=True)
+def _bot_output_in_tmp_path(tmp_path):
+    """The bots a test builds write in its tmp_path / 'bot_output' (all of them, so a restart finds its files)."""
+    _BotOutput.current = tmp_path / 'bot_output'
+    try:
+        yield _BotOutput.current
+    finally:
+        _BotOutput.current = None
 
 
 @pytest.fixture(scope='session')
