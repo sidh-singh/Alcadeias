@@ -169,3 +169,46 @@ def test_a_switch_to_another_account_mid_basket_changes_nothing(tmp_path, switch
     refused = [e for e in run.events if e['event'] == 'ACCOUNT_REFUSED'][0]
     assert refused['tag'] == 'ERROR' and 'not a demo account' in refused['details']['problem']
     assert len(run.errors) == 1 and 'not trading' in run.errors[0]          # the one WARNING line
+
+
+@pytest.mark.slow
+def test_a_switch_inside_the_close_decision_books_nothing(tmp_path, switch_reference):
+    """The basket's side of fix C of the third review round (the Turtle booked its trade as exited here): another
+    program logs the terminal into another account after the poll's account re-read, just before the close reads
+    the positions again, so close_by_type finds none of this bot's positions (closed 0, failed 0). Checked, and safe:
+    nothing is booked (no last close, nothing closed outside the bot or rebuilt), nothing is sent, and the close is
+    decided again when the demo account is back."""
+    fake0, _ = switch_reference
+    t_close = next(o['_t_ms'] for o in fake0.orders if 'position' in o) / 1000.0     # the reference's first close
+    fake, clock = market(1800, seed=21)
+    stash, switched, saved = {}, [], []
+
+    def to_live(f):
+        stash['positions'], f.positions = f.positions, []
+        f.account_login, f.trade_mode = 99, f.ACCOUNT_TRADE_MODE_REAL
+
+    def back(f):
+        f.positions = stash['positions']
+        f.account_login, f.trade_mode = 1, f.ACCOUNT_TRADE_MODE_DEMO
+
+    def on_new_bot(bot, n):
+        recording_states(saved)(bot, n)
+        close = bot.position_helper.close_by_type
+
+        def close_by_type(symbol, pos_type):
+            if not switched:                                # the switch lands inside the close decision
+                switched.append(clock.time())
+                to_live(fake)
+                fake.at(clock.time() + 60, back)
+            return close(symbol, pos_type)
+        bot.position_helper.close_by_type = close_by_type
+    run = run_bot(fake, clock, overrides=NO_LADDER, state_dir=tmp_path / 'run', on_new_bot=on_new_bot)
+    assert switched and switched[0] == pytest.approx(t_close, abs=0.01)
+    ok = next(e['t'] for e in run.events if e['event'] == 'ACCOUNT_OK') / 1000.0
+    closes = [e for e in run.events if e['event'] in ('CLOSE_BUY', 'CLOSE_SELL')]
+    assert closes[0]['details']['positions_closed'] == 0 and closes[0]['details']['realised_pnl'] is None
+    assert closes[1]['t'] / 1000.0 == pytest.approx(ok, abs=0.5) and closes[1]['details']['positions_closed'] >= 1
+    booked = [s['last_close']['time'] for s in saved if s.get('last_close')]
+    assert booked and min(booked) >= ok - 0.5               # nothing booked while the basket was still open
+    assert saved and not booked_outside(saved)
+    assert not [o for o in fake.orders if t_close * 1000 < o['_t_ms'] < (ok - 0.5) * 1000]

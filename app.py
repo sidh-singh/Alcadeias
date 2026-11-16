@@ -2606,9 +2606,13 @@ class MT5TradingBot:
                                    'bid': bid, 'ask': ask, 'legs': len(st['legs']),
                                    'total_profit': positions['total_profit'] if positions else 0,
                                    'response': close_response}
-                        if failed == 0:
+                        if failed == 0 and closed > 0:
                             T.on_exit(st, now)
                         else:
+                            # Some legs not closed -- or none: close_by_type's own positions read found none of this
+                            # bot's (another program switched the account just now, or the legs are gone): the book
+                            # stays, and the close is decided again on the next poll. If the legs are really gone,
+                            # the next _turtle_sync ends the trade (closing set: not as closed outside the bot).
                             st['closing'] = True
                         self._save_turtle_state(symbol, st)
                         if side == 1:
