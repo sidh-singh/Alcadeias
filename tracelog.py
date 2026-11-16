@@ -751,6 +751,8 @@ class TraceLog:
         self._digits_t = None
         self._pending_reason = None
         self._turtle_pending_key = None  # a Turtle close that left legs open: its exit, for the retry's close
+        self._turtle_nothing = None      # a Turtle close that closed nothing (v3.9.2-demo.5): its time and exit, till it ends
+        self._fills = {}                 # the bot's fills by order ticket (a basket leg the terminal has not listed yet)
         self._exits = self._load_exits()
         self._last_signal_note = None
         # the Turtle (STRATEGY = 'turtle')
@@ -886,14 +888,14 @@ class TraceLog:
 
     @_guarded
     def reconnect_failed(self, attempt, why, next_in_s=None, outage_s=None, logged=False):
-        """MT5TradingBot._try_reconnect: a reconnect attempt failed. The strategy log has RECONNECT_FAILED only when the
-        problem starts or changes, then at most every 15 min (logged: this attempt's event was written, and event()
-        made its ERROR line); every other attempt is a WARN line here, so the text log has each one."""
+        """MT5TradingBot._try_reconnect: a reconnect attempt failed. The strategy log has RECONNECT_FAILED once for each
+        reason, then at most every 15 min for that reason (logged: this attempt's event was written, and event() made
+        its ERROR line); every other attempt is a WARN line here, so the text log has each one."""
         if logged:
             return
         self._rec('WARN', 'TERMINAL', f'reconnect attempt {attempt} failed ({why}); next one in {_num(next_in_s, 0)} s, '
-                  f'{_dur(outage_s)} without the terminal so far (the strategy log has RECONNECT_FAILED only when the '
-                  'problem starts or changes, then every 15 min)',
+                  f'{_dur(outage_s)} without the terminal so far (the strategy log has RECONNECT_FAILED once for each '
+                  'reason, then at most every 15 min for that reason)',
                   kv={'attempt': attempt, 'why': why, 'next_in_s': next_in_s, 'outage_s': outage_s})
 
     @_guarded
@@ -946,6 +948,12 @@ class TraceLog:
             'last_error': err, 'ms': _f(ms, 2),
         }
         self._orders.append(o)
+        if done and not is_close and o['order']:
+            # (v3.9.2-demo.5) the basket takes the leg's position id from this answer at once (app.py _record_fill):
+            # kept here so the trace can show a leg the terminal has not listed yet (its price and lots)
+            self._fills[o['order']] = o
+            if len(self._fills) > 50:
+                self._fills = dict(list(self._fills.items())[-20:])
         d = self._digits                       # (known after the first poll; no terminal call in here: inside mt5_lock)
         price = f" at {_px(o['price'], d)}" if o['price'] is not None else ''
         stops = '' if is_close else f" sl {_px(o['sl'], d) if o['sl'] else 'none'} tp {_px(o['tp'], d) if o['tp'] else 'none'}"
@@ -992,6 +1000,8 @@ class TraceLog:
         'TERMINAL_ERROR': ('WARN', 'TERMINAL'), 'TERMINAL_OK': ('INFO', 'TERMINAL'),
         'TERMINAL_RECONNECTED': ('INFO', 'TERMINAL'), 'RECONNECT_FAILED': ('ERROR', 'TERMINAL'),
         'TERMINAL_IN_USE': ('ERROR', 'ACCOUNT'), 'LEG_CLOSED_OUTSIDE': ('WARN', 'BASKET'),
+        # (v3.9.2-demo.5) terminal_path names the live bots' MetaTrader 5, or is empty: refused before any terminal call
+        'LIVE_TERMINAL_PATH': ('ERROR', 'START'),
         # the Turtle's: covered by the trace's LEVELS / TRADE / STOP / CLOSE lines (they diff the book every poll)
         'TURTLE_LEVELS': None, 'TURTLE_REBUILT': None, 'TURTLE_CLOSED_OUTSIDE': None, 'TURTLE_LEG_CLOSED_OUTSIDE': None,
     }
@@ -1038,16 +1048,23 @@ class TraceLog:
                'TERMINAL_OK': 'the terminal answers again',
                'TERMINAL_RECONNECTED': 'connected to the terminal again',
                'RECONNECT_FAILED': 'reconnect failed: {note}',
-               # (the problem names TERMINAL_IN_USE itself; the strategy log has it once, then at most every 15 min)
-               'TERMINAL_IN_USE': '{note}; no login: the terminal and its account are left as they are'
+               # (the problem names TERMINAL_IN_USE / LIVE_TERMINAL_PATH itself; the strategy log has each problem
+               # once, then at most every 15 min: _log_limited)
+               'TERMINAL_IN_USE': ('{note}; no login: the terminal and its account are left as they are (this line '
+                                   'comes once for each account the terminal holds, then at most every 15 min)'),
+               'LIVE_TERMINAL_PATH': ('{note}. The bot attached to no terminal and does not trade; the launcher starts '
+                                      'it again every 30 s and it is refused each time (this line comes at most every '
+                                      '15 min while terminal_path stays as it is)'),
                }.get(event, f'{event}: {{note}}' if note else event)
         msg = msg.format(note=note)
         if event == 'TERMINAL_RECONNECTED' and d.get('outage_s') is not None:
             msg += (f" (attempt {d.get('attempt')}, after {_dur(d.get('outage_s'))} without the terminal and "
                     f"{d.get('failed_attempts')} failed attempt(s))")
         elif event == 'RECONNECT_FAILED':
-            msg += (f"; next attempt in {_num(d.get('next_in_s'), 0)} s (the strategy log has this once, then again when the "
-                    'problem changes or after 15 min; every attempt is a line here)')
+            more = _i(d.get('not_logged_since')) or 0
+            msg += (f"; next attempt in {_num(d.get('next_in_s'), 0)} s (the strategy log has this once for each reason, "
+                    'then at most every 15 min for that reason; every attempt is a line here)'
+                    + (f'; {more} more failed attempt(s) with this reason since its last RECONNECT_FAILED' if more else ''))
         elif event == 'LEG_CLOSED_OUTSIDE':
             msg = (f"leg(s) {d.get('legs_gone')} of the {d.get('side')} basket closed outside the bot (the broker's backstop, "
                    f"a stop-out or by hand): the other {len(d.get('legs_left') or [])} leg(s) are closed at once and the "
@@ -1636,8 +1653,26 @@ class TraceLog:
             'age_s': _f(now - first_t, 1) if first_t else (_f(now - opened, 1) if opened else None),
             'levels_pending': b.get('levels_pending'), 'close_pending': b.get('close_pending'), 'ids': b.get('ids'),
             'outside_ids': b.get('outside_ids'),
+            'unlisted': self._unlisted_view(b, legs, now, d),
             'known_to_bot': bool(b),
         }
+
+    def _unlisted_view(self, b, legs, now, digits):
+        """(v3.9.2-demo.5) The basket's legs recorded from their order's answer that the terminal has not listed yet
+        (app.py _record_fill: a leg of the basket from its fill, kept _PENDING_FILL_S). The P/L, stop and target above
+        are those of the listed legs, as the bot's own test reads them."""
+        listed = {l.get('id') for l in legs if l.get('listed')}
+        wait = _f(self._cfg('_PENDING_FILL_S')) or 10.0
+        out = []
+        for u in (b or {}).get('unlisted') or []:
+            pid, t = _i((u or {}).get('id')), _f((u or {}).get('time'))
+            if pid is None or pid in listed:
+                continue
+            o = self._fills.get(pid) or {}
+            out.append({'id': pid, 'fill_t': t, 'fill_utc': _iso(t), 'age_s': _f(now - t, 1) if t is not None else None,
+                        'wait_s': wait, 'price': _f(o.get('result_price') or o.get('price'), digits),
+                        'lots': _f(o.get('result_volume') or o.get('volume')), 'kind': o.get('kind')})
+        return out
 
     def _ladder_view(self, b, legs, side, a, units, mtqty, bid, ask):
         tiers = self._ladder_tiers()
@@ -1962,9 +1997,18 @@ class TraceLog:
             pnl = ov.get('pnl')
             cr = c.close_response or {}
             res = ''
-            if cr and int(cr.get('failed_count') or 0):
+            n_closed, n_failed = int(cr.get('closed_count') or 0), int(cr.get('failed_count') or 0)
+            waiting = self._close_waits_for(c.state, side, n_closed, n_failed)
+            if cr and n_failed:
                 res = (f" The close is incomplete: {cr.get('closed_count')} closed, {cr.get('failed_count')} failed "
                        f"({'; '.join(cr.get('errors') or [])}); the rest is closed next poll.")
+            elif cr and not n_closed:
+                res = (" The close closed nothing (none of this bot's positions were there to close): nothing is booked, "
+                       'and the close is decided again next poll.')
+            elif waiting:
+                res = (f" The close is incomplete: leg(s) {waiting} filled less than "
+                       f"{_num(self._cfg('_PENDING_FILL_S'), 0)} s ago are not listed by the terminal yet: the basket "
+                       'stays open and the rest is closed next poll.')
             if reason == 'target':
                 return f"Closing the {side} basket at the target: P/L {_usd(pnl)} > target {_usd(ov.get('target_usd'))}." + res
             if reason == 'stop_loss':
@@ -2060,12 +2104,13 @@ class TraceLog:
                          f"{_px(ov.get('stop_price'), digits)})" if ov.get('stop_usd') is not None else 'none')
                       + (f", {self._sl_word()} {_px(fill.get('sl'), digits)}" if fill.get('sl') else '')
                       + (f", volatility unit {_num(ov.get('vol_unit'), 3)} ({vol.get('tf')}, raw {_num(vol.get('raw'), 3)})"
-                         if vol.get('on') else ''),
+                         if vol.get('on') else '') + self._recorded_words(st, fill),
                       kv={'side': dec['side'], 'price': fill.get('result_price'), 'lots': fill.get('result_volume'),
                           'units': ov.get('units'), 'target_usd': ov.get('target_usd'), 'stop_usd': ov.get('stop_usd'),
                           'target_price': ov.get('target_price'), 'stop_price': ov.get('stop_price'),
                           'backstop': fill.get('sl'), 'vol_unit': ov.get('vol_unit'), 'trend_signal': bk['trend'].get('signal'),
-                          'open_score': bk['open_score'], 'fc_score': bk['fc_score']})
+                          'open_score': bk['open_score'], 'fc_score': bk['fc_score'],
+                          **self._recorded_kv(st, fill)})
             self._trades_dirty = True
         elif act in ('ADD_BUY', 'ADD_SELL'):
             fill = next((o for o in orders if o['done'] and o['kind'] in ('add', 'open')), {})
@@ -2074,10 +2119,12 @@ class TraceLog:
             self._rec('INFO', 'BASKET', f"added {fill.get('result_volume') or fill.get('volume')} lot to the {dec['side']} basket "
                       f"at {_px(fill.get('result_price') or fill.get('price'), digits)} ({len(ov.get('legs') or []) + 1} "
                       'positions now)' + (f"; the basket's {' and '.join(keep)} "
-                                          f"{'stay as they are' if len(keep) > 1 else 'stays as it is'} (in USD)" if keep else ''),
+                                          f"{'stay as they are' if len(keep) > 1 else 'stays as it is'} (in USD)" if keep else '')
+                      + self._recorded_words(st, fill),
                       kv={'side': dec['side'], 'price': fill.get('result_price'), 'lots': fill.get('result_volume'),
                           'positions_before': len(ov.get('legs') or []), 'sl': fill.get('sl'),
-                          'trigger': (ov.get('ladder') or {}).get('trigger'), 'tier': (ov.get('ladder') or {}).get('tier_tf')})
+                          'trigger': (ov.get('ladder') or {}).get('trigger'), 'tier': (ov.get('ladder') or {}).get('tier_tf'),
+                          **self._recorded_kv(st, fill)})
             self._trades_dirty = True
         elif act in ('CLOSE_BUY', 'CLOSE_SELL'):
             cr = c.close_response or {}
@@ -2087,9 +2134,25 @@ class TraceLog:
                 reason = self._pending_reason or reason
             lc = st.get('last_close') or {}
             ids = [l['id'] for l in ov.get('legs') or [] if l.get('id') is not None]
+            waiting = self._close_waits_for(st, dec['side'], closed, failed)
             if closed:                       # the reason is the one of the close that closed (the rest follows it)
                 self._record_exits(ids, reason, now, ov.get('pnl'))
-            if closed and not failed and reason == 'leg_closed_outside':
+            if waiting:
+                # (v3.9.2-demo.5) the close closed every leg the terminal listed, but a leg recorded from its order is
+                # not listed yet (app.py _after_close): the basket stays open and its close is finished next poll
+                self._pending_reason = reason
+                self._rec('WARN', 'CLOSE', f"the close of the {dec['side']} basket is incomplete: {closed} closed; leg(s) "
+                          f"{waiting} filled less than {_num(self._cfg('_PENDING_FILL_S'), 0)} s ago are not listed by "
+                          'the terminal yet, so the close did not reach them: the basket stays open, nothing is booked '
+                          'yet, and the rest is closed next poll',
+                          kv={'reason': reason, 'closed': closed, 'failed': failed, 'not_listed': waiting,
+                              'tickets': cr.get('closed_tickets')})
+            elif not closed and not failed:
+                self._rec('WARN', 'CLOSE', f"the close of the {dec['side']} basket closed nothing: the close's own "
+                          "positions read found none of this bot's positions (another account just now, or the "
+                          'positions are already gone); nothing is booked, and the close is decided again next poll',
+                          kv={'reason': reason, 'closed': 0, 'failed': 0, 'message': cr.get('message')})
+            elif closed and not failed and reason == 'leg_closed_outside':
                 self._pending_reason = None
                 self._rec('CLOSE', 'CLOSE', f"the rest of the {dec['side']} basket closed after leg(s) "
                           f"{ov.get('outside_ids')} were closed outside the bot: {closed} position(s), P/L "
@@ -2129,7 +2192,17 @@ class TraceLog:
                       f"position in {_f(self._cfg('_PENDING_FILL_S'))} s; the basket is dropped")
         elif pb is not None and bsum is not None and pb['side'] == bsum['side']:
             new_ids = [i for i in bsum['ids'] if i not in pb['ids']]
-            if new_ids:
+            # (v3.9.2-demo.5) legs recorded from their order (app.py _record_fill): listed now, or listed under another id
+            was_waiting = [i for i in (pb.get('unlisted') or []) if i not in (bsum.get('unlisted') or [])]
+            listed_now = [i for i in was_waiting if i in bsum['ids']]
+            swapped = [i for i in was_waiting if i not in bsum['ids']]
+            if listed_now:
+                self._rec('DEBUG', 'BASKET', f"position(s) {listed_now} of the {bsum['side']} basket listed by the terminal "
+                          '(a leg since its fill: its id came from the order)')
+            if swapped and new_ids:
+                self._rec('DEBUG', 'BASKET', f"the fill(s) of order(s) {swapped} listed as position(s) {new_ids} in the "
+                          f"{bsum['side']} basket ({len(bsum['ids'])} now)")
+            elif new_ids:
                 self._rec('DEBUG', 'BASKET', f"position(s) {new_ids} listed in the {bsum['side']} basket ({len(bsum['ids'])} now)")
             if pb.get('levels_pending') and not bsum.get('levels_pending'):
                 self._rec('INFO', 'BASKET', f"the taken-over {bsum['side']} basket's levels are set from the volatility unit "
@@ -2150,6 +2223,11 @@ class TraceLog:
                 tail = (f"realised {_usd(lc.get('pnl'))} on every leg (deal history)" if final else
                         f"{_usd(lc.get('pnl'))} so far (until the deal history shows every leg, the basket counts as a "
                         'loss: the pause after a loss)')
+            elif pb is not None and not pb.get('listed') and pb.get('side') == lc.get('side'):
+                # (v3.9.2-demo.5) an entry recorded from its order that the terminal never listed (app.py _sync_basket)
+                head = (f"the {lc.get('side')} entry {ids} is gone before the terminal listed it (its broker backstop "
+                        'while the bot or the terminal was down?): booked as closed outside the bot, with the pause '
+                        'after a loss if it lost: ')
             else:
                 head = (f"the {lc.get('side')} basket was closed outside the bot (the broker's backstop, the terminal, "
                         'or while the bot was down): ')
@@ -3439,6 +3517,9 @@ class TraceLog:
             if cr and int(cr.get('failed_count') or 0):
                 res = (f" The close is incomplete: {cr.get('closed_count')} closed, {cr.get('failed_count')} failed "
                        f"({'; '.join(cr.get('errors') or [])}); the rest is closed next poll.")
+            elif cr and not int(cr.get('closed_count') or 0):
+                res = (" The close closed nothing (none of the trade's legs were there to close): the trade stays booked, "
+                       'and the close is decided again next poll.')
             if reason == 'close_retry':
                 return f'Closing the rest of the {side} trade (an earlier close left legs open).' + res
             if reason == 'stop_passed_outside':
@@ -3659,6 +3740,9 @@ class TraceLog:
                     head = (f"the last {closed} leg(s) of the {side} trade closed (the close that followed the stop "
                             f"{_px(stop, d)} passed outside the bot had left them open) at the {tr.get('judged_on')} "
                             f"{_px(tr.get('price_now'), d)}, whatever the price")
+                elif retry and self._turtle_nothing:
+                    head = (f"the {side} trade closed: its {closed} leg(s), on the next try (the close at the stop "
+                            f"{_px(stop, d)} of {_hm(self._turtle_nothing.get('t'))} had closed nothing)")
                 elif retry:
                     head = (f"the last {closed} leg(s) of the {side} trade closed (the close at the stop "
                             f"{_px(stop, d)} had left them open)")
@@ -3677,6 +3761,17 @@ class TraceLog:
                               'price': tr.get('price_now'), 'decision_pnl': tr.get('pnl'), 'legs': closed,
                               'tickets': cr.get('closed_tickets'), 'n_entry': tr.get('n_entry'), 'held_s': tr.get('age_s'),
                               'retry': retry, **({'legs_outside': gone} if gone else {})})
+                self._turtle_nothing = None
+            elif not closed and not failed:
+                # (v3.9.2-demo.5) app.py keeps the book and sets 'closing': the close is decided again next poll, and if
+                # the legs are gone by then the trade ends there (not as closed outside the bot)
+                self._turtle_pending_key = key
+                self._turtle_nothing = {'t': now, 'key': key}
+                self._rec('WARN', 'CLOSE', f"the close of the {side} trade closed nothing: the close's own positions read "
+                          "found none of this bot's legs (another account just now, or the legs are already gone); the "
+                          'trade stays booked, and the close is decided again next poll',
+                          kv={'closed': 0, 'failed': 0, 'stop': stop, 'reason': key, 'legs': len(ids),
+                              'message': cr.get('message')})
             else:
                 self._turtle_pending_key = key           # the next poll's close (close_retry) ends the trade this way
                 self._rec('WARN', 'CLOSE', f"the close of the {side} trade is incomplete: {closed} closed, {failed} failed "
@@ -3685,8 +3780,10 @@ class TraceLog:
             self._trades_dirty = True
         # the book after this poll, compared with the last one
         same = bool(pb['side'] and cb['side'] == pb['side'] and cb['entry_time'] == pb['entry_time'])
+        nothing = self._turtle_nothing               # (a close of this trade that closed nothing: v3.9.2-demo.5)
         if not cb['side']:
             self._turtle_pending_key = None          # flat: no close is left to finish
+            self._turtle_nothing = None
         if pb['side'] and not cb['side'] and act not in ('CLOSE_BUY', 'CLOSE_SELL'):
             ids = [x[0] for x in pb['legs'] if x[0] is not None]
             self._record_exits(ids, 'closed_outside', now, last_tr.get('pnl'), extra={'side': side_w[pb['side']]})
@@ -3695,11 +3792,18 @@ class TraceLog:
                 rec['exit'] = {'t': now, 'reason': 'closed_outside', 'stop': pb.get('stop'), 'origin': pb.get('origin'),
                                'price': None, 'decision_pnl': last_tr.get('pnl')}
                 jdirty = True
-            self._rec('CLOSE', 'CLOSE', f"the {side_w[pb['side']]} trade was closed outside the bot (the broker's backstop, "
-                      f"the terminal, or while the bot was down): its {len(ids)} leg(s) are gone; P/L last seen "
-                      f"{_usd(last_tr.get('pnl'))}; the realised P/L and the closing deals follow from the deal history",
+            if nothing:
+                head = (f"the {side_w[pb['side']]} trade ended: its {len(ids)} leg(s) are gone, and the bot's close of "
+                        f"{_hm(nothing.get('t'))} had closed nothing, so they were closed outside the bot first (their "
+                        "broker backstop, or by hand); the bot ends the trade (not booked as closed outside it)")
+            else:
+                head = (f"the {side_w[pb['side']]} trade was closed outside the bot (the broker's backstop, the terminal, "
+                        f"or while the bot was down): its {len(ids)} leg(s) are gone")
+            self._rec('CLOSE', 'CLOSE', f"{head}; P/L last seen {_usd(last_tr.get('pnl'))}; the realised P/L and the "
+                      'closing deals follow from the deal history',
                       kv={'reason': 'closed_outside', 'ids': ids, 'pnl_last_seen': last_tr.get('pnl'),
-                          'stop': pb.get('stop'), 'backstops': last_tr.get('backstop_prices')})
+                          'stop': pb.get('stop'), 'backstops': last_tr.get('backstop_prices'),
+                          **({'after_close_of': nothing.get('key')} if nothing else {})})
             self._trades_dirty = True
         elif pb['side'] and cb['side'] and cb['side'] != pb['side']:
             self._rec('WARN', 'TRADE', f"the {side_w[pb['side']]} trade was replaced outside the bot by a "
@@ -3968,6 +4072,31 @@ class TraceLog:
         names = [n for n in vars(cm) if n.isupper() and not n.startswith('_')] if cm is not None else []
         return [(n, self._cfg(n)) for n in names]
 
+    def _recorded_id(self, st, fill):
+        """(v3.9.2-demo.5) The position id app.py _record_fill took from this fill's order answer, while the terminal has
+        not listed it yet; None otherwise."""
+        pid = _i((fill or {}).get('order'))
+        return pid if pid is not None and pid in _unlisted_ids((st or {}).get('basket')) else None
+
+    def _recorded_kv(self, st, fill):
+        pid = self._recorded_id(st, fill)
+        return {'recorded': pid} if pid is not None else {}
+
+    def _recorded_words(self, st, fill):
+        pid = self._recorded_id(st, fill)
+        if pid is None:
+            return ''
+        return (f"; position {pid} is a leg of the basket from its fill (its id from the order's answer; the terminal "
+                f"lists it within {_num(self._cfg('_PENDING_FILL_S'), 0)} s)")
+
+    def _close_waits_for(self, st, side, closed, failed):
+        """(v3.9.2-demo.5) The legs a close that closed every listed leg could not reach: recorded from their order,
+        not listed yet (app.py _after_close keeps the basket, close_pending). [] when the close booked the basket."""
+        b = (st or {}).get('basket')
+        if not closed or failed or not isinstance(b, dict) or b.get('side') != side or not b.get('close_pending'):
+            return []
+        return _unlisted_ids(b)
+
     def _basket_words(self, b):
         if not b:
             return 'no basket'
@@ -3976,7 +4105,8 @@ class TraceLog:
                 f"target {_usd(tgt * u) if tgt is not None else 'none'}, stop {_usd(-sl * u) if sl is not None else 'none'}, "
                 f"volatility unit {_num(b.get('vol_unit'), 3) if b.get('vol_unit') is not None else 'n/a'}"
                 + (', levels pending' if b.get('levels_pending') else '') + (', close pending' if b.get('close_pending') else '')
-                + (', ladder armed' if b.get('ladder_armed') else '') + ')')
+                + (', ladder armed' if b.get('ladder_armed') else '')
+                + (f", {_unlisted_ids(b)} not listed by the terminal yet" if _unlisted_ids(b) else '') + ')')
 
     def _close_words(self, lc):
         if not lc:
@@ -3991,7 +4121,18 @@ def _basket_sum(b):
         return None
     return {'side': b.get('side'), 'ids': list(b.get('ids') or []), 'opened_by': b.get('opened_by'),
             'opened_at': b.get('opened_at'), 'levels_pending': b.get('levels_pending'),
-            'close_pending': b.get('close_pending'), 'armed': b.get('ladder_armed')}
+            'close_pending': b.get('close_pending'), 'armed': b.get('ladder_armed'),
+            'unlisted': _unlisted_ids(b), 'listed': b.get('first_time') is not None}
+
+
+def _unlisted_ids(b):
+    """(v3.9.2-demo.5) The ids of a basket's legs recorded from their order that the terminal has not listed yet."""
+    out = []
+    for u in (b or {}).get('unlisted') or []:
+        pid = _i((u or {}).get('id')) if isinstance(u, dict) else None
+        if pid is not None:
+            out.append(pid)
+    return sorted(out)
 
 
 def _close_sum(lc):
