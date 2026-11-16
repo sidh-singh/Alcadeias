@@ -87,8 +87,10 @@ added or made clearer:
 - **The page shows no folder of the PC.** The bot's ERROR lines carry tracebacks with full paths, so the event rows, the
   raw text and the issue list named the bot folder (where `mt5_credentials.json` is) and the Windows user. Now every line
   the page shows from the logs goes through `_scrub`: 'File "app.py", line 12', 'the bot folder', 'OUTPUT_DIR', '~' for
-  the user's folder. The footer says 'reads the bot's output folder (OUTPUT_DIR)'. Only the Log tab's copy box keeps the
-  full path of the day's file (that is the file to send).
+  the user's folder. The settings (OUTPUT_DIR as the bot logged it), the raw files and the old strategy log go through it
+  too; it also knows a Windows folder written inside JSON (`C:\\Alcadeias\\...`). The footer says 'reads the bot's
+  output folder (OUTPUT_DIR)'. Only the Log tab's copy box keeps the full path of the day's file (that is the file to
+  send).
 - **The dashboard holds a file only to read it.** `read_json` parsed inside `with open(...)`: a full trades.json stayed
   open 10 to 43 ms, longer than the bot's retry, so on Windows the bot's write could fail. Now it reads the bytes,
   closes the file, then parses (about 1 ms open).
@@ -99,10 +101,28 @@ added or made clearer:
   path with a 500 and a stack trace in the console.
 - **`start_dashboard.bat`** goes to its own folder first (`cd /d "%~dp0"`: it works from Task Scheduler or a shortcut)
   and writes its 'installed' flag only when pip succeeded (a failed install was never tried again).
-- Tests: `test_dashboard.py` +10 (the basket's meters, the banner and the stale case; the Turtle's meters; a flat
+- Found in the final screenshots and browser checks, and changed: the Changes & issues tab opens its first row (the
+  newest error), so 'What it means' and 'What to do' show at once; a flat basket bot (no meter) shows no 'amber from
+  70 %' hint; a basket whose price has passed the add gap says 'reached (0.398 beyond it)' (it said '100% of the way
+  ... 0.398 away'); the CHANGELOG is drawn once and again only when the file changes (redrawn every minute, the
+  browser's code highlighter went over its own output again: a console warning each time); the alert's beep closes
+  its audio context after 1.5 s (a page open for weeks kept one per alert).
+- Tests: `test_dashboard.py` +9 (the basket's meters, the banner and the stale case; the Turtle's meters; a flat
   Turtle's entry meters; a real short trade's hovers and meters, from the bot's own trace; the Changes & issues tab;
-  no folder of the PC on the page; a day named in capitals; a file held only to read it; the 404). The HTTP test skips
-  the alert's two browser-only callbacks.
+  no folder of the PC on the page, the settings and the raw files included; a day named in capitals; a file held only
+  to read it; the 404). The HTTP test skips the alert's two browser-only callbacks. On a basket branch the file has
+  25 passed and 5 skipped (the Turtle's); on a Turtle branch 30 passed.
+- Re-tested on 16 Nov 2026 on the port branches (`wip_port_*`, before the merge onto v3.9.2-demo.5). The whole
+  `tests_demo`: 184 passed and 5 skipped on each basket branch
+  (the Turtle tests of `test_dashboard.py` skip), 258 passed on each Turtle branch. After the last dashboard changes,
+  `test_dashboard.py` again on all six, and with the pinned Dash 2.18.2 / plotly 5.24.1. `demo_parity` on the four
+  windows: the same polls, fills and balance as before (V3-lite 133,228 / 4 / $1,853.57; Top 2 on gold 93,359 / 4 /
+  $2,045.29; Top 1 53,960 / 6 / $2,017.85; Top 2 on BTC 111,568 / 4 / $1,977.91), 0 mismatches, every other field the
+  same as on the demo head. The Turtle's eight-year replay: System 1 88 trades, $6,977.48; System 2 60 trades,
+  $7,814.72; 0 votes differ. Headless Chrome: 12 views (an open basket, near the target, near the stop, flat and
+  blocked, stale, `python dashboard.py`; the Turtle open, near the stop, armed, blocked by the vote, orders used) with
+  Dash 2.14.2 and 2.18.2: 24 of 24 without an error or a console message. The exposure check: 4 runs of 1,907
+  requests, no fake secret and no folder came back.
 
 ### Fixed before release: the review of the dashboard
 - **No request can read a file outside the output folder.** The dashboard listens on `0.0.0.0` (as the live bots) and
@@ -368,7 +388,7 @@ new paths, after a check of what the trace already reported. In `app.py` only re
   terminal gives late made the headline count the past 00:00 close up ('in 2.0 min', 'in 3.0 min' ...). Now it says
   'the D1 bar that closed at ... 00:00:00 UTC is not there yet (2.0 min late): new orders as soon as the terminal gives
   it', and the 'Today's orders' gate says the same.
-- Tests: `test_tracelog.py` +6 (a cp1252 and a UTF-16 credentials file leave none of their bytes in the logs; a failed
+- Tests: `test_tracelog.py` +5 tests, 6 cases (a cp1252 and a UTF-16 credentials file leave none of their bytes in the logs; a failed
   job logs the type and message; the replace retry; the clean-up of a day named in capitals; the balance after a
   restart; the basket's stop and target prices against the bot's own closes: at every close the judged quote is through
   that price, and on the poll before it was not). On the Turtle branches `test_turtle_trace.py` +3 and one more check
