@@ -1,6 +1,6 @@
 """
 tracelog.py -- what the bot sees, decides and does: the dashboard's data and a detailed text log.
-(Demo branches, basket strategy. Data contract schema 1; docs/dashboard-data.md has every field.)
+(Demo branches: the basket strategy and the Turtle. Data contract schema 1; docs/dashboard-data.md has every field.)
 
 Every file is in the bot's output folder (OUTPUT_DIR, or MT5TradingBot.trace_dir). JSON is compact, written
 atomically (a temp file, then os.replace), times are UTC epoch seconds ("t", "..._t") with an ISO copy
@@ -11,14 +11,19 @@ daily_trade/...) are written as before, by app.py.
                         action, position or gate result is in it): health, account, market, decision (action,
                         a plain-English headline, the gates in the order the bot checks them, this poll's
                         orders), basket (votes, scores, trend, volatility unit, the levels a new basket would
-                        get, the pause, the open basket with its stop / target / backstop prices), turtle null.
+                        get, the pause, the open basket with its stop / target / backstop prices) or turtle (N,
+                        the D1 channels, today's buy / sell levels and their orders, the System 1 filter, the M15
+                        vote of closed bars and its parts, what a new trade would get, the open trade with its
+                        legs, stop, next add and backstops); the other one null.
   <SYMBOL>_bars.json    bid OHLC for the chart: M1 360, M5 300, M15 300, H1 300, D1 200 bars (the last one is
                         forming), rewritten at most every 30 s and only when a bar moved or a new one started.
-                        M1/M5/M15/H1 come from the bars the poll has already fetched; D1 costs one terminal call.
+                        Basket: M1/M5/M15/H1 come from the bars the poll has already fetched; D1 costs one terminal
+                        call. Turtle: all five from the terminal, plus the daily levels per D1 bar (overlay).
   <SYMBOL>_trades.json  this bot's trades from the deal history (its MAGIC, since VIRTUAL_START_DATE): every
-                        closed basket (legs, open / close, lots, P/L, the exit reason the bot recorded), the open
-                        one with its live levels, the virtual-balance curve and a summary. Read after every fill
-                        and close (and once more on the next poll), and every 60 s.
+                        closed basket / Turtle trade (legs, open / close, lots, P/L, the exit reason the bot
+                        recorded; a Turtle trade also its N, entry level and stop history), the open one with its
+                        live levels, the virtual-balance curve and a summary. Read after every fill and close (and
+                        once more on the next poll), and every 60 s.
   logs/<SYMBOL>_<YYYY-MM-DD>.log   the text log, one file per UTC day, kept 30 days; one line per event:
                         'YYYY-MM-DD HH:MM:SS.mmm UTC | LEVEL | CATEGORY | message | key=value ...'
                         (split(' | ', 4) gives the five fields; the message never holds ' | '); an ERROR from an
@@ -29,11 +34,14 @@ daily_trade/...) are written as before, by app.py.
   logs/<SYMBOL>_events.jsonl       the same lines as JSON ({t, time, level, cat, msg, kv, data, traceback}),
                         rotated at 10 MB into _events.1.jsonl (newest) .. _events.5.jsonl.
   state/<SYMBOL>_exit_reasons.json the exit reason the bot recorded per position id (feeds trades.json).
+  state/<SYMBOL>_turtle_trades.json the Turtle's journal per trade: N at the entry, the level, the vote, every leg
+                        with its add level, every stop move and the exit (feeds trades.json).
 
 What this module may do -- the trading must never notice it:
   * it reads what the poll has already computed (app.py hands it the poll's locals at the end of the poll); the
-    only terminal calls it makes are the deal history after a fill / close and every 60 s, the D1 bars at most
-    every 30 s, and the symbol's digits once, each under the bot's mt5_lock;
+    only terminal calls it makes are the deal history after a fill / close and every 60 s, the bars at most
+    every 30 s (basket: D1 only), and the symbol's facts once (symbol_info), each under the bot's mt5_lock;
+    the Turtle's RSI / MACD lines for the chart are computed again from the poll's closed M15 bars once per bar;
   * every entry point catches every Exception, logs it (ERROR with the traceback, repeats at most every 10 min)
     and returns; a write that fails is a WARN, the next poll tries again;
   * its own time per poll is measured (health.trace_ms; a millisecond or two).
@@ -75,7 +83,10 @@ SLOW_POLL_MS = 5000.0            # a poll slower than this is a WARN
 LEVELS = ('DEBUG', 'INFO', 'ORDER', 'FILL', 'CLOSE', 'WARN', 'ERROR')
 
 ACTIONS = ('SKIPPED', 'NO_DATA', 'MARKET_CLOSED', 'WAIT', 'PAUSED', 'BLOCKED', 'OPEN_BUY', 'OPEN_SELL', 'OPEN_FAILED',
-           'WAIT_FILL', 'HOLD', 'ADD_BUY', 'ADD_SELL', 'ADD_FAILED', 'CLOSE_BUY', 'CLOSE_SELL', 'BOTH_SIDES')
+           'WAIT_FILL', 'HOLD', 'ADD_BUY', 'ADD_SELL', 'ADD_FAILED', 'CLOSE_BUY', 'CLOSE_SELL', 'BOTH_SIDES',
+           'UNMANAGED')
+TURTLE_JOURNAL_KEEP = 500        # the newest Turtle trades kept in state/<SYMBOL>_turtle_trades.json
+VOTE_SERIES_N = 40               # the Turtle's M15 RSI / MACD lines in the trace: the last 40 closed bars
 
 RETCODES = {
     10004: 'requote', 10006: 'rejected', 10007: 'canceled', 10008: 'placed', 10009: 'done', 10010: 'done partially',
@@ -95,7 +106,11 @@ EXIT_TEXT = {
     'target': 'target', 'stop': 'stop', 'force_close': 'force-close', 'backstop': 'backstop (broker stop)',
     'broker_target': 'broker target', 'stop_out': 'stop-out', 'closed_outside': 'closed outside the bot',
     'close_retry': 'close (retry)', 'unknown': 'closed by the bot (reason not recorded)',
+    'turtle_stop': 'turtle stop',
 }
+# where the Turtle's one stop is (turtle.stop_origin): {origin: words} ({days} = the exit channel's length)
+STOP_ORIGIN_TEXT = {'2N': '2N from the best fill', 'channel': 'the {days}-day {extreme}',
+                    'kept': 'kept where it was when a leg was closed outside the bot'}
 _BOT_REASON = {'target': 'target', 'stop_loss': 'stop', 'force_close': 'force_close', 'close_retry': 'close_retry',
                'closed_outside': 'closed_outside'}
 _TF = 'TIMEFRAME_'
@@ -171,6 +186,18 @@ def _hm(t):
 
 def _day(t):
     return datetime.fromtimestamp(float(t), tz=timezone.utc).strftime('%Y-%m-%d')
+
+
+def _date(t):
+    """'2026-11-17' (a D1 bar's day), 'n/a' for None."""
+    t = _f(t)
+    return 'n/a' if t is None else _day(t)
+
+
+def _clock(t):
+    """'09:15 UTC' (an M15 bar's time of day), 'n/a' for None."""
+    t = _f(t)
+    return 'n/a' if t is None else datetime.fromtimestamp(t, tz=timezone.utc).strftime('%H:%M UTC')
 
 
 def _usd(x, signed=True):
@@ -685,6 +712,15 @@ class TraceLog:
         self._pending_reason = None
         self._exits = self._load_exits()
         self._last_signal_note = None
+        # the Turtle (STRATEGY = 'turtle')
+        self.journal_path = os.path.join(self.out_dir, 'state', f'{self.symbol}_turtle_trades.json')
+        self._journal = None                   # loaded on the Turtle's first use
+        self._facts = None                     # symbol_info facts (digits, contract size, ...), read once
+        self._facts_t = None
+        self._ch_key = self._ch = None         # the D1 channels, computed once per new D1 bar
+        self._vs_key = self._vs = None         # the M15 RSI / MACD lines, computed once per new M15 bar
+        self._book_ref = None                  # the Turtle's book (the bot's own dict, read only): entry or add?
+        self._closed_known = None              # the Turtle's closed trades already in trades.json (a RESULT line each)
 
     # ── plumbing ──
     def _now(self):
@@ -792,8 +828,12 @@ class TraceLog:
             kind = 'close'
             what = f"close position {r.get('position')} ({'SELL' if typ == 0 else 'BUY'} {r.get('volume')} lot)"
         else:
-            prev = self._prev.get('positions') or {}
-            kind = 'add' if prev.get(side) else 'open'
+            book = self._book_ref if isinstance(self._book_ref, dict) else None
+            if book is not None:                 # the Turtle: its book (changed in place) says entry or add
+                kind = 'add' if book.get('side') == (1 if side == 'BUY' else -1) else 'open'
+            else:
+                prev = self._prev.get('positions') or {}
+                kind = 'add' if prev.get(side) else 'open'
             what = f"{kind} {side} {r.get('volume')} lot"
         retcode = _i(getattr(result, 'retcode', None))
         done = retcode in _DONE
@@ -844,6 +884,8 @@ class TraceLog:
         'ACCOUNT_REFUSED': ('ERROR', 'ACCOUNT'), 'ACCOUNT_OK': ('INFO', 'ACCOUNT'),
         'TERMINAL_ERROR': ('WARN', 'TERMINAL'), 'TERMINAL_OK': ('INFO', 'TERMINAL'),
         'TERMINAL_RECONNECTED': ('INFO', 'TERMINAL'), 'RECONNECT_FAILED': ('ERROR', 'TERMINAL'),
+        # the Turtle's: covered by the trace's LEVELS / TRADE / STOP / CLOSE lines (they diff the book every poll)
+        'TURTLE_LEVELS': None, 'TURTLE_REBUILT': None, 'TURTLE_CLOSED_OUTSIDE': None, 'TURTLE_LEG_CLOSED_OUTSIDE': None,
     }
 
     @_guarded
@@ -851,6 +893,11 @@ class TraceLog:
         """An event of the strategy log (MT5TradingBot._log_event), as a log line."""
         if event == 'TERMINAL_RECONNECTED':
             self.reconnects += 1
+        if event == 'TURTLE_NOTE':           # the Turtle's notes (at most every 5 min each): missing bars, refusals ...
+            d = {k: v for k, v in (details or {}).items() if k != 'response'}
+            note = str(d.pop('note', '') or 'note')
+            self._rec('INFO' if note.lower().startswith('brake') else 'WARN', 'TURTLE', note, kv=d or None)
+            return
         m = self._EVENTS.get(event, ('ERROR', 'EVENT') if tag == 'ERROR' else ('INFO', 'EVENT'))
         if m is None:
             return
@@ -874,6 +921,8 @@ class TraceLog:
     def loop_start(self, ctx):
         """The start of the trading loop: who, what design, every effective constant, symbols.json, the state found."""
         c = _Ctx(ctx)
+        if self._is_turtle():
+            return self._turtle_loop_start(c)
         bot = self.bot
         self._rec('INFO', 'START', f'trading loop started for {self.symbol} ({self.mt5_symbol} at the terminal)', kv={
             'branch': self._cfg('DEMO_BRANCH'), 'design': self._cfg('DESIGN_NAME'), 'strategy': self._cfg('STRATEGY'),
@@ -941,8 +990,9 @@ class TraceLog:
             head = (f'Poll skipped, nothing decided: {problem}. No order is sent until the terminal holds the demo '
                     f"account {getattr(bot, '_account_login', None)} again.")
         else:
-            head = (f'Poll skipped, nothing decided: {problem}. The positions are not known, so the basket is '
-                    'neither managed nor booked this poll.')
+            head = (f'Poll skipped, nothing decided: {problem}. The positions are not known, so the '
+                    + ('trade is neither managed nor booked this poll (its stop is checked again on the next good one).'
+                       if self._is_turtle() else 'basket is neither managed nor booked this poll.'))
         dec = {'action': 'SKIPPED', 'reason': kind, 'side': None, 'headline': head, 'gates': gates,
                'blocked_by': decided, 'signal': None, 'orders': self._take_orders()}
         health = self._health(None, now, skip=(kind, problem))
@@ -950,7 +1000,7 @@ class TraceLog:
         snap = self._base(now)
         snap.update(stale=True, stale_since_utc=_iso(self._last_poll_t), health=health,
                     account=prev.get('account'), market=prev.get('market'), decision=dec,
-                    basket=prev.get('basket'), turtle=None)
+                    basket=prev.get('basket'), turtle=prev.get('turtle'))
         self._decision_line(dec, now)
         self._write_trace(snap, dec, now, force=True)
         self._heartbeat(dec, snap, now)
@@ -971,6 +1021,8 @@ class TraceLog:
 
     # ── one poll ──
     def _poll(self, c):
+        if self._is_turtle():
+            return self._poll_turtle(c)
         now = self._now()
         self.polls += 1
         orders = self._take_orders()
@@ -1021,7 +1073,8 @@ class TraceLog:
         self._digits = _i(getattr(info, 'digits', None)) if info is not None else None
         return self._digits
 
-    def _health(self, c, now, skip=None):
+    def _health(self, c, now, skip=None, live=None, tick=None):
+        """live / tick: the Turtle's (its loop has no candle flags); None = the basket poll's."""
         bot = self.bot
         acct = getattr(bot, '_last_account', None) or (None, None, None)
         mt5 = getattr(self.app, 'mt5', None)
@@ -1056,9 +1109,10 @@ class TraceLog:
                 h['positions_problem'] = problem
             return h
         ms = c.market_status or {}
-        tick = c._tick
+        tick = c._tick if tick is None else tick
         tick_t = (getattr(tick, 'time_msc', 0) or 0) / 1000.0 or _f(getattr(tick, 'time', None)) if tick is not None else None
-        h.update(market_live=bool(c.has_candle_data and c.candle_is_fresh), market_status=ms.get('status'),
+        live = bool(c.has_candle_data and c.candle_is_fresh) if live is None else bool(live)
+        h.update(market_live=live, market_status=ms.get('status'),
                  minutes_since_activity=_f(ms.get('minutes_since_last'), 2),
                  last_tick_age_s=_f(now - tick_t, 2) if tick_t else None, loop_ms=_f(c.iteration_ms, 1))
         return h
@@ -1753,7 +1807,7 @@ class TraceLog:
         """A design with a stop sends a broker-side backstop as the request sl; the live levers send the live (unreachable)
         auto sl."""
         try:
-            return 'broker backstop' if self._call('design_has_stop') else 'broker sl'
+            return 'broker backstop' if (self._is_turtle() or self._call('design_has_stop')) else 'broker sl'
         except Exception:
             return 'broker sl'
 
@@ -1984,11 +2038,21 @@ class TraceLog:
               'basket': ov.get('side'), 'pnl': ov.get('pnl'), 'pause_left_s': (bk.get('pause') or {}).get('left_s'),
               'loop_ms': h.get('loop_ms'), 'trace_ms': h.get('trace_ms'), 'tick_age_s': h.get('last_tick_age_s'),
               'errors_1h': h.get('errors_1h'), 'skipped': h.get('skipped_polls'), 'stale': snap.get('stale')}
+        tu = snap.get('turtle')
+        if tu:                                 # the Turtle's key numbers instead of the basket's
+            lv, vt, tr = tu.get('levels') or {}, tu.get('vote') or {}, tu.get('trade') or {}
+            for k in ('open_score', 'agree_score', 'trend', 'vol', 'basket', 'pause_left_s'):
+                kv.pop(k, None)
+            kv.update(buy_level=lv.get('buy'), sell_level=lv.get('sell'), n=lv.get('n'),
+                      orders=(tu.get('orders') or {}).get('state'), vote=vt.get('value'), vote_bar=vt.get('bar_utc'),
+                      trade=tr.get('side'), legs=tr.get('legs_count'), stop=tr.get('stop'), next_add=tr.get('next_add'),
+                      pnl=tr.get('pnl'))
         self._rec('INFO', 'HEARTBEAT', f"{dec['action']}: {dec['headline']}", kv={k: v for k, v in kv.items() if v is not None})
 
     def _write_trace(self, snap, dec, now, force=False):
+        held = (snap.get('basket') or {}).get('open') or (snap.get('turtle') or {}).get('trade') or {}
         key = (dec['action'], dec.get('reason'), tuple((g['key'], g['ok']) for g in dec['gates']),
-               tuple(l.get('ticket') for l in ((snap.get('basket') or {}).get('open') or {}).get('legs') or []))
+               tuple(l.get('ticket') for l in held.get('legs') or []))
         if (not force and self._last_trace_t is not None and now - self._last_trace_t < TRACE_MIN_INTERVAL_S
                 and key == self._last_trace_key):
             return
@@ -2000,11 +2064,12 @@ class TraceLog:
         self._last_trace_t, self._last_trace_key = now, key
 
     # ── the chart's bars ──
-    def _bars(self, c, now, digits):
+    def _bars(self, c, now, digits, sig=None, overlay=None):
+        """sig: what says the market moved since the last write (basket: the poll's M1 bar; the Turtle, which fetches
+        no M1 bars: the last tick); overlay: a function giving the file's 'overlay' (the Turtle's daily levels)."""
         frames = c._frames or {}
         m1 = frames.get(_TF + 'M1')
-        sig = None
-        if m1 is not None and len(m1):
+        if sig is None and m1 is not None and len(m1):
             sig = (_epoch(m1['time'].iloc[-1]), _f(m1['close'].iloc[-1]), _f(m1['high'].iloc[-1]), _f(m1['low'].iloc[-1]))
         if self._bars_t is not None and (now - self._bars_t < BARS_MIN_INTERVAL_S or sig is None or sig == self._bars_sig):
             return
@@ -2020,6 +2085,8 @@ class TraceLog:
         doc = {'schema': SCHEMA, 'symbol': self.symbol, 'mt5_symbol': self.mt5_symbol, 't': round(now, 3),
                'time_utc': _iso(now), 'price': 'bid', 'digits': digits, 'last_is_forming': True,
                'counts': {tf: len((v or {}).get('t') or []) for tf, v in tfs.items()}, 'source': sources, 'tf': tfs}
+        if overlay is not None:
+            doc['overlay'] = overlay()
         self._bars_t = now                     # (a failed write is tried again in 30 s, not every poll)
         try:
             write_json_atomic(self.paths['bars'], doc)
@@ -2079,6 +2146,8 @@ class TraceLog:
             return
         self._trades_retry_t = None
         doc = self._build_trades(list(deals), snap, since, now, digits, virtual)
+        if self._is_turtle():
+            self._turtle_results(doc)
         try:
             write_json_atomic(self.paths['trades'], doc)
         except Exception as e:
@@ -2146,6 +2215,7 @@ class TraceLog:
             run += _deal_net(d)
             cum.append(run)
         closed, open_ = [], []
+        turtle = self._is_turtle()
         for g in groups:
             ls = g['legs']
             lots = sum(l['lots'] or 0.0 for l in ls)
@@ -2158,21 +2228,28 @@ class TraceLog:
                      if olots else None,
                      'pnl': round(sum(l['net'] for l in ls), 2), 'profit': round(sum(l['profit'] for l in ls), 2),
                      'swap': round(sum(l['swap'] for l in ls), 2), 'commission': round(sum(l['commission'] for l in ls), 2)}
+            if turtle:
+                trade['turtle'] = self._journal_view([l['position_id'] for l in ls])
             if g['close_t'] is None:
                 trade['status'] = 'open'
                 open_.append(trade)
                 continue
             t_close = g['close_t']
             clots = sum(l['lots'] or 0.0 for l in ls if l['close_price'] is not None)
-            reason, bot_reason = self._exit_of(ls)
+            reason, bot_reason, rec = self._exit_of(ls)
             k = bisect_right(times, t_close + 1e-6)
+            text = EXIT_TEXT.get(reason, reason)
+            if reason == 'turtle_stop' and (rec or {}).get('origin'):
+                text = f"{text} ({self._origin_words(rec['origin'], g['side'])})"
             trade.update(status='closed', close_t=t_close, close_utc=_iso(t_close),
                          close_price=_f(sum(l['close_price'] * (l['lots'] or 0) for l in ls if l['close_price'] is not None)
                                         / clots, digits) if clots else None,
                          hold_s=_f(t_close - t_open, 1) if t_open is not None else None,
-                         exit_reason=reason, exit_reason_text=EXIT_TEXT.get(reason, reason), bot_reason=bot_reason,
+                         exit_reason=reason, exit_reason_text=text, bot_reason=bot_reason,
                          balance_after=round(cum[k - 1], 2) if k else round(vstart, 2), result=(
                              'win' if trade['pnl'] > 0 else 'loss' if trade['pnl'] < 0 else 'flat'))
+            if turtle:
+                trade.update(exit_detail=(rec or {}).get('origin'), exit_stop=(rec or {}).get('stop'))
             closed.append(trade)
         closed.sort(key=lambda x: x['close_t'])
         curve = [{'t': since, 'utc': _iso(since), 'v': round(vstart, 2), 'id': None}]
@@ -2181,7 +2258,7 @@ class TraceLog:
         wins = [x['pnl'] for x in closed if x['pnl'] > 0]
         losses = [x['pnl'] for x in closed if x['pnl'] < 0]
         net = round(sum(x['pnl'] for x in closed), 2)
-        live = (snap.get('basket') or {}).get('open')
+        live = (snap.get('turtle') or {}).get('trade') if turtle else (snap.get('basket') or {}).get('open')
         if live and live.get('side') and not live.get('both_sides'):
             live = dict(live, status='open', live=True)
             open_list = [live]
@@ -2209,26 +2286,30 @@ class TraceLog:
         }
 
     def _exit_of(self, legs):
-        """(exit reason key, the reason the bot recorded): the bot's record for any of the legs, refined by the closing
-        deals' reasons for a basket closed outside the bot (the broker's stop = the backstop ...)."""
-        bot = None
-        for l in legs:
+        """(exit reason key, the reason the bot recorded, its record): the bot's record for the legs that closed last
+        (a Turtle leg closed outside the bot earlier does not name the trade's exit), refined by the closing deals'
+        reasons for a trade closed outside the bot (the broker's stop = the backstop ...)."""
+        bot, rec = None, None
+        last = sorted(legs, key=lambda l: -(l['close_t'] or 0.0))
+        for l in last:
             r = self._exits.get(str(l['position_id']))
             if r:
-                bot = r.get('reason')
+                bot, rec = r.get('reason'), r
                 break
         if bot is not None and bot != 'closed_outside':
-            return _BOT_REASON.get(bot, bot), bot
-        why = [r for l in legs for r in l['deal_reasons']]
+            return _BOT_REASON.get(bot, bot), bot, rec
+        top = last[0]['close_t'] if last else None
+        why = [r for l in last if l['close_t'] == top for r in l['deal_reasons']] or \
+              [r for l in legs for r in l['deal_reasons']]
         if 'sl' in why:
-            return 'backstop', bot
+            return 'backstop', bot, rec
         if 'tp' in why:
-            return 'broker_target', bot
+            return 'broker_target', bot, rec
         if 'stop_out' in why:
-            return 'stop_out', bot
+            return 'stop_out', bot, rec
         if bot == 'closed_outside' or any(r in ('client', 'mobile', 'web') for r in why):
-            return 'closed_outside', bot
-        return 'unknown', bot
+            return 'closed_outside', bot, rec
+        return 'unknown', bot, rec
 
     def _load_exits(self):
         try:
@@ -2240,12 +2321,12 @@ class TraceLog:
             pass
         return {}
 
-    def _record_exits(self, ids, reason, t, pnl=None):
+    def _record_exits(self, ids, reason, t, pnl=None, extra=None):
         changed = False
         for i in ids or ():
             k = str(i)
             if k not in self._exits:
-                self._exits[k] = {'reason': reason, 't': round(float(t), 3), 'pnl': _f(pnl)}
+                self._exits[k] = dict(extra or {}, reason=reason, t=round(float(t), 3), pnl=_f(pnl))
                 changed = True
         if not changed:
             return
@@ -2257,6 +2338,1279 @@ class TraceLog:
                                                     'reasons': self._exits})
         except Exception as e:
             self.write_failed('the exit reasons', self.paths['exits'], e)
+
+    # ═════════════════════ the Turtle (STRATEGY = 'turtle'; its loop: MT5TradingBot._process_turtle) ═════════════════════
+    # The poll hands over its locals as the basket's does; the book `st` (turtle.py's state) is read, never changed: the
+    # rules module's pure functions (add_level, stop_origin, bar_of) and copies only. What changed since the last poll
+    # (levels, vote, entry, adds, stop moves, exits, rebuilds) is found by comparing the book with the one of the poll
+    # before (_book_sum).
+
+    def _is_turtle(self):
+        return self._cfg('STRATEGY') == 'turtle'
+
+    def _T(self):
+        """turtle.py as app.py loaded it (the rules)."""
+        return getattr(self.app, 'T', None)
+
+    @staticmethod
+    def _count(p):
+        return _i((p or {}).get('count')) or 0
+
+    def _turtle_params(self):
+        g = self._cfg
+        system = _i(g('TURTLE_SYSTEM'))
+        return {'system': system, 'n_len': g('TURTLE_N_LEN'), 'stop_n': _f(g('TURTLE_STOP_N')),
+                'add_n': _f(g('TURTLE_ADD_N')), 'max_legs': _i(g('TURTLE_MAX_LEGS')) or 4, 'tick': _f(g('TURTLE_TICK')) or 0.0,
+                'backstop_n': _f(g('TURTLE_BACKSTOP_N')), 'vote_tf': _tf_key(g('TURTLE_VOTE_TF')),
+                'vote_bars': g('TURTLE_VOTE_BARS'), 'min_vote_bars': g('_TURTLE_MIN_VOTE_BARS'),
+                'd1_bars': g('TURTLE_D1_BARS'), 'min_d1_bars': g('TURTLE_MIN_D1_BARS'),
+                'entry_days': 55 if system == 2 else 20, 'failsafe_days': 55 if system == 1 else None,
+                'exit_days': 20 if system == 2 else 10, 'pending_s': g('_TURTLE_PENDING_S'),
+                'settle_s': _f(g('_TURTLE_SETTLE_S')) or 0.0}
+
+    def _symbol_facts(self):
+        """symbol_info() once (again every 60 s while it fails): digits, contract size, volumes, the stops / freeze
+        levels and the swaps, logged once (INFO CONFIG). {} while unknown."""
+        if self._facts is not None:
+            return self._facts
+        now = self._now()
+        if self._facts_t is not None and now - self._facts_t < 60.0:
+            return {}
+        self._facts_t = now
+        with self.bot.mt5_lock:
+            info = self.app.mt5.symbol_info(self.mt5_symbol)
+        if info is None:
+            return {}
+
+        def g(name):
+            return getattr(info, name, None)
+        f = {'digits': _i(g('digits')), 'point': _f(g('point')), 'contract_size': _f(g('trade_contract_size')),
+             'volume_min': _f(g('volume_min')), 'volume_step': _f(g('volume_step')), 'volume_max': _f(g('volume_max')),
+             'stops_level': _i(g('trade_stops_level')), 'freeze_level': _i(g('trade_freeze_level')),
+             'swap_long': _f(g('swap_long')), 'swap_short': _f(g('swap_short')), 'swap_mode': _i(g('swap_mode')),
+             'trade_mode': _i(g('trade_mode')), 'filling_mode': _i(g('filling_mode')),
+             'currency_profit': g('currency_profit')}
+        self._facts = f
+        if self._digits is None and f['digits'] is not None:
+            self._digits = f['digits']
+
+        def w(x, unit=''):
+            return 'n/a' if x is None else f'{x:g}{unit}' if isinstance(x, float) else f'{x}{unit}'
+        self._rec('INFO', 'CONFIG', f"symbol {self.mt5_symbol}: digits {w(f['digits'])}, contract size "
+                  f"{w(f['contract_size'])}, volume {w(f['volume_min'])} .. {w(f['volume_max'])} step {w(f['volume_step'])}, "
+                  f"stops level {w(f['stops_level'], ' points')}, freeze level {w(f['freeze_level'], ' points')}, swap long "
+                  f"{w(f['swap_long'])} / short {w(f['swap_short'])} (mode {w(f['swap_mode'])})",
+                  kv={k: v for k, v in f.items() if v is not None})
+        return f
+
+    # ── the loop's start ──
+    def _turtle_loop_start(self, c):
+        bot, T = self.bot, self._T()
+        p = self._turtle_params()
+        self._rec('INFO', 'START', f"trading loop started for {self.symbol} ({self.mt5_symbol} at the terminal): the Turtle, "
+                  f"System {p['system']}", kv={
+                      'branch': self._cfg('DEMO_BRANCH'), 'design': self._cfg('DESIGN_NAME'), 'strategy': 'turtle',
+                      'system': p['system'], 'magic': self._cfg('MAGIC'), 'mode': getattr(bot, 'mode', None),
+                      'pid': os.getpid(), 'python': sys.version.split()[0], 'out_dir': self.out_dir, 'schema': SCHEMA})
+        summary = self._call('design_summary')
+        if summary:
+            self._rec('INFO', 'CONFIG', 'design: ' + str(summary))
+        if T is not None:
+            self._rec('INFO', 'CONFIG', 'rules: ' + T.describe(p['system']))
+        for name, value in self._constants():
+            self._rec('INFO', 'CONFIG', f'{name} = {kv_text(value)}')
+        entry = (f"{p['entry_days']}-day" if p['system'] == 2 else
+                 f"20-day (the 55-day failsafe after a winning 20-day breakout)")
+        self._rec('INFO', 'CONFIG', f"the Turtle as it runs: entries on the {entry} breakout + / - {p['tick']:g} of the "
+                  f"closed UTC D1 bars, exit channel {p['exit_days']}-day, N = Wilder's RMA({p['n_len']}) of the D1 true "
+                  f"range, one stop for all legs {p['stop_n']:g}N from the best fill (or the exit channel if tighter, never "
+                  f"loosened), an add every {p['add_n']:g}N (N frozen at the entry) up to {p['max_legs']} legs, a broker "
+                  f"backstop {p['backstop_n']:g}N beyond the stop on every leg, entries only with the {p['vote_tf']} vote of "
+                  f"closed bars ({p['vote_bars']} read, at least {p['min_vote_bars']}), {p['d1_bars']} closed D1 bars read "
+                  f"(at least {p['min_d1_bars']}); no target, no trading window (the manual brake stops new entries)", kv=p)
+        cfg = getattr(bot, 'symbols_config', None) or {}
+        sc = c.sym_cfg or {}
+        self._rec('INFO', 'CONFIG', f"symbols.json: brake {cfg.get('brake', 0)}, mtqty {cfg.get('mtqty')}, step_up_balance "
+                  f"{sc.get('step_up_balance')}, unit_max_limit {sc.get('unit_max_limit')} (the Turtle has no trading window)",
+                  kv={'symbols_json': cfg})
+        st = c.st if isinstance(c.st, dict) else {}
+        try:
+            path = bot._turtle_state_path(self.symbol)
+        except Exception:
+            path = None
+        if c._history_done:
+            self._rec('INFO', 'STATE', 'Turtle book restored: ' + self._book_words(st), kv={'path': path},
+                      data={'book': st})
+        else:
+            self._rec('INFO', 'STATE', "no Turtle state file of this bot: an open trade is rebuilt from the terminal (the "
+                      "legs from its positions, N at the entry and the stop from the D1 bars), the day's used orders and "
+                      'the last exit from the deal history', kv={'path': path})
+        names = [os.path.basename(x) for x in (self.paths['trace'], self.paths['bars'], self.paths['trades'])]
+        self._rec('INFO', 'START', 'files: ' + ', '.join(names) + f', state/{os.path.basename(self.paths["exits"])}, '
+                  f'state/{os.path.basename(self.journal_path)}, logs/{self.symbol}_<day>.log, logs/{self.symbol}_events.jsonl',
+                  kv={'out_dir': self.out_dir})
+        self._prev['turtle'] = self._book_sum(st)
+        self._book_ref = c.st if isinstance(c.st, dict) else None
+        self._journal_load()
+
+    @_guarded
+    def turtle_state_saved(self, st):
+        """MT5TradingBot._save_turtle_state wrote the book."""
+        self._rec('DEBUG', 'STATE', f'Turtle book saved: {self._book_words(st)}', data={'book': st})
+
+    # ── one poll ──
+    def _poll_turtle(self, c):
+        now = self._now()
+        self.polls += 1
+        if isinstance(c.st, dict):
+            self._book_ref = c.st
+        orders = self._take_orders()
+        facts = self._symbol_facts() or {}
+        digits = facts.get('digits')
+        if digits is None:
+            digits = _i((getattr(self.bot, '_digits', None) or {}).get(self.mt5_symbol))
+        snap = self._base(now)
+        snap['health'] = self._health(c, now, live=bool(c.live), tick=c.tick)
+        snap['account'] = self._account(c)
+        snap['market'] = self._turtle_market(c, digits)
+        snap['basket'] = None
+        snap['turtle'] = self._turtle_section(c, now, digits, orders, facts)
+        dec = self._turtle_decide(c, snap, orders, digits)
+        snap['decision'] = dec
+        self._turtle_transitions(c, snap, dec, orders, now, digits)
+        self._decision_line(dec, now)
+        self._last_snapshot = snap
+        self._write_trace(snap, dec, now)
+        tick = c.tick
+        sig = None if tick is None else (getattr(tick, 'time_msc', None) or getattr(tick, 'time', None),
+                                         _f(getattr(tick, 'bid', None)))
+        self._bars(c, now, digits, sig=sig, overlay=lambda: self._turtle_overlay(c, digits))
+        self._trades(c, snap, now, digits)
+        self._heartbeat(dec, snap, now)
+        self._prev['positions'] = {'BUY': self._count(c.buy_positions), 'SELL': self._count(c.sell_positions)}
+        self._last_poll_t = now
+        self._flush()
+
+    def _turtle_market(self, c, digits):
+        bid, ask = _f(c.bid), _f(c.ask)
+        ms = c.market_status or {}
+        tick_t = _f(c.now)
+        return {'bid': bid, 'ask': ask, 'spread': _f(ask - bid, 6) if bid is not None and ask is not None else None,
+                'tick_t': tick_t, 'tick_utc': _iso(tick_t), 'digits': digits,
+                'server_time_utc': _iso(_epoch(c.server_time)), 'status': ms.get('status'),
+                'minutes_since_activity': _f(ms.get('minutes_since_last'), 2),
+                'lookback_minutes': ms.get('lookback_minutes'), 'message': ms.get('message'),
+                'in_window': None, 'brake': bool(c.brake_manual), 'brake_manual': c.brake_manual,
+                'window': 'none: the Turtle trades around the clock (the manual brake stops new entries)'}
+
+    # ── the turtle block of the trace ──
+    def _turtle_section(self, c, now, digits, orders, facts):
+        T = self._T()
+        p = self._turtle_params()
+        st = c.st if isinstance(c.st, dict) else {}
+        lv = st.get('levels') or {}
+        dd = 6 if digits is None else digits
+        bid, ask, tnow = _f(c.bid), _f(c.ask), _f(c.now)
+        rows_t = c.rows_t
+        n_d1 = len(rows_t) if rows_t is not None else 0
+        n = _f(lv.get('n'))
+        tick = p['tick']
+        use20 = lv.get('use20')
+        entry_days = p['entry_days'] if p['system'] == 2 else (20 if use20 else 55)
+        levels = None
+        if lv:
+            from_t = _f(lv.get('from_time'))
+            levels = {k: lv.get(k) for k in ('bar_time', 'from_time', 'system', 'n', 'buy', 'sell', 'stop_dist', 'add_step',
+                                              'trail_long', 'trail_short', 'use20', 'ok')}
+            levels.update(bar_utc=_iso(lv.get('bar_time')), from_utc=_iso(from_t),
+                          until_t=from_t + 86400.0 if from_t is not None else None,
+                          until_utc=_iso(from_t + 86400.0) if from_t is not None else None,
+                          n_pct=_f(100.0 * n / bid, 3) if (n and bid) else None)
+        ch = self._turtle_channels(c, p)
+        high_e = _f(lv.get('buy') - tick, dd) if _f(lv.get('buy')) is not None else None
+        low_e = _f(lv.get('sell') + tick, dd) if _f(lv.get('sell')) is not None else None
+        channels = {
+            'bar_t': lv.get('bar_time'), 'bar_utc': _iso(lv.get('bar_time')),
+            'entry': {'days': entry_days, 'high': high_e, 'low': low_e,
+                      'rule': f'buy level = the {entry_days}-day high + {tick:g}, sell level = the {entry_days}-day low - '
+                              f'{tick:g} (the closed D1 bars, the last one included)'},
+            'exit': {'days': p['exit_days'], 'long': _f(lv.get('trail_long')), 'short': _f(lv.get('trail_short')),
+                     'rule': f"a long's stop is raised to the {p['exit_days']}-day low, a short's lowered to the "
+                             f"{p['exit_days']}-day high, at every D1 close (never loosened)"},
+            'all': (ch or {}).get('all'), 'bar': (ch or {}).get('bar'),
+        }
+        filt = None
+        if p['system'] == 1:
+            filt = {'use20': use20, 'levels_from': None if use20 is None else ('20-day' if use20 else '55-day failsafe'),
+                    'hypothetical': (ch or {}).get('s1'),
+                    'rule': "a hypothetical one-unit System 1 on the D1 bars (every 20-day breakout while it is flat, a 2N "
+                            "stop, the previous day's 10-day exit, no adds, no votes): use20 is true only while it is flat "
+                            "and its last trade did not make money; otherwise only the 55-day failsafe levels are traded"}
+        d1 = {'bars': n_d1, 'asked': p['d1_bars'], 'min_bars': p['min_d1_bars'], 'enough': c.rows is not None,
+              'got_last_read': _i(c.got), 'last_bar_t': int(rows_t[-1]) if n_d1 else None,
+              'last_bar_utc': _iso(int(rows_t[-1])) if n_d1 else None,
+              'next_close_t': (math.floor(tnow / 86400.0) + 1) * 86400.0 if tnow is not None else None}
+        d1['next_close_utc'] = _iso(d1['next_close_t'])
+        # stale: a minute after 00:00 UTC the terminal has not given the D1 bar that closed; the bot goes on with the
+        # levels (and the stop) of the bar before, and asks again every poll
+        until = (levels or {}).get('until_t')
+        d1['stale'] = bool(until is not None and tnow is not None and tnow > until + 60.0)
+        vote = self._turtle_vote(c, p)
+        armed = bool(st.get('armed'))
+        used_t, used_by = self._prev.get('used_t'), self._prev.get('used_by')
+        if used_t is None and not armed and st.get('side') and st.get('entry_row') == st.get('row'):
+            used_t, used_by = _f(st.get('entry_time')), {1: 'BUY', -1: 'SELL'}.get(st.get('side'))
+        lx = _f(st.get('last_exit_time'))
+        in_exit_bar = bool(T is not None and lx is not None and tnow is not None and T.bar_of(tnow) <= T.bar_of(lx))
+        buy, sell = _f(lv.get('buy')), _f(lv.get('sell'))
+        o = {
+            'state': 'none' if not lv else ('armed' if armed else 'used'), 'armed': armed,
+            'from_t': (levels or {}).get('from_time'), 'from_utc': (levels or {}).get('from_utc'),
+            'until_t': (levels or {}).get('until_t'), 'until_utc': (levels or {}).get('until_utc'),
+            'buy': None if buy is None else {
+                'level': buy, 'judged_on': 'ask', 'price_now': ask, 'vote_needed': 1,
+                'distance': _f(buy - ask, dd) if ask is not None else None,
+                'distance_n': _f((buy - ask) / n, 3) if (ask is not None and n) else None,
+                'reached': ask is not None and ask >= buy, 'channel': f'{entry_days}-day high + {tick:g}'},
+            'sell': None if sell is None else {
+                'level': sell, 'judged_on': 'bid', 'price_now': bid, 'vote_needed': -1,
+                'distance': _f(bid - sell, dd) if bid is not None else None,
+                'distance_n': _f((bid - sell) / n, 3) if (bid is not None and n) else None,
+                'reached': bid is not None and bid <= sell, 'channel': f'{entry_days}-day low - {tick:g}'},
+            'used_t': used_t, 'used_utc': _iso(used_t), 'used_by': used_by,
+            'last_exit_t': lx, 'last_exit_utc': _iso(lx), 'in_exit_bar': in_exit_bar,
+            'rule': 'one entry per D1 bar: a fill uses both orders until the next D1 close (00:00 UTC) arms new ones; an '
+                    'exit later that day does not re-arm them; no entry in the M1 bar of an exit',
+        }
+        return {
+            'system': p['system'], 'rules': T.describe(p['system']) if T is not None else None, 'params': p,
+            'd1': d1, 'n': n, 'levels': levels, 'channels': channels, 'filter': filt, 'vote': vote, 'orders': o,
+            'new_trade': None if st.get('side') else self._turtle_new_trade(c, lv, p, dd, facts),
+            'trade': self._turtle_trade(c, st, digits, orders, facts, p),
+            'pending_fill': bool(c.pending), 'hold': bool(c.hold), 'closing': bool(st.get('closing')),
+            'units_rule': 'the unit is fixed at the first fill (the virtual balance then); every leg = unit x mtqty lot',
+            'book': self._book_copy(st),
+        }
+
+    @staticmethod
+    def _book_copy(st):
+        """A copy of the book (the trace keeps snapshots; the bot changes its book in place)."""
+        if not isinstance(st, dict):
+            return None
+        out = dict(st)
+        out['legs'] = [dict(x) for x in st.get('legs') or []]
+        out['levels'] = dict(st['levels']) if isinstance(st.get('levels'), dict) else st.get('levels')
+        return out
+
+    def _turtle_channels(self, c, p):
+        """The 10 / 20 / 55-day channels of the last closed D1 bar with the day of each extreme, that bar, and (System
+        1) the hypothetical trade of its filter: from the D1 bars the bot read, once per new D1 bar."""
+        rows_t, d1 = c.rows_t, c.d1
+        if rows_t is None or not len(rows_t):
+            return None
+        key = (len(rows_t), int(rows_t[-1]))
+        if key == self._ch_key:
+            return self._ch
+        out = None
+        if isinstance(d1, dict) and d1.get('t') is not None and len(d1['t']) == len(rows_t) \
+                and int(d1['t'][-1]) == int(rows_t[-1]):
+            t = np.asarray(d1['t'], np.int64)
+            o, h, l, cl = (np.asarray(d1[k], float) for k in ('o', 'h', 'l', 'c'))
+            allc = {}
+            for k in (10, 20, 55):
+                if len(h) >= k:
+                    ih, il = int(np.argmax(h[-k:])), int(np.argmin(l[-k:]))
+                    allc[str(k)] = {'high': float(h[-k:][ih]), 'high_t': int(t[-k + ih]), 'high_utc': _iso(int(t[-k + ih])),
+                                    'low': float(l[-k:][il]), 'low_t': int(t[-k + il]), 'low_utc': _iso(int(t[-k + il]))}
+            tr = float(h[-1] - l[-1]) if len(h) < 2 else float(max(h[-1] - l[-1], abs(h[-1] - cl[-2]), abs(l[-1] - cl[-2])))
+            out = {'all': allc, 'bar': {'t': int(t[-1]), 'utc': _iso(int(t[-1])), 'o': float(o[-1]), 'h': float(h[-1]),
+                                        'l': float(l[-1]), 'c': float(cl[-1]), 'true_range': tr}}
+            if p['system'] == 1 and c.rows is not None:
+                try:
+                    out['s1'] = _s1_hypothetical(o, h, l, np.asarray(c.rows['n'], float), t, p['tick'], self._T())
+                except Exception:
+                    out['s1'] = None
+        self._ch_key, self._ch = key, out
+        return out
+
+    def _turtle_vote(self, c, p):
+        vi = c.vote_info if isinstance(c.vote_info, dict) else {}
+        r, m = vi.get('rsi') or {}, vi.get('macd') or {}
+        fresh = bool(c.vote_fresh)
+        last = _sign(_i(c.vote))
+        vbar = _f(c.vote_bar)
+        vote_s = _f(c.vote_s) or 900.0
+        vq = _i(c.vote_q)
+        s = self._vote_series(c) or {}
+        b15 = c.b15
+        sig = s.get('signal_now')
+        tf = p['vote_tf']
+        g = self._cfg
+        return {
+            'tf': tf, 'value': last if fresh else None, 'last': last, 'fresh': fresh,
+            'allows': ('BUY' if last == 1 else 'SELL' if last == -1 else None) if fresh else None,
+            'bar_t': vbar, 'bar_utc': _iso(vbar), 'bar_close_t': vbar + vote_s if vbar is not None else None,
+            'bar_close_utc': _iso(vbar + vote_s) if vbar is not None else None,
+            'next_read_t': (vq + 1) * vote_s + p['settle_s'] if vq is not None else None,
+            'next_read_utc': _iso((vq + 1) * vote_s + p['settle_s']) if vq is not None else None,
+            'bars': len(b15['c']) if isinstance(b15, dict) and b15.get('c') is not None else None,
+            'asked': p['vote_bars'], 'min_bars': p['min_vote_bars'],
+            'rsi': {'vote': _sign(_i(r.get('sign'))), 'pivot': _f(r.get('value'), 2), 'pivot_side': r.get('side'),
+                    'bars_ago': _i(r.get('bars_ago')), 'slope': _f(r.get('slope'), 4), 'now': s.get('rsi_now'),
+                    'ob': g('RSI_PEAK_OB'), 'os': g('RSI_PEAK_OS'), 'series': s.get('rsi')},
+            'macd': {'vote': _sign(_i(m.get('sign'))), 'pivot': _f(m.get('value'), 6), 'pivot_side': m.get('side'),
+                     'bars_ago': _i(m.get('bars_ago')), 'slope': _f(m.get('slope'), 6), 'now': s.get('hist_now'),
+                     'line': s.get('macd_now'), 'signal': sig,
+                     'side_rule': None if sig is None else ('high' if sig > 0 else 'low' if sig < 0 else 'none'),
+                     'series': s.get('hist'), 'signal_series': s.get('signal')},
+            't': s.get('t'), 'close': s.get('close'),
+            'rule': (f"the RSI({g('RSI_LENGTH')}) and the MACD({g('MACD_FAST')},{g('MACD_SLOW')},{g('MACD_SIGNAL')}) "
+                     f"histogram pivot-slope votes of the last CLOSED {tf} bar (a pivot: {g('PIVOT_WIDTH')} bars each side, "
+                     f"within {g('PEAK_LOOKBACK')} bars; RSI highs >= {g('RSI_PEAK_OB')}, lows <= {g('RSI_PEAK_OS')}; the "
+                     f"MACD pivot side from its signal line): +1 when both are +1, -1 when both are -1, else 0; read "
+                     f"{p['settle_s']:g} s after every {tf} close"),
+        }
+
+    def _vote_series(self, c):
+        """The last VOTE_SERIES_N closed M15 bars' close, RSI, MACD line, signal line and histogram (the chart under the
+        price): computed again from the poll's closed bars with the bot's indicator, once per new M15 bar."""
+        b15, key = c.b15, _f(c.vote_bar)
+        if key is not None and key == self._vs_key:
+            return self._vs
+        out = None
+        if (key is not None and isinstance(b15, dict) and b15.get('c') is not None and len(b15['c']) >= 30
+                and int(b15['t'][-1]) == int(key)):
+            import pandas as pd
+            ind = getattr(self.bot, 'indicator', None)
+            g = self._cfg
+            s = pd.Series(np.asarray(b15['c'], float))
+            rsi = ind.calculate_rsi(s, length=g('RSI_LENGTH'), ma_type=g('RSI_MA_TYPE'))
+            macd = ind.calculate_macd(s, fast=g('MACD_FAST'), slow=g('MACD_SLOW'), signal=g('MACD_SIGNAL'))
+            k = VOTE_SERIES_N
+
+            def tail(x, nd):
+                return [None if not math.isfinite(v) else round(float(v), nd) for v in np.asarray(x, float)[-k:]]
+            out = {'t': np.asarray(b15['t'], np.int64)[-k:].tolist(), 'close': tail(s, 6), 'rsi': tail(rsi, 2),
+                   'macd': tail(macd['macd'], 6), 'signal': tail(macd['signal'], 6), 'hist': tail(macd['hist'], 6),
+                   'rsi_now': _f(rsi.iloc[-1], 2), 'macd_now': _f(macd['macd'].iloc[-1], 6),
+                   'signal_now': _f(macd['signal'].iloc[-1], 6), 'hist_now': _f(macd['hist'].iloc[-1], 6)}
+        self._vs_key, self._vs = key, out
+        return out
+
+    def _turtle_new_trade(self, c, lv, p, dd, facts):
+        """What a trade entered now would get (N frozen, the stop, the next add, the backstop) on each side: entered at
+        the level, or at the quote when the price is already beyond it (the bot enters at the market)."""
+        n, sd_, step = _f(lv.get('n')), _f(lv.get('stop_dist')), _f(lv.get('add_step'))
+        if not (lv and lv.get('ok') and n and sd_ and step):
+            return None
+        units = _i(c.units) or 1
+        mtqty = _f(c.mtqty) or 0.01
+        lots = round(units * mtqty, 2)
+        contract = facts.get('contract_size')
+        bsn = p['backstop_n'] or 0.0
+        out = {'units': units, 'lots': lots, 'n': n, 'stop_dist': sd_, 'add_step': step, 'max_legs': p['max_legs'],
+               'balance': _f(c._virtual_balance, 2)}
+        for key, k in (('buy', 1), ('sell', -1)):
+            level = _f(lv.get('buy' if k == 1 else 'sell'))
+            q = _f(c.ask if k == 1 else c.bid)
+            if level is None:
+                out[key] = None
+                continue
+            entry = level if q is None else (max(level, q) if k == 1 else min(level, q))
+            stop, origin = entry - k * sd_, '2N'
+            tr = _f(lv.get('trail_long' if k == 1 else 'trail_short'))
+            if tr is not None and ((k == 1 and tr > stop) or (k == -1 and tr < stop)):
+                stop, origin = tr, 'channel'
+            out[key] = {'entry': round(entry, dd), 'at': 'level' if entry == level else ('ask' if k == 1 else 'bid'),
+                        'stop': round(stop, dd), 'stop_origin': origin, 'next_add': round(entry + k * step, dd),
+                        'backstop': round(stop - k * bsn * n, dd),
+                        'pnl_at_stop': _f(k * (stop - entry) * lots * contract, 2) if contract else None,
+                        'judged_on': 'bid' if k == 1 else 'ask'}
+        return out
+
+    def _turtle_leg(self, p_, k, digits):
+        leg = self._leg(p_, digits)
+        leg['n'] = k
+        return leg
+
+    def _turtle_trade(self, c, st, digits, orders, facts, p):
+        """The trade this poll held (or closed, or just opened): legs, P/L, the one stop and where it comes from, the next
+        add, the backstops. None when flat."""
+        nb, ns = self._count(c.buy_positions), self._count(c.sell_positions)
+        if nb and ns:
+            return {'both_sides': True, 'buy_count': nb, 'sell_count': ns}
+        bs, ss = _sig_name(c.buy_signal), _sig_name(c.sell_signal)
+        closing_now = bs == 'CLOSE_BUY' or ss == 'CLOSE_SELL'
+        bk = st if st.get('side') else ((self._prev.get('turtle') or {}) if closing_now else st)
+        side = _i(bk.get('side')) or 0
+        if not side and not (nb or ns):
+            return None
+        pos = (c.buy_positions if (side == 1 or (not side and nb)) else c.sell_positions) or {}
+        plist = sorted(pos.get('positions') or [], key=lambda x: (_pos_time(x) or 0.0, _i(getattr(x, 'ticket', 0)) or 0))
+        if not side:                         # positions the book could not take over (UNMANAGED)
+            legs = [self._turtle_leg(x, k + 1, digits) for k, x in enumerate(plist)]
+            return {'side': 'BUY' if nb else 'SELL', 'known_to_bot': False, 'legs': legs, 'legs_count': len(legs),
+                    'pnl': _f(pos.get('total_profit')), 'stop': None, 'next_add': None,
+                    'note': 'positions of this bot the book could not take over (they predate the D1 history): not managed'}
+        dd = 6 if digits is None else digits
+        buy = side == 1
+        by_id = {_pos_id(x): x for x in plist}
+        sent = {o['order']: o for o in orders if o['done'] and o['kind'] in ('open', 'add') and o['order']}
+        units = _i(bk.get('units')) or 1
+        mtqty = _f(c.mtqty) or 0.01
+        raw = bk.get('legs') or []
+        legs = []
+        for k, leg in enumerate(raw):
+            tid, price, t = (leg if isinstance(leg, tuple) else (leg.get('ticket'), leg.get('price'), leg.get('time')))
+            x = by_id.get(_i(tid))
+            if x is not None:
+                one = self._turtle_leg(x, k + 1, digits)
+            else:                            # filled by the bot, not listed by the terminal yet
+                o = sent.get(_i(tid)) or {}
+                one = {'n': k + 1, 'ticket': _i(tid), 'id': _i(tid), 'open_t': _f(t), 'open_utc': _iso(t),
+                       'price': _f(price), 'lots': o.get('result_volume') or round(units * mtqty, 2), 'profit': None,
+                       'swap': None, 'backstop': o.get('sl') or None, 'tp': None, 'listed': False}
+            legs.append(one)
+        fills = [x['price'] for x in legs if x['price'] is not None]
+        sdist, step = _f(bk.get('stop_dist')), _f(bk.get('add_step'))
+        if closing_now and not st.get('side'):
+            stop, origin = _f(c.stop), c.origin
+        else:
+            stop, origin = _f(bk.get('stop')), self._origin_of(bk)
+        best = (max(fills) if buy else min(fills)) if fills else None
+        px = _f(c.bid if buy else c.ask)
+        q = _f(c.ask if buy else c.bid)
+        contract = facts.get('contract_size')
+        lots = round(sum(x['lots'] or 0.0 for x in legs), 2)
+        full = len(legs) >= p['max_legs']
+        nxt = None if (full or not fills or step is None) else round(legs[-1]['price'] + (step if buy else -step), dd)
+        lv = st.get('levels') or {}
+        et = _f(bk.get('entry_time'))
+        jr = self._journal_view([x['id'] for x in legs])
+        entry_level = (jr or {}).get('entry_level')
+        if entry_level is None and lv and bk.get('entry_row') is not None and lv.get('bar_time') == bk.get('entry_row'):
+            entry_level = _f(lv.get('buy' if buy else 'sell'))        # the levels in force are the entry bar's
+        return {
+            'side': 'BUY' if buy else 'SELL', 'units': units, 'lots_per_leg': round(units * mtqty, 2), 'lots': lots,
+            'legs': legs, 'legs_count': len(legs), 'max_legs': p['max_legs'], 'full': full,
+            'n_entry': _f(bk.get('n_entry')), 'stop_dist': sdist, 'add_step': step,
+            'entry_t': et, 'entry_utc': _iso(et), 'age_s': _f(self._now() - et, 1) if et else None,
+            'entry_d1_t': bk.get('entry_row'), 'entry_d1_utc': _iso(bk.get('entry_row')),
+            'entry_level': entry_level,
+            'avg_price': _f(sum((x['price'] or 0) * (x['lots'] or 0) for x in legs) / lots, dd) if lots else None,
+            'best_fill': best, 'pnl': _f(pos.get('total_profit')),
+            'judged_on': 'bid' if buy else 'ask', 'price_now': px,
+            'stop': stop, 'stop_origin': origin, 'stop_text': self._origin_words(origin, 'BUY' if buy else 'SELL'),
+            'stop_2n': _f(best - sdist if buy else best + sdist, dd) if (best is not None and sdist) else None,
+            'stop_channel': _f(bk.get('trail_best')), 'stop_floor': _f(bk.get('stop_floor')),
+            'exit_channel_now': _f(lv.get('trail_long' if buy else 'trail_short')),
+            'to_stop': _f((px - stop) if buy else (stop - px), dd) if (px is not None and stop is not None) else None,
+            'pnl_at_stop': _f(sum((x['lots'] or 0) * contract * ((stop - x['price']) if buy else (x['price'] - stop))
+                                  for x in legs if x['price'] is not None), 2) if (contract and stop is not None) else None,
+            'next_add': nxt, 'next_add_judged_on': 'ask' if buy else 'bid', 'add_price_now': q,
+            'to_next_add': _f((nxt - q) if buy else (q - nxt), dd) if (nxt is not None and q is not None) else None,
+            'adds_left': max(0, p['max_legs'] - len(legs)),
+            'backstop_prices': [x['backstop'] for x in legs if x.get('backstop')],
+            'closing': closing_now or bool(bk.get('closing')),
+            'closed_now': closing_now and not st.get('side'),
+            'pending_fill': bool(c.pending), 'known_to_bot': True,
+            'journal': jr,
+        }
+
+    def _origin_of(self, bk):
+        if isinstance(bk.get('origin'), str) or 'origin' in bk:
+            return bk.get('origin')
+        try:
+            return self._T().stop_origin(bk)
+        except Exception:
+            return None
+
+    def _origin_words(self, origin, side):
+        p = self._turtle_params()
+        w = STOP_ORIGIN_TEXT.get(origin)
+        if w is None:
+            return str(origin) if origin else 'n/a'
+        return w.format(days=p['exit_days'], extreme='low' if side == 'BUY' else 'high')
+
+    # ── the decision: action, headline, gates ──
+    def _turtle_decide(self, c, snap, orders, digits):
+        T = self._T()
+        tv = snap['turtle']
+        st = c.st if isinstance(c.st, dict) else {}
+        p = tv['params']
+        bs, ss = _sig_name(c.buy_signal), _sig_name(c.sell_signal)
+        nb, ns = self._count(c.buy_positions), self._count(c.sell_positions)
+        d = digits
+        login = (getattr(self.bot, '_last_account', None) or (None,))[0]
+        G = [_gate('terminal', 'Terminal connected', True, 'answers', 'terminal_info() answers, connected to the trade server'),
+             _gate('account', 'Demo account', True, login, 'the demo, hedging account of the credentials'),
+             _gate('positions', 'Positions read', True, f'{nb} buy, {ns} sell', "positions_get() answers (this bot's magic only)")]
+        bid, ask = _f(c.bid), _f(c.ask)
+        quote = bid is not None and ask is not None and c.now is not None
+        G.append(_gate('quote', 'Quote', quote, f'{_px(bid, d)} / {_px(ask, d)}' if quote else 'none',
+                       'symbol_info_tick() answers (bid / ask; the time of the last tick is the decision time)',
+                       None if quote else 'no tick: nothing is decided'))
+        rows_ok = c.rows is not None
+        lvd = tv['levels'] or {}
+        if not rows_ok:
+            note = 'N and the channels are not settled: not trading'
+        elif tv['d1'].get('stale'):
+            note = (f"the levels of the D1 bar of {_date(lvd.get('bar_time'))} are still in force: the D1 bar that closed "
+                    f"at {_hm(lvd.get('until_t'))} is not there yet (asked again every poll)")
+        else:
+            note = f"levels of the D1 bar of {_date(lvd.get('bar_time'))}"
+        G.append(_gate('d1_levels', 'Daily levels', rows_ok, tv['d1']['bars'] if rows_ok else tv['d1']['got_last_read'],
+                       f">= {p['min_d1_bars']} closed D1 bars (asked for {p['d1_bars']})", note))
+        both = bool(nb and ns)
+        if both:
+            G.append(_gate('one_side', 'One side open', False, f'{nb} buy and {ns} sell', 'the Turtle holds one side',
+                           'it holds still and manages neither side (close one of them by hand)'))
+        unmanaged = bool(c.hold) and rows_ok and quote and not both
+        if unmanaged:
+            G.append(_gate('trade_known', 'Trade known', False, f'{nb or ns} position(s)',
+                           "the positions are the book's, or rebuilt from them and the D1 bars",
+                           'the positions predate the D1 history the terminal gives: they are left alone'))
+        live = bool(c.live)
+        ms = c.market_status or {}
+        G.append(_gate('market_live', 'Market live', live, _f(ms.get('minutes_since_last'), 2),
+                       f"a tick or an M1 bar within {self._cfg('MARKET_LOOKBACK_MINUTES')} min",
+                       None if live else 'nothing is decided while the market is closed: no entry, no add, no stop'))
+        if bs in ('CLOSE_BUY', 'BUY_MORE'):
+            pre_side = 1
+        elif ss in ('CLOSE_SELL', 'SELL_MORE'):
+            pre_side = -1
+        elif bs == 'BUY' or ss == 'SELL':
+            pre_side = 0
+        else:
+            pre_side = _i(st.get('side')) or 0
+        if pre_side:
+            action, reason, side = self._turtle_decide_trade(c, tv, G, st, pre_side, bs, ss, orders, d, p)
+        else:
+            action, reason, side = self._turtle_decide_flat(c, tv, G, st, bs, ss, orders, d, p)
+        if not quote:
+            action, reason = 'NO_DATA', 'quote'
+        elif not rows_ok:
+            action, reason = 'NO_DATA', 'd1 bars'
+        elif both:
+            action, reason, side = 'BOTH_SIDES', None, None
+        elif unmanaged:
+            action, reason = 'UNMANAGED', 'positions predate the D1 history'
+        elif not live:
+            action, reason = 'MARKET_CLOSED', None
+        decided = _mark_checked(G)
+        dec = {'action': action, 'reason': reason, 'side': side, 'blocked_by': decided,
+               'signal': {'buy': bs, 'sell': ss}, 'gates': G, 'orders': orders}
+        dec['headline'] = self._turtle_headline(dec, c, snap, d)
+        self._turtle_self_check(dec, bs, ss)
+        return dec
+
+    def _turtle_decide_trade(self, c, tv, G, st, pre_side, bs, ss, orders, d, p):
+        T = self._T()
+        buy = pre_side == 1
+        side = 'BUY' if buy else 'SELL'
+        tr = tv.get('trade') or {}
+        closing_now = bs == 'CLOSE_BUY' or ss == 'CLOSE_SELL'
+        retry = closing_now and c.exit_reason == 'close_retry'
+        if retry or (st.get('closing') and not closing_now):
+            G.append(_gate('close_retry', 'Earlier close finished', True, None,
+                           'the legs an incomplete close left are closed first, whatever the price', role='exit'))
+        stop = tr.get('stop')
+        px = _f(c.bid if buy else c.ask)
+        fired = ((closing_now and c.exit_reason == 'stop') or
+                 (not closing_now and px is not None and stop is not None and (px <= stop if buy else px >= stop)))
+        G.append(_gate('stop', 'Stop', fired, px,
+                       f"{'bid' if buy else 'ask'} {'<=' if buy else '>='} {_px(stop, d)} ({tr.get('stop_text')})",
+                       f"{_px(tr.get('to_stop'), d)} {'above' if buy else 'below'} the stop"
+                       if tr.get('to_stop') is not None else None, role='exit'))
+        if closing_now:
+            return f'CLOSE_{side}', ('close_retry' if retry else 'stop'), side
+        pending = bool(c.pending)
+        G.append(_gate('fill_listed', 'Fill listed', not pending, None if not pending else 'not yet',
+                       f"the terminal lists every leg (a new one waits up to {_num(p['pending_s'], 0)} s)",
+                       'no add meanwhile' if pending else None))
+        adding = bs == 'BUY_MORE' or ss == 'SELL_MORE'
+        add_done = adding and any(o['done'] for o in orders if o['kind'] in ('add', 'open') and o['side'] == side)
+        n_legs = len(st.get('legs') or []) - (1 if add_done else 0)
+        room = n_legs < p['max_legs']
+        G.append(_gate('legs', 'Legs', room, f"{n_legs}/{p['max_legs']}", f"fewer than {p['max_legs']}",
+                       None if room else 'the trade is full: no more adds', role='add'))
+        et, tnow = _f(st.get('entry_time')), _f(c.now)
+        bar_ok = bool(T is not None and et is not None and tnow is not None and T.bar_of(tnow) > T.bar_of(et))
+        G.append(_gate('add_bar', 'Not the entry minute', bar_ok, _iso(et), 'no add in the M1 bar of the entry', role='add'))
+        if adding:
+            lvl = _f(c.lvl)
+        else:
+            lvl = tr.get('next_add')
+        q = _f(c.ask if buy else c.bid)
+        hit = lvl is not None and q is not None and (q >= lvl if buy else q <= lvl)
+        G.append(_gate('add_price', 'Add level', hit if room else None, q,
+                       (f"{'ask' if buy else 'bid'} {'>=' if buy else '<='} {_px(lvl, d)} (the last fill "
+                        f"{'+' if buy else '-'} 0.5N {_num(st.get('add_step'))})") if lvl is not None else None,
+                       (f"{_px(tr.get('to_next_add'), d)} to go" if (tr.get('to_next_add') or 0) > 0 else None),
+                       role='add'))
+        if pending:
+            return 'WAIT_FILL', None, side
+        if adding:
+            return (f'ADD_{side}' if add_done else 'ADD_FAILED'), None, side
+        return 'HOLD', None, side
+
+    def _turtle_decide_flat(self, c, tv, G, st, bs, ss, orders, d, p):
+        T = self._T()
+        entering = bs == 'BUY' or ss == 'SELL'
+        side = 'BUY' if bs == 'BUY' else ('SELL' if ss == 'SELL' else None)
+        o, vt = tv['orders'], tv['vote']
+        armed = True if entering else bool(st.get('armed'))
+        lvd = tv['levels'] or {}
+        if armed:
+            note = f"the orders of the D1 bar of {_date(lvd.get('bar_time'))}"
+        else:
+            by = (f" by the {o['used_by']} trade of {_hm(o['used_t'])}" if o.get('used_t') else
+                  ' (an entry filled since that D1 bar closed)')
+            note = f"used{by}; the next D1 close ({_hm(o.get('until_t'))}) arms new ones"
+        G.append(_gate('armed', "Today's orders", armed, 'armed' if armed else 'used',
+                       'the entry orders of the last D1 bar not used yet (one entry per D1 bar)', note))
+        tnow, lx = _f(c.now), _f(st.get('last_exit_time'))
+        in_exit_bar = bool(not entering and T is not None and lx is not None and tnow is not None
+                           and T.bar_of(tnow) <= T.bar_of(lx))
+        G.append(_gate('exit_bar', 'Not the exit minute', not in_exit_bar, _iso(lx), 'no entry in the M1 bar of the last exit'))
+        ob, os_ = o.get('buy') or {}, o.get('sell') or {}
+        if entering:
+            hb, hs = side == 'BUY', side == 'SELL'
+        else:
+            hb, hs = bool(ob.get('reached')), bool(os_.get('reached'))
+        reached = side if entering else ('BUY' if hb else 'SELL' if hs else None)
+        far = []
+        if ob:
+            far.append(f"ask {_px(ob.get('price_now'), d)} is {_px(abs(ob.get('distance') or 0), d)} "
+                       f"{'below' if (ob.get('distance') or 0) > 0 else 'beyond'} the buy level")
+        if os_:
+            far.append(f"bid {_px(os_.get('price_now'), d)} is {_px(abs(os_.get('distance') or 0), d)} "
+                       f"{'above' if (os_.get('distance') or 0) > 0 else 'beyond'} the sell level")
+        G.append(_gate('breakout', 'Breakout', bool(hb or hs), reached,
+                       f"ask >= {_px(ob.get('level'), d)} (buy) or bid <= {_px(os_.get('level'), d)} (sell)",
+                       '; '.join(far) or None))
+        fresh = bool(vt.get('fresh'))
+        G.append(_gate('vote_known', f"{vt['tf']} vote known", fresh, vt.get('bar_utc'),
+                       f"the vote of the last closed {vt['tf']} bar",
+                       None if fresh else f"no vote of the last closed {vt['tf']} bar (the terminal gave "
+                                          f"{vt.get('bars')} closed bars, {vt.get('min_bars')} needed)"))
+        v = vt.get('last') if fresh else 0
+        if hb or hs:
+            ok = (hb and v == 1) or (hs and v == -1)
+            need = '+1 for the buy' if (hb and not hs) else ('-1 for the sell' if hs and not hb else '+1 / -1')
+        else:
+            ok, need = None, '+1 for a buy, -1 for a sell'
+        G.append(_gate('vote', f"{vt['tf']} vote", ok, v, need,
+                       f"RSI {_sc(vt['rsi']['vote'])}, MACD {_sc(vt['macd']['vote'])} on the bar closed at "
+                       f"{_clock(vt.get('bar_close_t'))}"))
+        brake = bool(c.brake_manual)
+        G.append(_gate('brake', 'Manual brake off', not brake, int(c.brake_manual or 0), 'symbols.json brake 0',
+                       'no new entries while the brake is on' if brake else None))
+        if entering:
+            sent = [x for x in orders if x['kind'] == 'open' and x['side'] == side]
+            if any(x['done'] for x in sent):
+                return f'OPEN_{side}', None, side
+            return 'OPEN_FAILED', (sent[-1]['retcode_text'] if sent else 'no order'), side
+        if not armed:
+            return 'WAIT', 'orders used', None
+        if in_exit_bar:
+            return 'WAIT', 'exit bar', None
+        if not (hb or hs):
+            return 'WAIT', 'no breakout', None
+        if not fresh:
+            return 'BLOCKED', 'vote unknown', reached
+        if not ok:
+            return 'BLOCKED', 'vote', reached
+        if brake:
+            return 'BLOCKED', 'brake', reached
+        return 'WAIT', None, None
+
+    def _turtle_self_check(self, dec, bs, ss):
+        """The gates are this module's reading of the decision; the bot's signals are the decision. A difference is a
+        WARN (a bug of the trace, not of the trading), at most every 10 min."""
+        if dec['action'] in ('SKIPPED', 'NO_DATA', 'MARKET_CLOSED', 'BOTH_SIDES', 'UNMANAGED'):
+            return
+        g = {x['key']: x for x in dec['gates']}
+        if 'armed' in g:
+            reads = all(g[k]['ok'] for k in ('armed', 'exit_bar', 'breakout', 'vote_known', 'vote', 'brake'))
+            signal = bs == 'BUY' or ss == 'SELL'
+        else:
+            if 'close_retry' in g:
+                return
+            close = g['stop']['ok'] is True
+            add = (not close and bool(g.get('fill_listed', {}).get('ok'))
+                   and all(x['ok'] for x in dec['gates'] if x['role'] == 'add'))
+            reads, signal = (close, add), (bs == 'CLOSE_BUY' or ss == 'CLOSE_SELL', bs == 'BUY_MORE' or ss == 'SELL_MORE')
+        if reads != signal:
+            write, n = self._repeat(('selfcheck', dec['action']))
+            if write:
+                self._rec('WARN', 'TRACE', f"the trace's reading of the gates differs from the bot's signals (buy {bs}, "
+                          f"sell {ss}); the signals are what the bot did", data={'gates': dec['gates']})
+
+    def _turtle_headline(self, dec, c, snap, d):
+        act, reason, side = dec['action'], dec['reason'], dec['side']
+        tv = snap['turtle']
+        p, o, vt, lv = tv['params'], tv['orders'], tv['vote'], tv['levels'] or {}
+        tr = tv.get('trade') or {}
+        ms = c.market_status or {}
+        tf = vt['tf']
+        e_days = tv['channels']['entry']['days']
+        if act == 'NO_DATA':
+            if reason == 'quote':
+                return f'No quote: the terminal gave no tick for {self.mt5_symbol} this poll, so nothing is decided.'
+            return (f"No daily levels yet: the terminal gave {tv['d1']['got_last_read'] or 0} closed D1 bars, at least "
+                    f"{p['min_d1_bars']} are needed for N and the channels; not trading.")
+        if act == 'MARKET_CLOSED':
+            mins = _num(ms.get('minutes_since_last'), 1)
+            if tr.get('side'):
+                return (f"Market not live (no tick for {mins} min): holding the {tr['side']} trade ({tr.get('legs_count')} "
+                        f"legs, P/L {_usd(tr.get('pnl'))}); its stop {_px(tr.get('stop'), d)} is checked again when it "
+                        'trades.')
+            return (f"Market not live: no tick for {mins} min (live needs one within "
+                    f"{self._cfg('MARKET_LOOKBACK_MINUTES')} min); nothing is decided until it trades again.")
+        if act == 'BOTH_SIDES':
+            return ('Both a BUY and a SELL of this bot are open: the Turtle holds still and manages neither side (close '
+                    'one of them by hand).')
+        if act == 'UNMANAGED':
+            return ("This bot's open positions predate the D1 history the terminal gives: their N and stop cannot be "
+                    'rebuilt, so the bot leaves them alone (close them by hand or give the terminal more D1 history).')
+        vote_now = (f"the {tf} vote is {_sc(vt.get('last'))}" if vt.get('fresh') else
+                    f'the {tf} vote of the last closed bar is not known')
+        if act == 'WAIT':
+            if reason == 'orders used':
+                by = f" by the {o['used_by']} trade of {_hm(o['used_t'])}" if o.get('used_t') else ''
+                left = _dur((_f(o.get('until_t')) or 0) - (_f(c.now) or 0)) if o.get('until_t') else 'n/a'
+                return (f"Flat: today's entry orders were used{by}; no new entry until the next D1 bar closes at "
+                        f"{_hm(o.get('until_t'))} (in {left}) and sets new levels.")
+            if reason == 'exit bar':
+                return (f"Flat: the trade was closed at {_hm(o.get('last_exit_t'))}; no entry in the same M1 bar (the "
+                        f"orders are {o['state']}).")
+            ob, os_ = o.get('buy') or {}, o.get('sell') or {}
+            return (f"Flat, orders armed, waiting for a breakout: a BUY when the ask reaches {_px(ob.get('level'), d)} "
+                    f"(the {e_days}-day high + {p['tick']:g}; ask {_px(ob.get('price_now'), d)}, "
+                    f"{_px(ob.get('distance'), d)} away) or a SELL when the bid reaches {_px(os_.get('level'), d)} "
+                    f"(bid {_px(os_.get('price_now'), d)}, {_px(os_.get('distance'), d)} away), each only with the "
+                    f"{tf} vote of closed bars ({vote_now}).")
+        if act == 'BLOCKED':
+            k = (o.get('buy') if side == 'BUY' else o.get('sell')) or {}
+            what = f"The {k.get('judged_on')} {_px(k.get('price_now'), d)} is through the {side.lower()} level {_px(k.get('level'), d)}"
+            if reason == 'vote':
+                return (f"{what}, but the {tf} vote of the bar closed at {_clock(vt.get('bar_close_t'))} is "
+                        f"{_sc(vt.get('last'))} (RSI {_sc(vt['rsi']['vote'])}, MACD {_sc(vt['macd']['vote'])}): no "
+                        f"{side.lower()} until it is {'+1' if side == 'BUY' else '-1'}; the next vote is read at "
+                        f"{_hm(vt.get('next_read_t'))}.")
+            if reason == 'vote unknown':
+                return (f"{what}, but the vote of the last closed {tf} bar is not known (the terminal gave "
+                        f"{vt.get('bars')} closed bars, {vt.get('min_bars')} needed): no entry until it is.")
+            if reason == 'brake':
+                return f'{what} with the vote, but the manual brake is on (symbols.json brake 1): no new entries.'
+            return f'{what}: blocked ({reason}).'
+        if act in ('OPEN_BUY', 'OPEN_SELL'):
+            fill = next((x for x in dec['orders'] if x['done'] and x['kind'] == 'open'), {})
+            k = (o.get('buy') if side == 'BUY' else o.get('sell')) or {}
+            jr = tr.get('journal') or {}
+            return (f"Opened a {side} trade: {fill.get('result_volume') or fill.get('volume')} lot at "
+                    f"{_px(fill.get('result_price') or fill.get('price'), d)} (the {side.lower()} level "
+                    f"{_px(jr.get('entry_level') or k.get('level'), d)}, {tf} vote {_sc(vt.get('last'))}); N "
+                    f"{_num(tr.get('n_entry'))} frozen: stop {_px(tr.get('stop'), d)} ({tr.get('stop_text')}), next add "
+                    f"at {_px(tr.get('next_add'), d)}, {p['max_legs']} legs at most; broker backstop "
+                    f"{_px(fill.get('sl'), d)}.")
+        if act == 'OPEN_FAILED':
+            return (f'Tried to open a {side} trade: the order was not filled ({reason}); it is tried again on the next '
+                    'poll while the breakout and the vote hold.')
+        if act == 'WAIT_FILL':
+            return (f"The {side} leg filled; waiting for the terminal to list it (up to {_num(p['pending_s'], 0)} s); no "
+                    'add meanwhile.')
+        if act in ('CLOSE_BUY', 'CLOSE_SELL'):
+            cr = c.close_response or {}
+            res = ''
+            if cr and int(cr.get('failed_count') or 0):
+                res = (f" The close is incomplete: {cr.get('closed_count')} closed, {cr.get('failed_count')} failed "
+                       f"({'; '.join(cr.get('errors') or [])}); the rest is closed next poll.")
+            if reason == 'close_retry':
+                return f'Closing the rest of the {side} trade (an earlier close left legs open).' + res
+            return (f"Closing the {side} trade at the stop: {tr.get('judged_on')} {_px(tr.get('price_now'), d)} "
+                    f"{'<=' if side == 'BUY' else '>='} the stop {_px(tr.get('stop'), d)} ({tr.get('stop_text')}); "
+                    f"{tr.get('legs_count')} legs, P/L {_usd(tr.get('pnl'))} at the decision." + res)
+        if act in ('ADD_BUY', 'ADD_SELL', 'ADD_FAILED'):
+            x = next((y for y in dec['orders'] if y['kind'] in ('add', 'open')), {})
+            lvl = _f(c.lvl)
+            if act == 'ADD_FAILED':
+                return (f"Tried to add a leg to the {side} trade at the add level {_px(lvl, d)}: "
+                        f"{x.get('retcode_text') or 'no order'}; tried again on the next poll.")
+            return (f"Added leg {tr.get('legs_count')}/{p['max_legs']} to the {side} trade: "
+                    f"{x.get('result_volume') or x.get('volume')} lot at {_px(x.get('result_price') or x.get('price'), d)} "
+                    f"(the add level {_px(lvl, d)} = the last fill {'+' if side == 'BUY' else '-'} 0.5N); the stop is now "
+                    f"{_px(tr.get('stop'), d)} ({tr.get('stop_text')}); "
+                    + (f"next add at {_px(tr.get('next_add'), d)}." if tr.get('next_add') is not None else
+                       'the trade is full.'))
+        if act == 'HOLD':
+            buy = side == 'BUY'
+            parts = [f"Holding the {side} trade, {tr.get('legs_count')}/{p['max_legs']} legs, P/L {_usd(tr.get('pnl'))}: "
+                     f"the stop is {_px(tr.get('stop'), d)} ({tr.get('stop_text')}; the {tr.get('judged_on')} "
+                     f"{_px(tr.get('price_now'), d)} is {_px(tr.get('to_stop'), d)} away)"]
+            if tr.get('next_add') is not None:
+                parts.append(f"; the next add at {'ask >=' if buy else 'bid <='} {_px(tr.get('next_add'), d)} "
+                             f"({tr.get('next_add_judged_on')} now {_px(tr.get('add_price_now'), d)})")
+            else:
+                parts.append('; the trade is full (no more adds)')
+            parts.append('; no target: it closes only at the stop.')
+            return ''.join(parts)
+        return act
+
+    # ── what changed since the last poll: log lines ──
+    def _book_sum(self, st):
+        """What the log compares of the Turtle's book from one poll to the next (and the trade view of a poll that
+        closed it reads)."""
+        st = st if isinstance(st, dict) else {}
+        lv = st.get('levels') or {}
+        origin = None
+        if st.get('side') and self._T() is not None:
+            try:
+                origin = self._T().stop_origin(st)
+            except Exception:
+                origin = None
+        return {'side': _i(st.get('side')) or 0, 'units': _i(st.get('units')),
+                'legs': [(_i(x.get('ticket')), _f(x.get('price')), _f(x.get('time'))) for x in st.get('legs') or []],
+                'n_entry': _f(st.get('n_entry')), 'stop_dist': _f(st.get('stop_dist')), 'add_step': _f(st.get('add_step')),
+                'trail_best': _f(st.get('trail_best')), 'stop_floor': _f(st.get('stop_floor')), 'stop': _f(st.get('stop')),
+                'origin': origin, 'row': _i(st.get('row')), 'armed': bool(st.get('armed')),
+                'closing': bool(st.get('closing')), 'last_exit_time': _f(st.get('last_exit_time')),
+                'entry_time': _f(st.get('entry_time')), 'entry_row': _i(st.get('entry_row')),
+                'levels': {k: lv.get(k) for k in ('bar_time', 'from_time', 'buy', 'sell', 'n', 'use20', 'trail_long',
+                                                  'trail_short', 'stop_dist', 'add_step', 'ok')} if lv else None}
+
+    def _book_words(self, st):
+        if not isinstance(st, dict) or not st:
+            return 'no book'
+        d = self._digits
+        lv = st.get('levels') or {}
+        lev = (f"levels of the D1 bar of {_date(lv.get('bar_time'))}: buy {_px(lv.get('buy'), d)}, sell "
+               f"{_px(lv.get('sell'), d)}, N {_num(lv.get('n'))}, orders {'armed' if st.get('armed') else 'used'}"
+               if lv else 'no levels yet')
+        side = st.get('side')
+        if not side:
+            return (f'flat; {lev}' + (f"; last exit {_hm(st.get('last_exit_time'))}" if st.get('last_exit_time') else ''))
+        s = self._book_sum(st)
+        return (f"{'BUY' if side == 1 else 'SELL'} trade of {len(st.get('legs') or [])} leg(s), unit {st.get('units')}, "
+                f"N at entry {_num(st.get('n_entry'))}, stop {_px(st.get('stop'), d)} "
+                f"({self._origin_words(s['origin'], 'BUY' if side == 1 else 'SELL')}), entered {_hm(st.get('entry_time'))}"
+                + (', closing' if st.get('closing') else '') + f'; {lev}')
+
+    def _vote_words(self, vt):
+        def part(name, x, nd):
+            if not x.get('pivot_side'):
+                return f"{name} {_sc(x.get('vote'))} (no pivot)"
+            return (f"{name} {_sc(x.get('vote'))} (pivot {x.get('pivot_side')} {_num(x.get('pivot'), nd)} "
+                    f"{x.get('bars_ago')} bars ago, slope {_num(x.get('slope'), nd)})")
+        m = vt['macd']
+        side = f", signal line {_num(m.get('signal'), 4)}: {m.get('side_rule')}s count" if m.get('side_rule') else ''
+        return part('RSI', vt['rsi'], 2) + ', ' + part('MACD', m, 4) + side
+
+    def _turtle_transitions(self, c, snap, dec, orders, now, digits):
+        tv = snap['turtle']
+        st = c.st if isinstance(c.st, dict) else {}
+        prev = self._prev
+        first = not prev.get('polled')
+        pb = prev.get('turtle') or self._book_sum({})
+        cb = self._book_sum(st)
+        p, d = tv['params'], digits
+        acct = snap['account']
+        act = dec['action']
+        tr = tv.get('trade') or {}
+        last = self._last_snapshot or {}
+        last_tr = (last.get('turtle') or {}).get('trade') or {}
+        side_w = {1: 'BUY', -1: 'SELL'}
+        J = self._journal_load()
+        jdirty = False
+        # the levels of the day (a D1 bar closed, or the first poll)
+        if cb['row'] is not None and (first or cb['row'] != pb.get('row')):
+            self._log_levels(c, tv, cb, pb, first, d)
+            if cb['armed']:
+                prev['used_t'] = prev['used_by'] = None
+        elif pb.get('armed') and not cb['armed'] and act not in ('OPEN_BUY', 'OPEN_SELL') and not cb['side']:
+            self._rec('INFO', 'LEVELS', "today's entry orders are marked used: the deal history shows an entry since the "
+                      f"D1 bar of {_date(cb['row'])} closed; no entry until the next D1 close")
+        # the M15 vote
+        vt = tv['vote']
+        pv = prev.get('vote')
+        if vt.get('bar_t') is not None and (pv is None or pv[0] != vt['bar_t']):
+            kv = {'bar_utc': vt.get('bar_utc'), 'vote': vt.get('last'), 'rsi': vt['rsi']['vote'], 'macd': vt['macd']['vote'],
+                  'rsi_now': vt['rsi'].get('now'), 'rsi_pivot': vt['rsi'].get('pivot'), 'rsi_slope': vt['rsi'].get('slope'),
+                  'hist_now': vt['macd'].get('now'), 'macd_pivot': vt['macd'].get('pivot'),
+                  'macd_slope': vt['macd'].get('slope'), 'signal': vt['macd'].get('signal'), 'bars': vt.get('bars')}
+            allows = {1: 'a BUY breakout may enter', -1: 'a SELL breakout may enter'}.get(vt.get('last'), 'no entry on either side')
+            if pv is None or pv[1] != vt.get('last'):
+                head = (f"{vt['tf']} vote {_sc(pv[1])} -> {_sc(vt.get('last'))}" if pv is not None else
+                        f"{vt['tf']} vote {_sc(vt.get('last'))}")
+                self._rec('INFO', 'VOTE', f"{head} on the bar closed at {_clock(vt.get('bar_close_t'))}: "
+                          f"{self._vote_words(vt)}; {allows}", kv=kv)
+            else:
+                self._rec('DEBUG', 'VOTE', f"{vt['tf']} vote of the bar closed at {_clock(vt.get('bar_close_t'))}: "
+                          f"{_sc(vt.get('last'))} ({self._vote_words(vt)})", kv=kv)
+        if pv is not None and pv[2] and not vt.get('fresh'):
+            self._rec('WARN', 'VOTE', f"no {vt['tf']} vote for the bar that closed last (the terminal gave {vt.get('bars')} "
+                      f"closed bars, {vt.get('min_bars')} needed): no entry until there is one")
+        elif pv is not None and not pv[2] and vt.get('fresh'):
+            self._rec('INFO', 'VOTE', f"the {vt['tf']} vote is known again")
+        # the bot's own trading this poll
+        if act in ('OPEN_BUY', 'OPEN_SELL'):
+            fill = next((x for x in orders if x['done'] and x['kind'] == 'open'), {})
+            side = dec['side']
+            k = (tv['orders'].get('buy') if side == 'BUY' else tv['orders'].get('sell')) or {}
+            lvl = _f(k.get('level'))
+            ext = tv['channels']['entry'].get('high' if side == 'BUY' else 'low')
+            rec = {'side': side, 'units': tr.get('units'), 'lots': tr.get('lots_per_leg'), 'n_entry': tr.get('n_entry'),
+                   'stop_dist': tr.get('stop_dist'), 'add_step': tr.get('add_step'), 'entry_level': lvl,
+                   'entry_d1_t': tr.get('entry_d1_t'), 'use20': (tv['levels'] or {}).get('use20'),
+                   'vote': vt.get('last'), 'vote_bar_t': vt.get('bar_t'), 'opened_t': tr.get('entry_t'),
+                   'balance': _f(c._virtual_balance, 2), 'rebuilt': False,
+                   'legs': [{'id': x['id'], 't': x['open_t'], 'price': x['price'], 'level': lvl, 'backstop': x['backstop']}
+                            for x in tr.get('legs') or []],
+                   'stops': [{'t': now, 'stop': tr.get('stop'), 'origin': tr.get('stop_origin'), 'why': 'entry'}],
+                   'exit': None}
+            if tr.get('legs'):
+                J[str(tr['legs'][0]['id'])] = rec
+                jdirty = True
+            prev['used_t'], prev['used_by'] = tr.get('entry_t'), side
+            self._rec('INFO', 'TRADE', f"{side} trade opened: {fill.get('result_volume') or fill.get('volume')} lot at "
+                      f"{_px(fill.get('result_price') or fill.get('price'), d)} (the {side.lower()} level {_px(lvl, d)} = the "
+                      f"{tv['channels']['entry']['days']}-day {'high' if side == 'BUY' else 'low'} {_px(ext, d)} "
+                      f"{'+' if side == 'BUY' else '-'} {p['tick']:g}, reached by the {k.get('judged_on')}; {vt['tf']} vote "
+                      f"{_sc(vt.get('last'))} on the bar closed at {_clock(vt.get('bar_close_t'))}), unit {tr.get('units')}"
+                      + (f" (virtual balance {_usd(c._virtual_balance, signed=False)})" if acct.get('virtual') else '')
+                      + f"; N {_num(tr.get('n_entry'))} frozen for the trade: stop {_px(tr.get('stop'), d)} "
+                      f"({tr.get('stop_text')}), next add at {'ask >=' if side == 'BUY' else 'bid <='} "
+                      f"{_px(tr.get('next_add'), d)}, up to {p['max_legs']} legs; broker backstop {_px(fill.get('sl'), d)}",
+                      kv={'side': side, 'price': fill.get('result_price'), 'level': lvl, 'lots': fill.get('result_volume'),
+                          'units': tr.get('units'), 'n_entry': tr.get('n_entry'), 'stop': tr.get('stop'),
+                          'stop_origin': tr.get('stop_origin'), 'next_add': tr.get('next_add'), 'backstop': fill.get('sl'),
+                          'vote': vt.get('last'), 'vote_bar': vt.get('bar_utc'), 'd1_bar': _iso(tr.get('entry_d1_t')),
+                          'use20': (tv['levels'] or {}).get('use20'), 'balance': _f(c._virtual_balance, 2)})
+            self._trades_dirty = True
+        elif act in ('ADD_BUY', 'ADD_SELL'):
+            fill = next((x for x in orders if x['done'] and x['kind'] in ('add', 'open')), {})
+            side = dec['side']
+            lvl = _f(c.lvl)
+            legs = tr.get('legs') or []
+            prev_fill = legs[-2]['price'] if len(legs) >= 2 else None
+            rec = J.get(str(legs[0]['id'])) if legs else None
+            if rec is not None and legs:
+                rec.setdefault('legs', []).append({'id': legs[-1]['id'], 't': legs[-1]['open_t'], 'price': legs[-1]['price'],
+                                                   'level': lvl, 'backstop': fill.get('sl')})
+                jdirty = True
+            self._rec('INFO', 'TRADE', f"leg {len(legs)}/{p['max_legs']} added to the {side} trade: "
+                      f"{fill.get('result_volume') or fill.get('volume')} lot at "
+                      f"{_px(fill.get('result_price') or fill.get('price'), d)} (the add level {_px(lvl, d)} = the last fill "
+                      f"{_px(prev_fill, d)} {'+' if side == 'BUY' else '-'} 0.5N {_num(tr.get('add_step'))}, reached by the "
+                      f"{tr.get('next_add_judged_on')}); "
+                      + (f"next add at {_px(tr.get('next_add'), d)}" if tr.get('next_add') is not None else
+                         'the trade is full: no more adds') + f"; broker backstop {_px(fill.get('sl'), d)}",
+                      kv={'side': side, 'leg': len(legs), 'price': fill.get('result_price'), 'level': lvl,
+                          'last_fill': prev_fill, 'lots': fill.get('result_volume'), 'next_add': tr.get('next_add'),
+                          'backstop': fill.get('sl'), 'stop': tr.get('stop')})
+            self._trades_dirty = True
+        elif act in ('CLOSE_BUY', 'CLOSE_SELL'):
+            cr = c.close_response or {}
+            closed, failed = int(cr.get('closed_count') or 0), int(cr.get('failed_count') or 0)
+            side = dec['side']
+            stop, origin = _f(c.stop), c.origin
+            ids = [x['id'] for x in tr.get('legs') or [] if x.get('id') is not None]
+            extra = {'origin': origin, 'stop': stop, 'side': side}
+            if closed:
+                self._record_exits(ids, 'turtle_stop', now, tr.get('pnl'), extra=extra)
+            if closed and not failed:
+                rec = self._journal_rec(ids)
+                if rec is not None:
+                    rec['exit'] = {'t': now, 'reason': 'turtle_stop', 'stop': stop, 'origin': origin,
+                                   'price': tr.get('price_now'), 'decision_pnl': tr.get('pnl')}
+                    jdirty = True
+                head = (f"the last {closed} leg(s) of the {side} trade closed (the close at the stop "
+                        f"{_px(stop, d)} had left them open)" if dec['reason'] == 'close_retry' else
+                        f"{side} trade closed at the stop ({self._origin_words(origin, side)}): {tr.get('judged_on')} "
+                        f"{_px(tr.get('price_now'), d)} {'<=' if side == 'BUY' else '>='} {_px(stop, d)}; {closed} leg(s)")
+                self._rec('CLOSE', 'CLOSE', f"{head}, P/L {_usd(tr.get('pnl'))} at the decision, held "
+                          f"{_dur(tr.get('age_s'))}; the realised P/L follows from the deal history",
+                          kv={'side': side, 'reason': 'turtle_stop', 'stop': stop, 'stop_origin': origin,
+                              'price': tr.get('price_now'), 'decision_pnl': tr.get('pnl'), 'legs': closed,
+                              'tickets': cr.get('closed_tickets'), 'n_entry': tr.get('n_entry'), 'held_s': tr.get('age_s'),
+                              'retry': dec['reason'] == 'close_retry'})
+            else:
+                self._rec('WARN', 'CLOSE', f"the close of the {side} trade is incomplete: {closed} closed, {failed} failed "
+                          f"({'; '.join(cr.get('errors') or []) or cr.get('message')}); the rest is closed next poll, "
+                          'whatever the price', kv={'closed': closed, 'failed': failed, 'stop': stop})
+            self._trades_dirty = True
+        # the book after this poll, compared with the last one
+        same = bool(pb['side'] and cb['side'] == pb['side'] and cb['entry_time'] == pb['entry_time'])
+        if pb['side'] and not cb['side'] and act not in ('CLOSE_BUY', 'CLOSE_SELL'):
+            ids = [x[0] for x in pb['legs'] if x[0] is not None]
+            self._record_exits(ids, 'closed_outside', now, last_tr.get('pnl'), extra={'side': side_w[pb['side']]})
+            rec = self._journal_rec(ids)
+            if rec is not None and rec.get('exit') is None:
+                rec['exit'] = {'t': now, 'reason': 'closed_outside', 'stop': pb.get('stop'), 'origin': pb.get('origin'),
+                               'price': None, 'decision_pnl': last_tr.get('pnl')}
+                jdirty = True
+            self._rec('CLOSE', 'CLOSE', f"the {side_w[pb['side']]} trade was closed outside the bot (the broker's backstop, "
+                      f"the terminal, or while the bot was down): its {len(ids)} leg(s) are gone; P/L last seen "
+                      f"{_usd(last_tr.get('pnl'))}; the realised P/L and the closing deals follow from the deal history",
+                      kv={'reason': 'closed_outside', 'ids': ids, 'pnl_last_seen': last_tr.get('pnl'),
+                          'stop': pb.get('stop'), 'backstops': last_tr.get('backstop_prices')})
+            self._trades_dirty = True
+        elif pb['side'] and cb['side'] and cb['side'] != pb['side']:
+            self._rec('WARN', 'TRADE', f"the {side_w[pb['side']]} trade was replaced outside the bot by a "
+                      f"{side_w[cb['side']]} one, taken over: {self._book_words(st)}")
+        if not pb['side'] and cb['side'] and act not in ('OPEN_BUY', 'OPEN_SELL'):
+            ids = [x[0] for x in cb['legs']]
+            if ids and self._journal_rec(ids) is None:
+                J[str(ids[0])] = {'side': side_w[cb['side']], 'units': cb['units'], 'n_entry': cb['n_entry'],
+                                  'stop_dist': cb['stop_dist'], 'add_step': cb['add_step'], 'entry_level': None,
+                                  'entry_d1_t': cb['entry_row'], 'opened_t': cb['entry_time'], 'rebuilt': True,
+                                  'legs': [{'id': x[0], 't': x[2], 'price': x[1], 'level': None} for x in cb['legs']],
+                                  'stops': [{'t': now, 'stop': cb['stop'], 'origin': cb['origin'], 'why': 'rebuilt'}],
+                                  'exit': None}
+                jdirty = True
+            self._rec('WARN', 'TRADE', f"{side_w[cb['side']]} trade of {len(cb['legs'])} leg(s) taken over from the terminal "
+                      f"(no Turtle state for it): unit {cb['units']}, N at the entry {_num(cb['n_entry'])} (the D1 bar of "
+                      f"{_date(cb['entry_row'])}), stop {_px(cb['stop'], d)} ({self._origin_words(cb['origin'], side_w[cb['side']])}), "
+                      f"next add at {_px(tr.get('next_add'), d)}; today's orders are {'armed' if cb['armed'] else 'used'}",
+                      kv={'side': side_w[cb['side']], 'legs': len(cb['legs']), 'units': cb['units'], 'n_entry': cb['n_entry'],
+                          'stop': cb['stop'], 'stop_origin': cb['origin'], 'entry_d1': _iso(cb['entry_row'])},
+                      data={'book': self._book_copy(st)})
+            self._trades_dirty = True
+        if same:
+            now_ids = {x[0] for x in cb['legs']}
+            gone = [x[0] for x in pb['legs'] if x[0] is not None and x[0] not in now_ids]
+            if gone and act not in ('CLOSE_BUY', 'CLOSE_SELL'):
+                self._record_exits(gone, 'closed_outside', now, None, extra={'side': side_w[cb['side']]})
+                self._rec('WARN', 'TRADE', f"leg(s) {gone} of the {side_w[cb['side']]} trade closed outside the bot (the "
+                          f"broker's backstop, or by hand): {len(cb['legs'])} leg(s) left; the stop stays at "
+                          f"{_px(cb['stop'], d)} ({self._origin_words(cb['origin'], side_w[cb['side']])})",
+                          kv={'gone': gone, 'legs': len(cb['legs']), 'stop': cb['stop'], 'stop_origin': cb['origin']})
+                self._trades_dirty = True
+            if pb.get('stop') is not None and cb['stop'] is not None and abs(cb['stop'] - pb['stop']) > 1e-9:
+                jdirty |= self._log_stop_move(c, tv, pb, cb, act, d)
+        if prev.get('pending') and not tv['pending_fill'] and cb['side']:
+            self._rec('DEBUG', 'TRADE', f"the terminal lists every leg of the {side_w[cb['side']]} trade now "
+                      f"({len(cb['legs'])})")
+        # the market, the data, the unit
+        live = bool(c.live)
+        if not first and prev.get('live') != live:
+            ms = c.market_status or {}
+            if live:
+                self._rec('INFO', 'MARKET', 'market live again')
+            else:
+                self._rec('INFO', 'MARKET', f"market not live: no tick or M1 bar for {_num(ms.get('minutes_since_last'), 1)} "
+                          'min; nothing is decided until it trades', kv={'status': ms.get('status'), 'message': ms.get('message')})
+        d1_ok = c.rows is not None
+        if (first and not d1_ok) or (not first and prev.get('d1_ok') != d1_ok):
+            if d1_ok:
+                self._rec('INFO', 'DATA', f"daily levels available: {tv['d1']['bars']} closed D1 bars")
+            else:
+                self._rec('WARN', 'DATA', f"no daily levels: the terminal gave {tv['d1']['got_last_read'] or 0} closed D1 "
+                          f"bars, {p['min_d1_bars']} needed: not trading")
+        d1_stale = bool(tv['d1'].get('stale'))
+        lvd = tv['levels'] or {}
+        if d1_stale and not prev.get('d1_stale'):
+            self._rec('WARN', 'DATA', f"the D1 bar that closed at {_hm(lvd.get('until_t'))} is not there yet: the bot goes on "
+                      f"with the levels of the D1 bar of {_date(lvd.get('bar_time'))} (and its stop), and asks the terminal "
+                      f"again every poll (it gave {tv['d1']['got_last_read'] or 0} closed D1 bars last time)",
+                      kv={'levels_of': _iso(lvd.get('bar_time')), 'got': tv['d1']['got_last_read']})
+        elif prev.get('d1_stale') and not d1_stale:
+            self._rec('INFO', 'DATA', f"the new D1 bar is there: the levels of the D1 bar of {_date(lvd.get('bar_time'))}")
+        both = act == 'BOTH_SIDES'
+        if both and not prev.get('both'):
+            self._rec('WARN', 'TRADE', 'a BUY and a SELL of this bot are open: the Turtle holds still and manages neither')
+        units = acct.get('units')
+        if not first and prev.get('units') != units:
+            self._rec('INFO', 'ACCOUNT', f"unit {prev.get('units')} -> {units}"
+                      + (f" (virtual balance {_usd(acct.get('virtual_balance'), signed=False)})" if acct.get('virtual') else ''))
+        if first:
+            self._rec('INFO', 'STATE', f"first poll: {self._book_words(st)}; {vt['tf']} vote "
+                      f"{_sc(vt.get('last')) if vt.get('fresh') else 'unknown'}"
+                      + (f"; virtual balance {_usd(acct.get('virtual_balance'), signed=False)}, unit {units}"
+                         if acct.get('virtual') else f'; unit {units}'), data={'book': self._book_copy(st)})
+        ms_loop = _f(c.iteration_ms)
+        if ms_loop is not None and ms_loop > SLOW_POLL_MS:
+            write, n = self._repeat(('slow',), every=300.0)
+            if write:
+                self._rec('WARN', 'LOOP', f'slow poll: {ms_loop / 1000.0:.1f} s of work (the terminal answered slowly?)',
+                          kv={'loop_ms': ms_loop, 'more_since': n})
+        if jdirty:
+            self._journal_save()
+        prev.update(polled=True, turtle=cb, vote=(vt.get('bar_t'), vt.get('last'), bool(vt.get('fresh'))), live=live,
+                    d1_ok=d1_ok, d1_stale=d1_stale, both=both, units=units, pending=tv['pending_fill'])
+
+    def _log_levels(self, c, tv, cb, pb, first, d):
+        lv, ch, p = tv['levels'] or {}, tv['channels'], tv['params']
+        e, x = ch['entry'], ch['exit']
+        days = ((cb['row'] - pb['row']) / 86400.0) if pb.get('row') else None
+        msg = (f"levels for {_date(lv.get('from_time'))} (the D1 bar of {_date(lv.get('bar_time'))}; "
+               f"{tv['d1']['bars']} closed D1 bars): BUY at ask >= {_px(lv.get('buy'), d)} (the {e['days']}-day high "
+               f"{_px(e.get('high'), d)} + {p['tick']:g}), SELL at bid <= {_px(lv.get('sell'), d)} (the {e['days']}-day low "
+               f"{_px(e.get('low'), d)} - {p['tick']:g}); N {_num(lv.get('n'))}"
+               + (f" ({lv.get('n_pct'):.2f}% of the price)" if lv.get('n_pct') else '')
+               + f": a new trade's stop 2N = {_num(lv.get('stop_dist'))}, an add every 0.5N = {_num(lv.get('add_step'))}; "
+               f"exit channel: the {x['days']}-day low {_px(x.get('long'), d)} (a long), the {x['days']}-day high "
+               f"{_px(x.get('short'), d)} (a short)")
+        if p['system'] == 1:
+            hy = (tv.get('filter') or {}).get('hypothetical') or {}
+            if lv.get('use20'):
+                why = 'the 20-day breakout (its hypothetical trade is flat and the last one did not make money)'
+            elif hy.get('state') in ('BUY', 'SELL'):
+                why = (f"the 55-day failsafe: the hypothetical 20-day {hy['state']} of {_date(hy.get('since_t'))} is still "
+                       f"open (its exit at {_px(hy.get('exit_level_next'), d)})")
+            else:
+                why = 'the 55-day failsafe: the last hypothetical 20-day breakout made money'
+            msg += '; System 1 filter: ' + why
+        if cb['side']:
+            msg += f"; in the {'BUY' if cb['side'] == 1 else 'SELL'} trade: its stop is {_px(cb['stop'], d)}"
+        else:
+            msg += f"; orders {'armed' if cb['armed'] else 'used'} until {_hm(lv.get('until_t'))}"
+            if not cb['armed'] and _f(c.last_entry) is not None:
+                msg += f" (the deal history shows an entry at {_hm(c.last_entry)})"
+        if first:
+            msg = 'levels in force: ' + msg
+        if days and days > 1.0:
+            msg += f' ({days:g} D1 bars closed since the last poll: the bot was not running at their closes)'
+        self._rec('INFO', 'LEVELS', msg, kv={
+            'd1_bar': _iso(lv.get('bar_time')), 'from_utc': lv.get('from_utc'), 'until_utc': lv.get('until_utc'),
+            'buy': lv.get('buy'), 'sell': lv.get('sell'), 'n': lv.get('n'), 'stop_dist': lv.get('stop_dist'),
+            'add_step': lv.get('add_step'), 'exit_long': lv.get('trail_long'), 'exit_short': lv.get('trail_short'),
+            'entry_high': e.get('high'), 'entry_low': e.get('low'), 'use20': lv.get('use20'), 'armed': cb['armed'],
+            'bars': tv['d1']['bars'], 'channels': ch.get('all')})
+
+    def _log_stop_move(self, c, tv, pb, cb, act, d):
+        """A stop move of the open trade: INFO when it tightens (it only ever does), WARN otherwise. True when the
+        journal changed."""
+        buy = cb['side'] == 1
+        old, new = pb['stop'], cb['stop']
+        why = []
+        if cb['row'] != pb.get('row') and cb['origin'] == 'channel':
+            why.append(f"the {tv['params']['exit_days']}-day {'low' if buy else 'high'} of the D1 bar of "
+                       f"{_date(cb['row'])}: the exit channel")
+        if act in ('ADD_BUY', 'ADD_SELL') and cb['origin'] == '2N':
+            why.append(f"2N {_num(cb['stop_dist'])} {'below' if buy else 'above'} the new leg's fill "
+                       f"{_px(cb['legs'][-1][1] if cb['legs'] else None, d)}")
+        if cb['origin'] == 'kept':
+            why.append('kept where it was: a leg was closed outside the bot')
+        if not why:
+            why.append(self._origin_words(cb['origin'], 'BUY' if buy else 'SELL'))
+        tr = tv.get('trade') or {}
+        better = new > old if buy else new < old
+        msg = (f"stop {'raised' if buy else 'lowered'} {_px(old, d)} -> {_px(new, d)} ({'; '.join(why)}); the "
+               f"{tr.get('judged_on')} {_px(tr.get('price_now'), d)} is {_px(tr.get('to_stop'), d)} away"
+               if better else f"the stop moved AGAINST the trade {_px(old, d)} -> {_px(new, d)} ({'; '.join(why)})")
+        self._rec('INFO' if better else 'WARN', 'STOP', msg, kv={'side': 'BUY' if buy else 'SELL', 'from': old, 'to': new,
+                                                                  'origin': cb['origin'], 'legs': len(cb['legs'])})
+        rec = self._journal_rec([x[0] for x in cb['legs']])
+        if rec is None:
+            return False
+        rec.setdefault('stops', []).append({'t': self._now(), 'stop': new, 'origin': cb['origin'], 'why': '; '.join(why)})
+        return True
+
+    def _turtle_results(self, doc):
+        """An INFO RESULT line for every Turtle trade the deal history shows closed since the last read: its realised P/L
+        from the deals, its exit, the virtual balance after it. At the first read after a start, for the trades the
+        journal knows and has no result of yet (closed while the bot was down: the broker's backstops ...); the result
+        is kept in the journal, so no start repeats it."""
+        closed = doc.get('closed') or []
+        ids = {x['id'] for x in closed}
+        first = self._closed_known is None
+        known = self._closed_known or set()
+        dirty = False
+        for x in closed:
+            if x['id'] in known:
+                continue
+            rec = self._journal_rec([leg.get('position_id') for leg in x.get('legs') or []])
+            if (rec is not None and rec.get('result')) or (first and rec is None):
+                continue
+            if rec is not None:
+                rec['result'] = {'pnl': x['pnl'], 'close_t': x.get('close_t'), 'exit_reason': x.get('exit_reason'),
+                                 'balance_after': x.get('balance_after')}
+                dirty = True
+            tu = x.get('turtle') or {}
+            self._rec('INFO', 'RESULT', f"the {x['side']} trade of {_hm(x.get('open_t'))} closed at {_hm(x.get('close_t'))}: "
+                      f"realised {_usd(x['pnl'])} (profit {_usd(x.get('profit'))}, swap {_usd(x.get('swap'))}, commission "
+                      f"{_usd(x.get('commission'))}) on {len(x.get('legs') or [])} leg(s), {x.get('lots')} lot, held "
+                      f"{_dur(x.get('hold_s'))}; exit: {x.get('exit_reason_text')}"
+                      + (f"; virtual balance now {_usd(x.get('balance_after'), signed=False)}" if doc.get('virtual') else ''),
+                      kv={'id': x['id'], 'side': x['side'], 'pnl': x['pnl'], 'legs': len(x.get('legs') or []),
+                          'open_price': x.get('open_price'), 'close_price': x.get('close_price'),
+                          'exit_reason': x.get('exit_reason'), 'exit_detail': x.get('exit_detail'),
+                          'n_entry': tu.get('n_entry'), 'balance_after': x.get('balance_after')})
+        self._closed_known = known | ids
+        if dirty:
+            self._journal_save()
+
+    # ── the chart's overlay: the daily levels per D1 bar ──
+    def _turtle_overlay(self, c, digits):
+        rows, rows_t = c.rows, c.rows_t
+        if rows is None or rows_t is None or not len(rows_t):
+            return None
+        k = dict(BARS_SPEC).get('D1', 200)
+        dd = 6 if digits is None else digits
+        t = np.asarray(rows_t, np.int64)[-k:]
+
+        def col(name, nd):
+            a = rows.get(name)
+            if a is None:
+                return None
+            return [None if not math.isfinite(v) else round(float(v), nd) for v in np.asarray(a, float)[-k:]]
+        out = {'d1_t': t.tolist(), 'from_t': (t + 86400).tolist(), 'buy': col('buy', dd), 'sell': col('sell', dd),
+               'exit_long': col('trail_long', dd), 'exit_short': col('trail_short', dd), 'n': col('n', 2),
+               'note': 'row k: the levels the D1 bar d1_t[k] sets for the day from from_t[k] (00:00 UTC): the buy / sell '
+                       'stop-entry levels, the exit channels (a long / a short), N'}
+        if rows.get('use20') is not None:
+            out['use20'] = [bool(x) for x in np.asarray(rows['use20'])[-k:]]
+        return {'turtle': out}
+
+    # ── the journal: per Turtle trade, N at the entry, the level, every leg, every stop move, the exit ──
+    def _journal_load(self):
+        if self._journal is None:
+            data = None
+            try:
+                with open(self.journal_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except (OSError, ValueError):
+                data = None
+            trades = (data or {}).get('trades') if isinstance(data, dict) else None
+            self._journal = dict(trades) if isinstance(trades, dict) else {}
+        return self._journal
+
+    def _journal_rec(self, ids):
+        J = self._journal_load()
+        for i in ids or ():
+            r = J.get(str(i))
+            if r is not None:
+                return r
+        want = {_i(i) for i in ids or ()} - {None}
+        if not want:
+            return None
+        for r in J.values():
+            if want & {_i(x.get('id')) for x in r.get('legs') or []}:
+                return r
+        return None
+
+    def _journal_view(self, ids):
+        r = self._journal_rec(ids)
+        if r is None:
+            return None
+        v = dict(r)
+        v['entry_d1_utc'] = _iso(r.get('entry_d1_t'))
+        v['opened_utc'] = _iso(r.get('opened_t'))
+        v['stops'] = [dict(s, utc=_iso(s.get('t'))) for s in r.get('stops') or []]
+        return v
+
+    def _journal_save(self):
+        J = self._journal_load()
+        if len(J) > TURTLE_JOURNAL_KEEP:
+            keep = sorted(J.items(), key=lambda kv: (kv[1].get('opened_t') or 0))[-TURTLE_JOURNAL_KEEP:]
+            self._journal = J = dict(keep)
+        try:
+            write_json_atomic(self.journal_path, {'schema': SCHEMA, 'symbol': self.symbol, 'magic': self._cfg('MAGIC'),
+                                                  'trades': J})
+        except Exception as e:
+            self.write_failed('the Turtle journal', self.journal_path, e)
 
     # ── words ──
     def _constants(self):
@@ -2297,6 +3651,79 @@ def _close_sum(lc):
         return None
     return {'time': lc.get('time'), 'resolved': lc.get('resolved'), 'lost': lc.get('lost'), 'pnl': lc.get('pnl'),
             'reason': lc.get('reason'), 'source': lc.get('source')}
+
+
+def _s1_hypothetical(O, H, L, N, t, tick, T):
+    """The Turtle System 1 filter's hypothetical trade (turtle.s1_use20, step for step: the same loop on the same closed
+    D1 bars, with what it did kept): its state at the last bar (flat / BUY / SELL, entry, stop, since), whether its last
+    trade won, use20, and its last five trades. Display only: the bot's use20 is turtle.s1_use20's."""
+    O, H, L, N = (np.asarray(x, float) for x in (O, H, L, N))
+    hi20, lo20 = T.roll_max(H, 20), T.roll_min(L, 20)
+    hi10, lo10 = T.roll_max(H, 10), T.roll_min(L, 10)
+    nb = len(O)
+    hyp, entry, stop, last_win = 0, 0.0, 0.0, False
+    cur, trades = None, []
+
+    def done(b, px, win):
+        nonlocal cur
+        cur.update(exit_t=int(t[b]), exit_utc=_iso(int(t[b])), exit=float(px), win=bool(win))
+        trades.append(cur)
+        cur = None
+    for b in range(nb):
+        if b >= 1:
+            if hyp == 0 and hi20[b - 1] == hi20[b - 1] and N[b - 1] == N[b - 1]:
+                up_l, dn_l = hi20[b - 1] + tick, lo20[b - 1] - tick
+                up, dn = H[b] >= up_l, L[b] <= dn_l
+                if up and dn:
+                    if up_l - O[b] <= O[b] - dn_l:
+                        dn = False
+                    else:
+                        up = False
+                if up:
+                    hyp, entry = 1, max(up_l, O[b])
+                    stop = entry - 2.0 * N[b - 1]
+                    cur = {'side': 'BUY', 'entry_t': int(t[b]), 'entry_utc': _iso(int(t[b])), 'entry': float(entry),
+                           'stop': float(stop)}
+                    if L[b] <= stop:
+                        hyp, last_win = 0, False
+                        done(b, stop, False)
+                elif dn:
+                    hyp, entry = -1, min(dn_l, O[b])
+                    stop = entry + 2.0 * N[b - 1]
+                    cur = {'side': 'SELL', 'entry_t': int(t[b]), 'entry_utc': _iso(int(t[b])), 'entry': float(entry),
+                           'stop': float(stop)}
+                    if H[b] >= stop:
+                        hyp, last_win = 0, False
+                        done(b, stop, False)
+            elif hyp == 1:
+                ex = stop
+                if lo10[b - 1] == lo10[b - 1] and lo10[b - 1] > ex:
+                    ex = lo10[b - 1]
+                if O[b] <= ex:
+                    last_win, hyp = O[b] > entry, 0
+                    done(b, O[b], last_win)
+                elif L[b] <= ex:
+                    last_win, hyp = ex > entry, 0
+                    done(b, ex, last_win)
+            elif hyp == -1:
+                ex = stop
+                if hi10[b - 1] == hi10[b - 1] and hi10[b - 1] < ex:
+                    ex = hi10[b - 1]
+                if O[b] >= ex:
+                    last_win, hyp = O[b] < entry, 0
+                    done(b, O[b], last_win)
+                elif H[b] >= ex:
+                    last_win, hyp = ex < entry, 0
+                    done(b, ex, last_win)
+    exit_now = None
+    if hyp == 1:
+        exit_now = max(stop, float(lo10[-1])) if lo10[-1] == lo10[-1] else stop
+    elif hyp == -1:
+        exit_now = min(stop, float(hi10[-1])) if hi10[-1] == hi10[-1] else stop
+    return {'state': {1: 'BUY', -1: 'SELL'}.get(hyp, 'flat'), 'entry': float(entry) if hyp else None,
+            'stop': float(stop) if hyp else None, 'exit_level_next': exit_now,
+            'since_t': cur['entry_t'] if cur else None, 'since_utc': cur['entry_utc'] if cur else None,
+            'last_win': bool(last_win), 'use20': bool(hyp == 0 and not last_win), 'trades': trades[-5:]}
 
 
 def _tb_where(tb):

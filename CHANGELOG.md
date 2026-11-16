@@ -184,6 +184,13 @@ fills (`tests_demo/test_tracelog.py`, and `test_live_equivalence.py` now runs wi
   `_log_event`: an error is a WARN in the log (and a console line at most once a minute), not an exception in the
   loop. The daily-trade / history-summary save errors, swallowed before, are a WARN with the traceback.
 
+### One `tracelog.py` for all six demo branches
+- The basket branches take the Turtle branch's `tracelog.py` byte for byte: the basket part plus the Turtle's. It does
+  not import `turtle.py` (it reads the module `app.py` loaded, and a basket `app.py` loads none), and every Turtle path
+  runs only when `STRATEGY` is 'turtle', which a basket branch refuses (`design_problems`): here `turtle` stays null.
+  Two shared changes reach the basket: a trade's exit reason comes from the legs that closed last, and the exit
+  reasons file keeps extra fields. A fix of the trace is now made once, for all six branches.
+
 ### Files
 - `tracelog.py` (new): `TraceLog` (entry points `boot`, `loop_start`, `poll`, `poll_skipped`, `order`, `event`,
   `state_saved`, `state_note`, `exception`, `write_failed`, `log`; each catches and logs its own errors), `LogWriter`
