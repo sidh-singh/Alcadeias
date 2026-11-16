@@ -22,15 +22,21 @@ credential/symbol commits are preserved; never force-push). Fleet:
 **Branches:** the `demo_hedging_*` branches (written on `wip_dash_basket`, a copy of an older
 `demo_hedging_xauusd6`, and carried to `wip_dash_turtle`; ported onto `demo_hedging_btcusd6` v3.9.2-demo.4 as
 `wip_port_btcusd6`). **NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** new
-`tracelog.py`, new `docs/dashboard-data.md`, `app.py`, `mt5_helper.py`, `tests_demo/` (+ this `CHANGELOG.md`,
-`README.md`). `strategy.py`, `indicator.py`, `constants.py`, `dashboard.py` untouched. **Baseline:**
-v3.9.2-demo.4. Not released yet: later fixes are folded into this entry.
+`tracelog.py`, new `docs/dashboard-data.md`, `app.py` (the basket loop and the Turtle's `_process_turtle`,
+`_load_turtle_state`, `_save_turtle_state`: trace hooks only), `mt5_helper.py`, `tests_demo/` (new `test_tracelog.py`,
+`test_turtle_trace.py`; + this `CHANGELOG.md`, `README.md`). `turtle.py`, `strategy.py`, `indicator.py`,
+`constants.py`, `dashboard.py` untouched. **Baseline:** v3.9.2-demo.5. Not released yet: later fixes are folded
+into this entry.
 
 **Why.** The dashboard was built for the old live logic: it cannot show what the ported design checks, why the bot
 waits, where a basket's stop, target and backstop are, or what went wrong. The bot now writes what it sees, decides
 and does, for a new dashboard and for a person (or Claude) reading the log after an issue. Nothing the bot decides
 reads any of it: with the trace on or off the replays take the same polls, send the same requests and get the same
 fills (`tests_demo/test_tracelog.py`, and `test_live_equivalence.py` now runs with the trace on).
+
+The Turtle runs its own loop (`_process_turtle`), so it has its own part: the daily levels, the channels, the vote
+of the closed M15 bar, the day's orders, the one stop and where it comes from, the adds. With the trace on or off
+the Turtle cycle takes the same polls, sends the same requests and gets the same fills (`test_turtle_trace.py`).
 
 ### Added: the dashboard's data (`tracelog.py`; every field in `docs/dashboard-data.md`)
 - `<SYMBOL>_trace.json` after every poll: health (terminal, account, market, loop and trace time, reconnects,
@@ -61,6 +67,65 @@ fills (`tests_demo/test_tracelog.py`, and `test_live_equivalence.py` now runs wi
   `_log_event`: an error is a WARN in the log (and a console line at most once a minute), not an exception in the
   loop. The daily-trade / history-summary save errors, swallowed before, are a WARN with the traceback.
 
+### Added: the Turtle's part (`tracelog.py`; every field in `docs/dashboard-data.md` §5)
+- `<SYMBOL>_trace.json` `turtle` block (`basket` null): N, the D1 bars used, the levels of the last closed D1 bar (buy
+  / sell stop-entry levels, 2N, 0.5N, the exit channels), the channels (entry 55 / exit 20 days for System 2; 20 or 55
+  / 10 for System 1; the 10 / 20 / 55-day highs and lows with the day of each), System 1's filter (`use20` and the
+  filter's own hypothetical trade: state, entry, stop, its last five trades -- the same loop as `turtle.s1_use20`),
+  the M15 vote of the last closed bar (value, fresh, the bar, the next read, RSI and MACD pivot / side / bars ago /
+  slope, the RSI, MACD line, signal line and histogram of the last 40 closed bars for the chart), the day's orders
+  (armed / used, by which entry, the distance of each level from the quote in price and in N), what a new trade would
+  get (entry, stop and where it comes from, next add, backstop, P/L at the stop), and the open trade (legs with their
+  fills and backstops, N at the entry, the entry level, the one stop with `stop_origin` 2N / channel / kept and its
+  2N and channel values, the distance to it, the P/L at it, the next add and its distance, the backstops), a copy of
+  the book.
+- The decision for the Turtle: actions `WAIT` (no breakout / orders used / exit bar), `BLOCKED` (vote / vote unknown /
+  brake), `OPEN_*`, `WAIT_FILL`, `HOLD`, `ADD_*`, `CLOSE_*` (stop / close_retry), `NO_DATA` (quote / d1 bars),
+  `MARKET_CLOSED`, `BOTH_SIDES`, `UNMANAGED` (new: positions that predate the D1 history); the gates in the loop's
+  order: terminal, account, positions, quote, d1_levels, (one_side, trade_known), market_live, then flat: armed,
+  exit_bar, breakout, vote_known, vote, brake, or in a trade: (close_retry), stop, fill_listed, legs, add_bar,
+  add_price; a one-sentence headline (e.g. "The ask 60,830.10 is through the buy level 60,804.32, but the M15 vote of
+  the bar closed at 08:00 UTC is 0 (RSI 0, MACD 0): no buy until it is +1; the next vote is read at 08:15:02 UTC.");
+  a WARN when the gates' reading differs from the bot's signals (a trace bug, not a trading one).
+- `<SYMBOL>_bars.json`: the five timeframes from the terminal (the Turtle's poll fetches no M1 / M5 / H1 bars), at
+  most every 30 s while ticks come, plus `overlay.turtle`: the levels of the last 200 D1 bars (buy, sell, exit long /
+  short, N, use20) to draw the channels as steps.
+- `<SYMBOL>_trades.json`: the Turtle trades from the deal history with `exit_reason` `turtle_stop` (`exit_detail` 2N /
+  channel / kept, `exit_stop`, e.g. "turtle stop (the 20-day low)"), `backstop` (the broker closed the legs at their
+  sl), `closed_outside`; each with `turtle` = its journal (`state/<SYMBOL>_turtle_trades.json`, new): N at the entry,
+  the entry level and D1 bar, the vote, the unit, every leg with the add level it was taken at, every stop move and
+  why, the exit. The open trade is listed with its live levels.
+- The text log: the start (the Turtle as it runs, every constant, the symbol's facts from `symbol_info`: digits,
+  contract size, volumes, stops / freeze levels, swaps; the book restored or rebuilt), LEVELS (every new D1 bar's
+  levels with the channels they come from, N, 2N, 0.5N, the filter, the orders' state; "the bot was not running at
+  their closes" when several closed at once), VOTE (changes INFO with the pivots and slopes, every new closed bar
+  DEBUG, WARN when unknown), TRADE (entry with fill / level / vote / unit / N / stop / next add / backstop, every add,
+  a takeover after a start without the state file, legs closed outside), STOP (every move and why: 2N from a new leg,
+  the exit channel of a new D1 bar, kept after a leg closed outside; WARN if it ever loosened), CLOSE (at the stop with
+  its origin and the P/L at the decision; closed outside the bot; WARN: an incomplete close), RESULT (the realised P/L
+  from the deal history, the exit, the virtual balance after it; at a start also for a trade the journal knows that
+  closed while the bot was down, never twice), DATA (no daily levels; WARN when the D1 bar that closed at 00:00 UTC is
+  still missing a minute later -- the bot goes on with the levels and the stop of the bar before -- and INFO when it
+  is there; `turtle.d1.stale` in the trace), TURTLE (the bot's own notes: too few bars, a refused order, the brake),
+  DEBUG STATE (every book save), the DECISION lines and the HEARTBEAT every minute with the Turtle's key numbers.
+- The cost on the fake terminal: median 0.7-0.8 ms a poll, p95 about 3 ms (the polls that also write the bars or the
+  trades), worst about 10-60 ms (the first poll). Terminal calls: `symbol_info` once, the five timeframes' bars at most
+  every 30 s, the deal history after fills / closes and every 60 s. The M15 RSI / MACD lines are computed again from
+  the poll's closed bars once per M15 bar.
+
+### The shared code for the Turtle (the basket's files are as before)
+- `_exit_of`: the exit reason of the legs that closed last (a Turtle leg closed outside the bot earlier does not name
+  the trade's exit); `_record_exits` keeps extra fields (the Turtle's stop and its origin).
+- `order()`: an order of the Turtle is an entry or an add by its book (the poll's own dict, read only).
+- `poll_skipped` keeps the last `turtle` block (stale); `_health` / `_bars` take the Turtle's quote, liveness, change
+  signature and overlay; `_heartbeat` / `_write_trace` read the Turtle's trade; `event()` maps the Turtle's events
+  (the trace's own lines cover TURTLE_LEVELS / REBUILT / CLOSED_OUTSIDE / LEG_CLOSED_OUTSIDE; TURTLE_NOTE is a TURTLE
+  line).
+- `app.py`: in `_process_turtle` the same hooks as the basket loop (`loop_start`, `poll_skipped` at its two skips,
+  `poll(locals())` at the end of every poll, `exception` in its `except`, a WARN instead of a silent `pass` when the
+  daily-trade / history files fail); `_load_turtle_state` / `_save_turtle_state` tell the trace (WARN / ERROR notes,
+  DEBUG book saves). Every hook goes through `_trace`, which swallows whatever the trace raises.
+
 ### Files
 - `tracelog.py` (new): `TraceLog` (entry points `boot`, `loop_start`, `poll`, `poll_skipped`, `order`, `event`,
   `state_saved`, `state_note`, `exception`, `write_failed`, `log`; each catches and logs its own errors), `LogWriter`
@@ -73,14 +138,31 @@ fills (`tests_demo/test_tracelog.py`, and `test_live_equivalence.py` now runs wi
   in `_load_state` / `_save_state`, the event mirror in `_log_event`; the writers above.
 - `mt5_helper.py`: `MT5PositionHelper.order_observer` and `_observe` (called after every request with its result and
   its time; anything it raises is swallowed).
-- `tests_demo/`: `test_tracelog.py` (22 tests; the suite: 129); `fake_mt5.py` loads `tracelog`, gives every bot a temp trace folder,
-  `make_bot(trace_dir=, keep_writers=)`; `conftest.py` points `OUTPUT_DIR` at a temp folder for every test.
-- `docs/dashboard-data.md` (new): the files, their fields, the actions and gates, the log format.
+- `tests_demo/`: `test_tracelog.py` (22 tests), `test_turtle_trace.py` (20); `fake_mt5.py` loads `tracelog`, gives
+  every bot a temp trace folder, `make_bot(trace_dir=, keep_writers=)`; `conftest.py` points `OUTPUT_DIR` at a temp
+  folder for every test.
+- `docs/dashboard-data.md` (new): the files, their fields, the actions and gates, the log format; §5 the Turtle.
+
+### Tests
+- `tests_demo/test_turtle_trace.py` (20): the Turtle cycle with the real writers (the trace changes no poll, request or
+  fill; about a millisecond a poll; every snapshot's turtle block is the bot's book, the test's own levels and the old
+  JSON; the actions and their gates in order; the bars and the overlay; the trade with its journal; the text log line
+  by line, the events file), a vote that blocks a breakout, a D1 close inside the trade (the stop raised to the new
+  20-day low, the exit at it: "turtle stop (the 20-day low)"), a D1 bar that comes six minutes late, a refused close
+  retried, the result of a trade closed while the bot was down (logged once), System 1's filter (and its replica
+  against `turtle.s1_use20`), a takeover after a restart without the state file, a gap through the backstops
+  (`backstop`), a skipped poll, no daily levels, a trace that raises.
+- The whole `tests_demo` on `wip_dash_turtle`: 189 passed (test_turtle_replay.py against the backtester included), 16 min.
+
+### Open
+- The Turtle's loop has never written `account.json` (only the basket loop does): the old dashboard's account panel
+  stays empty on the Turtle branches; the same numbers are in `<SYMBOL>.json` and in the trace's `account`.
 
 ### Rollback
-`git revert` this commit; delete `OUTPUT_DIR/<SYMBOL>_trace.json`, `_bars.json`, `_trades.json`,
-`OUTPUT_DIR/logs/<SYMBOL>_*.log`, `_events*.jsonl` and `OUTPUT_DIR/state/<SYMBOL>_exit_reasons.json` if wanted. To keep
-the code and switch the trace off: `bot.trace_enabled = False` (nothing is written then).
+`git revert` the two `demo(dash)` commits of this version (newest first); delete `OUTPUT_DIR/<SYMBOL>_trace.json`,
+`_bars.json`, `_trades.json`, `OUTPUT_DIR/logs/<SYMBOL>_*.log`, `_events*.jsonl`, `OUTPUT_DIR/state/<SYMBOL>_exit_reasons.json`
+and `OUTPUT_DIR/state/<SYMBOL>_turtle_trades.json` if wanted. To keep the code and switch the trace off:
+`bot.trace_enabled = False` (nothing is written then).
 
 ---
 

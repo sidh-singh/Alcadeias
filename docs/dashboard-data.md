@@ -1,7 +1,8 @@
-# The dashboard's data: what the bot writes (schema 1, basket strategy)
+# The dashboard's data: what the bot writes (schema 1: the basket strategy and the Turtle)
 
 `tracelog.py` writes these files into the bot's output folder (`OUTPUT_DIR` in `constants.py`, here
-`C:\Alcadeias\demo_hedging_xauusd6`). The bot never reads them back; nothing it decides depends on them.
+`C:\Alcadeias\demo_hedging_btcusd6`). The bot never reads them back; nothing it decides depends on them. This branch
+runs the Turtle (`STRATEGY = 'turtle'`, §5); the basket strategy's fields (§1) are those of the basket branches.
 
 | file | what | when |
 |---|---|---|
@@ -11,9 +12,12 @@
 | `logs/<SYMBOL>_<YYYY-MM-DD>.log` | the text log, one line per event | as it happens; one file per UTC day, kept 30 days |
 | `logs/<SYMBOL>_events.jsonl` | the same lines as JSON | as it happens; rotated at 10 MB into `_events.1.jsonl` (newest) .. `_events.5.jsonl` |
 | `state/<SYMBOL>_exit_reasons.json` | the exit reason the bot recorded per position | at every close |
+| `state/<SYMBOL>_turtle_trades.json` | the Turtle's journal per trade: N at the entry, the level, the vote, every leg with its add level, every stop move, the exit | at every entry, add, stop move and exit |
 
-The old dashboard's files are written as before: `<SYMBOL>.json`, `account.json`, `active_config.json`,
-`logs/<SYMBOL>_strategy_log.json`, `daily_trade/<SYMBOL>/*.json`, `state/<SYMBOL>_state.json`.
+The old dashboard's files are written as before: `<SYMBOL>.json`, `account.json` (the basket loop; the Turtle's loop
+has never written it -- its numbers are in `<SYMBOL>.json` and in the trace's `account`), `active_config.json`,
+`logs/<SYMBOL>_strategy_log.json`, `daily_trade/<SYMBOL>/*.json`, `state/<SYMBOL>_state.json` (basket) /
+`state/<SYMBOL>_turtle.json` (the Turtle's book).
 
 **Reading them.** JSON files are replaced atomically (a temp file, then a rename): a reader sees the old file or the
 new one, never half of one. They are compact (no indentation). A file can be missing (the bot has not run yet, or a
@@ -24,9 +28,9 @@ as the terminal quotes them, rounded to the symbol's `digits` where the bot comp
 ## 1. `<SYMBOL>_trace.json`
 
 ```
-schema, branch, design, strategy ('basket'), symbol, mt5_symbol, magic, t, time_utc, poll (count since start),
-stale (true: this poll could not read the terminal; account / market / basket are the last good poll's),
-stale_since_utc, health, account, market, decision, basket, turtle (null on this strategy)
+schema, branch, design, strategy ('basket' | 'turtle'), symbol, mt5_symbol, magic, t, time_utc, poll (count since
+start), stale (true: this poll could not read the terminal; account / market / basket / turtle are the last good
+poll's), stale_since_utc, health, account, market, decision, basket (null on the Turtle), turtle (null on the basket)
 ```
 
 ### health
@@ -170,3 +174,102 @@ in a day the day's file takes only WARN and ERROR lines (the events file keeps e
 
 `logs/<SYMBOL>_events.jsonl`: one JSON object per line: `{t, time, level, cat, msg, kv, data, traceback}`;
 `data` holds the full gate list of a DECISION line, the state of a STATE line.
+
+## 5. The Turtle (`STRATEGY = 'turtle'`; this branch)
+
+Its loop (`MT5TradingBot._process_turtle`, the rules in `turtle.py`) hands the trace the same things the basket's
+does; `health`, `account`, `decision` keep their meaning. `market` has no trading window (`window` says so, `brake` =
+the manual brake). Prices the bot compares (`levels`, `stop`, `n`) are exact; the others are rounded to `digits`.
+
+### decision (the Turtle)
+
+| action | meaning |
+|---|---|
+| `SKIPPED` | as above (the trade is neither managed nor booked; its stop is checked on the next good poll) |
+| `NO_DATA` | no quote (`reason` 'quote') or fewer closed D1 bars than `TURTLE_MIN_D1_BARS` (`reason` 'd1 bars'): not trading |
+| `MARKET_CLOSED` | no tick for 3 min: nothing decided (an open trade is held, its stop is not checked) |
+| `WAIT` | flat: `reason` 'no breakout' (the orders are armed, no level reached), 'orders used' (an entry filled since the last D1 close: none until the next one), 'exit bar' (the M1 bar of the last exit) |
+| `BLOCKED` | a level is reached (`side`) but `reason` 'vote' (the M15 vote is not +1 for a buy / -1 for a sell), 'vote unknown' (no vote of the last closed M15 bar), 'brake' |
+| `OPEN_BUY` / `OPEN_SELL` / `OPEN_FAILED` | an entry was sent: filled / not filled (`reason` the retcode text) |
+| `WAIT_FILL` | a leg filled, the terminal does not list it yet (up to 10 s; no add) |
+| `HOLD` | in a trade: the stop not hit, no add due |
+| `ADD_BUY` / `ADD_SELL` / `ADD_FAILED` | a pyramid add was sent |
+| `CLOSE_BUY` / `CLOSE_SELL` | every leg closed at the stop (`reason` 'stop', or 'close_retry': the legs an incomplete close left) |
+| `BOTH_SIDES` | a buy and a sell of this bot are open: it holds still |
+| `UNMANAGED` | positions of this bot it could not take over (they predate the D1 history): left alone |
+
+| path | gate keys, in the bot's order |
+|---|---|
+| every poll | `terminal`, `account`, `positions`, `quote`, `d1_levels`, (`one_side`), (`trade_known`), `market_live` |
+| flat | `armed` (today's orders not used), `exit_bar`, `breakout` (value: the side reached), `vote_known`, `vote`, `brake` |
+| in a trade | (`close_retry`), `stop` (exit: the bid of a long at or below it, the ask of a short at or above it), `fill_listed`, then the add gates `legs`, `add_bar` (not the entry's M1 bar), `add_price` (the ask of a long at or above the last fill + 0.5 N) |
+
+### turtle
+- `system` (1 / 2), `rules` (text), `params` {`system, n_len, stop_n, add_n, max_legs, tick, backstop_n, vote_tf,
+  vote_bars, min_vote_bars, d1_bars, min_d1_bars, entry_days, failsafe_days, exit_days, pending_s, settle_s`}.
+- `d1` {`bars` (closed D1 bars used), `asked`, `min_bars`, `enough`, `got_last_read`, `last_bar_t` / `_utc`,
+  `next_close_t` / `_utc` (the next 00:00 UTC: new levels), `stale` (a minute after 00:00 UTC the terminal has not
+  given the D1 bar that closed: the bot goes on with the levels and the stop of the bar before and asks again every
+  poll)}; `n` (N of the last closed D1 bar).
+- `levels` (what the last closed D1 bar sets, the bot's own numbers): `bar_time` (that bar) / `bar_utc`, `from_time` /
+  `from_utc` (00:00 after it) .. `until_t` / `until_utc`, `system`, `n`, `n_pct` (N as % of the bid), `buy`, `sell`
+  (the stop-entry levels), `stop_dist` (2N), `add_step` (0.5N), `trail_long` / `trail_short` (the exit channels),
+  `use20` (System 1), `ok`. null without daily levels.
+- `channels`: `entry` {`days` (55 System 2; System 1 20, or 55 on a failsafe day), `high`, `low`, `rule`}, `exit`
+  {`days` (20 / 10), `long` (the low a long's stop is raised to), `short`, `rule`}, `all` {`10` / `20` / `55`: `high`,
+  `high_t` / `_utc` (the day of the extreme), `low`, `low_t` / `_utc`}, `bar` {the last closed D1 bar: `t`, `o h l c`,
+  `true_range`}.
+- `filter` (System 1, else null): `use20`, `levels_from` ('20-day' / '55-day failsafe'), `hypothetical` {the filter's
+  own one-unit System 1 on the D1 bars: `state` (flat / BUY / SELL), `entry`, `stop`, `exit_level_next`, `since_t` /
+  `_utc`, `last_win`, `use20`, `trades` (its last five: side, entry / exit day and price, win)}, `rule`.
+- `vote`: `tf` (M15), `value` (+1 / -1 / 0 of the last CLOSED bar, null when not known), `last`, `fresh`, `allows`
+  (BUY / SELL / null), `bar_t` / `_utc` (that bar's open), `bar_close_t` / `_utc`, `next_read_t` / `_utc` (2 s after
+  the next M15 close), `bars` (closed M15 bars used), `asked`, `min_bars`; `rsi` {`vote`, `pivot`, `pivot_side`,
+  `bars_ago`, `slope`, `now`, `ob`, `os`, `series`} and `macd` {`vote`, `pivot`, `pivot_side`, `bars_ago`, `slope`,
+  `now` (the histogram), `line`, `signal`, `side_rule` (the signal line picks high / low pivots), `series`,
+  `signal_series`}: the series are the last 40 closed bars, times in `t`, closes in `close`; `rule`.
+- `orders` (the day's stop-entry orders): `state` ('armed' / 'used' / 'none'), `armed`, `from_t` .. `until_t` (with
+  `_utc`), `buy` / `sell` {`level`, `judged_on` (ask / bid), `price_now`, `distance` (to the level; <= 0 = reached),
+  `distance_n` (in N), `reached`, `vote_needed`, `channel`}, `used_t` / `used_utc` / `used_by` (the entry that used
+  them), `last_exit_t` / `_utc`, `in_exit_bar`, `rule`.
+- `new_trade` (flat only): what an entry now would get, N frozen: `units`, `lots` (per leg), `n`, `stop_dist`,
+  `add_step`, `max_legs`, `balance`, and `buy` / `sell` {`entry` (the level, or the quote beyond it), `at`, `stop`,
+  `stop_origin`, `next_add`, `backstop`, `pnl_at_stop` (the first leg's P/L at the stop), `judged_on`}.
+- `trade`: null when flat; else `side`, `units`, `lots_per_leg`, `lots`, `legs` [{`n`, `ticket`, `id`, `open_t` /
+  `_utc`, `price`, `lots`, `profit`, `swap`, `backstop` (the leg's broker sl), `tp`, `magic`, `comment`, `listed`}],
+  `legs_count`, `max_legs`, `full`, `n_entry`, `stop_dist`, `add_step`, `entry_t` / `_utc`, `age_s`, `entry_d1_t` /
+  `_utc` (the D1 bar whose orders filled), `entry_level`, `avg_price`, `best_fill`, `pnl` (floating), `judged_on`,
+  `price_now`, `stop` (the one stop of all legs), `stop_origin` ('2N' / 'channel' / 'kept') and `stop_text`,
+  `stop_2n` (2N from the best fill), `stop_channel` (the tightest exit channel since the entry), `stop_floor` (kept
+  after a leg closed outside), `exit_channel_now`, `to_stop`, `pnl_at_stop`, `next_add` (null when full),
+  `next_add_judged_on`, `add_price_now`, `to_next_add`, `adds_left`, `backstop_prices`, `closing`, `closed_now` (this
+  poll closed it), `pending_fill`, `known_to_bot`, `journal` (below). `{both_sides: true, ...}` when both sides are
+  open; `known_to_bot: false` for positions it could not take over.
+- `pending_fill`, `hold`, `closing`, `units_rule`, `book` (a copy of the bot's book, `turtle.py` state).
+
+### the Turtle in `<SYMBOL>_bars.json` and `<SYMBOL>_trades.json`
+- bars: all five timeframes from the terminal (`source` 'terminal'), plus `overlay.turtle` {`d1_t` (the D1 bar),
+  `from_t` (the day its levels apply), `buy`, `sell`, `exit_long`, `exit_short`, `n`, (`use20`)}: the last 200 D1 bars'
+  levels, to draw the channels as steps.
+- trades: a trade = the legs of one side open together. A closed Turtle trade's `exit_reason` is `turtle_stop` (the
+  bot's stop; `exit_detail` '2N' / 'channel' / 'kept', `exit_stop` the stop price, `exit_reason_text` e.g. 'turtle
+  stop (2N from the best fill)'), `backstop` (the broker closed it at a leg's sl), `closed_outside`, `stop_out`. Every
+  trade has `turtle` (the journal): `side`, `units`, `lots`, `n_entry`, `stop_dist`, `add_step`, `entry_level`,
+  `entry_d1_t` / `_utc`, `use20`, `vote`, `vote_bar_t`, `opened_t` / `_utc`, `balance`, `rebuilt` (taken over after a
+  start without the state file), `legs` [{`id`, `t`, `price`, `level` (the add level it was taken at), `backstop`}],
+  `stops` [{`t`, `utc`, `stop`, `origin`, `why`}: the entry's, every tightening], `exit` {`t`, `reason`, `stop`,
+  `origin`, `price`, `decision_pnl`}. The open trade is the trace's `turtle.trade` (`live: true`).
+
+### the Turtle's log lines
+| level | category | lines |
+|---|---|---|
+| INFO | LEVELS | the levels of every new D1 bar (and the ones in force at the start): buy / sell and the channels they come from, N, 2N, 0.5N, the exit channels, System 1's filter, the orders' state; the orders marked used from the deal history |
+| INFO / DEBUG | VOTE | a change of the M15 vote (INFO, with its RSI / MACD pivots and slopes), every new closed M15 bar (DEBUG); WARN: no vote |
+| INFO | TRADE | an entry (fill, level, vote, unit, N, stop, next add, backstop), every add (fill, add level, next add) |
+| WARN | TRADE | a trade taken over from the terminal (no state file), legs closed outside the bot, a trade replaced, both sides open |
+| INFO | STOP | every stop move and why (2N from a new leg, the exit channel of a new D1 bar, kept after a leg closed outside); WARN if it ever loosened |
+| CLOSE | CLOSE | the trade closed at the stop (where it came from, the price, the legs, the P/L at the decision), or closed outside the bot; WARN: an incomplete close |
+| INFO | RESULT | the realised P/L of a closed trade from the deal history, its exit, the virtual balance after it (also, at a start, for a trade the journal knows that closed while the bot was down; never twice) |
+| INFO / WARN | TURTLE | the bot's own notes (too few D1 / M15 bars, a refused order, the brake), at most every 5 min each |
+| INFO / WARN | DATA / MARKET / ACCOUNT | daily levels missing / back, the D1 bar of the day late (WARN) / there, the market live / not, the unit changing |
+| DEBUG | STATE | the Turtle book saved (the book in the events file's `data`) |
