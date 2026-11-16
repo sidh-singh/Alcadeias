@@ -47,7 +47,7 @@ long the terminal has been lost), `connect_problem` (why the last start-up or re
 `TERMINAL_IN_USE: the terminal at ... is logged into another account ...`; null once connected), `terminal_in_use`.
 
 ### account
-`virtual` (units from the virtual balance), `virtual_balance`, `virtual_start_balance`, `virtual_start_date`,
+`virtual` (units from the virtual balance), `virtual_balance`, `virtual_balance_source` ('bot': the bot's own figure; 'deal history': after a restart in a trade the bot has none until it is flat again, so the trace gives the balance of its last deal-history read; null without a balance), `virtual_start_balance`, `virtual_start_date`,
 `units`, `lot` (units x mtqty), `mtqty`, `own_closed_pl` (virtual balance - start), `own_open_pl` (this bot's
 floating P/L), `own_equity` · the shared account: `balance`, `equity`, `margin`, `margin_free`, `margin_level`,
 `account_profit` · `step_up_balance`, `unit_max_limit`, `next_unit_at` (the virtual balance of the next unit),

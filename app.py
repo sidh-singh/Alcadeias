@@ -43,6 +43,30 @@ except Exception as _e:              # a broken tracelog.py must not stop the bo
     print(f"note: tracelog.py did not load ({_e!r}): no trace files, no text log")
     _tracelog = None
 
+
+
+def _err_text(e):
+    """An exception for the text log and the dashboard: its type and its message. Never repr(e): the repr of a
+    decode error holds every byte it was decoding (a whole credentials file, passwords included)."""
+    try:
+        return f'{type(e).__name__}: {e}'
+    except Exception:
+        return type(e).__name__
+
+
+def _replace_retry(src, dst):
+    """os.replace, tried again for about 0.24 s while Windows refuses it (PermissionError: a reader such as the
+    dashboard has dst open this moment)."""
+    for wait in (0.005, 0.01, 0.02, 0.04, 0.06, 0.1, None):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if wait is None:
+                raise
+            time.sleep(wait)
+
+
 _TF_PREFIX = 'TIMEFRAME_'
 _STATE_VERSION = 1
 _RESOLVE_ATTEMPTS = 30           # polls spent looking for a closed basket's deals before its P/L at the close decision stands
@@ -507,7 +531,23 @@ class MT5TradingBot:
     def _boot_flush(self):
         """The job ends before any symbol's loop started: its lines go to the log of the symbol it was started for."""
         if self._boot_lines and not self._tracers:
-            self._tracer(self.symbols[0] if self.symbols else (self.target_symbol or 'bot'))
+            self._tracer(self.symbols[0] if self.symbols else self._symbol_spelling(self.target_symbol))
+
+    def _symbol_spelling(self, name):
+        """The symbol as symbols.json spells it ('XAUUSDm' for --symbol xauusdm), else name ('bot' for none): the
+        text log's file name then matches the one the running bot writes (Windows keeps the case of the first)."""
+        if not name:
+            return 'bot'
+        try:
+            with open(Path(__file__).parent / 'symbols.json', 'r', encoding='utf-8-sig') as f:
+                cfg = json.load(f)
+            for item in cfg.get('symbols', []):
+                sym = item.get('symbol') if isinstance(item, dict) else None
+                if isinstance(sym, str) and sym.upper() == str(name).upper():
+                    return sym
+        except Exception:
+            pass
+        return name
 
     def _order_observed(self, request, result, refused=False, ms=None):
         """MT5PositionHelper._send: every order request and its result, to the trace of its symbol (inside mt5_lock)."""
@@ -635,7 +675,7 @@ class MT5TradingBot:
             return False
         try:
             json_path = Path(__file__).parent / 'mt5_credentials.json'
-            with open(json_path, 'r') as f:
+            with open(json_path, 'r', encoding='utf-8-sig') as f:
                 credentials = json.load(f)
 
             if self.mode not in credentials:
@@ -652,6 +692,17 @@ class MT5TradingBot:
         except json.JSONDecodeError:
             print("✗ Error: Invalid JSON format in mt5_credentials.json")
             self._boot('ERROR', 'START', 'mt5_credentials.json is not valid JSON')
+            return False
+        except UnicodeError:
+            # (Notepad's ANSI or PowerShell's UTF-16): the error's repr would hold the file's bytes, so a fixed text
+            print("✗ Error: mt5_credentials.json is not UTF-8 text: save it as UTF-8")
+            self._boot('ERROR', 'START', 'mt5_credentials.json is not UTF-8 text: save it as UTF-8 (Notepad: Save as, '
+                       'Encoding UTF-8)')
+            return False
+        except (OSError, ValueError, TypeError, AttributeError) as e:
+            print(f"✗ Error: mt5_credentials.json could not be used ({type(e).__name__})")
+            self._boot('ERROR', 'START', f'mt5_credentials.json could not be used ({type(e).__name__}): it needs a '
+                       f'"{self.mode}" block with login_id, login_pass and server')
             return False
     
     def load_symbols(self):
@@ -1033,7 +1084,7 @@ class MT5TradingBot:
             return None
         except (OSError, ValueError) as e:
             print(f"[{symbol}] note: state file {path} unreadable ({e}); rebuilding it from the terminal")
-            self._trace(symbol, 'state_note', 'WARN', f'the state file {path} is unreadable ({e!r}): it is rebuilt from '
+            self._trace(symbol, 'state_note', 'WARN', f'the state file {path} is unreadable ({_err_text(e)}): it is rebuilt from '
                         'the terminal')
             return None
         if not isinstance(data, dict) or data.get('symbol') != symbol or data.get('magic') != MAGIC:
@@ -1054,10 +1105,10 @@ class MT5TradingBot:
             with self.thread_lock:
                 with open(tmp, 'w') as f:
                     json.dump(data, f, indent=2, default=str)
-                os.replace(tmp, path)
+                _replace_retry(tmp, path)
         except OSError as e:
             print(f"[{symbol}] Error: could not write the state file {path}: {e}")
-            self._trace(symbol, 'state_note', 'ERROR', f'could not write the state file {path}: {e!r} (a restart now '
+            self._trace(symbol, 'state_note', 'ERROR', f'could not write the state file {path}: {_err_text(e)} (a restart now '
                         'would rebuild the basket from the terminal)')
             return
         self._trace(symbol, 'state_saved', state)
@@ -1680,7 +1731,7 @@ class MT5TradingBot:
         try:
             info = mt5.terminal_info()
         except Exception as e:
-            return f'terminal_info() raised {e!r}', True
+            return f'terminal_info() raised {_err_text(e)}', True
         if info is None:
             return f'terminal_info() returned None (last_error {self._last_error()})', True
         if getattr(info, 'connected', True) is False:
@@ -1763,7 +1814,7 @@ class MT5TradingBot:
             try:
                 return bool(self.initialize_mt5())
             except Exception as e:          # (no credentials, a terminal that raises ...)
-                self._init_problem = f'initialize_mt5 raised {e!r}'
+                self._init_problem = f'initialize_mt5 raised {_err_text(e)}'
                 return False
 
     def _poll_succeeded(self, symbol):
@@ -2458,7 +2509,7 @@ class MT5TradingBot:
 
             except Exception as e:
                 print(f"[{symbol}] Error: {e}")
-                self._trace(symbol, 'exception', 'LOOP', f'the poll failed: {e!r}; the loop goes on in 1 s')
+                self._trace(symbol, 'exception', 'LOOP', f'the poll failed: {_err_text(e)}; the loop goes on in 1 s')
                 time.sleep(1)
                 if self._stop_event.is_set():
                     return
@@ -2620,7 +2671,7 @@ class MT5TradingBot:
             return False
         except Exception as e:
             print(f"\n✗ Job Failed with exception: {e}")
-            self._boot('ERROR', 'START', f'the job failed: {e!r}', exc=True)
+            self._boot('ERROR', 'START', f'the job failed: {_err_text(e)}', exc=True)
             self._boot_flush()
             self._stop_event.set()
             self.cleanup()

@@ -296,9 +296,38 @@ def dumps(obj):
                           ensure_ascii=False)
 
 
-def write_json_atomic(path, obj, retries=3):
+def err_text(e):
+    """An exception for the log: its type and its message ('UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe4
+    in position 60: invalid continuation byte'). Never repr(e): the repr of a decode error holds every byte it was
+    decoding (a whole credentials file)."""
+    if not isinstance(e, BaseException):
+        return str(e)
+    try:
+        return f'{type(e).__name__}: {e}'
+    except Exception:
+        return type(e).__name__
+
+
+REPLACE_WAITS_S = (0.005, 0.01, 0.02, 0.04, 0.06, 0.1)     # about 0.24 s in all
+
+
+def replace_retry(src, dst, waits=REPLACE_WAITS_S):
+    """os.replace(src, dst), tried again while Windows refuses it (PermissionError: a reader such as the dashboard has
+    dst open this moment): up to len(waits) more times, about 0.24 s in all. Raises the last error."""
+    for wait in tuple(waits) + (None,):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if wait is None:
+                raise
+            time.sleep(wait)
+
+
+def write_json_atomic(path, obj, retries=None):
     """Write obj as JSON to path: a temp file next to it, then os.replace (a reader sees the old file or the new
-    one, never half of one). Returns the bytes written; raises OSError (the caller logs it)."""
+    one, never half of one), tried again for about 0.24 s while Windows refuses it. Returns the bytes written;
+    raises OSError (the caller logs it)."""
     data = dumps(obj)
     folder = os.path.dirname(path)
     if folder:
@@ -307,14 +336,8 @@ def write_json_atomic(path, obj, retries=3):
     try:
         with open(tmp, 'w', encoding='utf-8') as f:
             f.write(data)
-        for attempt in range(retries):
-            try:
-                os.replace(tmp, path)
-                return len(data)
-            except PermissionError:          # Windows: a reader (the dashboard) has the file open this moment
-                if attempt == retries - 1:
-                    raise
-                time.sleep(0.005)
+        replace_retry(tmp, path, REPLACE_WAITS_S if retries is None else REPLACE_WAITS_S[:max(0, retries - 1)])
+        return len(data)
     except BaseException:
         try:
             os.remove(tmp)
@@ -444,7 +467,9 @@ class LogWriter:
         self._note_t = None
         self.failures = 0
         self.last_error = None
-        self._name = re.compile(r'^' + re.escape(self.symbol) + r'_(\d{4}-\d{2}-\d{2})\.log$')
+        # IGNORECASE: on Windows (NTFS keeps the case of whoever made the file first) a day begun by a start that
+        # failed before symbols.json was read can be named XAUUSDM_<day>.log; it is still this bot's file
+        self._name = re.compile(r'^' + re.escape(self.symbol) + r'_(\d{4}-\d{2}-\d{2})\.log$', re.IGNORECASE)
 
     def day_path(self, day):
         return os.path.join(self.dir, f'{self.symbol}_{day}.log')
@@ -485,7 +510,7 @@ class LogWriter:
         if self._note_t is None or now - self._note_t >= 60.0:
             self._note_t = now
             try:
-                print(f'[{self.symbol}] tracelog: cannot write the log in {self.dir}: {e!r} (trading goes on)')
+                print(f'[{self.symbol}] tracelog: cannot write the log in {self.dir}: {err_text(e)} (trading goes on)')
             except Exception:
                 pass
         return False
@@ -568,9 +593,9 @@ class LogWriter:
         for k in range(self.events_keep - 1, 0, -1):
             src = f'{base}.{k}.jsonl'
             if os.path.exists(src):
-                os.replace(src, f'{base}.{k + 1}.jsonl')
+                replace_retry(src, f'{base}.{k + 1}.jsonl')
         if os.path.exists(self.events_path):
-            os.replace(self.events_path, f'{base}.1.jsonl')
+            replace_retry(self.events_path, f'{base}.1.jsonl')
         self._events_bytes = 0
 
 
@@ -717,6 +742,7 @@ class TraceLog:
         self._bars_t = None
         self._bars_sig = None
         self._trades_t = None
+        self._deal_balance = None        # the virtual balance from the last deal-history read (a restart mid-trade)
         self._trades_dirty = True
         self._trades_again = False
         self._trades_retry_t = None
@@ -724,6 +750,7 @@ class TraceLog:
         self._digits = None
         self._digits_t = None
         self._pending_reason = None
+        self._turtle_pending_key = None  # a Turtle close that left legs open: its exit, for the retry's close
         self._exits = self._load_exits()
         self._last_signal_note = None
         # the Turtle (STRATEGY = 'turtle')
@@ -800,7 +827,7 @@ class TraceLog:
             more = f' (it failed {n} more times since it was last written)' if n else ''
             at = f' in its step {step}' if step else ''
             goes_on = 'its other steps and the trading go on' if step else 'trading goes on'
-            self._rec('ERROR', 'TRACE', f'the trace hook {name}() failed{at}: {e!r}; ignored, {goes_on}{more}', tb=tb)
+            self._rec('ERROR', 'TRACE', f'the trace hook {name}() failed{at}: {err_text(e)}; ignored, {goes_on}{more}', tb=tb)
         else:
             self._errors.append(self._now())
 
@@ -855,7 +882,7 @@ class TraceLog:
         write, n = self._repeat(('write', what), every=300.0)
         if write:
             more = f' ({n} more failures since the last line)' if n else ''
-            self._rec('WARN', 'WRITE', f'could not write {what}: {err!r}; trading goes on{more}', kv={'path': path})
+            self._rec('WARN', 'WRITE', f'could not write {what}: {err_text(err)}; trading goes on{more}', kv={'path': path})
 
     @_guarded
     def reconnect_failed(self, attempt, why, next_in_s=None, outage_s=None, logged=False):
@@ -1295,11 +1322,17 @@ class TraceLog:
         vb = _f(c._virtual_balance)
         if vb is None:
             vb = _f(getattr(self.bot, '_virtual_balance_last', None))
+        source = 'bot' if vb is not None else None
+        if vb is None and virtual and self._deal_balance is not None:
+            # the bot re-derives its balance only while flat: after a restart in the middle of a trade it has none
+            # until the trade ends; the deal history read for trades.json gives the same figure
+            vb, source = self._deal_balance, 'deal history'
         vstart = _f(self._cfg('VIRTUAL_START_BALANCE'))
         open_pl = sum((_f((p or {}).get('total_profit')) or 0.0) for p in (c.buy_positions, c.sell_positions))
         step, top = _f(c.step_up_balance), _i(c.max_limit)
         return {
             'virtual': virtual, 'virtual_balance': _f(vb, 2) if virtual else None,
+            'virtual_balance_source': source if (virtual and vb is not None) else None,
             'virtual_start_balance': vstart if virtual else None,
             'virtual_start_date': self._cfg('VIRTUAL_START_DATE') if virtual else None,
             'units': units, 'lot': round(units * mtqty, 2), 'mtqty': mtqty,
@@ -2348,6 +2381,8 @@ class TraceLog:
             return
         self._trades_retry_t = now + TRADES_INTERVAL_S          # a build that raises: the next read in a minute
         doc = self._build_trades(list(deals), snap, since, now, digits, virtual)
+        if virtual and self._cfg('VIRTUAL_START_DATE') is not None:
+            self._deal_balance = _f(((doc.get('summary') or {}).get('balance_now')), 2)
         if self._is_turtle():
             self._turtle_results(doc)
         try:
@@ -3228,7 +3263,12 @@ class TraceLog:
         else:
             by = (f" by the {o['used_by']} trade of {_hm(o['used_t'])}" if o.get('used_t') else
                   ' (an entry filled since that D1 bar closed)')
-            note = f"used{by}; the next D1 close ({_hm(o.get('until_t'))}) arms new ones"
+            u_t, n_t = _f(o.get('until_t')), _f(c.now)
+            if u_t is not None and n_t is not None and u_t <= n_t:
+                note = (f"used{by}; the D1 bar that closed at {_hm(u_t)} is not there yet: new orders as soon as the "
+                        'terminal gives it')
+            else:
+                note = f"used{by}; the next D1 close ({_hm(o.get('until_t'))}) arms new ones"
         G.append(_gate('armed', "Today's orders", armed, 'armed' if armed else 'used',
                        'the entry orders of the last D1 bar not used yet (one entry per D1 bar)', note))
         tnow, lx = _f(c.now), _f(st.get('last_exit_time'))
@@ -3345,7 +3385,13 @@ class TraceLog:
         if act == 'WAIT':
             if reason == 'orders used':
                 by = f" by the {o['used_by']} trade of {_hm(o['used_t'])}" if o.get('used_t') else ''
-                left = _dur((_f(o.get('until_t')) or 0) - (_f(c.now) or 0)) if o.get('until_t') else 'n/a'
+                until_t, now_t = _f(o.get('until_t')), _f(c.now)
+                if until_t is not None and now_t is not None and until_t <= now_t:
+                    # the D1 close has passed but the terminal has not given the new D1 bar yet (the bot asks every poll)
+                    return (f"Flat: today's entry orders were used{by}; the D1 bar that closed at {_hm(until_t)} "
+                            f"is not there yet ({_dur(now_t - until_t)} late): new orders as soon as the terminal "
+                            'gives it (asked every poll).')
+                left = _dur(until_t - now_t) if (until_t is not None and now_t is not None) else 'n/a'
                 return (f"Flat: today's entry orders were used{by}; no new entry until the next D1 bar closes at "
                         f"{_hm(o.get('until_t'))} (in {left}) and sets new levels.")
             if reason == 'exit bar':
@@ -3590,8 +3636,11 @@ class TraceLog:
             extra = {'origin': origin, 'stop': stop, 'side': side}
             # a leg closed outside the bot beyond the stop (app.py _turtle_sync): the bot closes the others now
             passed = dec['reason'] == 'stop_passed_outside'
+            retry = dec['reason'] == 'close_retry'
             gone = self._outside_of(tr, st) if passed else []
             key = 'stop_passed_outside' if passed else 'turtle_stop'
+            if retry and self._turtle_pending_key:
+                key = self._turtle_pending_key       # the retry finishes the close that left legs open: its exit
             if gone:
                 self._log_outside(gone, side, pb, d)
                 self._record_exits(gone, 'closed_outside', now, None, extra={'side': side})
@@ -3605,7 +3654,12 @@ class TraceLog:
                     if gone:
                         rec['exit']['legs_outside'] = gone
                     jdirty = True
-                if dec['reason'] == 'close_retry':
+                self._turtle_pending_key = None
+                if retry and key == 'stop_passed_outside':
+                    head = (f"the last {closed} leg(s) of the {side} trade closed (the close that followed the stop "
+                            f"{_px(stop, d)} passed outside the bot had left them open) at the {tr.get('judged_on')} "
+                            f"{_px(tr.get('price_now'), d)}, whatever the price")
+                elif retry:
                     head = (f"the last {closed} leg(s) of the {side} trade closed (the close at the stop "
                             f"{_px(stop, d)} had left them open)")
                 elif passed:
@@ -3622,14 +3676,17 @@ class TraceLog:
                           kv={'side': side, 'reason': key, 'stop': stop, 'stop_origin': origin,
                               'price': tr.get('price_now'), 'decision_pnl': tr.get('pnl'), 'legs': closed,
                               'tickets': cr.get('closed_tickets'), 'n_entry': tr.get('n_entry'), 'held_s': tr.get('age_s'),
-                              'retry': dec['reason'] == 'close_retry', **({'legs_outside': gone} if gone else {})})
+                              'retry': retry, **({'legs_outside': gone} if gone else {})})
             else:
+                self._turtle_pending_key = key           # the next poll's close (close_retry) ends the trade this way
                 self._rec('WARN', 'CLOSE', f"the close of the {side} trade is incomplete: {closed} closed, {failed} failed "
                           f"({'; '.join(cr.get('errors') or []) or cr.get('message')}); the rest is closed next poll, "
                           'whatever the price', kv={'closed': closed, 'failed': failed, 'stop': stop})
             self._trades_dirty = True
         # the book after this poll, compared with the last one
         same = bool(pb['side'] and cb['side'] == pb['side'] and cb['entry_time'] == pb['entry_time'])
+        if not cb['side']:
+            self._turtle_pending_key = None          # flat: no close is left to finish
         if pb['side'] and not cb['side'] and act not in ('CLOSE_BUY', 'CLOSE_SELL'):
             ids = [x[0] for x in pb['legs'] if x[0] is not None]
             self._record_exits(ids, 'closed_outside', now, last_tr.get('pnl'), extra={'side': side_w[pb['side']]})
