@@ -3530,7 +3530,7 @@ def serve_layout():
         dcc.Location(id='url', refresh=False),
         dcc.Interval(id='tick', interval=REFRESH_INTERVAL, n_intervals=0),
         dcc.Store(id='sig-live'), dcc.Store(id='sig-trades'), dcc.Store(id='sig-log'), dcc.Store(id='sig-hist'),
-        dcc.Store(id='sig-changes'), dcc.Store(id='alert-store'), dcc.Store(id='alert-done'), dcc.Store(id='alert-perm'),
+        dcc.Store(id='sig-changes'), dcc.Store(id='sig-cl'), dcc.Store(id='alert-store'), dcc.Store(id='alert-done'), dcc.Store(id='alert-perm'),
         html.Header(className='topbar', children=[html.Div(className='top-row', children=[
             html.Div(className='brand', children=[
                 html.Img(src=app.get_asset_url('alcadeias.png'), alt=''),
@@ -3804,16 +3804,30 @@ def _download(_clicks, day, sym):
     return dcc.send_file(path)
 
 
-@app.callback(Output('issues-view', 'children'), Output('changelog-view', 'children'), Output('sig-changes', 'data'),
+@app.callback(Output('issues-view', 'children'), Output('sig-changes', 'data'),
               Input('tick', 'n_intervals'), Input('tabs', 'value'), Input('symbol', 'value'), State('sig-changes', 'data'))
 def _changes(_n, tab, sym, prev):
+    """The issue list: again when the events file changes (and every minute: 'in the last hour' moves on)."""
     if tab != 'changes':
-        return [no_update] * 3
+        return [no_update] * 2
     sym = valid_symbol(sym)
-    sig = '|'.join([sym, file_sig(events_path(sym), os.path.join(HERE, 'CHANGELOG.md')), str(int(_now() // 60))])
+    sig = '|'.join([sym, file_sig(events_path(sym)), str(int(_now() // 60))])
     if sig == prev and any(p.startswith('tick.') for p in _triggered()):
-        return [no_update] * 3
-    return issues_view(sym), changelog_view(), sig
+        return [no_update] * 2
+    return issues_view(sym), sig
+
+
+@app.callback(Output('changelog-view', 'children'), Output('sig-cl', 'data'),
+              Input('tick', 'n_intervals'), Input('tabs', 'value'), State('sig-cl', 'data'))
+def _changelog(_n, tab, prev):
+    """The CHANGELOG, drawn once and again only when the file changes: the pane stays in the page while hidden, and
+    a redraw would make the browser's code highlighter go over its own output again (a console warning each time)."""
+    if tab != 'changes':
+        return [no_update] * 2
+    sig = file_sig(os.path.join(HERE, 'CHANGELOG.md'))
+    if sig == prev:
+        return [no_update] * 2
+    return changelog_view(), sig
 
 
 @app.callback(Output('hist-day', 'options'), Output('hist-day', 'value'), Output('hist-daily', 'children'),

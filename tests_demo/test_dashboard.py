@@ -707,7 +707,7 @@ def test_no_http_request_reads_a_file_outside_the_output_folder(D, tmp_path, bas
     _point(D, out, BASKET)
     syms, days = _climbing_values(up1, up2)
     tab_of = {'live-now': 'live', 'trades-kpis': 'trades', 'log-files': 'log', 'log-count': 'log', 'hist-day': 'history',
-              'issues-view': 'changes'}
+              'issues-view': 'changes', 'changelog-view': 'changes'}
     fixed = {('tick', 'n_intervals'): 1, ('tf', 'value'): 'M1', ('log-levels', 'value'): list(D.LOG_LEVELS),
              ('log-search', 'value'): '', ('log-hb', 'value'): ['hb', 'cfg'], ('log-limit', 'value'): 2000,
              ('log-follow', 'value'): 'live', ('log-dl-btn', 'n_clicks'): 1, ('url', 'search'): '?tab=history'}
@@ -903,7 +903,8 @@ def test_the_changes_and_issues_tab(D, tmp_path, basket):
     assert by['ACCOUNT_REFUSED']['count'] == 1 and by['RECONNECT_FAILED']['count'] == 4
     assert by['WRITE_FAILED']['level'] == 'WARN' and by['DATA: something new # times']['count'] == 2
     assert [r['level'] for r in rows][:3] == ['ERROR'] * 3
-    issues, changes, _ = D._changes(0, 'changes', BASKET, None)
+    issues, _ = D._changes(0, 'changes', BASKET, None)
+    changes, sig = D._changelog(0, 'changes', None)
     text = _text(issues)
     for bit in ('TERMINAL_IN_USE', 'ACCOUNT_REFUSED', 'RECONNECT_FAILED', 'What it means: ', 'What to do: ',
                 f"{sum(r['count'] for r in rows if r['level'] == 'ERROR')} error line(s)",
@@ -915,7 +916,9 @@ def test_the_changes_and_issues_tab(D, tmp_path, basket):
     assert any(e[1] == '2026-11-16' for e in entries)                       # a dated entry: its date, not '2026'
     text = _text(changes)
     assert head in text and '"open": true' in text and 'versions in this branch' in text
-    assert D._changes(0, 'live', BASKET, None) == [D.no_update] * 3
+    assert D._changes(0, 'live', BASKET, None) == [D.no_update] * 2
+    # the CHANGELOG is drawn once (the pane stays in the page) and again only when the file changes
+    assert D._changelog(0, 'changes', sig) == [D.no_update] * 2 and D._changelog(0, 'live', None) == [D.no_update] * 2
 
 
 def test_the_page_shows_no_folder_of_this_pc(D, tmp_path, basket):
