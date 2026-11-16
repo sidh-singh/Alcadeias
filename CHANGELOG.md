@@ -17,6 +17,74 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2-demo.6] — unreleased — Demo branches: the bot writes the dashboard's data and a detailed text log [demo only]
+
+**Branches:** the basket `demo_hedging_*` branches (written on `wip_dash_basket`, a copy of an older
+`demo_hedging_xauusd6`; ported onto `demo_hedging_xauusd6` v3.9.2-demo.4 as `wip_port_xauusd6`, then carried onto
+`demo_hedging_xauusd8` as `wip_port_xauusd8`). **NOT** the
+live-money `netting_`/`hedging_` deployment branches. **Files touched:** new `tracelog.py`, new
+`docs/dashboard-data.md`, `app.py`, `mt5_helper.py`, `tests_demo/` (+ this `CHANGELOG.md`, `README.md`).
+`strategy.py`, `indicator.py`, `constants.py`, `dashboard.py` untouched. **Baseline:** v3.9.2-demo.5. Not released
+yet: later fixes are folded into this entry.
+
+**Why.** The dashboard was built for the old live logic: it cannot show what the ported design checks, why the bot
+waits, where a basket's stop, target and backstop are, or what went wrong. The bot now writes what it sees, decides
+and does, for a new dashboard and for a person (or Claude) reading the log after an issue. Nothing the bot decides
+reads any of it: with the trace on or off the replays take the same polls, send the same requests and get the same
+fills (`tests_demo/test_tracelog.py`, and `test_live_equivalence.py` now runs with the trace on).
+
+### Added: the dashboard's data (`tracelog.py`; every field in `docs/dashboard-data.md`)
+- `<SYMBOL>_trace.json` after every poll: health (terminal, account, market, loop and trace time, reconnects,
+  errors in the last hour), account (virtual balance, unit, lot, own closed / open P/L, the shared account), market
+  (bid / ask / spread / tick age), the decision (an action, a one-sentence headline, every gate in the order the bot
+  checks it with its value and threshold, this poll's orders), the basket strategy (the votes per timeframe with
+  their pivots and slopes, open and agreement scores, the H1 trend of the closed bar, the volatility unit raw /
+  capped / bars used, the stop / target / backstop a new basket would get, the pause, and the open basket: legs,
+  P/L, stop and target in USD and as prices, backstops, the ladder's next add price), `turtle: null`.
+- `<SYMBOL>_bars.json`: bid OHLC, M1 360 / M5 300 / M15 300 / H1 300 / D1 200 bars, at most every 30 s (M1-H1 from
+  the bars the poll already fetched; D1 is one terminal call).
+- `<SYMBOL>_trades.json`: this bot's baskets from the deal history since `VIRTUAL_START_DATE` (legs, open / close,
+  lots, P/L, the exit reason the bot recorded: target / stop / backstop / closed outside / force-close ...), the
+  open basket with its live levels, the virtual-balance curve, a summary; read after every fill and close and
+  every 60 s. `state/<SYMBOL>_exit_reasons.json` keeps the recorded reason per position.
+- `logs/<SYMBOL>_<YYYY-MM-DD>.log` (UTC days, kept 30 days, 50 MB a day): `time UTC | LEVEL | CATEGORY | message |
+  key=value ...`, levels DEBUG (every decision change, with the gates) / INFO / ORDER / FILL / CLOSE / WARN / ERROR
+  (with the traceback): the start (branch, design, every effective constant, symbols.json, the account checks, the
+  state found), every order request and result, fills, closes with reason and P/L, pause start / end, state saves,
+  reconnects, read errors, every exception, and a HEARTBEAT line every minute (a gap = the bot was not running).
+  `logs/<SYMBOL>_events.jsonl`: the same lines as JSON (10 MB, 5 older files).
+- The cost: about 1 ms a poll on the fake terminal (median 0.7-1.0 ms, p95 1-3 ms, worst 3-10 ms on the polls that
+  also write the bars or trades; the trace file's atomic write is most of it). Terminal calls: the deal history after a fill / close and every 60 s, the D1 bars at most every
+  30 s, the digits once.
+
+### Changed: a write that fails never reaches the trading
+- `_save_account_data` (written before the poll decides: a full disk stopped the trading), `_save_symbol_data`,
+  `_log_event`: an error is a WARN in the log (and a console line at most once a minute), not an exception in the
+  loop. The daily-trade / history-summary save errors, swallowed before, are a WARN with the traceback.
+
+### Files
+- `tracelog.py` (new): `TraceLog` (entry points `boot`, `loop_start`, `poll`, `poll_skipped`, `order`, `event`,
+  `state_saved`, `state_note`, `exception`, `write_failed`, `log`; each catches and logs its own errors), `LogWriter`
+  (day files, retention, size cap, events rotation; never raises), `write_json_atomic`.
+- `app.py`: guarded `import tracelog`; `MT5TradingBot.trace_dir` / `trace_enabled` / `_tracer` / `_trace` / `_boot` /
+  `_boot_flush` / `_order_observed` / `_write_failed`; hooks: `loop_start` and `poll(locals())` in `process_symbol`,
+  `poll_skipped` at its two skips, `exception` in its `except`, `_frames` / `_signals` (the poll's bars and forming
+  signal lines, read only), `_last_account` (`_account_problem`), `_guard_why` (`_poll_guard`), `_reconnects_done`,
+  start-up lines in `load_credentials` / `load_symbols` / `initialize_mt5` / `_init_cycle` / `execute_job`, state lines
+  in `_load_state` / `_save_state`, the event mirror in `_log_event`; the writers above.
+- `mt5_helper.py`: `MT5PositionHelper.order_observer` and `_observe` (called after every request with its result and
+  its time; anything it raises is swallowed).
+- `tests_demo/`: `test_tracelog.py` (22 tests; the suite: 129); `fake_mt5.py` loads `tracelog`, gives every bot a temp trace folder,
+  `make_bot(trace_dir=, keep_writers=)`; `conftest.py` points `OUTPUT_DIR` at a temp folder for every test.
+- `docs/dashboard-data.md` (new): the files, their fields, the actions and gates, the log format.
+
+### Rollback
+`git revert` this commit; delete `OUTPUT_DIR/<SYMBOL>_trace.json`, `_bars.json`, `_trades.json`,
+`OUTPUT_DIR/logs/<SYMBOL>_*.log`, `_events*.jsonl` and `OUTPUT_DIR/state/<SYMBOL>_exit_reasons.json` if wanted. To keep
+the code and switch the trace off: `bot.trace_enabled = False` (nothing is written then).
+
+---
+
 ## [v3.9.2-demo.5] — 2026-11-16 — Demo branches: the third fix round [demo only]
 
 **Branches:** the `demo_hedging_*` branches (written on `demo_hedging_xauusd6`; the Turtle's own fix C on the BTC

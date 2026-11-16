@@ -585,7 +585,12 @@ def random_walk_market(start_s, run_s, seed=1, price0=2000.0, sigma_per_s=0.08, 
 
 # ───────────────────────────── loading and running the bot ─────────────────────────────
 
-_MODULES = ('MetaTrader5', 'constants', 'strategy', 'indicator', 'mt5_helper', 'app')
+_MODULES = ('MetaTrader5', 'constants', 'strategy', 'indicator', 'mt5_helper', 'app', 'tracelog')
+_OPTIONAL = ('tracelog',)          # not in every tree (the code before the trace has none): None when absent
+
+# Where a bot made by make_bot writes its trace files and text log when the test gives no trace_dir (conftest
+# points it at a pytest temp folder): never OUTPUT_DIR, which is a Windows path.
+TRACE_ROOT = None
 
 
 @contextmanager
@@ -600,7 +605,9 @@ def bot_modules(root, fake, clock, overrides=None):
     sys.path.insert(0, root)
     try:
         import app  # noqa: F401
-        mods = types.SimpleNamespace(**{n: sys.modules[n] for n in _MODULES})
+        mods = types.SimpleNamespace(**{n: sys.modules.get(n) for n in _MODULES})
+        for n in _MODULES:
+            assert n in _OPTIONAL or getattr(mods, n) is not None, n
 
         class _SimDatetime(datetime):
             @classmethod
@@ -639,7 +646,11 @@ class Run:
         self.restarts = 0
 
 
-def make_bot(mods, fake, symbol, run, state_dir=None, step_up=2500, max_limit=10, window=None, mtqty=0.01):
+def make_bot(mods, fake, symbol, run, state_dir=None, step_up=2500, max_limit=10, window=None, mtqty=0.01,
+             trace_dir=None, keep_writers=False):
+    """A bot on the fake terminal. Its JSON / log writers record into `run` instead of writing files, unless
+    keep_writers (then they write into the OUTPUT_DIR the test gives). Its trace (tracelog.py) writes into
+    `trace_dir`, else TRACE_ROOT / a temp folder (never the Windows OUTPUT_DIR)."""
     bot = mods.app.MT5TradingBot(mode='demo', target_symbol=symbol)
     bot.symbols_config = {'brake': 0, 'mtqty': mtqty,
                           'trading_window': window or {'enabled': False},
@@ -652,8 +663,17 @@ def make_bot(mods, fake, symbol, run, state_dir=None, step_up=2500, max_limit=10
     bot.mt5_initialized = True
     if state_dir is not None:
         bot.state_dir = str(state_dir)
+    if hasattr(bot, 'trace_dir'):
+        if trace_dir is None and not keep_writers:
+            import tempfile
+            trace_dir = tempfile.mkdtemp(prefix='trace_', dir=TRACE_ROOT)
+        if trace_dir is not None:
+            bot.trace_dir = str(trace_dir)
+    real = {name: getattr(bot, name) for name in ('_save_symbol_data', '_log_event')}
 
     def _save_symbol_data(sym, data):
+        if keep_writers:
+            real['_save_symbol_data'](sym, data)
         an = data.get('analysis', {})
         pos = data.get('positions', {})
         run.polls.append({
@@ -674,12 +694,15 @@ def make_bot(mods, fake, symbol, run, state_dir=None, step_up=2500, max_limit=10
     def _log_event(sym, event, tag, details=None, server_time=None):
         run.events.append({'t': fake.clock.now_ms, 'event': event, 'tag': tag,
                            'details': {k: v for k, v in (details or {}).items() if k != 'response'}})
+        if keep_writers:
+            real['_log_event'](sym, event, tag, details, server_time)
 
     bot._save_symbol_data = _save_symbol_data
-    bot._save_account_data = lambda *a, **k: None
-    bot._save_daily_trades = lambda *a, **k: None
-    bot._save_historical_summary = lambda *a, **k: None
     bot._log_event = _log_event
+    if not keep_writers:
+        bot._save_account_data = lambda *a, **k: None
+        bot._save_daily_trades = lambda *a, **k: None
+        bot._save_historical_summary = lambda *a, **k: None
     return bot
 
 
