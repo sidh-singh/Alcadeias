@@ -153,7 +153,41 @@ detailed text log he can send when something goes wrong. The bot already writes 
 live-money `netting_`/`hedging_` deployment branches. **Files touched:** new `tracelog.py`, new
 `docs/dashboard-data.md`, `app.py`, `mt5_helper.py`, `tests_demo/` (+ this `CHANGELOG.md`, `README.md`).
 `strategy.py`, `indicator.py`, `constants.py`, `dashboard.py` untouched. **Baseline:** v3.9.2-demo.5. Not released
-yet: later fixes are folded into this entry.
+yet: later fixes are folded into this entry (the review's fixes: below).
+
+### Fixed before release: the review of the trace (`tracelog.py`, the same file on all six branches)
+- **No file is written while the bot holds `mt5_lock`.** The order hook ran inside `MT5PositionHelper._send`, inside
+  the lock, and wrote the log to disk before `order_send`'s result reached the bot: on a disk that takes 250 ms a
+  write (an antivirus scan, a saturated VPS disk) the 4th leg of a close went out about 0.75 s late (the review
+  measured 1.04 s for 4 close requests). Now `order()` only makes its record and lines; every other entry point writes
+  only when the lock is free (`_flush` waits while `mt5_lock.locked()`): an event (the basket's LEG_CLOSED_OUTSIDE is
+  logged inside the lock), a state save or a start-up line made inside the lock waits too. They are written at the end
+  of the poll (or by `poll_skipped`, the exception hook, the job's last lines), with their own times and in their
+  order. Measured with that slow disk, 4 close requests and an event inside the lock: 1,279 ms with the trace before
+  the fix, 0.1 ms after it, the same as without the trace (0.1 ms on the fake terminal). The price: a process killed
+  between an order and the end of its poll (a fraction of a second) loses that order's lines (the deal history still
+  has the order).
+- **One failing step of the poll hook no longer skips the rest.** `_poll` runs every step on its own (`_step`): a
+  step that raises is an ERROR line ('the trace hook poll() failed in its step _bars: ...', at most every 10 min) and
+  the trace file, the bars, the trades, the heartbeat and the bookkeeping still run. When the decision cannot be
+  worked out (the basket section or the decision itself fails), the trace says so: the action `TRACE_ERROR` with a
+  headline (new in `docs/dashboard-data.md`). The deal history is read again at most every 5 s after a failed read and
+  every 60 s after a failed build (before: on every poll, under `mt5_lock`, when the build raised after the read).
+- **A close names the side of its position.** `close_by_type` closes a SELL position with a BUY order; the ORDER line
+  said `side=BUY`. Now: 'close position 100001 (SELL 0.01 lot, with a BUY order) ... | kind=close side=SELL
+  order_side=BUY', and the trace's `decision.orders` has `side` (the position's) and `order_side`.
+- **A skipped poll marks what it kept**: the last good poll's `market` with `status` 'UNKNOWN' and a message that the
+  terminal was not read, the `basket` with `fresh` false (the dashboard showed 'Market closed (OPEN)' and 'votes fresh
+  this poll').
+- **The first poll after a restart**: a ladder add there was labelled 'open' in its ORDER / FILL lines (the trace had
+  not seen a poll yet). Now the kind comes from the loop's own `state` (read only), so it is 'add' from the first
+  poll.
+- (On the Turtle branches also: the wording of the Turtle's D1 note in `app.py`. Not on this branch.)
+- Tests (each fails on the code before its fix): `test_tracelog.py` +4 (30): the slow disk (no write while the lock is
+  held, 12 close lines written after it, the time with and without the trace), two steps failing on every poll (the
+  heartbeat and the trace go on, one ERROR line each, the history read once a minute), a close's side in the log and
+  the trace, an add on the first poll after a start; and a skipped poll's market and votes, a step that fails
+  (TRACE_ERROR, the heartbeat, the bars and trades) in two tests changed.
 
 **Why.** The dashboard was built for the old live logic: it cannot show what the ported design checks, why the bot
 waits, where a basket's stop, target and backstop are, or what went wrong. The bot now writes what it sees, decides
@@ -243,8 +277,9 @@ In `app.py` only read-only hooks, each through `_trace` / `_boot` (they cannot r
   `poll_skipped('account_recheck')` after the account read again right after the positions (in `process_symbol`).
 - `mt5_helper.py`: `MT5PositionHelper.order_observer` and `_observe` (called after every request with its result and
   its time; anything it raises is swallowed).
-- `tests_demo/`: `test_tracelog.py` (26 tests: 4 for the paths of v3.9.2-demo.4; its account test covers login and no
-  login; its job test uses the new design check, so the file is the same on every branch); `fake_mt5.py` loads
+- `tests_demo/`: `test_tracelog.py` (30 tests: 4 for the paths of v3.9.2-demo.4, 4 for the review's fixes; its account
+  test covers login and no login; its job test uses the new design check, so the file is the same on every branch);
+  `fake_mt5.py` loads
   `tracelog`, gives every bot a temp trace folder, `make_bot(trace_dir=, keep_writers=)`; `conftest.py` points
   `OUTPUT_DIR` at a temp folder for every test.
 - `docs/dashboard-data.md` (new): the files, their fields, the actions and gates, the log format.
@@ -252,6 +287,10 @@ In `app.py` only read-only hooks, each through `_trace` / `_boot` (they cannot r
 ### Tests
 - The whole `tests_demo` on `wip_port_xauusd6` (with the dashboard of v3.9.2-demo.7): 159 passed,
   3 skipped (the Turtle tests of `test_dashboard.py`: no `turtle.py`), 22 min.
+- With the review's fixes (2026-11-16, on `wip_port_xauusd6`, on a PC busy with other jobs): `test_dashboard.py` 18
+  passed, 3 skipped (no `turtle.py`) with Dash 2.14.2 / plotly 5.18 and with the pinned Dash 2.18.2 / plotly 5.24.1 (a
+  venv), `test_design.py` 21, `test_tracelog.py` 30, `test_live_equivalence.py` 2 passed. The rest of `tests_demo` was
+  not run again end to end on the final code.
 
 ### Rollback
 `git revert` this commit; delete `OUTPUT_DIR/<SYMBOL>_trace.json`, `_bars.json`, `_trades.json`,
