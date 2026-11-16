@@ -16,10 +16,10 @@ CREDS = {'terminal_path': r'C:\fake\terminal64.exe', 'login_id': 1, 'login_pass'
 WIDE = dict(SCALED, STOP_VOL=6.0, TARGET_VOL=3.0)      # the scaled Top 1 shape with room after its one add
 
 
-def _two_leg_basket(mods):
+def _two_leg_basket(mods, tmp_path):
     fake, clock = market(120)
     m = mods(fake=fake, clock=clock, **SCALED)
-    bot = F.make_bot(m, fake, 'XAUUSDm', F.Run())
+    bot = F.make_bot(m, fake, 'XAUUSDm', F.Run(), state_dir=tmp_path / 'state')     # (never the real OUTPUT_DIR)
     now = clock.time()
     e = fake.add_position(0, 0.01, 2000.0, now - 300, magic=MAGIC)          # the entry
     a = fake.add_position(0, 0.01, 1995.0, now - 200, magic=MAGIC)          # the add, 5 below
@@ -28,8 +28,8 @@ def _two_leg_basket(mods):
     return m, fake, clock, bot, {'basket': b, 'last_close': None}, e, a
 
 
-def test_a_leg_gone_outside_the_bot_marks_the_basket_to_close(mods):
-    m, fake, clock, bot, state, e, a = _two_leg_basket(mods)
+def test_a_leg_gone_outside_the_bot_marks_the_basket_to_close(mods, tmp_path):
+    m, fake, clock, bot, state, e, a = _two_leg_basket(mods, tmp_path)
     h = m.mt5_helper.MT5PositionHelper(fake)
     assert fake.close_by_broker(e)                                          # the entry's backstop
     now = clock.time()
@@ -49,10 +49,10 @@ def test_a_leg_gone_outside_the_bot_marks_the_basket_to_close(mods):
     assert lc['resolved'] and lc['source'] == 'history' and lc['pnl'] == realised and lc['lost'] == (realised < 0)
 
 
-def test_the_bots_own_partial_close_is_not_a_leg_closed_outside(mods):
+def test_the_bots_own_partial_close_is_not_a_leg_closed_outside(mods, tmp_path):
     """A close of the bot that left a leg behind (close_pending): the legs it closed are gone, the basket is not
     marked as closed outside, and the rest is closed as a retry."""
-    m, fake, clock, bot, state, e, a = _two_leg_basket(mods)
+    m, fake, clock, bot, state, e, a = _two_leg_basket(mods, tmp_path)
     h = m.mt5_helper.MT5PositionHelper(fake)
     fake.fail_close_tickets = {a}
     res = h.close_by_type('XAUUSDm', 0)
@@ -65,10 +65,10 @@ def test_the_bots_own_partial_close_is_not_a_leg_closed_outside(mods):
     assert 'outside_ids' not in state['basket']
 
 
-def test_a_backstop_partial_close_estimates_a_loss_until_the_history_has_it(mods):
+def test_a_backstop_partial_close_estimates_a_loss_until_the_history_has_it(mods, tmp_path):
     """The history does not show the leg closed outside yet: the basket is booked as a loss (the longer pause) until
     it does (then the realised P/L of every leg replaces it)."""
-    m, fake, clock, bot, state, e, a = _two_leg_basket(mods)
+    m, fake, clock, bot, state, e, a = _two_leg_basket(mods, tmp_path)
     h = m.mt5_helper.MT5PositionHelper(fake)
     assert fake.close_by_broker(e)
     bot._sync_basket('XAUUSDm', 'XAUUSDm', state, h.get_buy_positions('XAUUSDm'), None, 0.01, 1.0, clock.time())
