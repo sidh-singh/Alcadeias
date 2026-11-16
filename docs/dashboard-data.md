@@ -307,12 +307,38 @@ page for both strategies (it takes `strategy` from the trace; without a trace, `
 
 | tab | reads |
 |---|---|
-| status bar | `<SYMBOL>_trace.json`: `t` (its age: fresh under 15 s, slow under 60 s, stale after), `health`, `account`, `market`, `stale` |
+| status bar | `<SYMBOL>_trace.json`: `t` (its age: fresh under 15 s, slow under 60 s, stale after), `health`, `account`, `market` (`tick_t`: the last tick's age now), `stale`; the ERROR lines of the last hour from the newest 3 MB of `logs/<SYMBOL>_events.jsonl` |
 | Live | the trace's `decision` (headline, gates in order, `blocked_by`, this poll's `orders`) and `basket` / `turtle`; `<SYMBOL>_bars.json` (the forming bar moved with `market.bid`; `overlay.turtle` on D1); `<SYMBOL>_trades.json` `closed` for the chart's entries and exits; the newest 256 KB of `logs/<SYMBOL>_events.jsonl` |
-| Trades | `<SYMBOL>_trades.json` (`summary`, `balance_curve`, `closed`, each trade's `turtle` journal) and the trace's open position |
+| Trades | `<SYMBOL>_trades.json` (`t`, `summary`, `balance_curve`, `closed`, each trade's `turtle` journal) and the trace's open position |
 | Log | the newest 3 MB of `logs/<SYMBOL>_events.jsonl`, the newest 512 KB of a day's `logs/<SYMBOL>_<day>.log` (download: the whole file) |
-| History & settings | `daily_trade/<SYMBOL>/*.json`, `historical_summary.json`, `logs/<SYMBOL>_strategy_log.json`, the CONFIG lines of the bot's start (the text log of `health.started_utc`'s day; `constants.py` when they are not there), the raw files |
+| History & settings | `daily_trade/<SYMBOL>/*.json`, `historical_summary.json`, `logs/<SYMBOL>_strategy_log.json`, the CONFIG lines of the bot's start (the text log of `health.started_utc`'s day; `constants.py` when they are not there), the raw files (a fixed list: the trace, trades, `<SYMBOL>.json`, `account.json`, the state files, the Turtle's journal, the exit reasons, the bars' header) |
 
 A file that is missing, cut in the middle or of an unexpected shape shows as such (an empty state, or a card with the
-error and its traceback); the rest of the page is unaffected. The charts take times as UTC wall-clock text (a number
-would be shown in the browser's own time zone).
+error and its traceback, files named, not their folders); the rest of the page is unaffected. The charts take times as
+UTC wall-clock text (a number would be shown in the browser's own time zone).
+
+**What a request may name.** The page has no login and listens on `DASHBOARD_HOST` (`0.0.0.0`): anyone who can reach
+its port can send any value to a callback. A symbol is taken only when the dashboard lists it (the `*_trace.json`
+files of `OUTPUT_DIR`, else `symbols.json`; plain names: letters, digits, `.`, `_`, `-`), a day only when it reads
+`YYYY-MM-DD` and `logs/<SYMBOL>_<day>.log` exists; another symbol falls back to the first one, another day to today's
+file (the download then sends nothing). Every path is a fixed name inside `OUTPUT_DIR`; one that would leave it (`..`,
+an absolute path, another drive) is refused.
+
+**A stale trace** (older than 60 s: the bot is down, the PC slept, or the loop fails before its trace hook): the age
+chip is red and every other chip is neutral with 'as of HH:MM' (the trace's time); the market chip counts the last
+tick's age now; the errors of the last hour come from the events file (it keeps getting the loop's ERROR lines); a
+red banner above the headline says the page is the bot's last poll; the strategy, the checks, the position and the
+uptime say 'as of' / 'not writing'. A skipped poll (fresh, `stale` true): 'Market: unknown (terminal not read)',
+'votes kept from the last poll'.
+
+**trades.json missing or old**: missing or unreadable, the Trades tab, the balance chart, the position card and the
+chart note say so (the closed trades are not known; never 'No trade yet'); older than 3 minutes (it is rewritten at
+least every minute), the Trades tab shows when it was written and warns that its trades are as of then.
+
+**The chart**: the candles are bid. A level the bot compares with the ask (a sell basket's stop / target / broker
+stops, a buy basket's next add, the Turtle's buy level, a short's stop / broker stops, a long's next add) is tagged
+'(ask)', and an ASK line is drawn next to the BID line. The Turtle's BUY / SELL LEVEL are entry triggers (blue,
+dashed) only while `turtle.orders.state` is 'armed' and no trade is open; else they are drawn faint and dotted with
+'used, new orders at 00:00' or 'no entry while in a trade' under the price (the orders panel then says 'BUY level
+passed ...: no entry, ...' instead of 'needs the M15 vote'). A close in 'This poll's orders' reads 'CLOSE SELL
+position 100001 (BUY order, 0.01 lot)'.

@@ -23,11 +23,60 @@ credential/symbol commits are preserved; never force-push). Fleet:
 `wip_dash_turtle`, which carries the trace of both strategies; ported onto `demo_hedging_btcusd6` v3.9.2-demo.4 as
 `wip_port_btcusd6`). One `dashboard.py` for the basket and the Turtle.
 **NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** `dashboard.py` (rewritten),
-`assets/dark-dropdown.css` (removed), new `tests_demo/test_dashboard.py`, `tests_demo/test_design.py` and
+`assets/dark-dropdown.css` (removed), `start_dashboard.bat` (the pinned install, no wrong address), new
+`tests_demo/test_dashboard.py`, `tests_demo/test_design.py` and
 `tests_demo/test_turtle_bot.py` (their tests of the old slope panel removed), `README.md` (the dashboard),
 `docs/dashboard-data.md` (§6) (+ this `CHANGELOG.md`). `app.py`, `tracelog.py`, `turtle.py`, `strategy.py`,
 `indicator.py`, `mt5_helper.py`, `constants.py` untouched: nothing the bot does changes. **Baseline:** v3.9.2-demo.6.
-Not released yet: later fixes are folded into this entry.
+Not released yet: later fixes are folded into this entry (the review's fixes: below).
+
+### Fixed before release: the review of the dashboard
+- **No request can read a file outside the output folder.** The dashboard listens on `0.0.0.0` (as the live bots) and
+  has no login, and Dash does not check a value against its options: a client could send a symbol such as
+  `..\..\<folder>\mt5_credentials` and the raw view showed that file (the review read a fake password that way),
+  and the download sent any `*.log` it could reach. Now every callback takes the symbol only when `symbols()` lists it
+  (the trace files of `OUTPUT_DIR`, else `symbols.json`; plain names only) and a day only when it reads `YYYY-MM-DD`
+  and that day's file exists; the raw views and the download use a fixed list of file names; `_path()` refuses any
+  path that leaves `OUTPUT_DIR` (`..`, an absolute path, another drive). Error cards show file names, not folders;
+  the raw views and the problem lines name files by their place in the output folder (`logs/BTCUSDm_events.jsonl`).
+  The paths to copy on the Log tab stay full (that is the file to send). `DASHBOARD_HOST` is still `0.0.0.0`:
+  the README says who can see the page and how to close the port.
+- **A trace the bot stopped writing is shown as its last poll, not as now.** Before, only the first chip was red:
+  'Demo account', 'Terminal connected', 'Market open · last tick <1 s ago' (the age stored at the poll) and 'No errors
+  in the last hour' stayed green. Now, when the trace is older than 60 s: every chip but the age is neutral and says
+  'as of HH:MM'; the market chip counts the last tick's age now; the errors are counted from the events file (it keeps
+  getting ERROR lines when the loop fails before its trace hook); a red banner above the headline says the bot has
+  not written since HH:MM and that everything below is its last poll; the strategy, the checks, the position card and
+  the uptime tile say so too. A skipped poll (fresh) shows 'Market: unknown (terminal not read)' (it said 'Market
+  closed (OPEN)') and 'votes kept from the last poll'.
+- **A missing trades.json is said, an old one has its time.** Before: 'No trade yet' / 'No closed trade yet' when
+  the file was missing. Now the Trades tab, the balance chart, the position card and the chart note say
+  `<SYMBOL>_trades.json is missing` (or unreadable): the closed trades are not known. The Trades tab shows when the
+  file was written; older than 3 minutes (the bot rewrites it at least every minute) it warns that the trades are
+  as of then.
+- **A close is shown with the side of its position**: 'CLOSE SELL position 100001 (BUY order, 0.01 lot)' (it said
+  'CLOSE BUY 0.01 lot (position 100001)' for the close of a SELL). A trace written before the fix is read the same way.
+- **Levels judged on the ask.** The candles are bid prices. A level the bot compares with the ask (a sell basket's
+  stop, target and broker stops; a buy basket's next add; today's BUY LEVEL; a short's stop and broker stops; a long's
+  next add) has '(ask)' in its tag and hover, and an ASK line is drawn next to the BID line.
+- **The Turtle's BUY / SELL LEVEL is an entry trigger only while the day's orders are armed and no trade is open.**
+  Used, or with a trade open, the two lines are drawn faint and dotted, with a second line in the tag: 'used, new
+  orders at 00:00' or 'no entry while in a trade' (on M1 to H1, and the day's step on D1). The right margin grows
+  to the widest tag.
+- The Log tab's search box says 'then press Enter' (it applies on Enter, one request, not one per key).
+- `start_dashboard.bat`: `pip install dash==2.18.2 plotly==5.24.1`, the versions `requirements.txt` pins (it ran an
+  unpinned `pip install dash plotly`, which could install Dash 3 or plotly 6); the flag file now names the versions,
+  so a PC with the old flag installs them once. It no longer prints `http://localhost:8050` (the wrong port):
+  `dashboard.py` prints its own address (port 8071 here).
+- The shared-account tile says 'the slot's 2 bots' (it said 'all 6 bots'; each slot's gold and BTC bot share one
+  account).
+- Found in the browser check of these fixes, and fixed with them: the Turtle's orders panel said 'BUY level reached
+  ...; needs the M15 vote +1' while the orders were used or a trade was open (now 'BUY level passed ...: no entry, a
+  trade is open' / '... today's orders are used'); a missing trades.json still showed a summary of zeros (now only the
+  note); an order's retcode read '10,009' (now 10009); a PC whose clock is behind the bot's showed a negative tick age
+  as 'hours ago' (now the bot's own tick age).
+- Checked with the pinned versions: `test_dashboard.py` in a venv with Dash 2.18.2 / plotly 5.24.1 (and with the
+  local Dash 2.14.2 / plotly 5.18), and every tab in headless Chrome on both. Nothing differed.
 
 **Why.** The owner: the old dashboard was built for the old live logic; he wants to see every detail of what is
 triggered and how, in a clean layout, an OHLC chart with the opening and closing points and the targets, and a
@@ -111,6 +160,13 @@ detailed text log he can send when something goes wrong. The bot already writes 
   heartbeats, raw text and download, the settings the bot started with; an empty folder, files cut in the middle,
   every field null, a stale trace with a refused account and errors; the force-close text follows the design; the
   dashboard imports no terminal package and keeps its 15 imports from `constants`.
+- The review's fixes, 8 more tests (21 in all; each fails on the code before its fix): a fake secret one and two
+  folders above `OUTPUT_DIR` and symbol / day values that climb out (`../`, Windows backslashes, absolute paths, an
+  empty string, `None`), sent to every callback function and as HTTP POSTs to a running server's
+  `/_dash-update-component` (every answer 200 / 204, none holds the secret, the download decoded); a trace two hours
+  old (no green chip, 'as of', the tick's age now, the errors from the log, the banner); a skipped poll (market
+  unknown, votes kept); a missing and an old `trades.json`; a close's side; the '(ask)' tags and the ASK line; the
+  Turtle's muted levels (made-up trace, so it runs on every branch); the launcher's pins; the search box's hint.
 - `test_design.py::test_dashboard_still_imports_and_draws_the_new_analysis` and
   `test_turtle_bot.py::test_the_dashboard_draws_the_turtle` removed: they drew the old slope panel.
 - The whole `tests_demo` on `wip_dash_turtle`: 200 passed (test_turtle_replay.py against the backtester included),
@@ -120,6 +176,10 @@ detailed text log he can send when something goes wrong. The bot already writes 
   trades and account as the backtest, 0 votes different), 26 min.
   The dashboard also draws the trace of every path of v3.9.2-demo.4 without an error card (a scratch check of
   every view, not in `tests_demo`).
+- With the review's fixes (2026-11-16, on a PC busy with other jobs): `test_dashboard.py` 21 passed with Dash
+  2.14.2 / plotly 5.18 and 21 passed with the pinned Dash 2.18.2 / plotly 5.24.1 (a venv), `test_design.py` 21,
+  `test_tracelog.py` 30, `test_live_equivalence.py` 2, `test_turtle_trace.py` 23, `test_turtle_bot.py` 18 passed.
+  The rest of `tests_demo` was not run again end to end on the final code.
 - Seen in a browser: headless Chrome screenshots of every tab on a basket replay (the scaled design, an open basket
   with its add armed after 11 closed ones) and on a two-day Turtle replay (a failed breakout stopped out, then a
   breakout holding three legs; a flat, BLOCKED state by the vote), from the bot's own writers on the fake terminal.
