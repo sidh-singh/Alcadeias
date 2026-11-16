@@ -138,6 +138,110 @@ def test_a_reconnect_never_logs_in_over_another_account(mods):
     assert run.events[-1]['event'] == 'TERMINAL_RECONNECTED'
 
 
+LIVE = (99, 'Fake-Real', 2)          # a live bot's real account
+
+
+def _hold(fake, login_server_mode):
+    fake.account_login, fake.server, fake.trade_mode = login_server_mode
+    fake.logged_in = True
+
+
+def _names(fake):
+    return [c[0] for c in fake.calls]
+
+
+@pytest.mark.parametrize('answer', ['ipc_timeout', 'login_0', 'still_logging_in'])
+def test_a_momentary_no_account_answer_is_never_a_login(mods, answer):
+    """Fix B of the third review round: right after initialize() account_info() answers None or login 0 for a moment
+    on a terminal that holds a live account -- an IPC timeout on a busy terminal, a login-0 answer, or a terminal
+    just started (or restarted) that logs into its saved account for 3 s. Never a login (before: the bot read it as
+    'no account' and logged in, switching the live account off); the account is read again, and the live one is
+    refused (TERMINAL_IN_USE) when it shows."""
+    m, fake, clock, bot, run = _fresh(mods)
+    _hold(fake, LIVE)
+    if answer == 'still_logging_in':
+        fake.login_delay_s = 3.0
+    else:
+        fake.account_answers = [answer]
+    t0 = clock.time()
+    first = bot.initialize_mt5()
+    problem = bot._init_problem
+    for _ in range(2):                                          # (the start-up's other two attempts, 5 s apart)
+        clock.sleep(5)
+        assert bot.initialize_mt5() is False
+    assert first is False and 'login' not in _names(fake) and _names(fake) == ['initialize', 'shutdown'] * 3
+    assert (fake.account_login, fake.server, fake.trade_mode) == LIVE                  # left as it was
+    ev = _in_use(run)
+    assert len(ev) == 1 and 'another account 99 (real, Fake-Real)' in ev[0]['details']['problem']
+    if answer == 'ipc_timeout':                                 # the account not known: detached, tried again
+        assert problem.startswith('account not known: account_info() answered None (last_error (-10005')
+        assert round(ev[0]['t'] / 1000.0 - t0) == 5
+    else:                                                       # read again: the live account shows
+        assert problem.startswith('TERMINAL_IN_USE')
+        assert round(ev[0]['t'] / 1000.0 - t0) == (1 if answer == 'login_0' else 3)
+
+
+def test_an_account_not_known_is_tried_again_and_then_used(mods):
+    """An IPC timeout on the first account read of a terminal that holds this bot's own account: no login, detached;
+    the next attempt finds the account and uses it as it is."""
+    m, fake, clock, bot, run = _fresh(mods)
+    fake.account_answers = ['ipc_timeout']
+    assert bot.initialize_mt5() is False and bot._init_problem.startswith('account not known')
+    clock.sleep(5)
+    assert bot.initialize_mt5() is True and bot._account_login == 1
+    assert _names(fake) == ['initialize', 'shutdown', 'initialize'] and not run.events
+
+
+def test_a_terminal_that_shows_no_account_for_15_s_is_logged_in(mods):
+    m, fake, clock, bot, run = _fresh(mods)
+    fake.logged_in, fake.account_login = False, 0
+    t0 = clock.time()
+    assert bot.initialize_mt5() is True and fake.account_login == 1
+    assert [(n, round(t / 1000.0 - t0)) for n, t in fake.calls] == [('initialize', 0), ('login', 15)]
+
+
+def test_a_terminal_connected_to_a_trade_server_that_shows_no_account_is_not_logged_in(mods):
+    """Connected to a trade server means logged into some account: login 0 for the whole grace period there is not
+    'no account'."""
+    m, fake, clock, bot, run = _fresh(mods)
+    fake.account_answers = ['login_0'] * 30
+    assert bot.initialize_mt5() is False and 'login' not in _names(fake)
+    assert 'connected to a trade server but shows no account' in bot._init_problem
+
+
+def test_a_terminal_slower_than_the_grace_period_is_logged_in(mods):
+    """The limit the README names: a terminal still logging into its saved account after 15 s reads as holding none,
+    and the bot logs in over it. Only a separate MetaTrader 5 per slot closes this."""
+    m, fake, clock, bot, run = _fresh(mods)
+    _hold(fake, LIVE)
+    fake.login_delay_s = 20.0
+    t0 = clock.time()
+    bot.initialize_mt5()
+    assert [(n, round(t / 1000.0 - t0)) for n, t in fake.calls if n == 'login'] == [('login', 15)]
+
+
+def test_a_reconnect_onto_a_terminal_still_logging_into_a_live_account_is_never_a_login(mods):
+    """The terminal restarts (30 s) and comes back logging into a live bot's saved real account, 3 s after every
+    initialize(): the reconnects never log in; once the demo account is back the bot connects again (before: the
+    first reconnect logged in over the live account)."""
+    m, fake, clock, bot, run = _fresh(mods, seconds=1200)
+    assert bot.initialize_mt5() is True
+    t0 = clock.time()
+    fake.down(t0 + 0.5, t0 + 30.5)
+    fake.at(t0 + 20, lambda f: _hold(f, LIVE))
+    fake.at(t0 + 20, lambda f: setattr(f, 'login_delay_s', 3.0))
+    fake.at(t0 + 400, lambda f: _hold(f, (1, 'Fake-Demo', 0)))
+    ok_at = None
+    for _ in range(600):
+        clock.sleep(1)
+        if bot._poll_guard('XAUUSDm'):
+            ok_at = clock.time() - t0
+            break
+    assert 'login' not in _names(fake) and _names(fake).count('initialize') >= 5
+    assert ok_at is not None and 400 < ok_at < 470 and bot._account_login == 1
+    assert len(_in_use(run)) == 1 and run.events[-1]['event'] == 'TERMINAL_RECONNECTED'
+
+
 def _log_entries(path):
     with open(path) as f:
         return json.load(f)
