@@ -465,8 +465,8 @@ class MT5TradingBot:
         self._account_bad = None
         # Polls in a row that could not read the terminal (they decide nothing), and why the last one could not;
         # those of them without the terminal at all (terminal_info() None) and since when, the reconnects that
-        # failed since, the time of the next attempt, why initialize_mt5 failed last, and the reason and time of the
-        # last RECONNECT_FAILED event.
+        # failed since, the time of the next attempt, why initialize_mt5 failed last, and for each reason a reconnect
+        # failed with (_why_key) the time of its last RECONNECT_FAILED event and the failures not logged since.
         self._failed_polls = 0
         self._read_bad = None
         self._ipc_failed = 0
@@ -474,7 +474,7 @@ class MT5TradingBot:
         self._reconnects_failed = 0
         self._reconnect_at = None
         self._init_problem = None
-        self._reconnect_logged = None
+        self._reconnect_logged = {}
         # initialize_mt5 found the terminal logged into another account (it never logs in there): the problem
         # last logged as TERMINAL_IN_USE and when.
         self._in_use_logged = None
@@ -1485,10 +1485,11 @@ class MT5TradingBot:
         return None if self._ipc_lost_at is None else round(time.time() - self._ipc_lost_at, 1)
 
     def _try_reconnect(self, symbol):
-        """One reconnect attempt. Every failed one is printed; the ERROR event RECONNECT_FAILED only on the first
-        failure, when its reason changes (the terminal's last_error aside) and at most every _LOG_REPEAT_S
-        otherwise, so an outage of hours does not fill the 200-entry strategy log; TERMINAL_RECONNECTED reports the
-        attempts and the outage's length."""
+        """One reconnect attempt. Every failed one is printed; the ERROR event RECONNECT_FAILED for each reason (the
+        terminal's last_error aside) the first time it is seen, then at most every _LOG_REPEAT_S for that reason
+        (with the failures not logged since), so an outage of hours -- also one whose reasons alternate, a terminal
+        that keeps restarting -- does not fill the 200-entry strategy log; TERMINAL_RECONNECTED reports the attempts
+        and the outage's length."""
         attempt = self._reconnects_failed + 1
         if self._reconnect(symbol):
             print(f"[{symbol}] note: connected to the terminal again (attempt {attempt}, after {self._outage_s()} s)")
@@ -1499,7 +1500,7 @@ class MT5TradingBot:
             self._reconnects_failed = 0
             self._reconnect_at = None
             self._ipc_lost_at = None
-            self._reconnect_logged = None
+            self._reconnect_logged = {}
             return
         wait = _RECONNECT_BACKOFF_S[min(self._reconnects_failed, len(_RECONNECT_BACKOFF_S) - 1)]
         self._reconnects_failed += 1
@@ -1507,12 +1508,17 @@ class MT5TradingBot:
         self._reconnect_at = now + wait
         print(f"[{symbol}] WARNING: reconnect attempt {attempt} failed ({self._init_problem}); next one in {wait:g} s")
         why = _why_key(self._init_problem)
-        last = self._reconnect_logged
-        if last is None or last[0] != why or now - last[1] >= _LOG_REPEAT_S:
-            self._reconnect_logged = (why, now)
+        logged_at, unlogged = self._reconnect_logged.get(why, (None, 0))
+        if logged_at is None or now - logged_at >= _LOG_REPEAT_S:
+            if len(self._reconnect_logged) >= 32:      # (keep it small: a reason logged long ago is logged again anyway)
+                self._reconnect_logged = {k: v for k, v in self._reconnect_logged.items()
+                                          if now - v[0] < _LOG_REPEAT_S}
+            self._reconnect_logged[why] = (now, 0)
             self._log_event(symbol, 'RECONNECT_FAILED', 'ERROR', {
                 'attempt': attempt, 'why': self._init_problem, 'next_in_s': wait, 'failed_polls': self._failed_polls,
-                'outage_s': self._outage_s()})
+                'outage_s': self._outage_s(), 'not_logged_since': unlogged})
+        else:
+            self._reconnect_logged[why] = (logged_at, unlogged + 1)
 
     def _reconnect(self, symbol):
         """mt5.shutdown(), then initialize_mt5() again: the terminal, the login (only on a terminal that shows no
@@ -1542,7 +1548,7 @@ class MT5TradingBot:
         self._reconnects_failed = 0
         self._reconnect_at = None
         self._ipc_lost_at = None
-        self._reconnect_logged = None
+        self._reconnect_logged = {}
 
     def process_symbol(self, symbol):
         """
