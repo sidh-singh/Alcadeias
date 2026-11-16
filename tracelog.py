@@ -846,6 +846,23 @@ class TraceLog:
                 pass
             return _FAILED
 
+    def _transitions_step(self, fn, keep, c, snap, dec, orders, now, digits):
+        """The transitions step of a poll (_transitions, _turtle_transitions), as _step. When it raises, keep(c) still
+        records this poll's book for the next poll to compare with: the line that failed is not tried again -- and
+        does not fail again -- on every poll after it (until the book changed again: hours in a pause after a loss)."""
+        step = getattr(fn, '__name__', 'transitions')
+        r = self._step('poll', step, fn, c, snap, dec, orders, now, digits)
+        if r is _FAILED:
+            self._step('poll', step, keep, c)
+        return r
+
+    def _keep_basket(self, c):
+        st = c.state or {}
+        self._prev.update(polled=True, basket=_basket_sum(st.get('basket')), lc=_close_sum(st.get('last_close')))
+
+    def _keep_turtle(self, c):
+        self._prev.update(polled=True, turtle=self._book_sum(c.st if isinstance(c.st, dict) else {}))
+
     def _failed_decision(self, orders, step):
         """The decision of a poll whose trace could not work it out (a step before it raised): said as such."""
         return {'action': 'TRACE_ERROR', 'reason': step, 'side': None,
@@ -1239,7 +1256,7 @@ class TraceLog:
             dec = self._failed_decision(orders, '_basket_section' if bk is _FAILED else '_decide')
         snap['decision'] = dec
         if not failed:
-            S('_transitions', self._transitions, c, snap, dec, orders, now, digits)
+            self._transitions_step(self._transitions, self._keep_basket, c, snap, dec, orders, now, digits)
         S('_decision_line', self._decision_line, dec, now)
         self._last_snapshot = snap
         S('_write_trace', self._write_trace, snap, dec, now)
@@ -2228,6 +2245,9 @@ class TraceLog:
                 head = (f"the {lc.get('side')} entry {ids} is gone before the terminal listed it (its broker backstop "
                         'while the bot or the terminal was down?): booked as closed outside the bot, with the pause '
                         'after a loss if it lost: ')
+                tail = (f"realised {_usd(lc.get('pnl'))}, its closing deal at {_hm(lc.get('time'))} (deal history)"
+                        if final else 'the bot never saw its P/L: the realised P/L and the closing time follow from the '
+                                      'deal history')
             else:
                 head = (f"the {lc.get('side')} basket was closed outside the bot (the broker's backstop, the terminal, "
                         'or while the bot was down): ')
@@ -2803,7 +2823,7 @@ class TraceLog:
             dec = self._failed_decision(orders, '_turtle_section' if tv is _FAILED else '_turtle_decide')
         snap['decision'] = dec
         if not failed:
-            S('_turtle_transitions', self._turtle_transitions, c, snap, dec, orders, now, digits)
+            self._transitions_step(self._turtle_transitions, self._keep_turtle, c, snap, dec, orders, now, digits)
         S('_decision_line', self._decision_line, dec, now)
         self._last_snapshot = snap
         S('_write_trace', self._write_trace, snap, dec, now)

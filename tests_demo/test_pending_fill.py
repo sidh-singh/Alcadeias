@@ -13,6 +13,7 @@ once instead of pausing after the loss. Now the entry's position id is recorded 
 (_record_fill, as for an add) and saved with the state: an entry gone before its first listing is a basket closed
 outside the bot, booked with its realised loss, and the pause after a loss follows.
 """
+import os
 import types
 
 import pytest
@@ -147,13 +148,20 @@ def _entry_gone_while_down(tmp_path, first_entry, mode):
     else:
         fake.down(t_cut, t_cut + 60.0)
 
+    bots = []
+
     def on_new_bot(bot, n):
         bot.credentials = dict(CREDS)
+        bots.append(bot)
         recording_states(saved)(bot, n)
         if mode == 'crash' and n == 1:
             at_restart.append(dict((saved[-1].get('basket') or {}) if saved else {}))
             clock.now_ms += 60_000                                       # down 60 s
-    run = run_bot(fake, clock, overrides=WIDE, state_dir=tmp_path, on_new_bot=on_new_bot)
+    trace = tmp_path / 'trace'                       # (both bots' trace and text log, as in one OUTPUT_DIR)
+    run = run_bot(fake, clock, overrides=WIDE, state_dir=tmp_path, on_new_bot=on_new_bot, trace_dir=trace)
+    for bot in bots:
+        for tr in list((getattr(bot, '_tracers', None) or {}).values()):
+            tr._flush()
     by_broker = [d for d in fake.deals if d.reason == fake.DEAL_REASON_SL]
     assert len(by_broker) == 1 and by_broker[0].time_msc == fake.t_ms[i]   # the entry, at the spike
     entry_id = by_broker[0].position_id
@@ -167,6 +175,19 @@ def _entry_gone_while_down(tmp_path, first_entry, mode):
     later = [o['_t_ms'] / 1000.0 for o in fake.orders if 'position' not in o and o['_t_ms'] > t_cut * 1000]
     assert not later or later[0] >= lc['time'] + WIDE['LOSS_COOLDOWN_S']     # the pause after a loss
     assert not [s for s in saved if (s.get('basket') or {}).get('opened_by') == 'rebuild']
+    # the text log (tracelog.py) says the same: one CLOSE line, the pause after the loss, and no error of the trace
+    # (before the final step's fix: UnboundLocalError on this poll and on every poll after it, no CLOSE, no PAUSE line)
+    lines = []
+    for name in sorted(os.listdir(trace / 'logs')):
+        if name.endswith('.log'):
+            with open(trace / 'logs' / name, encoding='utf-8') as f:
+                lines += f.read().splitlines()
+    assert lines and not [ln for ln in lines if '| ERROR | TRACE |' in ln]
+    gone = [ln for ln in lines if f'| CLOSE | CLOSE | the {"BUY" if buy else "SELL"} entry [{entry_id}] is gone before '
+            'the terminal listed it' in ln]
+    assert len(gone) == 1 and f'realised -${-realised:,.2f}, its closing deal at ' in gone[0], gone
+    pause = [ln for ln in lines if '| INFO | PAUSE | entry pause started: ' in ln and f'(loss -${-realised:,.2f})' in ln]
+    assert len(pause) == 1, pause
     return run, at_restart, entry_id
 
 
