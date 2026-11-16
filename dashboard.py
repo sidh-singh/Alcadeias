@@ -1797,7 +1797,8 @@ def proximity(d):
             html.Span(head or '', className='prox-what'),
             badge({'red': 'VERY CLOSE', 'amber': 'GETTING CLOSE'}.get(alert['level'], 'NOT CLOSE'),
                   {'red': 'neg', 'amber': 'warn'}.get(alert['level'], 'neutral')) if worst and not stale else None,
-            html.Span(f"amber from {ALERT_AMBER:g}% of the way, red from {ALERT_RED:g}%", className='muted small'),
+            html.Span(f"amber from {ALERT_AMBER:g}% of the way, red from {ALERT_RED:g}%", className='muted small')
+            if worst else None,
         ]),
         html.Div(rows, className='progs'),
         extra,
@@ -2969,9 +2970,9 @@ def issues_view(sym):
                   f"{os.path.basename(events_path(sym))}", className='muted small'),
     ])
     items = []
-    for r in rows:
+    for k, r in enumerate(rows):
         active = r['last'] is not None and now - r['last'] <= 3600
-        items.append(html.Details(className=f"issue issue-{r['level'].lower()}", children=[
+        items.append(html.Details(open=k == 0, className=f"issue issue-{r['level'].lower()}", children=[
             html.Summary(className='issue-sum', children=[
                 html.Span(r['level'], className=f"lvl lvl-{r['level'].lower()}"),
                 html.Span(r['code'], className='issue-code mono'),
