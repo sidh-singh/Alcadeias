@@ -243,6 +243,27 @@ def test_the_trace_shows_the_open_basket_with_its_prices(traced):
             g = {x['key']: x for x in s['decision']['gates']}
             fired = {'stop_loss': 'stop', 'target': 'target'}[p['exit_reason']]
             assert g[fired]['ok'] is True and s['decision']['blocked_by'] == fired and s['decision']['reason'] == p['exit_reason']
+    # the prices the trace gives are the bot's own exits: at every close by the stop or the target the judged quote is
+    # through that price, and on the poll before it was not (not a copy of the trace's formula: the bot's P/L test)
+    closes = 0
+    for prev, s, p in zip(traced.snaps, traced.snaps[1:], traced.run.polls[1:]):
+        if s['decision']['action'] not in ('CLOSE_BUY', 'CLOSE_SELL') or p['exit_reason'] not in ('stop_loss', 'target'):
+            continue
+        o, o0 = s['basket']['open'], prev['basket']['open']
+        if not o0 or o0.get('side') != o.get('side'):
+            continue
+        buy = o['side'] == 'BUY'
+        q, q0 = (s['market']['bid'], prev['market']['bid']) if buy else (s['market']['ask'], prev['market']['ask'])
+        level = o['stop_price'] if p['exit_reason'] == 'stop_loss' else o['target_price']
+        assert level == o0[{'stop_loss': 'stop_price', 'target': 'target_price'}[p['exit_reason']]]
+        down = (p['exit_reason'] == 'stop_loss') == buy          # a buy's stop / a sell's target: the quote falls to it
+        tol = 2e-3                                             # (the prices are rounded to the symbol's 3 digits)
+        if down:
+            assert q <= level + tol and q0 > level - tol, (p['exit_reason'], o['side'], q, q0, level)
+        else:
+            assert q >= level - tol and q0 < level + tol, (p['exit_reason'], o['side'], q, q0, level)
+        closes += 1
+    assert closes >= 2
 
 
 @pytest.mark.slow
@@ -706,8 +727,8 @@ def test_a_hook_that_raises_is_an_error_with_its_traceback(tmp_path, untraced):
     errs = [i for i, (m, _) in enumerate(_parsed(lines)) if m and m.group(2) == 'ERROR']
     assert 1 <= len(errs) <= SECONDS // 600 + 1
     first = lines[errs[0]]
-    assert ("| ERROR | TRACE | the trace hook poll() failed in its step _basket_section: ValueError('boom: a bug in the "
-            "trace'); ignored, its other steps and the trading go on") in first
+    assert ("| ERROR | TRACE | the trace hook poll() failed in its step _basket_section: ValueError: boom: a bug in the "
+            "trace; ignored, its other steps and the trading go on") in first
     tb = []
     for ln in lines[errs[0] + 1:]:
         if not ln.startswith('    '):
@@ -743,7 +764,7 @@ def test_an_exception_in_the_loop_is_an_error_with_its_traceback(tmp_path):
     r = _replay(tmp_path, seconds=120, hook=hook)
     lines = _read_log(r.out)
     i = next(k for k, ln in enumerate(lines) if '| ERROR | LOOP |' in ln)
-    assert "the poll failed: ZeroDivisionError('a bug in the strategy'); the loop goes on in 1 s" in lines[i]
+    assert "the poll failed: ZeroDivisionError: a bug in the strategy; the loop goes on in 1 s" in lines[i]
     assert lines[i + 1] == '    Traceback (most recent call last):' and 'in flaky' in '\n'.join(lines[i + 1:i + 30])
     t_err = datetime.strptime(lines[i][:23], '%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).timestamp()
     assert any(p['t'] / 1000.0 > t_err + 10 for p in r.run.polls)              # it went on
@@ -1013,3 +1034,123 @@ def test_a_basket_a_backstop_closed_only_partly_is_booked_whole_in_the_trace(tmp
     t = next(x for x in doc['closed'] if {l['position_id'] for l in x['legs']} == {e, a})
     assert t['exit_reason'] == 'leg_closed_outside' and t['pnl'] == realised
     assert t['exit_reason_text'] == 'a leg closed outside the bot, the rest closed by the bot'
+
+
+# ───────────────────────────── the final review's fixes ─────────────────────────────
+
+FAKE_CREDS = {'demo': {'terminal_path': 'C:\\MT5\\slot\\terminal64.exe', 'login_id': 111,
+                       'login_pass': 'FAKE-demo-pässword-111', 'server': 'Fake-Demo'},
+              'live': {'login_id': 999, 'login_pass': 'FAKE-live-pässword-999', 'server': 'Fake-Live'}}
+
+
+def _all_logged(folder):
+    out = ''
+    for root, _, names in os.walk(folder):
+        for n in names:
+            with open(os.path.join(root, n), 'rb') as f:
+                out += f.read().decode('utf-8', 'replace')
+    return out
+
+
+@pytest.mark.parametrize('encoding', ['cp1252', 'utf-16'])
+def test_a_credentials_file_that_is_not_utf8_leaves_no_byte_of_it_in_the_logs(mods, tmp_path, encoding):
+    """Notepad's ANSI (cp1252) or PowerShell's UTF-16: the bot says the file is not UTF-8 text and logs none of its bytes
+    (the repr of the decode error held the whole file, passwords included); the day file is named as symbols.json
+    spells the symbol (the job was started with --symbol in capitals)."""
+    m = mods(OUTPUT_DIR=str(tmp_path / 'out'))
+    code = tmp_path / 'code'
+    code.mkdir()
+    (code / 'mt5_credentials.json').write_bytes(json.dumps(FAKE_CREDS, ensure_ascii=False, indent=1).encode(encoding))
+    (code / 'symbols.json').write_text(json.dumps({'symbols': [{'symbol': SYMBOL, 'is_active': True}]}), encoding='utf-8')
+    m.app.__file__ = str(code / 'app.py')                    # (the bot reads its files next to app.py)
+    bot = m.app.MT5TradingBot(mode='demo', target_symbol=SYMBOL.upper())
+    bot.trace_dir = str(tmp_path / 'out')
+    assert bot.load_credentials() is False and not bot.credentials if hasattr(bot, 'credentials') else True
+    bot._boot_flush()
+    logs = os.listdir(tmp_path / 'out' / 'logs')
+    assert any(n.startswith(f'{SYMBOL}_') and n.endswith('.log') for n in logs), logs        # 'XAUUSDm_', not 'XAUUSDM_'
+    text = _all_logged(tmp_path / 'out')
+    assert 'mt5_credentials.json is not UTF-8 text: save it as UTF-8' in text
+    for secret in ('FAKE', 'p\\xe4ss', 'pässword', '111', '999', 'F\\x00A'):
+        assert secret not in text, secret
+
+
+def test_a_job_that_fails_logs_the_error_type_and_message_never_its_repr(mods, tmp_path):
+    """An exception that reaches execute_job: its type and str() in the log (the repr of a decode error is every byte it
+    decoded)."""
+    m = mods(OUTPUT_DIR=str(tmp_path / 'out'))
+    bot = m.app.MT5TradingBot(mode='demo', target_symbol=SYMBOL)
+    bot.trace_dir = str(tmp_path / 'out')
+    secret = b'{"demo": {"login_pass": "FAKE-secret-\xe4"}}'
+    at = secret.index(b'\xe4')
+
+    def boom():
+        raise UnicodeDecodeError('utf-8', secret, at, at + 1, 'invalid continuation byte')
+    bot._init_cycle = boom
+    assert bot.execute_job() is False
+    text = _all_logged(tmp_path / 'out')
+    assert ("the job failed: UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe4 in position "
+            f'{at}: invalid continuation byte') in text
+    assert 'FAKE-secret' not in text
+    assert m.app._err_text(ValueError('x')) == 'ValueError: x' and m.tracelog.err_text('plain text') == 'plain text'
+
+
+def test_a_refused_replace_is_tried_again_for_a_quarter_of_a_second(mods, tmp_path, monkeypatch):
+    """Windows refuses os.replace onto a file a reader (the dashboard) has open: the trace's JSON writer, the events
+    rotation and the bot's state files try again (about 0.24 s in all) before they give up."""
+    tl = mods().tracelog
+    calls = []
+    real = os.replace
+
+    def refusing(n):
+        def rep(a, b):
+            calls.append(time.perf_counter())
+            if len(calls) <= n:
+                raise PermissionError(13, 'Access is denied')
+            return real(a, b)
+        return rep
+    monkeypatch.setattr(tl.os, 'replace', refusing(4))
+    tl.write_json_atomic(str(tmp_path / 'a.json'), {'x': 1})
+    assert len(calls) == 5 and json.loads((tmp_path / 'a.json').read_text(encoding='utf-8')) == {'x': 1}
+    calls.clear()
+    monkeypatch.setattr(tl.os, 'replace', refusing(99))
+    with pytest.raises(PermissionError):
+        tl.write_json_atomic(str(tmp_path / 'b.json'), {'x': 2})
+    assert len(calls) == len(tl.REPLACE_WAITS_S) + 1 and 0.2 <= calls[-1] - calls[0] <= 1.0
+    assert not [n for n in os.listdir(tmp_path) if n.endswith('.tmp')]
+    calls.clear()
+    monkeypatch.setattr(tl.os, 'replace', refusing(2))
+    w = tl.LogWriter(tmp_path / 'logs', SYMBOL, events_cap=300, events_keep=2)
+    for i in range(20):
+        assert w.write([_rec(START + i, msg=f'line {i}')])
+    assert len(calls) > 2 and os.path.exists(tmp_path / 'logs' / f'{SYMBOL}_events.1.jsonl')
+
+
+def test_retention_deletes_a_day_file_named_in_another_case(mods, tmp_path):
+    tl = mods().tracelog
+    old = f'{datetime.fromtimestamp(START - 40 * 86400, tz=timezone.utc):%Y-%m-%d}'
+    (tmp_path / f'{SYMBOL.upper()}_{old}.log').write_text('x\n')
+    w = tl.LogWriter(tmp_path, SYMBOL)
+    assert w.write([_rec(START)])
+    assert not any(old in n for n in os.listdir(tmp_path)), os.listdir(tmp_path)
+
+
+def test_the_virtual_balance_after_a_restart_in_a_trade_comes_from_the_deal_history(mods, tmp_path):
+    """The bot re-derives its virtual balance only while flat: after a restart in the middle of a trade it has none.
+    The trace then gives the balance of its last deal-history read (marked 'deal history'), not null."""
+    m = mods(OUTPUT_DIR=str(tmp_path / 'out'))
+    bot = F.make_bot(m, m.fake, SYMBOL, F.Run(), trace_dir=tmp_path / 'out')
+    tr = bot._tracer(SYMBOL)
+    bot._virtual_balance_last = None
+    c = types.SimpleNamespace(account_info={'balance': 2003.0}, mtqty=0.01, units=1, _virtual_balance=None,
+                              buy_positions={'total_profit': 1.5}, sell_positions=None, step_up_balance=2500.0,
+                              max_limit=10)
+    acct = tr._account(c)
+    assert acct['virtual'] and acct['virtual_balance'] is None and acct['virtual_balance_source'] is None
+    tr._deal_balance = 1996.25
+    acct = tr._account(c)
+    assert (acct['virtual_balance'], acct['virtual_balance_source'], acct['own_equity']) == (1996.25, 'deal history', 1997.75)
+    assert acct['own_closed_pl'] == pytest.approx(1996.25 - acct['virtual_start_balance'])
+    c._virtual_balance = 2001.0
+    acct = tr._account(c)
+    assert (acct['virtual_balance'], acct['virtual_balance_source']) == (2001.0, 'bot')

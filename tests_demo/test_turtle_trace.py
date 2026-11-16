@@ -456,11 +456,12 @@ def test_the_old_dashboard_files_are_still_written(traced):
 
 # ───────────────────────────── a D1 close inside the trade ─────────────────────────────
 
-def _night_market():
+def _night_market(early_exit=False):
     """23:40 UTC, 200 days of history whose last 30 days rise 20 a day (so the 20-day low rises by 20 at every D1
     close), +-300 within each day; a 5N stop, so the 20-day low is the tighter stop. The ask goes through the buy
     level at about 23:45, holds above it past midnight (the D1 bar of the day closes: new levels, the stop raised to
-    the new 20-day low), then falls through the stop at about 00:20."""
+    the new 20-day low), then falls through the stop at about 00:20. early_exit: it falls through the stop at about
+    23:55 instead and stays below it (flat past midnight, today's orders used)."""
     s0 = START + 15 * 3600 + 40 * 60
     n = 200 * 96
     t = (int(s0) - 900 * np.arange(n, 0, -1)).astype(np.int64)
@@ -472,8 +473,12 @@ def _night_market():
     rows = T.daily_rows(d1['o'][closed], d1['h'][closed], d1['l'][closed], d1['c'][closed], system=2, stop_n=5.0)
     lv = T.row_levels(rows, d1['t'][closed], int(closed.sum()) - 1)
     b = lv['buy']
-    bid = np.round(np.concatenate([np.linspace(b - 100, b + 100, 600), np.full(1200, b + 100),
-                                   np.linspace(b + 100, lv['trail_long'] - 200, 1200)]), 2)
+    if early_exit:
+        bid = np.round(np.concatenate([np.linspace(b - 100, b + 100, 600), np.linspace(b + 100, lv['trail_long'] - 200, 300),
+                                       np.full(1800, lv['trail_long'] - 200)]), 2)
+    else:
+        bid = np.round(np.concatenate([np.linspace(b - 100, b + 100, 600), np.full(1200, b + 100),
+                                       np.linspace(b + 100, lv['trail_long'] - 200, 1200)]), 2)
     k = len(bid)
     t_ms = (int(s0) * 1000 + 1000 + 1000 * np.arange(k)).astype(np.int64)
     clock = F.FakeClock(s0 + 1.5, s0 + k)
@@ -680,6 +685,13 @@ def test_a_restart_without_the_state_file_logs_the_takeover(tmp_path):
     fills = [d.price for d in TB._deal_ins(r.fake)][:3]
     assert tr['legs_count'] == 3 and tr['n_entry'] == pytest.approx(LV['n'])
     assert tr['stop'] == pytest.approx(max(fills) - LV['stop_dist']) and tr['entry_level'] == LV['buy']
+    # the bot has no virtual balance until it is flat again: the trace takes it from its deal-history read (the review
+    # found it null for the rest of the trade)
+    in_trade = [x for x in after if x['turtle']['trade'] and x['decision']['action'] not in ('CLOSE_BUY', 'CLOSE_SELL')]
+    with_vb = [x for x in in_trade if x['account']['virtual_balance'] is not None]
+    assert len(with_vb) >= len(in_trade) - 5 and with_vb[-1]['account']['virtual_balance_source'] == 'deal history'
+    before = [x for x in r.snaps if x['t'] <= START + at and x['account']['virtual_balance'] is not None]
+    assert with_vb[-1]['account']['virtual_balance'] == before[-1]['account']['virtual_balance']
 
 
 @pytest.mark.slow
@@ -750,7 +762,7 @@ def test_a_turtle_trace_that_fails_changes_nothing(tmp_path, untraced):
     lines = _read_log(r.out)
     errs = [ln for ln in lines if '| ERROR | TRACE |' in ln]
     assert 1 <= len(errs) <= 3000 // 600 + 1
-    assert ("the trace hook poll() failed in its step _turtle_section: ValueError('boom: a bug in the Turtle trace'); "
+    assert ("the trace hook poll() failed in its step _turtle_section: ValueError: boom: a bug in the Turtle trace; "
             "ignored, its other steps and the trading go on") in errs[0]
     i = lines.index(errs[0])
     assert lines[i + 1] == '    Traceback (most recent call last):' and 'in _step' in '\n'.join(lines[i:i + 40])
@@ -877,3 +889,99 @@ def test_an_account_switch_just_before_the_turtles_positions_read_is_in_the_trac
     assert '| ERROR | ACCOUNT | not trading: account 99 is not a demo account' in text
     assert '| INFO | ACCOUNT | the terminal holds the demo account again: trading' in text
     assert len(TB._opens(r.fake)) == 4 and len(TB._closes(r.fake)) == 4             # the trade as without the switch
+
+
+# ───────────────────────────── the final review's fixes ─────────────────────────────
+
+@pytest.mark.slow
+def test_a_stop_passed_close_with_a_refused_leg_keeps_its_reason_to_the_end(traced, tmp_path):
+    """The leg-beyond-the-stop case above, and the terminal refuses the close of one of the other legs once (off
+    quotes): the retry on the next poll is the end of the same exit, 'the stop passed outside the bot', in the CLOSE
+    line, the journal and trades.json (it said 'turtle_stop' at a price far above the stop)."""
+    sl = [o['sl'] for o in TB._opens(traced.fake)]
+    a = START + 1590.0
+
+    def prepare(fake):
+        i = int((fake.t_ms >= (a + 4.0) * 1000).argmax())
+        spike = (sl[3] + sl[2]) / 2.0
+        fake.bid[i], fake.ask[i] = spike, spike + (fake.ask[i] - fake.bid[i])
+        fake.down(a, a + 8.0)
+        orig = fake.positions_get
+
+        def positions_get(symbol=None, **k):
+            now = fake.clock.time()
+            # the first close after the reconnect (three legs left) is refused for one of them; the retry is not
+            fake.fail_close_tickets = ({fake.positions[0]['ticket']} if now >= a and len(fake.positions) == 3 else set())
+            return orig(symbol=symbol, **k)
+        fake.positions_get = positions_get
+
+    def creds(bot, n):
+        bot.credentials = dict(CREDS)
+    r = _replay(tmp_path, prepare=prepare, on_bot=creds)
+    assert not r.fake.positions
+    reasons = [s['decision']['reason'] for s in r.snaps if s['decision']['action'] == 'CLOSE_BUY']
+    assert reasons[0] == 'stop_passed_outside' and 'close_retry' in reasons, reasons
+    ms = _lines(r.out)
+    warn = [m.group(4) for m in ms if m.group(2) == 'WARN' and m.group(3) == 'CLOSE']
+    assert warn and 'is incomplete: 2 closed, 1 failed' in warn[0]
+    close = [m.group(4) for m in ms if m.group(2) == 'CLOSE']
+    assert len(close) == 1 and close[0].startswith('the last 1 leg(s) of the BUY trade closed (the close that followed '
+                                                   'the stop ')
+    assert 'reason=stop_passed_outside' in close[0] and 'reason=turtle_stop' not in close[0]
+    with open(os.path.join(r.out, f'{SYMBOL}_trades.json'), encoding='utf-8') as f:
+        t = json.load(f)['closed'][-1]
+    assert t['exit_reason'] == 'stop_passed_outside' and t['turtle']['exit']['reason'] == 'stop_passed_outside'
+    result = [m.group(4) for m in ms if m.group(3) == 'RESULT']
+    assert result and 'exit: the stop passed outside the bot' in result[-1]
+
+
+@pytest.mark.slow
+def test_a_late_d1_bar_while_flat_with_the_orders_used_is_not_counted_as_still_to_come(tmp_path):
+    """The night market, but the trade stops out before midnight: flat, today's orders used. After 00:00 the terminal
+    gives the new D1 bar 6 minutes late: the headline says the bar that closed at 00:00 is not there yet (it counted the
+    past close as 'in 2.0 min', 'in 3.0 min' ...), and the gate note too; before midnight it counts down."""
+    (fake2, clock), lv = _night_market(early_exit=True)
+    midnight = lv['from_time'] + 86400
+    fake2.fail_rates('D1', midnight, midnight + 360)
+    r = _replay(tmp_path, market=(fake2, clock), overrides={'TURTLE_STOP_N': 5.0})
+    snaps = [s for s, _ in _polled(r)]
+    assert TB._closes(fake2) and TB._closes(fake2)[-1]['_t_ms'] / 1000.0 < midnight
+    used = [s for s in snaps if s['decision']['action'] == 'WAIT' and s['decision']['reason'] == 'orders used']
+    late = [s for s in used if s['market']['tick_t'] >= midnight]
+    early = [s for s in used if s['market']['tick_t'] < midnight]
+    assert early and all('(in ' in s['decision']['headline'] for s in early)
+    assert late and any(s['turtle']['d1']['stale'] for s in late)
+    for s in late:
+        h = s['decision']['headline']
+        assert '00:00:00 UTC is not there yet' in h and '(in ' not in h and 'UTC UTC' not in h, h
+        note = next(g for g in s['decision']['gates'] if g['key'] == 'armed')['note']
+        assert 'is not there yet' in note and 'arms new ones' not in note, note
+
+
+@pytest.mark.slow
+def test_a_short_turtle_trade_is_the_bots_book(tmp_path):
+    """The short trip (test_turtle_bot.py, the vote -1) with the trace: the trade block is the bot's book and the
+    terminal on every poll -- the stop judged on the ask, the next add on the bid at the last fill - 0.5N, the stop at
+    the lowest fill + 2N, the P/L at the stop."""
+    r = _replay(tmp_path, trip=TB._short_trip(), vote=lambda t: -1)
+    assert not r.run.errors, r.run.errors[:3]
+    fills = [d.price for d in TB._deal_ins(r.fake)]
+    assert len(fills) >= 2
+    in_trade = 0
+    for s, old in _polled(r):
+        book, tr = old['book'], s['turtle']['trade']
+        if not book['side'] or s['decision']['action'] == 'CLOSE_SELL':
+            continue
+        in_trade += 1
+        legs = book['legs']
+        assert tr['side'] == 'SELL' and tr['legs_count'] == len(legs) and tr['judged_on'] == 'ask'
+        assert tr['stop'] == book['stop'] and tr['stop_2n'] == pytest.approx(min(fills[:len(legs)]) + LV['stop_dist'], abs=1e-3)
+        assert tr['to_stop'] == pytest.approx(tr['stop'] - s['market']['ask'], abs=1e-3)
+        if len(legs) < 4:
+            assert tr['next_add_judged_on'] == 'bid'
+            assert tr['next_add'] == pytest.approx(legs[-1]['price'] - LV['add_step'], abs=1e-3)
+            assert tr['to_next_add'] == pytest.approx(s['market']['bid'] - tr['next_add'], abs=1e-3)
+        assert tr['pnl_at_stop'] == pytest.approx(sum((x['price'] - tr['stop']) * x['lots'] for x in tr['legs']), abs=0.02)
+    assert in_trade > 500
+    close = [m.group(4) for m in _lines(r.out) if m.group(2) == 'CLOSE']
+    assert close and close[0].startswith('SELL trade closed at the stop')
