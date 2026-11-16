@@ -269,3 +269,66 @@ def test_the_launchers_restarts_do_not_fill_the_log(mods, tmp_path, monkeypatch)
     new_process()                                               # 15 minutes later: once more
     assert [e['event'] for e in _log_entries(log)] == ['TERMINAL_IN_USE', 'TERMINAL_IN_USE']
     assert 'login' not in [c[0] for c in m.fake.calls]
+
+
+# ───────────────── the final review: the limit per problem (fix D's nearby case, TERMINAL_IN_USE) ─────────────────
+
+def test_two_other_accounts_in_turn_do_not_fill_the_log(mods):
+    """TERMINAL_IN_USE remembered only the problem it logged last, so a terminal held in turn by two other accounts (a
+    live 99, another slot's 7) logged every reconnect attempt: 240 TERMINAL_IN_USE in 4 hours, enough to overwrite the
+    200-entry strategy log in 3.3 hours. Now each problem is limited on its own: logged when it is first seen, then at
+    most every 15 minutes."""
+    fake, clock = market(60)
+    m = mods(fake=fake, clock=clock)
+    run = F.Run()
+    bot = F.make_bot(m, fake, 'XAUUSDm', run)
+    bot.credentials = dict(CREDS)
+    clock.end_ms = 10 ** 15
+    t0 = clock.time()
+    fake.down(t0, t0 + 30)
+    attach = fake.initialize
+    n = {'k': 0}
+
+    def initialize(*a, **k):                                   # each attach finds the other of the two accounts
+        ok = attach(*a, **k)
+        n['k'] += 1
+        _hold(fake, LIVE if n['k'] % 2 else (7, 'Fake-Demo', 0))
+        return ok
+    fake.initialize = initialize
+    for _ in range(4 * 3600):
+        bot._poll_guard('XAUUSDm')
+        clock.sleep(1)
+    times = {}
+    for e in _in_use(run):
+        times.setdefault(e['details']['login'], []).append(e['t'] / 1000.0)
+    assert n['k'] > 200 and sorted(times) == [7, 99] and 'login' not in _names(fake)
+    for t in times.values():                                   # (before: every 120 s, 120 each)
+        assert len(t) <= 4 * 3600 // 900 + 1 and all(b - a >= 900 for a, b in zip(t, t[1:]))
+
+
+def test_the_launchers_restarts_with_two_other_accounts_in_turn_do_not_fill_the_log(mods, tmp_path, monkeypatch):
+    """Across the launcher's restarts too: each start finds the terminal held by the other of two accounts. The log
+    gets each account's TERMINAL_IN_USE once, not one line per start (before: 6 lines for 6 starts). A start after the
+    bot ran (another entry at the head of the log) logs the problem again at once."""
+    m = mods(OUTPUT_DIR=str(tmp_path))
+    monkeypatch.setattr(m.app, 'time', real_time)               # the log's times are the wall clock
+    log = tmp_path / 'logs' / 'XAUUSDm_strategy_log.json'
+
+    def new_process(account):
+        _hold(m.fake, account)
+        bot = m.app.MT5TradingBot(mode='demo', target_symbol='XAUUSDm')
+        bot.credentials, bot.symbols = dict(CREDS), ['XAUUSDm']
+        for _ in range(3):
+            assert bot.initialize_mt5() is False
+    for _ in range(3):
+        new_process(LIVE)
+        new_process((7, 'Fake-Demo', 0))
+    assert [(e['event'], e['details']['login']) for e in _log_entries(log)] == [('TERMINAL_IN_USE', 7),
+                                                                                ('TERMINAL_IN_USE', 99)]
+    entries = _log_entries(log)
+    entries.insert(0, {'time': entries[0]['time'], 'utc_time': entries[0]['utc_time'], 'symbol': 'XAUUSDm',
+                       'event': 'TERMINAL_OK', 'tag': 'SIGNAL', 'details': {}})      # the bot ran in between
+    log.write_text(json.dumps(entries))
+    new_process(LIVE)
+    assert [e['event'] for e in _log_entries(log)][:2] == ['TERMINAL_IN_USE', 'TERMINAL_OK']
+    assert 'login' not in _names(m.fake)
