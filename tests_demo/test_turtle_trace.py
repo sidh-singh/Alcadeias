@@ -985,3 +985,75 @@ def test_a_short_turtle_trade_is_the_bots_book(tmp_path):
     assert in_trade > 500
     close = [m.group(4) for m in _lines(r.out) if m.group(2) == 'CLOSE']
     assert close and close[0].startswith('SELL trade closed at the stop')
+
+
+# ───────────────────── the paths of v3.9.2-demo.5 (the third fix round) on the Turtle ─────────────────────
+
+def _inside_the_close(switched, inside):
+    """on_bot hook: `inside(fake)` runs at the first close_by_type call, before that close reads the positions."""
+    def on_bot(bot, n):
+        close = bot.position_helper.close_by_type
+        fake = bot.position_helper.mt5
+
+        def close_by_type(symbol, pos_type):
+            if not switched:
+                switched.append(fake.clock.time())
+                inside(fake)
+            return close(symbol, pos_type)
+        bot.position_helper.close_by_type = close_by_type
+    return on_bot
+
+
+@pytest.mark.slow
+def test_a_close_that_closed_nothing_is_said_and_decided_again(tmp_path):
+    """Fix C of the third round: another program logs the terminal into another account just before the stop's close
+    reads the positions, so it closes nothing. The log says 'closed nothing ... decided again next poll' (not
+    'incomplete: 0 closed, 0 failed'), the headline too, and the trace keeps the trade; when the demo account is back,
+    one CLOSE line ends the trade with its four legs, and trades.json gives the stop as its exit."""
+    switched, stash = [], {}
+
+    def to_live(f):
+        stash['positions'], f.positions = f.positions, []
+        f.account_login, f.trade_mode = 99, f.ACCOUNT_TRADE_MODE_REAL
+        f.at(f.clock.time() + 60, back)
+
+    def back(f):
+        f.positions = stash['positions']
+        f.account_login, f.trade_mode = 1, f.ACCOUNT_TRADE_MODE_DEMO
+    r = _replay(tmp_path, on_bot=_inside_the_close(switched, to_live))
+    assert switched and r.run.errors and all('not trading: account 99' in e for e in r.run.errors), r.run.errors[:3]
+    lines = _lines(r.out)
+    warn = [m.group(4) for m in lines if m.group(2) == 'WARN' and m.group(3) == 'CLOSE']
+    nothing = [w for w in warn if w.startswith('the close of the BUY trade closed nothing')]
+    assert len(nothing) == 1 and 'the trade stays booked, and the close is decided again next poll' in nothing[0]
+    assert not any('is incomplete: 0 closed, 0 failed' in w for w in warn)
+    first = next(s for s in r.snaps if s['decision']['action'] == 'CLOSE_BUY')
+    assert 'The close closed nothing' in first['decision']['headline'] and first['turtle']['trade']
+    closes = [m.group(4) for m in lines if m.group(2) == 'CLOSE' and m.group(3) == 'CLOSE']
+    assert len(closes) == 1 and closes[0].startswith('the BUY trade closed: its 4 leg(s), on the next try (the close '
+                                                     'at the stop ')
+    assert 'had closed nothing)' in closes[0] and 'reason=turtle_stop' in closes[0]
+    trade = r.trades[-1]['closed'][-1]
+    assert trade['exit_reason'] == 'turtle_stop'
+
+
+@pytest.mark.slow
+def test_legs_gone_before_a_close_that_closed_nothing_end_the_trade_next_poll(tmp_path):
+    """The broker closes every leg between the poll's positions read and the stop's close, which closes nothing; the
+    next poll finds the legs gone and ends the trade (app.py: not as closed outside the bot, its close was decided).
+    The log says both: the close that closed nothing, then the end of the trade and why."""
+    switched = []
+
+    def broker_closes_all(f):
+        for p in list(f.positions):
+            f.close_by_broker(p['ticket'])
+    r = _replay(tmp_path, on_bot=_inside_the_close(switched, broker_closes_all))
+    assert switched and not r.run.errors, r.run.errors[:3]
+    lines = _lines(r.out)
+    assert sum(m.group(2) == 'WARN' and m.group(4).startswith('the close of the BUY trade closed nothing')
+               for m in lines) == 1
+    ended = [m.group(4) for m in lines if m.group(2) == 'CLOSE' and 'had closed nothing, so they were closed outside '
+             'the bot first' in m.group(4)]
+    assert len(ended) == 1 and ended[0].startswith('the BUY trade ended: its 4 leg(s) are gone')
+    assert 'the bot ends the trade (not booked as closed outside it)' in ended[0] and 'after_close_of=turtle_stop' in ended[0]
+    assert 'TURTLE_CLOSED_OUTSIDE' not in {e['event'] for e in r.run.events}

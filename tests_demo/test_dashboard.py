@@ -1011,3 +1011,92 @@ def test_odd_paths_get_a_plain_404(D):
         r = client.get(path)
         assert r.status_code == 404, (path, r.status_code)
     assert client.get('/').status_code == 200
+
+
+# ───────────────────── the paths of v3.9.2-demo.5 (the third fix round) on the page ─────────────────────
+
+LIVE_MT5 = r'C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe'
+
+
+def test_a_start_refused_on_the_live_terminal_is_shown_with_what_to_do(D, mods, tmp_path):
+    """LIVE_TERMINAL_PATH: the bot never starts, so there is no trace. The status bar (on every tab) says the bot is not
+    running and why, with what to do; Changes & issues lists LIVE_TERMINAL_PATH first, with its lines. A start of the
+    trading loop after it clears the box."""
+    folder = str(tmp_path / 'refused')
+    os.makedirs(folder)
+    _point(D, folder, BASKET)
+    sym = D.symbols()[0]                                # no trace yet: the branch's own symbol (symbols.json)
+    m = mods(OUTPUT_DIR=folder)
+    bot = m.app.MT5TradingBot(mode='demo', target_symbol=sym)
+    bot.load_credentials = lambda: setattr(bot, 'credentials', {'terminal_path': LIVE_MT5, 'login_id': 1,
+                                                                'login_pass': 'not-a-password',
+                                                                'server': 'Fake-Demo'}) or True
+    bot.load_symbols = lambda: setattr(bot, 'symbols', [sym]) or True             # (never the real files)
+    assert bot.execute_job() is False and m.fake.calls == []
+    d = _point(D, folder, sym, age=30.0)
+    slot = re.search(r'(\d+)$', str(D._C.DEMO_BRANCH)).group(1)
+    ref = D.start_refusal(sym, d.get('trace'))
+    assert ref and ref['code'] == 'LIVE_TERMINAL_PATH' and ref['limited']
+    status = _text(D.status_bar(sym, d))
+    for bit in ('No trace file', 'Not started: LIVE_TERMINAL_PATH', 'The bot is not running: its start was refused',
+                'The launcher tries again every 30 s', 'at most every 15 minutes', 'What to do: ',
+                f'Install a separate MetaTrader 5 for slot {slot} in its own folder', 'README, How to run, steps 1 and 2'):
+        assert bit in status, bit
+    assert 'not-a-password' not in status
+    live = _text(D._live(0, 'live', 'M1', sym, None)[0])           # (the Live tab's card without a trace)
+    assert 'its start was refused (LIVE_TERMINAL_PATH): the red box above says what to do' in live
+    rows, _, problem = D.issues(sym)
+    assert problem is None and rows[0]['code'] == 'LIVE_TERMINAL_PATH' and rows[0]['level'] == 'ERROR'
+    assert rows[0]['count'] == 5                        # the refusal, the three start attempts, the job's end
+    text = _text(D._changes(0, 'changes', sym, None)[0])
+    assert 'The bot refuses to start: terminal_path in mt5_credentials.json names the live bots' in text
+    # the trading loop started after it: the bot runs, no box
+    _events_file(folder, sym, [{'t': ref['t'] + 60, 'level': 'INFO', 'cat': 'START',
+                                'msg': f'trading loop started for {sym} ({sym} at the terminal)'}])
+    d = _point(D, folder, sym, age=90.0)
+    assert D.start_refusal(sym, d.get('trace')) is None and 'Not started' not in _text(D.status_bar(sym, d))
+
+
+def test_an_old_start_refusal_and_the_new_issue_kinds(D, tmp_path, basket):
+    """A refusal older than the trace is history (the bot ran after it): no box. The new lines of the third fix round
+    are grouped by kind: the account not known, the bot's own login, a close that closed nothing."""
+    folder = str(tmp_path / 'old_refusal')
+    shutil.copytree(basket.end, folder)
+    t = json.load(open(os.path.join(folder, f'{BASKET}_trace.json'), encoding='utf-8'))['t']
+    _events_file(folder, BASKET, [
+        {'t': t - 600, 'level': 'ERROR', 'cat': 'START', 'msg': 'all 3 start attempts failed (initialize failed: (-6, '
+                                                                 "'Terminal: Authorization failed')): the job ends"},
+        {'t': t - 500, 'level': 'WARN', 'cat': 'ACCOUNT', 'msg': "no login: account not known: account_info() answered "
+                                                                 "None (last_error (-10005, 'IPC timeout')); the bot "
+                                                                 'detached and tries again later'},
+        {'t': t - 400, 'level': 'WARN', 'cat': 'ACCOUNT', 'msg': 'the terminal showed no account for 15 s: the bot logs '
+                                                                 'in itself (login 1 on Fake-Demo)'},
+        {'t': t - 300, 'level': 'WARN', 'cat': 'CLOSE', 'msg': 'the close of the BUY basket closed nothing: ...'},
+    ])
+    d = _point(D, folder, BASKET)
+    assert D.start_refusal(BASKET, d.get('trace')) is None and 'Not started' not in _text(D.status_bar(BASKET, d))
+    by = {r['code']: r for r in D.issues(BASKET)[0]}
+    assert by['MT5_INIT_FAILED']['count'] == 1 and by['ACCOUNT_NOT_KNOWN']['count'] == 1
+    assert by['BOT_LOGIN']['count'] == 1 and by['CLOSE_NOTHING']['count'] == 1
+    assert 'README, How to run, step 2' in by['BOT_LOGIN']['todo']
+
+
+def test_a_leg_filled_and_not_listed_yet_is_shown_in_the_position(D, tmp_path, basket):
+    """_record_fill: a leg of the basket from its fill. The trace's basket.open.unlisted has the legs the terminal has not
+    listed yet; the position card flags them, says what the bot does meanwhile and lists them in the legs table."""
+    folder = str(tmp_path / 'unlisted')
+    shutil.copytree(basket.open, folder)
+    path = os.path.join(folder, f'{BASKET}_trace.json')
+    with open(path, encoding='utf-8') as f:
+        tr = json.load(f)
+    tr['basket']['open']['unlisted'] = [{'id': 999001, 'fill_t': tr['t'] - 2, 'fill_utc': None, 'age_s': 2.0,
+                                         'wait_s': 10.0, 'price': 2001.25, 'lots': 0.01, 'kind': 'add'}]
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(tr, f)
+    d = _point(D, folder, BASKET)
+    pos = _text(D.position_view(d))
+    assert re.search(r'Filled, not listed by the terminal yet: position 999001 \(add, 0\.01 lot at 2,001\.250*, 2 s ago\)',
+                     pos), pos[pos.find('Filled'):][:200]
+    for bit in ('1 leg(s) not listed yet', 'the P/L, the stop and the target above use the listed legs', 'within 10 s',
+                'not listed yet'):
+        assert bit in pos, bit
