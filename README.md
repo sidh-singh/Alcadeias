@@ -68,7 +68,9 @@ logs. Open the port in the server's firewall only to your own IP address, or ope
   fresh, the demo-account check, the terminal, the market, errors in the last hour; the virtual balance, the unit and
   lot, this bot's open and closed P/L and its equity, the shared demo account, how long the bot has run. When the bot
   has not written for a minute, the first chip is red, the others are grey with the time of its last poll ('as of
-  09:10'), and a red banner says the page shows that poll, not now.
+  09:10'), and a red banner says the page shows that poll, not now. When the bot's start was refused and it has not
+  started since (for example `LIVE_TERMINAL_PATH`: `terminal_path` names the live bots' MetaTrader 5), a red chip 'Not
+  started' and a red box say so, with what the bot wrote and what to do (here: steps 1 and 2 of "How to run").
 - **Live**: *what the bot is doing now*: the action and the bot's own one-sentence reason, every check in the order
   the bot makes it (✓ passed, ✗ blocks, ⚡ fires, ○ not yet; the one that decided is marked) with its value against
   the rule, and the strategy's numbers. For the Turtle: today's entry orders and how far the price is from each
@@ -101,8 +103,9 @@ logs. Open the port in the server's firewall only to your own IP address, or ope
   Enter), live or paused; the raw text of any day; the path of today's text log to copy and a button that downloads a
   day's file.
   **When something looks wrong, send that day's file.**
-- **Changes & issues**: every WARN and ERROR line of the bot, grouped by kind (for example `TERMINAL_IN_USE`,
-  `ACCOUNT_REFUSED`, `RECONNECT_FAILED`), with how many, the first and the last time, what it means and what to do.
+- **Changes & issues**: every WARN and ERROR line of the bot, grouped by kind (for example `LIVE_TERMINAL_PATH`,
+  `TERMINAL_IN_USE`, `ACCOUNT_REFUSED`, `RECONNECT_FAILED`), with how many, the first and the last time, what it means
+  and what to do.
   Below it, this branch's `CHANGELOG.md`, version by version (the newest open).
 - **History & settings**: the old views (daily trades, the lifetime summary, the old strategy log), the settings the
   bot started with (a value `constants.py` has changed since is marked: the bot takes it at its next start), and the
@@ -110,8 +113,9 @@ logs. Open the port in the server's firewall only to your own IP address, or ope
 
 ## What it writes for the dashboard, and its log
 
-Next to the files the old dashboard reads, the bot writes into its output folder (every field:
-`docs/dashboard-data.md`; `tracelog.py`, which writes them, is the same file on all six demo branches):
+Next to the files the old dashboard reads, the bot writes into its output folder, `C:\Alcadeias\demo_hedging_btcusd7`
+(`OUTPUT_DIR`; every field: `docs/dashboard-data.md`; `tracelog.py`, which writes them, is the same file on all six
+demo branches):
 
 - `BTCUSDm_trace.json`: after every poll, what the bot sees and decides: one sentence on what it does now and why,
   every check in the order it makes them (passed, blocked, fired), and the Turtle's numbers: N, the 20-day and 10-day
@@ -125,9 +129,12 @@ Next to the files the old dashboard reads, the bot writes into its output folder
 - `logs\BTCUSDm_<YYYY-MM-DD>.log`: the detailed text log (UTC days, kept 30 days): the start-up and every constant,
   the levels of every day, every vote change, every decision change, order, fill, add, stop move, close and its
   realised result, reconnect and error with its traceback, and a heartbeat line every minute; also every safety
-  refusal of the section below (a terminal that holds another account, the account refused, every failed reconnect
-  attempt, a leg closed outside the bot and whether that was beyond the stop). When something looks wrong, this file
-  (and `logs\BTCUSDm_events.jsonl`) is the one to send.
+  refusal of the section below (the live bots' MetaTrader 5 refused before the start, `LIVE_TERMINAL_PATH`, at most
+  every 15 minutes; a terminal that holds another account; the wait for the terminal's own account and a login by the
+  bot; the account refused; every failed reconnect attempt; a leg closed outside the bot and whether that was beyond
+  the stop; a close that closed nothing). When something looks wrong, this file (in full:
+  `C:\Alcadeias\demo_hedging_btcusd7\logs\BTCUSDm_<YYYY-MM-DD>.log`, and `logs\BTCUSDm_events.jsonl`) is the one to
+  send.
 
 ## Safety
 

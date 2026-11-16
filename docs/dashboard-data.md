@@ -128,7 +128,10 @@ the Turtle's book): an order on the side of the open basket or trade is an `add`
   last_fill, next_add_price, judged_on, price_now, next_add_lots}` (or `{on: false, note}`), `opened_at` /
   `opened_utc`, `opened_by` (bot / rebuild), `first_t` / `first_utc`, `age_s`, `levels_pending`, `close_pending`,
   `ids`, `outside_ids` (its legs closed outside the bot: the rest is closed at once), `known_to_bot`, `closing` /
-  `closed_now` (this poll closes it), `listed` / `opened_now` (just opened).
+  `closed_now` (this poll closes it), `listed` / `opened_now` (just opened), `unlisted` [`{id, fill_t, fill_utc,
+  age_s, wait_s, price, lots, kind}`] (since v3.9.2-demo.5: the legs whose position id the bot took from the order's
+  answer and the terminal has not listed yet, kept `wait_s` = 10 s; `legs`, `pnl`, `stop_price` and `target_price` are
+  those of the listed legs, as the bot's own test reads them).
 
 ## 2. `<SYMBOL>_bars.json`
 
@@ -185,13 +188,13 @@ at most every 5 s after a failed read and every 60 s after a failed build.
 
 | level | lines |
 |---|---|
-| DEBUG | DECISION (every change of the action or of a checked gate, with all the gates), STATE (state saved), BASKET (a position listed, the ladder armed), SIGNAL |
-| INFO | START, CONFIG (every effective constant, symbols.json, the contract size), STATE, ACCOUNT (logged in, or no login when the terminal already holds this bot's account; the checks passed), TERMINAL (connected again, after how long and how many failed attempts), BASKET (opened, added), PAUSE (start, end), MARKET, WINDOW, DATA, HEARTBEAT (every minute) |
+| DEBUG | DECISION (every change of the action or of a checked gate, with all the gates), STATE (state saved), BASKET (a position listed -- also a leg recorded from its order, listed now, or listed under another id -- the ladder armed), SIGNAL |
+| INFO | START, CONFIG (every effective constant, symbols.json, the contract size), STATE, ACCOUNT (the terminal shows no account yet: read again every second for up to 15 s; logged in, or no login when the terminal already holds this bot's account; the checks passed), TERMINAL (connected again, after how long and how many failed attempts), BASKET (opened, added; `recorded=<id>`: the position id taken from the order's answer), PAUSE (start, end), MARKET, WINDOW, DATA, HEARTBEAT (every minute) |
 | ORDER | every order request and its result (retcode, comment, price, sl, tp) |
 | FILL | an entry or add filled |
-| CLOSE | a basket closed, with the reason and the P/L (also one closed outside the bot; after a leg closed outside the bot, the close of the rest and the booking of the whole basket) |
-| WARN | an order not filled, a terminal read error, missing bars, a file that could not be written, a slow poll, BASKET: legs of the basket closed outside the bot, TERMINAL: every failed reconnect attempt that the strategy log leaves out (it has RECONNECT_FAILED only when the problem starts or changes, then every 15 min) |
-| ERROR | an exception (with its traceback), the account refused (also by the account read again right after the positions), TERMINAL_IN_USE (the terminal holds another account: no login, the terminal is left as it is; once, then every 15 min), a reconnect that failed (as in the strategy log), TRACE: a step of the trace that failed (the trading goes on) |
+| CLOSE | a basket closed, with the reason and the P/L (also one closed outside the bot; an entry gone before the terminal listed it; after a leg closed outside the bot, the close of the rest and the booking of the whole basket) |
+| WARN | an order not filled, a terminal read error, missing bars, a file that could not be written, a slow poll, BASKET: legs of the basket closed outside the bot, CLOSE: a close that is incomplete (a leg refused, or an add not listed yet: the basket stays open) or that closed nothing (decided again next poll), ACCOUNT: no login because the account is not known (an IPC error), the bot logging in itself after 15 s of no account, TERMINAL: every failed reconnect attempt that the strategy log leaves out (it has RECONNECT_FAILED once for each reason, then at most every 15 min for that reason) |
+| ERROR | an exception (with its traceback), the account refused (also by the account read again right after the positions), TERMINAL_IN_USE (the terminal holds another account: no login, the terminal is left as it is; once for each account, then every 15 min), START: LIVE_TERMINAL_PATH (refused before any terminal call) and all 3 start attempts failed (with the problem), a reconnect that failed (as in the strategy log, with `not_logged_since`), TRACE: a step of the trace that failed (the trading goes on) |
 
 A HEARTBEAT line comes every minute: a gap of more than a minute means the bot was not running. The same
 exception at the same place is written again at most every 10 minutes, with the count of the repeats. Past 50 MB
@@ -199,6 +202,32 @@ in a day the day's file takes only WARN and ERROR lines (the events file keeps e
 
 `logs/<SYMBOL>_events.jsonl`: one JSON object per line: `{t, time, level, cat, msg, kv, data, traceback}`;
 `data` holds the full gate list of a DECISION line, the state of a STATE line.
+
+**The third fix round (v3.9.2-demo.5) in the log.**
+- `LIVE_TERMINAL_PATH` (terminal_path names the live bots' MetaTrader 5, or is empty): one ERROR START line
+  'LIVE_TERMINAL_PATH: terminal_path ... is the MetaTrader 5 of the live bots (...): install a separate MetaTrader 5
+  for slot N and set terminal_path in mt5_credentials.json to its terminal64.exe. The bot attached to no terminal and
+  does not trade ...', then the three start attempts and 'all 3 start attempts failed (LIVE_TERMINAL_PATH: ...)'. It
+  comes at most every 15 minutes, as in the strategy log: a launcher restart (every 30 s) that the limit holds back
+  writes no line at all (`_boot_flush`). The same holds for a start refused on `TERMINAL_IN_USE`.
+- The login rule: 'the terminal shows no account yet (account_info() answered None, last_error ...): the bot reads it
+  again every second for up to 15 s before any login' (INFO ACCOUNT); 'no login: account not known: ... ; the bot
+  detached and tries again later' (WARN ACCOUNT: an IPC error); 'the terminal showed no account for 15 s: the bot logs
+  in itself (login N on SERVER). Log this MetaTrader 5 into the slot's demo account once by hand ...' (WARN ACCOUNT).
+  No password is ever written.
+- The limits per problem: RECONNECT_FAILED once for each reason, then at most every 15 min for it (its ERROR line
+  ends with '; N more failed attempt(s) with this reason since its last RECONNECT_FAILED'); every other attempt is a
+  WARN TERMINAL line. TERMINAL_IN_USE once for each account the terminal holds.
+- A fill is a leg of the basket from the order's answer (`_record_fill`): the BASKET line of the entry or the add has
+  'position N is a leg of the basket from its fill (its id from the order's answer; ...)' and `recorded=N`; the poll
+  that lists it a DEBUG line; an entry gone before it was ever listed is a CLOSE line 'the BUY entry [N] is gone
+  before the terminal listed it ...'; a close that could not reach an add not listed yet is a WARN CLOSE 'is
+  incomplete: ... not listed by the terminal yet ...: the basket stays open' (the headline says it too).
+- A close that closed nothing (close_by_type found none of this bot's positions: another account just then, or the
+  positions already gone): WARN CLOSE '... closed nothing ...; nothing is booked, and the close is decided again next
+  poll'. (On the Turtle branches: 'the trade stays booked, and the close is decided again next poll'; the next close
+  says 'on the next try', or, when the legs are gone, 'the trade ended: ... the bot's close of HH:MM had closed
+  nothing'.)
 
 ## 5. The Turtle (`STRATEGY = 'turtle'`; this branch)
 
@@ -294,7 +323,7 @@ the manual brake). Prices the bot compares (`levels`, `stop`, `n`) are exact; th
 | INFO | TRADE | an entry (fill, level, vote, unit, N, stop, next add, backstop), every add (fill, add level, next add) |
 | WARN | TRADE | a trade taken over from the terminal (no state file), legs closed outside the bot (with `beyond_stop` from the deal history: at or beyond the stop, so the other legs are closed at once; or inside it, by hand, and the trade goes on), a trade replaced, both sides open |
 | INFO | STOP | every stop move and why (2N from a new leg, the exit channel of a new D1 bar, kept after a leg closed outside); WARN if it ever loosened |
-| CLOSE | CLOSE | the trade closed at the stop (where it came from, the price, the legs, the P/L at the decision), or ended after a leg closed outside the bot beyond the stop (`reason=stop_passed_outside`), or closed outside the bot; WARN: an incomplete close |
+| CLOSE | CLOSE | the trade closed at the stop (where it came from, the price, the legs, the P/L at the decision), or ended after a leg closed outside the bot beyond the stop (`reason=stop_passed_outside`), or closed outside the bot; WARN: an incomplete close, or (since v3.9.2-demo.5) a close that closed nothing: the trade stays booked and the close is decided again next poll -- the next close says 'on the next try (the close at the stop ... of HH:MM had closed nothing)', or, when the legs are gone by then, 'the trade ended: ... had closed nothing, so they were closed outside the bot first' (`after_close_of=<exit>`) |
 | INFO | RESULT | the realised P/L of a closed trade from the deal history, its exit, the virtual balance after it (also, at a start, for a trade the journal knows that closed while the bot was down; never twice) |
 | INFO / WARN | TURTLE | the bot's own notes (too few D1 / M15 bars, a refused order, the brake), at most every 5 min each; too few D1 bars after midnight, with the levels of the day before in force: 'the bot goes on with the levels and the stop of the D1 bar before and asks again every poll' (at a start, without levels: 'not trading') |
 | INFO / WARN | DATA / MARKET / ACCOUNT | daily levels missing / back, the D1 bar of the day late (WARN) / there, the market live / not, the unit changing |
@@ -307,10 +336,11 @@ page for both strategies (it takes `strategy` from the trace; without a trace, `
 
 | tab | reads |
 |---|---|
-| status bar | `<SYMBOL>_trace.json`: `t` (its age: fresh under 15 s, slow under 60 s, stale after), `health`, `account`, `market` (`tick_t`: the last tick's age now), `stale`; the ERROR lines of the last hour from the newest 3 MB of `logs/<SYMBOL>_events.jsonl` |
+| status bar | `<SYMBOL>_trace.json`: `t` (its age: fresh under 15 s, slow under 60 s, stale after), `health`, `account`, `market` (`tick_t`: the last tick's age now), `stale`; the ERROR lines of the last hour from the newest 3 MB of `logs/<SYMBOL>_events.jsonl`; from the same file a refused start (below) |
 | Live | the trace's `decision` (headline, gates in order, `blocked_by`, this poll's `orders`) and `basket` / `turtle`; `<SYMBOL>_bars.json` (the forming bar moved with `market.bid`; `overlay.turtle` on D1); `<SYMBOL>_trades.json` `closed` for the chart's entries and exits; the newest 256 KB of `logs/<SYMBOL>_events.jsonl` |
 | Trades | `<SYMBOL>_trades.json` (`t`, `summary`, `balance_curve`, `closed`, each trade's `turtle` journal) and the trace's open position |
 | Log | the newest 3 MB of `logs/<SYMBOL>_events.jsonl`, the newest 512 KB of a day's `logs/<SYMBOL>_<day>.log` (download: the whole file) |
+| Changes & issues | the WARN and ERROR lines of the newest 3 MB of `logs/<SYMBOL>_events.jsonl`, grouped by kind (below), errors first; the branch's `CHANGELOG.md`, version by version |
 | History & settings | `daily_trade/<SYMBOL>/*.json`, `historical_summary.json`, `logs/<SYMBOL>_strategy_log.json`, the CONFIG lines of the bot's start (the text log of `health.started_utc`'s day; `constants.py` when they are not there), the raw files (a fixed list: the trace, trades, `<SYMBOL>.json`, `account.json`, the state files, the Turtle's journal, the exit reasons, the bars' header) |
 
 A file that is missing, cut in the middle or of an unexpected shape shows as such (an empty state, or a card with the
@@ -330,6 +360,24 @@ tick's age now; the errors of the last hour come from the events file (it keeps 
 red banner above the headline says the page is the bot's last poll; the strategy, the checks, the position and the
 uptime say 'as of' / 'not writing'. A skipped poll (fresh, `stale` true): 'Market: unknown (terminal not read)',
 'votes kept from the last poll'.
+
+**A refused start** (since v3.9.2-demo.5): when the newest ERROR START line of the events file (LIVE_TERMINAL_PATH, all
+3 start attempts failed, a refused design or credentials file, the job failed) is newer than the trace and than the
+last 'trading loop started' line, the bot is not running. The status bar (every tab) has a red chip 'Not started:
+<kind> (HH:MM)' and a red box: what the bot wrote, what it means and what to do (LIVE_TERMINAL_PATH: install a
+separate MetaTrader 5 for the slot, set terminal_path to its terminal64.exe, log it into the slot's demo account once
+by hand with 'Save password': README, How to run, steps 1 and 2).
+
+**The issue kinds** (Changes & issues; the first that matches the line's message): `TERMINAL_IN_USE`,
+`LIVE_TERMINAL_PATH`, `ACCOUNT_NOT_KNOWN` (no login: the account was not known), `BOT_LOGIN` (the bot logged in
+itself), `ACCOUNT_REFUSED`, `RECONNECT_FAILED`, `MT5_INIT_FAILED`, `START_FAILED` (a start attempt or the job failed),
+`TERMINAL_ERROR`, `POLL_FAILED`, `TRACE_FAILED`, `WRITE_FAILED`, `CLOSE_NOTHING` (a close that closed nothing),
+`CLOSE_INCOMPLETE`, `CLOSED_OUTSIDE`, `D1_LATE`, `ORDER_REFUSED`; any other by its category and the shape of its
+message. Each has what it means and what to do.
+
+**An open basket's leg not listed yet**: the position card has the chip 'N leg(s) not listed yet', a line with each
+leg (its kind, lots, price, how long ago it filled) and that the P/L, stop and target use the listed legs until the
+terminal lists it; the legs table has its row, 'not listed yet'.
 
 **trades.json missing or old**: missing or unreadable, the Trades tab, the balance chart, the position card and the
 chart note say so (the closed trades are not known; never 'No trade yet'); older than 3 minutes (it is rewritten at

@@ -666,6 +666,52 @@ def errors_last_hour(sym, tail=EVENTS_TAIL_BYTES):
     return sum(1 for t in hit[1] if now - 3600.0 <= t <= now + 60.0), None
 
 
+_LIMITED = ('LIVE_TERMINAL_PATH', 'TERMINAL_IN_USE')     # refusals the bot logs at most every 15 min (_log_limited)
+
+
+def start_refusal(sym, tr):
+    """(v3.9.2-demo.5) The bot's start refused, and no start since: the newest ERROR START line of the events file
+    (LIVE_TERMINAL_PATH, all 3 start attempts failed, a refused design or credentials file, the job failed) when no
+    'trading loop started' line and no trace came after it. {t, msg, code, meaning, todo, limited}; None otherwise."""
+    evs, _, problem = read_events(sym)
+    if problem is not None:
+        return None
+    for e in reversed(evs):                  # newest first: the first START line that tells
+        if str(e.get('cat') or '').upper() != 'START':
+            continue
+        lvl, msg = str(e.get('level') or '').upper(), str(e.get('msg') or '')
+        if lvl == 'INFO' and msg.startswith('trading loop started'):
+            return None
+        if lvl != 'ERROR':
+            continue
+        t = ts(e.get('t')) or ts(e.get('time'))
+        t_trace = ts(g(tr, 't'))
+        if t is None or (t_trace is not None and t_trace >= t):
+            return None
+        code, meaning, todo = issue_kind(e)
+        return {'t': t, 'msg': msg, 'code': code, 'meaning': meaning, 'todo': todo, 'limited': code in _LIMITED,
+                'ended': msg.startswith('the job failed')}
+    return None
+
+
+def start_banner(ref):
+    """The red box of a refused start: what the bot wrote, what it means, what to do."""
+    if not ref:
+        return None
+    again = (' The launcher tries again every 30 s; the log has this line again at most every 15 minutes while it '
+             'lasts.' if ref.get('limited') else ' The launcher starts it again 30 s after it ends.')
+    what = 'its job ended with an error' if ref.get('ended') else 'its start was refused'
+    return html.Div(className='banner banner-neg start-refused', children=[
+        html.Div([html.B(f'The bot is not running: {what}'),
+                  f" ({ref.get('code')}, {when(ref.get('t'))}, {dur(_now() - ref['t'])} ago) and it has not started "
+                  'since.' + again]),
+        html.Div([html.Span('The bot wrote: ', className='muted'), html.Code(_scrub(ref.get('msg') or ''), className='mono')],
+                 className='line'),
+        html.Div([html.B('What it means: '), ref.get('meaning')], className='line') if ref.get('meaning') else None,
+        html.Div([html.B('What to do: '), ref.get('todo')], className='line') if ref.get('todo') else None,
+    ])
+
+
 @safe()
 def status_bar(sym, d):
     tr = dd(d.get('trace'))
@@ -680,6 +726,11 @@ def status_bar(sym, d):
         what = 'Basket: the bot\'s RSI / MACD votes'
     fk, ftext = freshness(tr)
     chips = [chip(ftext, fk, title=f"trace written {stamp(tr.get('t'))}, poll {smart(tr.get('poll'))}")]
+    refused = start_refusal(sym, tr)
+    if refused:
+        chips.append(chip(f"{'Stopped' if refused.get('ended') else 'Not started'}: {refused.get('code')} "
+                          f"({hm(refused.get('t'))})", 'neg', icon='✗',
+                          title='the bot is not running and has not started since: the red box says why'))
     stale = is_stale(tr)
     asof = as_of(d)
 
@@ -766,7 +817,8 @@ def status_bar(sym, d):
     if not tr:
         money_row = html.Div('The balance, the unit and the P/L appear here once the bot writes its trace.',
                              className='line muted')
-    return [html.Div(className='status-top', children=[ident, html.Div(chips, className='chips')]), money_row]
+    return [html.Div(className='status-top', children=[ident, html.Div(chips, className='chips')]),
+            start_banner(refused), money_row]
 
 
 # ───────────────────────────── what the bot is doing now ─────────────────────────────
@@ -791,7 +843,7 @@ _OTHER_SIDE = {'BUY': 'SELL', 'SELL': 'BUY'}
 
 def close_sides(o):
     """(the side of the position, the side of the order) of a close: a SELL position is closed with a BUY order. A
-    trace before v3.9.2-demo.5's fix had only the order's side, in `side`."""
+    trace before v3.9.2-demo.6's fix had only the order's side, in `side`."""
     if 'order_side' in o:
         return o.get('side') or '?', o.get('order_side') or '?'
     order = str(o.get('side') or '').upper()
@@ -1479,6 +1531,23 @@ def _basket_position(d, op, digits):
                 flags.append(chip('taken over from the terminal (no state file)', 'warn'))
         elif op.get(key):
             flags.append(chip(text, kind))
+    # (v3.9.2-demo.5) legs recorded from their order's answer that the terminal has not listed yet
+    legs = dl(op.get('legs'))
+    seen = {lg.get('id') for lg in legs}
+    waiting = [u for u in dl(op.get('unlisted')) if isinstance(u, dict)]
+    extra = [{'id': u.get('id'), 'ticket': u.get('id'), 'open_t': u.get('fill_t'), 'price': u.get('price'),
+              'lots': u.get('lots'), 'listed': False} for u in waiting if u.get('id') not in seen]
+    unlisted_note = None
+    if waiting:
+        flags.append(chip(f'{len(waiting)} leg(s) not listed yet', 'warn',
+                          title='filled; the terminal lists a fill within seconds'))
+        unlisted_note = html.Div(
+            'Filled, not listed by the terminal yet: '
+            + '; '.join(f"position {u.get('id')} ({u.get('kind') or 'leg'}, {fnum(u.get('lots'), 2)} lot at "
+                        f"{px(u.get('price'), digits)}, {dur(u.get('age_s'))} ago)" for u in waiting)
+            + '. The bot counts it as a leg of the basket from its fill (no second entry); the P/L, the stop and the '
+            f"target above use the listed legs until the terminal lists it (within {fnum(waiting[0].get('wait_s'), 0)} s).",
+            className='banner banner-warn')
     info = html.Div(className='kvs', children=[
         kv('Average price', px(op.get('avg_price'), digits)),
         kv(f"Price now ({op.get('judged_on') or '?'})", px(op.get('price_now'), digits)),
@@ -1499,8 +1568,9 @@ def _basket_position(d, op, digits):
         ]),
         gauge,
         html.Div(ladder, className='line'),
+        unlisted_note,
         info,
-        legs_table(op.get('legs'), digits),
+        legs_table(legs + extra, digits),
     ])
     return card('Open basket' + as_of(d), body, sub='its stop, target and add gap were fixed when it opened'
                 + (' · the bot has not written since: the P/L and the legs are those of its last poll' if as_of(d) else ''))
@@ -2864,15 +2934,38 @@ def raw_view(sym):
 
 # ───────────────────────────── changes & issues ─────────────────────────────
 
+# this branch's slot ('slot 6' for demo_hedging_xauusd6), for the words of what to do
+_SLOT_NO = re.search(r'(\d+)$', str(getattr(_C, 'DEMO_BRANCH', '') or ''))
+_SLOT = f'slot {_SLOT_NO.group(1)}' if _SLOT_NO else 'this slot'
+_SLOT_DIR = ('C:\\MT5\\slot' + _SLOT_NO.group(1)) if _SLOT_NO else 'C:\\MT5\\<slot>'
+_LIVE_MT5 = 'C:\\Program Files\\MetaTrader 5 EXNESS\\terminal64.exe'     # (app.py _LIVE_TERMINAL_PATHS)
+
 # The bot's WARN / ERROR lines grouped by what they are about: (code, what the message holds, what it means, what to do)
 ISSUE_KINDS = (
     ('TERMINAL_IN_USE', re.compile(r'TERMINAL_IN_USE'),
-     'The slot\'s terminal holds another account: the bot does not log in over it and does not trade.',
-     'Open that MT5 terminal and log it into the demo account of mt5_credentials.json (or give each slot its own '
-     'terminal). The bot tries again by itself.'),
+     'The slot\'s terminal holds another account: the bot does not log in over it and does not trade. The log has '
+     'this once for each account it finds there, then at most every 15 minutes.',
+     f'If it is {_SLOT}\'s own MetaTrader 5, log it into the slot\'s demo account by hand (README, How to run, step 2). '
+     'If another program or slot uses that terminal, give this slot its own installation instead (step 1): a login '
+     'switches the account of every program attached to it. The bot tries again by itself.'),
     ('LIVE_TERMINAL_PATH', re.compile(r'LIVE_TERMINAL_PATH'),
-     'The terminal path in the credentials is the one of a live bot: the demo bot refuses it.',
-     'Give this demo slot its own MT5 terminal folder in mt5_credentials.json.'),
+     f'The bot refuses to start: terminal_path in mt5_credentials.json names the live bots\' MetaTrader 5 '
+     f'({_LIVE_MT5}), or is empty. It attaches to no terminal and does not trade. The launcher starts it again every '
+     '30 s and it is refused each time; the log has the refusal at most every 15 minutes.',
+     f'Install a separate MetaTrader 5 for {_SLOT} in its own folder (for example {_SLOT_DIR}) and set terminal_path in '
+     'mt5_credentials.json to its terminal64.exe. Then open it and log it into the slot\'s demo account once by hand, '
+     'with "Save password" ticked (README, How to run, steps 1 and 2). The bot starts by itself at the launcher\'s '
+     'next try.'),
+    ('ACCOUNT_NOT_KNOWN', re.compile(r'account not known'),
+     'Right after it attached, the terminal did not say which account it holds (an IPC error, or no answer). The bot '
+     'did not log in, detached, and tries again later.',
+     'Nothing if it passes. If it repeats for minutes: restart the slot\'s MetaTrader 5, and check that it is logged '
+     'into the slot\'s demo account (README, How to run, step 2).'),
+    ('BOT_LOGIN', re.compile(r'the bot logs in itself'),
+     'The terminal showed no account for 15 s, so the bot logged in itself. On the slot\'s own MetaTrader 5 that is '
+     'harmless; a login switches the account of every program attached to that terminal.',
+     'Log the slot\'s MetaTrader 5 into its demo account once by hand, with "Save password" ticked (README, How to '
+     'run, step 2): it then logs in by itself when it starts, and the bot never has to.'),
     ('ACCOUNT_REFUSED', re.compile(r'^not trading: |ACCOUNT_REFUSED|refused, not trading'),
      'The terminal holds an account the bot refuses (not the demo account, not hedging, another login): no trading.',
      'Log the terminal into the demo account of mt5_credentials.json. Trading starts again by itself.'),
@@ -2885,6 +2978,11 @@ ISSUE_KINDS = (
      'RECONNECT_FAILED.',
      'Check that the slot\'s MT5 terminal is installed, open and logged in, and that terminal_path in '
      'mt5_credentials.json points at it.'),
+    ('START_FAILED', re.compile(r'start attempts? (\d/3 )?failed|^the job failed|is refused: |'
+                                r'mt5_credentials\.json|symbols\.json'),
+     'The bot did not start (or its job ended): the line says why. The launcher starts it again 30 s later.',
+     'Fix what the line names (the issue above it in the list often says more). The bot starts by itself at the '
+     'launcher\'s next try.'),
     ('TERMINAL_ERROR', re.compile(r'^poll skipped'),
      'A poll could not read the terminal; nothing was decided in that poll.',
      'A few are normal (a short stall). Many in a row: check the terminal and the internet connection.'),
@@ -2897,8 +2995,13 @@ ISSUE_KINDS = (
     ('WRITE_FAILED', re.compile(r'^could not write|could not write the state file'),
      'A file could not be written (a full disk, or Windows refused it for a moment). Trading goes on.',
      'Check the free disk space. A single line is harmless: the bot writes the file again.'),
+    ('CLOSE_NOTHING', re.compile(r'closed nothing'),
+     'A close found none of this bot\'s positions to close (the account was switched just then, or they were already '
+     'gone): nothing was booked, and the bot decides the close again on the next poll.',
+     'Nothing, unless it repeats: then look for ACCOUNT_REFUSED above, and at the Trades tab.'),
     ('CLOSE_INCOMPLETE', re.compile(r'is incomplete'),
-     'A close left legs open (the terminal refused one); the bot closes the rest on the next poll.',
+     'A close left legs open (the terminal refused one, or a leg filled seconds ago was not listed yet); the bot '
+     'closes the rest on the next poll.',
      'Nothing, unless it repeats for minutes: then check the terminal (off quotes, market closed).'),
     ('CLOSED_OUTSIDE', re.compile(r'closed outside the bot'),
      'Positions of this bot were closed outside it: the broker backstop, a stop-out, by hand, or while it was down.',
@@ -3128,6 +3231,7 @@ letter-spacing:.04em;border:1px solid var(--line);background:var(--raised);color
 .banner{border-radius:8px;padding:8px 12px;margin-top:10px;font-size:12.5px}
 .banner-warn{background:var(--warn-soft);border:1px solid rgba(240,192,64,.4)}
 .banner-neg{background:var(--neg-soft);border:1px solid rgba(224,85,85,.5);color:var(--text);font-weight:600}
+.start-refused .line{font-weight:400;color:var(--text)}
 .headline-old{color:var(--text2)}
 .orders{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .order{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:4px 0}
@@ -3671,13 +3775,17 @@ def _live(_n, tab, tf, sym, prev):
         return [no_update] * 9
     d = load(sym)
     if not d.get('trace'):
+        launcher = 'start_btcusd.bat' if str(sym).upper().startswith('BTC') else 'start_xauusd.bat'
+        refused = start_refusal(sym, None)
         msg = html.Div([
             html.Div(className='now-head', children=[html.Div(className='now-title', children=[
                 html.Span('What the bot is doing now', className='eyebrow'), badge('NO DATA', 'warn')])]),
             html.P('No trace from the bot yet.', className='headline'),
             html.Div(f"{os.path.basename(trace_path(sym))} is {d.get('trace_problem')} in the bot's output folder. The "
-                     f"bot writes it after every poll: start the bot (start_btcusd.bat / start_job.bat) and this page "
-                     f"fills in.", className='line muted'),
+                     'bot writes it after every poll, once its trading loop runs: '
+                     + (f"its start was refused ({refused.get('code')}): the red box above says what to do."
+                        if refused else f'start the bot ({launcher} / start_job.bat) and this page fills in.'),
+                     className='line muted'),
         ])
         return (msg, None, None, price_figure(d, tf), chart_note(d, tf), position_view(d), latest_events(sym), sig, None)
     return (now_header(d), gates_view(d), strategy_panel(d), price_figure(d, tf), chart_note(d, tf), position_view(d),
