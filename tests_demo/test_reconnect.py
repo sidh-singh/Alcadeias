@@ -6,9 +6,10 @@ initialize_mt5() again (with the demo-account checks), and while that fails trie
 every 60 s. The launchers start app.py again 30 s after it exits (demo only).
 
 A long outage does not fill the 200-entry strategy log (finding 4 of the re-review: 4 hours down wrote 243
-RECONNECT_FAILED events): RECONNECT_FAILED is logged on the first failure, when its reason changes (the terminal's
-last_error aside), and at most every 15 minutes otherwise; TERMINAL_RECONNECTED reports the attempts and the
-outage's length.
+RECONNECT_FAILED events): RECONNECT_FAILED is logged for each reason (the terminal's last_error aside) when it is
+first seen, then at most every 15 minutes for that reason (fix D of the third round: the limit remembered only the
+last reason, so two alternating reasons were logged on every attempt); TERMINAL_RECONNECTED reports the attempts and
+the outage's length.
 """
 import re
 
@@ -98,6 +99,36 @@ def test_a_new_reason_is_logged_at_once(mods):
     failed = [(round(e['t'] / 1000.0 - t0), e['details']['why'].split(':')[0])
               for e in run.events if e['event'] == 'RECONNECT_FAILED']
     assert failed == [(4, 'initialize failed'), (109, 'TERMINAL_IN_USE'), (1009, 'TERMINAL_IN_USE')]
+
+
+def test_alternating_reasons_do_not_fill_the_log(mods):
+    """Fix D of the third review round: a terminal that keeps restarting -- down 60 s, then up 60 s and held by
+    another account, for 4 hours -- fails the reconnects with two reasons in turn ('initialize failed',
+    TERMINAL_IN_USE). The 15-minute limit remembered only the last reason, so every attempt was logged (240
+    RECONNECT_FAILED in 4 hours). Now each reason is logged when it is first seen, then at most every 15 minutes, with
+    the failures not logged since; every attempt is still made."""
+    fake, clock = market(4 * 3600 + 300)
+    m = mods(fake=fake, clock=clock)
+    m.app.print = lambda *a, **k: None
+    run = F.Run()
+    bot = F.make_bot(m, fake, 'XAUUSDm', run)
+    bot.credentials = dict(CREDS)
+    t0 = clock.time()
+    fake.account_login, fake.server, fake.trade_mode = 99, 'Fake-Real', fake.ACCOUNT_TRADE_MODE_REAL
+    for k in range(4 * 30):
+        fake.down(t0 + k * 120, t0 + k * 120 + 60)
+    for _ in range(4 * 3600):
+        bot._poll_guard('XAUUSDm')
+        clock.sleep(1)
+    failed = [e for e in run.events if e['event'] == 'RECONNECT_FAILED']
+    by_reason = {}
+    for e in failed:
+        by_reason.setdefault(e['details']['why'].split(':')[0], []).append(e['t'] / 1000.0 - t0)
+    assert sorted(by_reason) == ['TERMINAL_IN_USE', 'initialize failed']
+    for times in by_reason.values():
+        assert 15 <= len(times) <= 17 and all(b - a >= 900 for a, b in zip(times, times[1:]))
+    assert sum(e['details']['not_logged_since'] for e in failed) > 150        # (the failures in between, counted)
+    assert len(_tries(fake, t0)) > 200 and len(run.events) < 60               # (before: 256 events)
 
 
 @pytest.mark.slow
