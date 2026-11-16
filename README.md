@@ -51,6 +51,20 @@ The tests need no terminal and write only into pytest's own tmp folders. Run the
 `python3 -B -m pytest tests_demo -q -p no:cacheprovider` (`-B` keeps Python's bytecode out of the branch; a run
 without it fails at its end).
 
+## What it writes for the dashboard, and its log
+
+Next to the files the old dashboard reads, the bot writes into its output folder (every field:
+`docs/dashboard-data.md`):
+
+- `XAUUSDm_trace.json`: after every poll, what the bot sees and decides: one sentence on what it does now and why,
+  every check in the order it makes them (passed, blocked, fired), the votes, the trend, the volatility unit, the
+  pause, and the open basket with its stop, target and backstop as prices;
+- `XAUUSDm_bars.json`: the bars for the chart (M1, M5, M15, H1, D1), `XAUUSDm_trades.json`: every basket with its
+  open, close, P/L and exit reason, and the virtual-balance curve;
+- `logs\XAUUSDm_<YYYY-MM-DD>.log`: the detailed text log (UTC days, kept 30 days): the start-up and every constant,
+  every decision change, order, fill, close, pause, reconnect and error with its traceback, and a heartbeat line
+  every minute. When something looks wrong, this file (and `logs\XAUUSDm_events.jsonl`) is the one to send.
+
 ## Safety
 
 - **One MT5 installation per slot, never shared with a live bot.** Install a separate MetaTrader 5 for slot 6 (its
