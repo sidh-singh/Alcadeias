@@ -20,9 +20,10 @@ def _replay_both(baseline_root, tmp_path, seconds, seed, overrides=None):
     for name, root in (('ported', ROOT), ('baseline', baseline_root)):
         fake, clock = market(seconds, seed=seed)
         # the ported bot from its default constants (a design block at the end of constants.py is ignored)
-        ov = {**DEFAULTS, **(overrides or {})} if name == 'ported' else overrides
-        run = F.run_bot(root, fake, clock, 'XAUUSDm', overrides=ov,
-                        state_dir=tmp_path / name if name == 'ported' else None)
+        ov = {**DEFAULTS, **(overrides or {})} if name == 'ported' else dict(overrides or {})
+        # both bots write in this test's tmp_path, never in their OUTPUT_DIR (on the server: a running bot's folder)
+        ov['OUTPUT_DIR'] = str(tmp_path / name / 'output')
+        run = F.run_bot(root, fake, clock, 'XAUUSDm', overrides=ov, state_dir=tmp_path / name / 'state')
         assert not run.errors, run.errors[:3]
         out[name] = (run, fake)
     return out
