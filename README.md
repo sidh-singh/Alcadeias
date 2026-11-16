@@ -84,6 +84,16 @@ logs. Open the port in the server's firewall only to your own IP address, or ope
   are drawn faint, with the reason under the price, while today's orders are used or a trade is open (no entry
   then). Then the **open position** (its legs, the distance to the stop and to the next add, every stop move) and the
   **latest events**.
+- **How close is it** (at the top of Live, under the bot's sentence): for an open position, a meter from the entry to
+  the target and one to the stop loss (the Turtle has no target: its stop and its next add). Each meter says how far
+  it has gone (percent), and the distance in price and in $. It turns **amber from 70 %** and **red from 90 %**. Below
+  it: the P/L in $ and in price, the time in the trade, the legs and the lot, the virtual balance, the spread and the
+  last tick. For a flat bot: which entry conditions pass and which one is missing; on a Turtle branch also how far the
+  price is from today's BUY and SELL level (the meter fills over the last 2 N).
+- **The alert banner** (on every tab, under the tabs): amber or red when a meter passes 70 % or 90 %, with the words
+  of that meter. Tick **sound** or **browser notification** in the tab bar to hear a beep or get a notification
+  when it starts or gets worse (the browser remembers the choice; it asks once for the notification). A stale bot
+  gives no alert: its numbers are old.
 - **Trades**: the summary (trades, win rate, net P/L, largest loss, max drawdown of the virtual balance, profit
   factor), the virtual balance after every close, and every trade, newest first (click one for its legs, N at the
   entry, the level of every add and every stop move).
@@ -91,6 +101,9 @@ logs. Open the port in the server's firewall only to your own IP address, or ope
   Enter), live or paused; the raw text of any day; the path of today's text log to copy and a button that downloads a
   day's file.
   **When something looks wrong, send that day's file.**
+- **Changes & issues**: every WARN and ERROR line of the bot, grouped by kind (for example `TERMINAL_IN_USE`,
+  `ACCOUNT_REFUSED`, `RECONNECT_FAILED`), with how many, the first and the last time, what it means and what to do.
+  Below it, this branch's `CHANGELOG.md`, version by version (the newest open).
 - **History & settings**: the old views (daily trades, the lifetime summary, the old strategy log), the settings the
   bot started with (a value `constants.py` has changed since is marked: the bot takes it at its next start), and the
   raw files.

@@ -30,6 +30,56 @@ credential/symbol commits are preserved; never force-push). Fleet:
 `indicator.py`, `mt5_helper.py`, `constants.py` untouched: nothing the bot does changes. **Baseline:** v3.9.2-demo.6.
 Not released yet: later fixes are folded into this entry (the review's fixes: below).
 
+### Added before release: the owner's requests of 16 Nov 2026
+The owner saw the old dashboard still running on the server and asked again for: an OHLC chart with the opening and
+closing points and the past trades; the open position with its target, its stop loss and every handy detail; a warning
+when the target or the stop is close; a detailed change log with the issues. The page had most of the chart; these are
+added or made clearer:
+- **How close is it** (Live, at the top). For an open basket: a meter to the target and a meter to the stop loss. Each
+  says the percent of the way (the P/L against the target or the stop in $), the distance in price and in $. It turns
+  **amber from 70 %** and **red from 90 %**. A third meter shows the way to the next add (neutral). For a Turtle trade:
+  the stop (the meter fills over the 2N stop distance) and the next add; it has no target, and the page says so. For a
+  flat bot: which entry conditions pass and which one is missing ('Waiting for: M15 vote — now 0; needs +1'); on the
+  Turtle branches also a meter to today's BUY and SELL level (it fills over the last 2 N; 'reached' at the level).
+- **Handy figures** under the meters: P/L in $ and in price, time in the trade, legs and lot, the virtual balance, the
+  spread with the bid and ask, the last tick and its age.
+- **The alert banner** on every tab: amber or red with the words of the meter that is close ('BUY basket 95% of the way
+  to its target ($0.10 to go)'). In the tab bar, **sound** (a short beep, two for amber, three for red) and **browser
+  notification** can be ticked; the browser remembers them. They fire when an alert starts or gets worse, once each. A
+  stale trace gives no alert.
+- **The chart.** Green and red candles (they were grey). The open position is shaded: green from its average price to the
+  target, red to the stop. Every level's tag has its distance from the price it is compared with ('TARGET 1,806.853 ·
+  +2.704'). The chart opens on the newest 160 bars and the whole open position; drag or zoom out for the rest.
+  The live part of the page is now in this order: what the bot does and how close it is, the chart, the checks and the
+  strategy, the open position, the latest events.
+- **Changes & issues** (a new tab). *Issues from the log*: every WARN and ERROR line of the events file, grouped by kind
+  (`TERMINAL_IN_USE`, `LIVE_TERMINAL_PATH`, `ACCOUNT_REFUSED`, `RECONNECT_FAILED`, `TERMINAL_ERROR`, `POLL_FAILED`,
+  `TRACE_FAILED`, `WRITE_FAILED`, `CLOSE_INCOMPLETE`, `CLOSED_OUTSIDE`, `D1_LATE`, `ORDER_REFUSED`, `MT5_INIT_FAILED`; any other by its
+  category and the shape of its message), errors first: how many, how many in the last 24 h, the first and the last time,
+  'in the last hour', what it means and what to do, the last line. *Changes*: this branch's `CHANGELOG.md`, one row per
+  version (version, date, title), the newest open; click a row to read it.
+
+### Fixed before release: the final reviews of the dashboard
+- **The page shows no folder of the PC.** The bot's ERROR lines carry tracebacks with full paths, so the event rows, the
+  raw text and the issue list named the bot folder (where `mt5_credentials.json` is) and the Windows user. Now every line
+  the page shows from the logs goes through `_scrub`: 'File "app.py", line 12', 'the bot folder', 'OUTPUT_DIR', '~' for
+  the user's folder. The footer says 'reads the bot's output folder (OUTPUT_DIR)'. Only the Log tab's copy box keeps the
+  full path of the day's file (that is the file to send).
+- **The dashboard holds a file only to read it.** `read_json` parsed inside `with open(...)`: a full trades.json stayed
+  open 10 to 43 ms, longer than the bot's retry, so on Windows the bot's write could fail. Now it reads the bytes,
+  closes the file, then parses (about 1 ms open).
+- **A day named in capitals is listed and downloaded** (`log_files` matches without case; see v3.9.2-demo.6).
+- **A short Turtle trade's NEXT ADD hover** said 'next leg at bid ≥ this (the last fill + 0.5N)'. Now 'next leg when the
+  bid ≤ this (the last fill - 0.5N)'; a long's says 'ask ≥ ... + 0.5N'.
+- **A request path with `..` or a backslash gets a plain 404.** Dash's `/_dash-component-suites/` route answered such a
+  path with a 500 and a stack trace in the console.
+- **`start_dashboard.bat`** goes to its own folder first (`cd /d "%~dp0"`: it works from Task Scheduler or a shortcut)
+  and writes its 'installed' flag only when pip succeeded (a failed install was never tried again).
+- Tests: `test_dashboard.py` +10 (the basket's meters, the banner and the stale case; the Turtle's meters; a flat
+  Turtle's entry meters; a real short trade's hovers and meters, from the bot's own trace; the Changes & issues tab;
+  no folder of the PC on the page; a day named in capitals; a file held only to read it; the 404). The HTTP test skips
+  the alert's two browser-only callbacks.
+
 ### Fixed before release: the review of the dashboard
 - **No request can read a file outside the output folder.** The dashboard listens on `0.0.0.0` (as the live bots) and
   has no login, and Dash does not check a value against its options: a client could send a symbol such as
@@ -206,6 +256,43 @@ detailed text log he can send when something goes wrong. The bot already writes 
 `test_turtle_trace.py`; + this `CHANGELOG.md`, `README.md`). `turtle.py`, `strategy.py`, `indicator.py`,
 `constants.py`, `dashboard.py` untouched. **Baseline:** v3.9.2-demo.5. Not released yet: later fixes are folded
 into this entry (the review's fixes: below).
+
+### Fixed before release: the final reviews (security and correctness of the port)
+- **A credentials file that is not UTF-8 is never written into the log.** Notepad on Windows Server can save
+  `mt5_credentials.json` as ANSI, and PowerShell 5.1 writes UTF-16. The bot then failed with a `UnicodeDecodeError`, and
+  the job's last line logged `repr(e)`: that text holds every byte of the file, so the demo and live passwords went into
+  `logs/<SYMBOL>_<day>.log` and the events file, again at every restart (every 30 s), and the dashboard showed them.
+  Now `load_credentials` reads the file as UTF-8 (a BOM is allowed) and says `mt5_credentials.json is not UTF-8 text:
+  save it as UTF-8` (a fixed text). Every log line made from an error gives its type and message only
+  (`UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe4 in position 60: ...`), never its repr: `app.py`
+  (`_err_text`: the job, the poll, the start-up, the state files) and `tracelog.py` (`err_text`).
+- **A day begun by a failed start keeps the bot's file name.** A start that ended before `symbols.json` was read logged
+  under `--symbol` in capitals (`XAUUSDM_<day>.log`). Windows keeps that name for the whole day, and the dashboard and
+  the 30-day clean-up looked only for `XAUUSDm_`. Now the job uses the spelling of `symbols.json`, and the clean-up and
+  the dashboard match the name without case.
+- **A file the dashboard is reading is written again a moment later.** Windows refuses to replace a file that another
+  program has open. The JSON writer tried 3 times in 10 ms; now `replace_retry` tries for about 0.24 s (6 waits). The
+  events rotation and the bot's state files (`_save_state`, `_save_turtle_state` on the Turtle branches) use the same
+  retry; before, a refused state save was an ERROR and was not tried again until the basket changed.
+- **A restart in the middle of a trade keeps the virtual balance.** The bot works out its balance only while flat. After
+  a restart during a basket or a Turtle trade, the trace had no virtual balance, closed P/L or equity until the trade
+  ended (the review saw 1,354 polls of '—'). Now the trace takes the balance of its last deal-history read and says so:
+  `account.virtual_balance_source` is `'deal history'` (else `'bot'`).
+- **The Turtle branches: the retry of a 'stop passed outside' close keeps that reason.** When one leg of that close was
+  refused, the next poll's retry was logged and journaled as a normal stop close (`turtle_stop`, at a price 1,100 above
+  the stop). Now the retry ends the same exit: the CLOSE line says 'the close that followed the stop ... passed outside
+  the bot had left them open', and the journal, the RESULT line and trades.json all say `stop_passed_outside`.
+- **The Turtle branches: a late D1 bar is not counted as still to come.** Flat with today's orders used, a D1 bar the
+  terminal gives late made the headline count the past 00:00 close up ('in 2.0 min', 'in 3.0 min' ...). Now it says
+  'the D1 bar that closed at ... 00:00:00 UTC is not there yet (2.0 min late): new orders as soon as the terminal gives
+  it', and the 'Today's orders' gate says the same.
+- Tests: `test_tracelog.py` +6 (a cp1252 and a UTF-16 credentials file leave none of their bytes in the logs; a failed
+  job logs the type and message; the replace retry; the clean-up of a day named in capitals; the balance after a
+  restart; the basket's stop and target prices against the bot's own closes: at every close the judged quote is through
+  that price, and on the poll before it was not). On the Turtle branches `test_turtle_trace.py` +3 and one more check
+  (the refused leg of a 'stop passed outside' close; a late D1 bar while flat; a real short trade checked against the
+  bot's book on every poll; the virtual balance after the restart test's restart). Each new test fails on the code
+  before the fix, except the short trade and the price check, which guard what was already right.
 
 ### Fixed before release: the review of the trace
 - **No file is written while the bot holds `mt5_lock`.** The order hook ran inside `MT5PositionHelper._send`, inside
