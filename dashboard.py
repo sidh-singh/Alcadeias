@@ -4,7 +4,11 @@ Alcadeias dashboard (demo branches): what the bot sees, decides and does, read f
 It only reads OUTPUT_DIR (docs/dashboard-data.md lists every field) and never talks to the terminal. One page for
 both strategies of the demo branches, told apart by the trace (`strategy`: 'basket' or 'turtle'):
 
-  Live     the status bar; what the bot is doing now: its one-sentence headline, every check in the order the
+  (every tab) the status bar and, when the open position is close to its target or stop (or a flat Turtle to an
+           entry), an amber / red banner; an optional sound and browser notification
+  Live     how close it is: meters from the entry to the target and to the stop (amber from 70 %, red from 90 %),
+           the handy figures (P/L in $ and price, time in trade, legs, lot, balance, spread, last tick), a flat bot's
+           entry conditions; what the bot is doing now: its one-sentence headline, every check in the order the
            bot makes it (passed / blocked / fired, the value against the rule), and the strategy's numbers
            (basket: the votes per timeframe with their pivots and slopes, the scores against their thresholds,
            the trend, the volatility unit, the pause, the levels a new basket would get; Turtle: N, the D1
@@ -14,6 +18,8 @@ both strategies of the demo branches, told apart by the trace (`strategy`: 'bask
   Trades   the summary, the virtual balance after every close, every trade with its legs (newest first)
   Log      the events of logs/<SYMBOL>_events.jsonl with level filters and a search, the text log's path to copy
            and send, the raw text of the day's log
+  Changes  every WARN / ERROR of the log grouped by kind (count, first / last time, meaning, what to do) and the
+           branch's CHANGELOG.md version by version
   History  the old views that still apply (daily trades, the lifetime summary, the old strategy log), the
            settings as constants.py has them, the raw files
 
@@ -54,6 +60,7 @@ JSON_DIR = OUTPUT_DIR                     # every path is built from this at cal
 REFRESH_INTERVAL = DASHBOARD_REFRESH_INTERVAL
 STATE_SUBDIR = getattr(_C, 'STATE_SUBDIR', 'state')
 TIMEFRAMES = ('M1', 'M5', 'M15', 'H1', 'D1')
+VIEW_BARS = 160                          # the chart opens on the newest 160 bars (drag or zoom out for the rest)
 TF_SECONDS = {'M1': 60, 'M5': 300, 'M15': 900, 'M30': 1800, 'H1': 3600, 'H4': 14400, 'H6': 21600, 'D1': 86400}
 LOG_LEVELS = ('ERROR', 'WARN', 'ORDER', 'FILL', 'CLOSE', 'INFO', 'DEBUG')
 EVENTS_TAIL_BYTES = 3 * 2 ** 20           # the log tab parses the newest 3 MB of the events file
@@ -126,11 +133,30 @@ _TB_FILE = re.compile(r'File "([^"]+)"')
 
 
 def _scrub(text):
-    """An error text or a traceback with file names instead of full paths ('File "dashboard.py", line 12')."""
+    """A text for the page with file names instead of full paths: 'File "app.py", line 12' in a traceback; the
+    output folder, the bot folder and the user's profile folder named, not spelled out. The page has no login: it
+    shows no folder of this PC (the copy-path boxes of the log files are the one exception: that is the file to send)."""
+    if text is None:
+        return ''
     text = _TB_FILE.sub(lambda m: 'File "%s"' % os.path.basename(m.group(1).replace('\\', '/')), str(text))
-    for folder, name in ((os.path.abspath(JSON_DIR), 'OUTPUT_DIR'), (HERE, 'the bot folder')):
-        text = text.replace(folder + os.sep, '').replace(folder, name)
+    folders = [(os.path.abspath(JSON_DIR), 'OUTPUT_DIR'), (HERE, 'the bot folder')]
+    home = os.path.expanduser('~')
+    if home and home not in ('~', os.sep) and len(home) > 3:
+        folders.append((home, '~'))
+    for folder, name in sorted(folders, key=lambda z: -len(z[0])):
+        text = text.replace(folder + os.sep, name + '/' if name == '~' else '').replace(folder, name)
     return text
+
+
+def _scrub_obj(v):
+    """_scrub over every string of a JSON value (the kv and data of an event)."""
+    if isinstance(v, str):
+        return _scrub(v)
+    if isinstance(v, dict):
+        return {k: _scrub_obj(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_scrub_obj(x) for x in v]
+    return v
 
 
 # ───────────────────────────── colours (one accent; green / red only for profit-loss and pass-fail) ─────────────
@@ -140,7 +166,7 @@ COL = {
     'line': '#1f2a44', 'grid': '#162036',
     'text': '#eef0f5', 'text2': '#aab3c5', 'muted': '#8b95aa', 'faint': '#5d6a85',
     'accent': '#d4a843', 'pos': '#3cc48e', 'neg': '#e05555', 'warn': '#f0c040', 'blue': '#4a8ecc',
-    'candle_up': '#9aa6bd', 'candle_down': '#5d6a85',
+    'candle_up': '#26a69a', 'candle_down': '#ef5350',
 }
 FONT = 'Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif'
 MONO = '"JetBrains Mono", "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace'
@@ -162,8 +188,11 @@ def read_json(path):
     if hit is not None and hit[0] == key:
         return hit[1], hit[2]
     try:
-        with open(path, 'r', encoding='utf-8') as f:
-            data, problem = json.load(f), None
+        # read, close, then parse: on Windows the bot cannot replace a file while it is open here, so the file is
+        # held for the read only (about 1 ms), not for the whole parse (10-40 ms for a full trades.json)
+        with open(path, 'rb') as f:
+            raw = f.read()
+        data, problem = json.loads(raw.decode('utf-8')), None
     except (OSError, ValueError) as e:
         data, problem = None, f'unreadable ({e.__class__.__name__})'
     _CACHE[path] = (key, data, problem)
@@ -1546,6 +1575,265 @@ def _turtle_position(d, tt, digits):
                 + (' · the bot has not written since: the P/L and the legs are those of its last poll' if as_of(d) else ''))
 
 
+# ───────────────────────────── how close is it (the open position's exits, a flat bot's entry) ─────────────────
+
+ALERT_AMBER = 70.0                        # a meter this far of the way (percent) turns amber ...
+ALERT_RED = 90.0                          # ... and this far red; the banner (and the optional sound) follow
+NEAR_ENTRY_N = 2.0                        # a flat Turtle's entry meter fills over the last 2 N before its level
+
+
+def closeness(pct_):
+    """'red' (>= ALERT_RED %), 'amber' (>= ALERT_AMBER %) or 'ok'."""
+    v = num(pct_)
+    if v is None:
+        return 'ok'
+    return 'red' if v >= ALERT_RED else 'amber' if v >= ALERT_AMBER else 'ok'
+
+
+def _clamp_pct(v):
+    v = num(v)
+    return None if v is None else max(0.0, min(100.0, v))
+
+
+def prog(label, pct_, detail, kind='exit', sub=None):
+    """One progress meter: `label`, the percent of the way, a bar that turns amber / red (kind 'exit' or 'entry'; an
+    'info' meter stays neutral), the distance in words under it."""
+    p = _clamp_pct(pct_)
+    level = 'info' if kind == 'info' else closeness(p)
+    return html.Div(className=f'prog prog-{level} prog-{kind}', children=[
+        html.Div(className='prog-head', children=[
+            html.Span(label, className='prog-label'),
+            html.Span('—' if p is None else f'{p:.0f}% of the way', className='prog-pct'),
+        ]),
+        html.Div(className='prog-track', children=[
+            html.Div(className='prog-fill', style={'width': f'{p or 0:.1f}%'}),
+            html.Div(className='prog-mark', style={'left': f'{ALERT_AMBER:g}%'}),
+            html.Div(className='prog-mark', style={'left': f'{ALERT_RED:g}%'}),
+        ]),
+        html.Div(detail, className='prog-detail'),
+        html.Div(sub, className='prog-sub') if sub else None,
+    ])
+
+
+def _extra_tiles(d, side, pnl, avg, now_px, legs, lots, age_s, digits):
+    """The handy figures of an open position: P/L in $ and in price, time in trade, legs and lot, the virtual balance,
+    the spread, the last tick."""
+    tr = dd(d.get('trace'))
+    acct, mk = dd(tr.get('account')), dd(tr.get('market'))
+    sgn = 1.0 if str(side).upper() == 'BUY' else -1.0
+    pts = (now_px - avg) * sgn if (num(now_px) is not None and num(avg) is not None) else None
+    tick_t = ts(mk.get('tick_t') or mk.get('tick_utc'))
+    vb_src = acct.get('virtual_balance_source')
+    return html.Div(className='xtiles', children=[
+        tile('P/L', money(pnl, signed=True), 'floating, this bot only', vcls=pl_class(pnl)),
+        tile('P/L in price', (f"{'+' if (pts or 0) > 0 else ''}{px(pts, digits)}" if pts is not None else '—'),
+             f"from the average {px(avg, digits)}", vcls=pl_class(pts)),
+        tile('Time in trade', dur(age_s) if num(age_s) is not None else '—', 'since the first leg'),
+        tile('Legs · lot', f"{smart(legs)} · {fnum(lots, 2)}", 'open legs · lots in all'),
+        tile('Virtual balance', money(acct.get('virtual_balance')),
+             'from the deal history (the bot re-reads it when flat)' if vb_src == 'deal history' else
+             f"start {money(acct.get('virtual_start_balance'))}"),
+        tile('Spread', smart(mk.get('spread'), digits), f"bid {px(mk.get('bid'), digits)} · ask {px(mk.get('ask'), digits)}"),
+        tile('Last tick', when(tick_t), (f"{dur(_now() - tick_t)} ago" if tick_t is not None else 'no tick yet')),
+    ])
+
+
+def _gate_summary(dec, flat_words):
+    """A flat bot: which entry conditions pass, which one is missing (the bot's own checks, in its order)."""
+    gates = [gt for gt in dl(dec.get('gates')) if gt.get('role') in (None, 'need')]
+    if not gates:
+        return None
+    ok = [gt for gt in gates if gt.get('ok') is True]
+    first_bad = next((gt for gt in gates if gt.get('ok') is False), None)
+    chips = [chip(('✓ ' if gt.get('ok') is True else '✗ ' if gt.get('ok') is False else '○ ') + str(gt.get('name') or gt.get('key')),
+                  'pos' if gt.get('ok') is True else 'neg' if gt.get('ok') is False else '', icon='')
+             for gt in gates]
+    if first_bad is not None:
+        need = first_bad.get('need')
+        val = first_bad.get('value')
+        wait = html.Div(className='wait', children=[
+            html.Span('Waiting for: ', className='muted'), html.B(str(first_bad.get('name') or first_bad.get('key'))),
+            html.Span(f" — now {smart(val) if not isinstance(val, str) else val}" if val is not None else ''),
+            html.Span(f"; needs {need}" if need else ''),
+            html.Span(f" ({first_bad.get('note')})" if first_bad.get('note') else '', className='muted'),
+        ])
+    else:
+        wait = html.Div(f'Every entry condition passes: {flat_words}', className='wait')
+    return html.Div([
+        html.Div(f"{len(ok)} of {len(gates)} entry conditions met", className='mini-title'),
+        html.Div(chips, className='chips chips-left gchips'),
+        wait,
+    ])
+
+
+def proximity(d):
+    """(view, alert): how close the open position is to its exits (target, stop, next add), or a flat bot to an entry;
+    alert = {'level': 'red' / 'amber' / None, 'text', 'key'} for the banner and the optional sound / notification."""
+    tr = dd(d.get('trace'))
+    digits = digits_of(d)
+    stale = is_stale(tr)
+    alert = {'level': None, 'text': None, 'key': None}
+    rows, extra, head = [], None, None
+    bk = g(tr, 'basket', 'open')
+    tt = dd(tr.get('turtle'))
+    trd = tt.get('trade') if isinstance(tt.get('trade'), dict) else None
+    worst = []                                     # (pct, what, text) of the alarm meters
+
+    if isinstance(bk, dict) and bk.get('side'):
+        side, pnl = bk.get('side'), num(bk.get('pnl'))
+        jo = bk.get('judged_on') or 'bid'
+        now_px = num(bk.get('price_now'))
+        tgt_usd, stop_usd = num(bk.get('target_usd')), num(bk.get('stop_usd'))
+        if tgt_usd:
+            p = (pnl or 0.0) / tgt_usd * 100.0
+            dist = abs((num(bk.get('target_price')) or 0) - (now_px or 0)) if num(bk.get('target_price')) is not None else None
+            rows.append(prog('To the target', p,
+                             f"target +{money(tgt_usd)} at {jo} {px(bk.get('target_price'), digits)} · "
+                             f"{px(dist, digits)} in price · {money(bk.get('to_target_usd'))} to go"))
+            worst.append((_clamp_pct(p), 'target', f"{side} basket {(_clamp_pct(p) or 0):.0f}% of the way to its target "
+                                                   f"({money(bk.get('to_target_usd'))} to go)"))
+        else:
+            rows.append(html.Div('No target in this design: the basket closes at its stop (or another exit).',
+                                 className='line muted'))
+        if stop_usd:
+            p = -(pnl or 0.0) / stop_usd * 100.0
+            dist = abs((num(bk.get('stop_price')) or 0) - (now_px or 0)) if num(bk.get('stop_price')) is not None else None
+            rows.append(prog('To the stop loss', p,
+                             f"stop -{money(stop_usd)} at {jo} {px(bk.get('stop_price'), digits)} · "
+                             f"{px(dist, digits)} in price · {money(bk.get('to_stop_usd'))} away"))
+            worst.append((_clamp_pct(p), 'stop', f"{side} basket {(_clamp_pct(p) or 0):.0f}% of the way to its stop loss "
+                                                 f"({money(bk.get('to_stop_usd'))} away)"))
+        else:
+            rows.append(html.Div('No stop in this design: the broker backstop is the only floor.', className='line muted'))
+        ld = dd(bk.get('ladder'))
+        last, nxt, lp = num(ld.get('last_fill')), num(ld.get('next_add_price')), num(ld.get('price_now'))
+        if ld.get('on') and not ld.get('exhausted') and None not in (last, nxt, lp) and nxt != last:
+            p = (lp - last) / (nxt - last) * 100.0
+            rows.append(prog('To the next add (price gap)', p,
+                             f"{ld.get('judged_on') or 'ask'} {px(nxt, digits)} or better, {px(abs(nxt - lp), digits)} "
+                             f"away · then a {ld.get('tier_tf') or '?'} {ld.get('trigger') or ''} "
+                             f"({'armed' if ld.get('armed') else 'not armed yet'})", kind='info'))
+        bs = [num(x) for x in lst(bk.get('backstop_prices')) if num(x) is not None]
+        if bs and now_px is not None:
+            near = min(bs, key=lambda b_: abs(b_ - now_px))
+            rows.append(html.Div(f"Broker backstop {px(near, digits)} is {px(abs(near - now_px), digits)} away (it acts "
+                                 "only while the bot is down).", className='line muted small'))
+        extra = _extra_tiles(d, side, pnl, bk.get('avg_price'), now_px, len(dl(bk.get('legs'))), bk.get('lots'),
+                             bk.get('age_s'), digits)
+        head = f"Open {side} basket"
+    elif trd and trd.get('side') and not trd.get('both_sides'):
+        side, pnl = trd.get('side'), num(trd.get('pnl'))
+        jo = trd.get('judged_on') or 'bid'
+        now_px = num(trd.get('price_now'))
+        sd, to_stop = num(trd.get('stop_dist')), num(trd.get('to_stop'))
+        if sd and to_stop is not None:
+            p = (1.0 - to_stop / sd) * 100.0
+            gap = (pnl - num(trd.get('pnl_at_stop'))) if (pnl is not None and num(trd.get('pnl_at_stop')) is not None) else None
+            rows.append(prog('To the stop loss', p,
+                             f"stop {px(trd.get('stop'), digits)} at {jo} ({trd.get('stop_text') or trd.get('stop_origin') or ''}) · "
+                             f"{px(to_stop, digits)} in price · {money(gap)} of P/L away · P/L there "
+                             f"{money(trd.get('pnl_at_stop'), signed=True)}",
+                             sub=f"the meter fills over the 2N stop distance ({px(sd, digits)}) from the stop"))
+            worst.append((_clamp_pct(p), 'stop', f"{side} trade {(_clamp_pct(p) or 0):.0f}% of the way to its stop "
+                                                 f"({px(to_stop, digits)} away)"))
+        step, to_add = num(trd.get('add_step')), num(trd.get('to_next_add'))
+        if num(trd.get('next_add')) is not None and step and to_add is not None:
+            p = (1.0 - to_add / step) * 100.0
+            rows.append(prog('To the next add (+1 leg)', p,
+                             f"{trd.get('next_add_judged_on') or 'ask'} {'≥' if str(side).upper() == 'BUY' else '≤'} "
+                             f"{px(trd.get('next_add'), digits)} · {px(to_add, digits)} to go · "
+                             f"{smart(trd.get('adds_left'))} add(s) left", kind='info'))
+        elif trd.get('full'):
+            rows.append(html.Div('The trade is full: no more adds.', className='line muted'))
+        rows.append(html.Div('No target: the Turtle exits only at its stop (2N from the best fill, or the exit channel '
+                             'when that is tighter).', className='line muted small'))
+        extra = _extra_tiles(d, side, pnl, trd.get('avg_price'), now_px, trd.get('legs_count'), trd.get('lots'),
+                             trd.get('age_s'), digits)
+        head = f"Open {side} Turtle trade"
+    else:
+        dec = dd(tr.get('decision'))
+        o = dd(tt.get('orders'))
+        if tt and o:
+            n = num(tt.get('n')) or num(g(tt, 'levels', 'n'))
+            armed = o.get('state') == 'armed' or o.get('armed') is True
+            vote = g(tt, 'vote', 'last')
+            for key, name, sign in (('buy', 'BUY', 1), ('sell', 'SELL', -1)):
+                od = dd(o.get(key))
+                lvl, dist = num(od.get('level')), num(od.get('distance'))
+                if lvl is None:
+                    continue
+                if od.get('reached'):
+                    p = 100.0
+                elif dist is not None and n:
+                    p = (1.0 - max(dist, 0.0) / (NEAR_ENTRY_N * n)) * 100.0
+                else:
+                    p = None
+                vote_ok = vote is not None and num(vote) == od.get('vote_needed')
+                detail = (f"{od.get('judged_on') or ('ask' if sign > 0 else 'bid')} {px(od.get('price_now'), digits)} → "
+                          f"level {px(lvl, digits)} ({od.get('channel') or ''}) · "
+                          + ('reached' if od.get('reached') else f"{px(dist, digits)} away ({fnum(od.get('distance_n'), 2)} N)")
+                          + f" · needs the M15 vote {'+1' if sign > 0 else '-1'} (now {smart(vote) if vote is not None else '?'}"
+                          + (', ok)' if vote_ok else ')'))
+                rows.append(prog(f"To a {name} entry", p if armed else None, detail,
+                                 kind='entry' if armed else 'info',
+                                 sub=None if armed else (f"not an entry now: today's orders are {o.get('state') or 'not armed'}"
+                                                         + (f" (used by the {o.get('used_by')} trade)" if o.get('used_by') else ''))))
+                if armed:
+                    worst.append((_clamp_pct(p), 'entry', f"flat: {(_clamp_pct(p) or 0):.0f}% of the way to a {name} entry "
+                                                          f"({'level reached' if od.get('reached') else px(dist, digits) + ' away'})"))
+        gs = _gate_summary(dec, 'the bot enters on this poll')
+        if gs is not None:
+            rows.append(gs)
+        head = 'Flat: how close an entry is'
+        if not rows:
+            rows.append(html.Div('Flat: no entry condition in the trace yet.', className='line muted'))
+    if worst and not stale:
+        top = max(worst, key=lambda z: z[0] or 0)
+        lvl = closeness(top[0])
+        if lvl != 'ok':
+            alert = {'level': lvl, 'text': top[2], 'key': f"{top[1]}:{lvl}:{tr.get('symbol') or d.get('symbol')}"}
+    body = html.Div([
+        html.Div(className='prox-head', children=[
+            html.Span(head or '', className='prox-what'),
+            badge({'red': 'VERY CLOSE', 'amber': 'GETTING CLOSE'}.get(alert['level'], 'NOT CLOSE'),
+                  {'red': 'neg', 'amber': 'warn'}.get(alert['level'], 'neutral')) if worst and not stale else None,
+            html.Span(f"amber from {ALERT_AMBER:g}% of the way, red from {ALERT_RED:g}%", className='muted small'),
+        ]),
+        html.Div(rows, className='progs'),
+        extra,
+    ])
+    return body, alert
+
+
+@safe()
+def proximity_view(d):
+    if not d.get('trace'):
+        return None
+    view, _ = proximity(d)
+    return html.Div([html.Div(className='prox-title', children=[
+        html.Span('How close is it' + as_of(d), className='eyebrow'),
+        html.Span(' · the open position against its target and stop loss, or a flat bot against its entry',
+                  className='muted small')]), view], className='prox')
+
+
+def alert_of(d):
+    try:
+        return proximity(d)[1] if d.get('trace') else {'level': None, 'text': None, 'key': None}
+    except Exception:
+        return {'level': None, 'text': None, 'key': None}
+
+
+def alert_banner(alert):
+    if not alert or not alert.get('level'):
+        return None
+    return html.Div(className=f"alertbar alertbar-{alert['level']}", children=[
+        html.Span('●' if alert['level'] == 'red' else '▲', className='alert-ic'),
+        html.B('Very close: ' if alert['level'] == 'red' else 'Getting close: '),
+        html.Span(alert.get('text') or ''),
+        html.Span(' · the Live tab has the details', className='muted'),
+    ])
+
+
 # ───────────────────────────── the chart ─────────────────────────────
 
 def _bars(d, tf):
@@ -1624,7 +1912,15 @@ def price_figure(d, tf):
         v = ts(v)
         return v is not None and t0 <= v < t_end
 
-    y_lo, y_hi = min(l), max(h)
+    # the first view: the newest VIEW_BARS bars (and the whole open position); pan or zoom out for the rest
+    tr0 = dd(d.get('trace'))
+    pos_t = ts(g(tr0, 'basket', 'open', 'first_t') or g(tr0, 'basket', 'open', 'opened_at')
+               or g(tr0, 'turtle', 'trade', 'entry_t'))
+    vi = max(0, len(t) - VIEW_BARS)
+    if pos_t is not None:
+        while vi > 0 and t[vi] > pos_t - 10 * tf_s:
+            vi -= 1
+    y_lo, y_hi = min(l[vi:]), max(h[vi:])
     keep = []          # prices that must stay in view
     trades = dl(g(d, 'trades', 'closed'))
     tr = dd(d.get('trace'))
@@ -1723,7 +2019,9 @@ def price_figure(d, tf):
         if num(trd.get('next_add')) is not None:
             levels.append(dict(y=trd.get('next_add'), name='NEXT ADD', col=COL['accent'], dash='dash', t_from=t_from, key=True,
                                on=trd.get('next_add_judged_on') or 'ask',
-                               hover=f"next leg at {trd.get('next_add_judged_on') or 'ask'} ≥ this (the last fill + 0.5N)"))
+                               hover=(f"next leg when the {trd.get('next_add_judged_on') or 'ask'} ≥ this (the last fill + 0.5N)"
+                                      if str(open_side or '').upper() == 'BUY' else
+                                      f"next leg when the {trd.get('next_add_judged_on') or 'bid'} ≤ this (the last fill - 0.5N)")))
         for i, b_ in enumerate(lst(trd.get('backstop_prices'))):
             levels.append(dict(y=b_, name='BACKSTOP' if i == 0 else '', col=COL['neg'], dash='dot', t_from=t_from, key=False,
                                width=1, on=stop_on,
@@ -1793,6 +2091,21 @@ def price_figure(d, tf):
             levels.append(dict(y=lv.get('trail_short'), name='EXIT CHANNEL', col=COL['blue'], dash='dot', t_from=day_from,
                                key=False, width=1,
                                hover=f"the {xdays}-day high: the short's stop is lowered to it at a D1 close when it is tighter"))
+    # ── the open position highlighted: the room to the target (green) and to the stop (red), from its entry to now ──
+    zone_from = None
+    if isinstance(bk_open, dict):
+        zone_from, z_avg = ts(bk_open.get('first_t') or bk_open.get('opened_at')), num(bk_open.get('avg_price'))
+        zones = [(bk_open.get('target_price'), 'rgba(38,166,154,0.10)'), (bk_open.get('stop_price'), 'rgba(239,83,80,0.10)')]
+    elif isinstance(trd, dict) and not trd.get('both_sides'):
+        zone_from, z_avg = ts(trd.get('entry_t') or trd.get('entry_utc')), num(trd.get('avg_price'))
+        zones = [(trd.get('stop'), 'rgba(239,83,80,0.10)')]
+    if zone_from is not None and z_avg is not None:
+        for y_, colr in zones:
+            y_ = num(y_)
+            if y_ is None:
+                continue
+            fig.add_shape(type='rect', xref='x', yref='y', x0=snap(max(zone_from, t0)), x1=_ms(t_end), y0=min(z_avg, y_),
+                          y1=max(z_avg, y_), fillcolor=colr, line=dict(width=0), layer='below')
     # ── the open legs ──
     if open_legs:
         ox, oy, ot_ = [], [], []
@@ -1881,6 +2194,11 @@ def price_figure(d, tf):
     for y_draw, (y_at, lvl, inside, y_true) in zip(ys, tags):
         arrow = '' if inside else ('▲ ' if y_true > hi_v else '▼ ')
         head = f"{arrow}{lvl['name']}{' (ask)' if lvl.get('on') == 'ask' else ''} {px(y_true, digits)}"
+        ref = ask if lvl.get('on') == 'ask' else bid
+        if lvl['name'] not in ('BID', 'ASK') and ref is not None and not lvl.get('note'):
+            # how far the level is from the price it is compared with: the distance to go
+            gap_ = y_true - ref
+            head += f" · {'+' if gap_ > 0 else '-' if gap_ < 0 else ''}{px(abs(gap_), digits)}"
         text = head + (f"<br><span style='font-size:9.5px;color:{COL['muted']}'>{lvl['note']}</span>"
                        if lvl.get('note') else '')
         widest = max(widest, len(head) * 6.4, len(lvl.get('note') or '') * 5.8)
@@ -1898,7 +2216,7 @@ def price_figure(d, tf):
         if t[i] - t[i - 1] > gap_s:
             breaks.append(dict(bounds=[_ms(t[i - 1] + tf_s), _ms(t[i])]))
     fig.update_layout(**base_layout)
-    fig.update_xaxes(type='date', range=[_ms(t0 - tf_s), _ms(t_end + (t_end - t0) * 0.02)], showgrid=True,
+    fig.update_xaxes(type='date', range=[_ms(t[vi] - tf_s), _ms(t_end + (t_end - t[vi]) * 0.03)], showgrid=True,
                      gridcolor=COL['grid'], linecolor=COL['line'], tickfont=dict(color=COL['muted']),
                      showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikecolor=COL['faint'],
                      spikedash='solid', rangeslider=dict(visible=False),
@@ -1987,7 +2305,7 @@ def event_row(ev, compact=False):
         html.Span(clock, className='ev-t mono'),
         html.Span(lvl, className=f'lvl lvl-{lvl.lower()}'),
         html.Span(ev.get('cat') or '', className='ev-cat'),
-        html.Span(ev.get('msg') or '', className='ev-msg'),
+        html.Span(_scrub(ev.get('msg') or ''), className='ev-msg'),
     ])
     if compact:
         return html.Div(className='ev ev-compact', children=summary.children)
@@ -1995,15 +2313,17 @@ def event_row(ev, compact=False):
     kv_ = ev.get('kv')
     if isinstance(kv_, dict) and kv_:
         body.append(html.Div(className='ev-kv', children=[
-            html.Div([html.Span(k, className='kv-k'), html.Span(v if isinstance(v, str) else json.dumps(v, default=str),
-                                                                className='kv-v mono')], className='kv')
+            html.Div([html.Span(k, className='kv-k'),
+                      html.Span(_scrub(v if isinstance(v, str) else json.dumps(_scrub_obj(v), default=str)),
+                                className='kv-v mono')], className='kv')
             for k, v in kv_.items()]))
     if ev.get('data') is not None:
-        body.append(html.Pre(json.dumps(ev.get('data'), indent=1, default=str)[:20000], className='pre'))
+        body.append(html.Pre(json.dumps(_scrub_obj(ev.get('data')), indent=1, default=str)[:20000], className='pre'))
     if ev.get('traceback'):
         tb = ev['traceback']
-        body.append(html.Pre(tb if isinstance(tb, str) else '\n'.join(map(str, tb)), className='pre pre-err'))
-    body.append(html.Div(f"{ev.get('time') or stamp(t)} | {lvl} | {ev.get('cat')} | {ev.get('msg')}", className='ev-raw mono'))
+        body.append(html.Pre(_scrub(tb if isinstance(tb, str) else '\n'.join(map(str, tb))), className='pre pre-err'))
+    body.append(html.Div(_scrub(f"{ev.get('time') or stamp(t)} | {lvl} | {ev.get('cat')} | {ev.get('msg')}"),
+                         className='ev-raw mono'))
     return html.Details(className=f'ev ev-{lvl.lower()}', children=[summary, html.Div(body, className='ev-body')])
 
 
@@ -2034,7 +2354,7 @@ def log_files(sym):
     if not is_symbol_name(sym):
         return []
     folder = _path('logs')
-    name = re.compile(re.escape(sym) + r'_(\d{4}-\d{2}-\d{2})\.log')
+    name = re.compile(re.escape(sym) + r'_(\d{4}-\d{2}-\d{2})\.log', re.IGNORECASE)   # XAUUSDM_<day>.log too
     out = []
     try:
         names = os.listdir(folder)
@@ -2536,6 +2856,200 @@ def raw_view(sym):
 
 # ───────────────────────────── the page ─────────────────────────────
 
+# ───────────────────────────── changes & issues ─────────────────────────────
+
+# The bot's WARN / ERROR lines grouped by what they are about: (code, what the message holds, what it means, what to do)
+ISSUE_KINDS = (
+    ('TERMINAL_IN_USE', re.compile(r'TERMINAL_IN_USE'),
+     'The slot\'s terminal holds another account: the bot does not log in over it and does not trade.',
+     'Open that MT5 terminal and log it into the demo account of mt5_credentials.json (or give each slot its own '
+     'terminal). The bot tries again by itself.'),
+    ('LIVE_TERMINAL_PATH', re.compile(r'LIVE_TERMINAL_PATH'),
+     'The terminal path in the credentials is the one of a live bot: the demo bot refuses it.',
+     'Give this demo slot its own MT5 terminal folder in mt5_credentials.json.'),
+    ('ACCOUNT_REFUSED', re.compile(r'^not trading: |ACCOUNT_REFUSED|refused, not trading'),
+     'The terminal holds an account the bot refuses (not the demo account, not hedging, another login): no trading.',
+     'Log the terminal into the demo account of mt5_credentials.json. Trading starts again by itself.'),
+    ('RECONNECT_FAILED', re.compile(r'^reconnect failed|^reconnect attempt \d+ failed|RECONNECT_FAILED'),
+     'The bot lost the terminal and could not connect again yet. It keeps trying (the log has every attempt).',
+     'Check that the MT5 terminal is open and logged in. If it stays red for more than a few minutes, restart the '
+     'terminal, then the bot.'),
+    ('MT5_INIT_FAILED', re.compile(r'initiali[sz]e failed'),
+     'The bot could not connect to the MT5 terminal (initialize). While the terminal is gone this comes with '
+     'RECONNECT_FAILED.',
+     'Check that the slot\'s MT5 terminal is installed, open and logged in, and that terminal_path in '
+     'mt5_credentials.json points at it.'),
+    ('TERMINAL_ERROR', re.compile(r'^poll skipped'),
+     'A poll could not read the terminal; nothing was decided in that poll.',
+     'A few are normal (a short stall). Many in a row: check the terminal and the internet connection.'),
+    ('POLL_FAILED', re.compile(r'^the poll failed'),
+     'A poll raised an error; the loop goes on one second later.',
+     'Send the day\'s text log: the line has the full traceback.'),
+    ('TRACE_FAILED', re.compile(r'^the trace hook'),
+     'A part of the dashboard\'s data could not be written this poll. Trading is not affected.',
+     'Send the day\'s text log if it repeats.'),
+    ('WRITE_FAILED', re.compile(r'^could not write|could not write the state file'),
+     'A file could not be written (a full disk, or Windows refused it for a moment). Trading goes on.',
+     'Check the free disk space. A single line is harmless: the bot writes the file again.'),
+    ('CLOSE_INCOMPLETE', re.compile(r'is incomplete'),
+     'A close left legs open (the terminal refused one); the bot closes the rest on the next poll.',
+     'Nothing, unless it repeats for minutes: then check the terminal (off quotes, market closed).'),
+    ('CLOSED_OUTSIDE', re.compile(r'closed outside the bot'),
+     'Positions of this bot were closed outside it: the broker backstop, a stop-out, by hand, or while it was down.',
+     'Nothing to do if you closed them. Else look at the Trades tab for the result.'),
+    ('D1_LATE', re.compile(r'is not there yet'),
+     'The terminal gave the new daily bar late; the bot keeps the levels of the day before until it comes.',
+     'Nothing: it asks again every poll. Many minutes late: check the terminal\'s connection.'),
+    ('ORDER_REFUSED', re.compile(r'retcode|\b(order|close)\b.*\brefused'),
+     'The terminal refused an order or a close.',
+     'Look at the retcode in the line (10018 market closed, 10019 no money, 10021 no quotes). Send the day\'s log if '
+     'it repeats.'),
+)
+_NUM_RUN = re.compile(r'(?<![A-Za-z])\d[\d,.:]*')
+
+
+def issue_kind(ev):
+    """(code, meaning, what to do) of a WARN / ERROR event; unknown ones are grouped by category and message shape."""
+    msg = str(ev.get('msg') or '')
+    for code, rx, meaning, todo in ISSUE_KINDS:
+        if rx.search(msg):
+            return code, meaning, todo
+    shape = _NUM_RUN.sub('#', msg)[:70]
+    return f"{ev.get('cat') or 'OTHER'}: {shape}", None, None
+
+
+def issues(sym, now=None):
+    """[{code, level, count, count_24h, first, last, msg, meaning, todo}] of the WARN / ERROR lines of the events file
+    (its newest EVENTS_TAIL_BYTES), the newest problem first; (list, cut, problem)."""
+    evs, cut, problem = read_events(sym)
+    now = _now() if now is None else now
+    groups = {}
+    for e in evs:
+        lvl = str(e.get('level') or '').upper()
+        if lvl not in ('WARN', 'ERROR'):
+            continue
+        code, meaning, todo = issue_kind(e)
+        t = ts(e.get('t')) or ts(e.get('time'))
+        gr = groups.get(code)
+        if gr is None:
+            gr = groups[code] = {'code': code, 'level': lvl, 'count': 0, 'count_24h': 0, 'first': t, 'last': t,
+                                 'msg': None, 'meaning': meaning, 'todo': todo, 'cat': e.get('cat')}
+        gr['count'] += 1
+        if lvl == 'ERROR':
+            gr['level'] = 'ERROR'
+        if t is not None:
+            if now - t <= 86400:
+                gr['count_24h'] += 1
+            gr['first'] = t if gr['first'] is None else min(gr['first'], t)
+            gr['last'] = t if gr['last'] is None else max(gr['last'], t)
+        gr['msg'] = e.get('msg')
+    out = sorted(groups.values(), key=lambda x: (x['level'] != 'ERROR', -(x['last'] or 0)))
+    return out, cut, problem
+
+
+@safe()
+def issues_view(sym):
+    rows, cut, problem = issues(sym)
+    if problem:
+        return empty(f'The events file is {problem}: {_rel(events_path(sym))}',
+                     'the bot writes it from its start; no file, no issue list')
+    if not rows:
+        return html.Div([html.Div('No warning and no error in the log.', className='flat pos'),
+                         html.Div('Every WARN and ERROR line of the bot would be listed here, grouped by kind.',
+                                  className='line muted')])
+    now = _now()
+    n_err = sum(r['count'] for r in rows if r['level'] == 'ERROR')
+    n_warn = sum(r['count'] for r in rows if r['level'] == 'WARN')
+    recent = sum(r['count_24h'] for r in rows)
+    head = html.Div(className='chips chips-left', children=[
+        chip(f'{n_err} error line(s)', 'neg' if n_err else 'pos'),
+        chip(f'{n_warn} warning line(s)', 'warn' if n_warn else 'pos'),
+        chip(f'{recent} in the last 24 h', 'warn' if recent else 'pos'),
+        html.Span(f"from {'the newest ' + _size(EVENTS_TAIL_BYTES) + ' of ' if cut else ''}"
+                  f"{os.path.basename(events_path(sym))}", className='muted small'),
+    ])
+    items = []
+    for r in rows:
+        active = r['last'] is not None and now - r['last'] <= 3600
+        items.append(html.Details(className=f"issue issue-{r['level'].lower()}", children=[
+            html.Summary(className='issue-sum', children=[
+                html.Span(r['level'], className=f"lvl lvl-{r['level'].lower()}"),
+                html.Span(r['code'], className='issue-code mono'),
+                html.Span(f"{r['count']}×", className='issue-n mono'),
+                html.Span(f"first {when(r['first'])} · last {when(r['last'])} ({dur(now - r['last']) + ' ago' if r['last'] else '—'})",
+                          className='issue-when'),
+                badge('in the last hour', 'neg' if r['level'] == 'ERROR' else 'warn') if active else None,
+            ]),
+            html.Div(className='issue-body', children=[
+                html.Div([html.B('What it means: '), r['meaning']], className='line') if r.get('meaning') else None,
+                html.Div([html.B('What to do: '), r['todo']], className='line') if r.get('todo') else None,
+                html.Div([html.Span('The last line: ', className='muted'), html.Code(_scrub(r.get('msg') or ''), className='mono')],
+                         className='line'),
+                html.Div(f"{r['count_24h']} in the last 24 h · category {r.get('cat') or '—'} · the Log tab has every line "
+                         f"(search for a word of it)", className='line muted small'),
+            ]),
+        ]))
+    return html.Div([head, html.Div(items, className='issues')])
+
+
+_CHANGELOG_CACHE = {}
+_CL_HEAD = re.compile(r'^## \[(?P<ver>[^\]]+)\]\s+[—–]\s+(?P<date>.+?)\s+[—–]\s+(?P<title>.*)$')
+
+
+def changelog_entries():
+    """[(version, date, title, markdown body)] of the branch's CHANGELOG.md, newest first; cached until it changes."""
+    path = os.path.join(HERE, 'CHANGELOG.md')
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _CHANGELOG_CACHE.get(path)
+    if hit and hit[0] == key:
+        return hit[1]
+    try:
+        with open(path, 'rb') as f:
+            text = f.read().decode('utf-8', 'replace')
+    except OSError:
+        return None
+    out = []
+    parts = re.split(r'\n(?=## \[)', text)
+    for part in parts[1:]:
+        first, _, body = part.partition('\n')
+        m = _CL_HEAD.match(first.strip())
+        if m:
+            out.append((m.group('ver'), m.group('date').strip(), m.group('title').strip(), body.strip('\n -')))
+        else:
+            out.append((first.lstrip('# ').strip(), '', '', body.strip('\n -')))
+    _CHANGELOG_CACHE.clear()
+    _CHANGELOG_CACHE[path] = (key, out)
+    return out
+
+
+@safe()
+def changelog_view(limit=40):
+    entries = changelog_entries()
+    if entries is None:
+        return empty('No CHANGELOG.md next to dashboard.py.')
+    items = []
+    for i, (ver, date, title, body) in enumerate(entries[:limit]):
+        demo = 'demo' in ver
+        items.append(html.Details(open=i == 0, className='cl', children=[
+            html.Summary(className='cl-sum', children=[
+                html.Span(ver, className=f"cl-ver mono {'cl-demo' if demo else ''}"),
+                html.Span(date, className='cl-date'),
+                html.Span(title, className='cl-title'),
+            ]),
+            dcc.Markdown(body, className='md', link_target='_blank'),
+        ]))
+    more = len(entries) - limit
+    return html.Div([
+        html.Div(f"{len(entries)} versions in this branch's CHANGELOG.md, newest first; click one to open it"
+                 + (f" (the {more} oldest are in the file)" if more > 0 else '') + '.', className='count'),
+        html.Div(items, className='cls'),
+    ])
+
+
 CSS = """
 :root{--page:#070b17;--surface:#0c1324;--raised:#111a2e;--raised2:#16213a;--line:#1f2a44;--grid:#162036;
 --text:#eef0f5;--text2:#aab3c5;--muted:#8b95aa;--faint:#5d6a85;--accent:#d4a843;--accent-soft:rgba(212,168,67,.13);
@@ -2797,6 +3311,73 @@ padding:5px 2px;border-bottom:1px solid var(--grid)}
 .set-v{color:var(--text);overflow-wrap:anywhere}
 .set-tags{display:flex;gap:4px}
 .small{font-size:12px}
+/* how close is it */
+.prox{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+.prox-title{margin-bottom:8px}
+.prox-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.prox-what{font-size:15px;font-weight:600}
+.progs{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:10px 18px}
+.prog{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.prog-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.prog-label{font-weight:600}
+.prog-pct{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text2)}
+.prog-track{position:relative;height:12px;border-radius:6px;background:#0a1020;border:1px solid var(--line);margin:7px 0 6px;
+overflow:hidden}
+.prog-fill{position:absolute;left:0;top:0;bottom:0;border-radius:6px 0 0 6px;background:var(--blue);transition:width .4s}
+.prog-mark{position:absolute;top:0;bottom:0;width:1px;background:rgba(238,240,245,.28)}
+.prog-detail{font-size:12px;color:var(--text2)}
+.prog-sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+.prog-ok .prog-fill{background:#3a6fa8}
+.prog-amber{border-color:rgba(240,192,64,.55);background:linear-gradient(180deg,rgba(240,192,64,.08),var(--raised))}
+.prog-amber .prog-fill{background:var(--warn)}.prog-amber .prog-pct{color:var(--warn)}
+.prog-red{border-color:rgba(224,85,85,.7);background:linear-gradient(180deg,rgba(224,85,85,.12),var(--raised));
+box-shadow:0 0 0 1px rgba(224,85,85,.25)}
+.prog-red .prog-fill{background:var(--neg)}.prog-red .prog-pct{color:var(--neg)}
+.prog-info .prog-fill{background:var(--accent);opacity:.75}
+.xtiles{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:12px}
+@media (max-width:1180px){.xtiles{grid-template-columns:repeat(3,1fr)}.progs{grid-template-columns:1fr}}
+.gchips .chip{font-size:11.5px}
+.wait{margin-top:8px;color:var(--text2)}
+/* the banner on every tab */
+.alert-wrap{max-width:1640px;margin:0 auto;padding:0 28px}
+.alertbar{margin-top:14px;border-radius:10px;padding:10px 14px;font-size:13.5px;display:flex;gap:8px;align-items:baseline;
+flex-wrap:wrap}
+.alertbar-amber{background:var(--warn-soft);border:1px solid rgba(240,192,64,.6)}
+.alertbar-red{background:rgba(224,85,85,.18);border:1px solid rgba(224,85,85,.8);animation:pulse 1.6s ease-in-out infinite}
+.alert-ic{font-size:12px}.alertbar-amber .alert-ic{color:var(--warn)}.alertbar-red .alert-ic{color:var(--neg)}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(224,85,85,.0)}50%{box-shadow:0 0 0 4px rgba(224,85,85,.25)}}
+/* changes & issues */
+.issues{display:flex;flex-direction:column;margin-top:10px}
+.issue{border-top:1px solid var(--grid)}
+.issue-sum{display:grid;grid-template-columns:62px minmax(220px,420px) 60px minmax(0,1fr) auto;gap:12px;padding:8px 6px;
+cursor:pointer;list-style:none;align-items:baseline}
+.issue-sum::-webkit-details-marker{display:none}
+.issue[open]>.issue-sum,.issue-sum:hover{background:rgba(255,255,255,.02)}
+.issue-code{font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.issue-n{color:var(--text2);text-align:right}
+.issue-when{color:var(--muted);font-size:12px}
+.issue-body{padding:2px 8px 10px 80px}
+.issue-body code{white-space:pre-wrap;overflow-wrap:anywhere}
+.cls{display:flex;flex-direction:column}
+.cl{border-top:1px solid var(--grid)}
+.cl-sum{display:grid;grid-template-columns:170px 100px minmax(0,1fr);gap:12px;padding:8px 6px;cursor:pointer;list-style:none;
+align-items:baseline}
+.cl-sum::-webkit-details-marker{display:none}
+.cl[open]>.cl-sum,.cl-sum:hover{background:rgba(255,255,255,.02)}
+.cl-ver{font-weight:700;color:var(--text2)}.cl-demo{color:var(--accent)}
+.cl-date{color:var(--muted);font-size:12px}
+.cl-title{color:var(--text)}
+.md{padding:2px 10px 14px 18px;color:var(--text2);font-size:13px;line-height:1.55;max-width:1200px}
+.md h3{font-size:13px;color:var(--text);margin:14px 0 6px;letter-spacing:.02em}
+.md h4{font-size:12.5px;color:var(--text);margin:10px 0 4px}
+.md code{background:#080d1b;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--text)}
+.md pre{background:#080d1b;border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow:auto}
+.md pre code{border:0;padding:0}
+.md ul{padding-left:20px;margin:4px 0}
+.md li{margin:2px 0}
+.md table{border-collapse:collapse;margin:8px 0}.md th,.md td{border:1px solid var(--line);padding:4px 8px}
+.md strong{color:var(--text)}
+.md a{color:var(--accent)}
 """
 
 INDEX = """<!DOCTYPE html>
@@ -2818,7 +3399,8 @@ TAB_STYLE = {'background': 'transparent', 'border': 'none', 'borderBottom': '2px
              'color': COL['muted'], 'fontWeight': '600', 'fontSize': '13px', 'fontFamily': FONT, 'width': 'auto',
              'flex': '0 0 auto'}
 TAB_SELECTED = dict(TAB_STYLE, color=COL['text'], borderBottom=f"2px solid {COL['accent']}")
-TABS = (('live', 'Live'), ('trades', 'Trades'), ('log', 'Log'), ('history', 'History & settings'))
+TABS = (('live', 'Live'), ('trades', 'Trades'), ('log', 'Log'), ('changes', 'Changes & issues'),
+        ('history', 'History & settings'))
 
 app = dash.Dash(__name__, title=f"{getattr(_C, 'DEMO_BRANCH', None) or 'demo bot'} · Alcadeias", update_title=None,
                 suppress_callback_exceptions=True)
@@ -2826,11 +3408,22 @@ app.index_string = INDEX
 server = app.server
 
 
+@server.before_request
+def _refuse_odd_paths():
+    """A request path with '..' or a backslash (a probe for files outside the package folders) gets a plain 404:
+    Dash's /_dash-component-suites/ route answered such paths with a 500 and a stack trace in the console."""
+    from flask import request
+    path = request.path or ''
+    if '..' in path or '\\' in path or '%2e%2e' in path.lower() or '%5c' in path.lower():
+        return 'not found', 404
+    return None
+
+
 def _pane_live():
     return html.Div(id='pane-live', children=[
         html.Section(className='card now', children=[
             html.Div(id='live-now'),
-            html.Div(className='grid-2 now-grid', children=[html.Div(id='live-gates'), html.Div(id='live-strategy')]),
+            html.Div(id='live-close'),
         ]),
         html.Section(className='card', children=[
             html.Div(className='card-head', children=[
@@ -2843,6 +3436,9 @@ def _pane_live():
             dcc.Graph(id='chart', config={'displaylogo': False, 'scrollZoom': True,
                                           'modeBarButtonsToRemove': ['lasso2d', 'select2d', 'autoScale2d']}),
             html.Div(id='chart-note', className='chart-note'),
+        ]),
+        html.Section(className='card', children=[
+            html.Div(className='grid-2', children=[html.Div(id='live-gates'), html.Div(id='live-strategy')]),
         ]),
         html.Div(id='live-position'),
         html.Div(id='live-events'),
@@ -2897,6 +3493,16 @@ def _pane_log():
     ])
 
 
+def _pane_changes():
+    return html.Div(id='pane-changes', style={'display': 'none'}, children=[
+        card('Issues from the log', html.Div(id='issues-view'),
+             sub='every WARN and ERROR line the bot wrote, grouped by kind: how many, the first and the last time, what '
+                 'it means and what to do (click a row)'),
+        card('Changes (CHANGELOG.md)', html.Div(id='changelog-view'),
+             sub='what changed in this branch, version by version: the new features, the fixes and how to undo each one'),
+    ])
+
+
 def _pane_history():
     return html.Div(id='pane-history', style={'display': 'none'}, children=[
         card('Daily trades', html.Div([
@@ -2918,6 +3524,7 @@ def serve_layout():
         dcc.Location(id='url', refresh=False),
         dcc.Interval(id='tick', interval=REFRESH_INTERVAL, n_intervals=0),
         dcc.Store(id='sig-live'), dcc.Store(id='sig-trades'), dcc.Store(id='sig-log'), dcc.Store(id='sig-hist'),
+        dcc.Store(id='sig-changes'), dcc.Store(id='alert-store'), dcc.Store(id='alert-done'), dcc.Store(id='alert-perm'),
         html.Header(className='topbar', children=[html.Div(className='top-row', children=[
             html.Div(className='brand', children=[
                 html.Img(src=app.get_asset_url('alcadeias.png'), alt=''),
@@ -2932,11 +3539,17 @@ def serve_layout():
             html.Div(className='tabbar-right', children=[
                 dcc.RadioItems(id='symbol', options=[{'label': s, 'value': s} for s in syms], value=first,
                                className='seg', inline=True, style={} if len(syms) > 1 else {'display': 'none'}),
+                dcc.Checklist(id='alert-opts', options=[{'label': 'sound', 'value': 'sound'},
+                                                        {'label': 'browser notification', 'value': 'notify'}],
+                              value=[], className='chk', inline=True, persistence=True, persistence_type='local'),
                 html.Span(f'refreshes every {REFRESH_INTERVAL / 1000:g} s · times in UTC'),
             ]),
         ]),
-        html.Main(className='page', children=[_pane_live(), _pane_trades(), _pane_log(), _pane_history()]),
-        html.Div(f'Alcadeias · reads {os.path.abspath(JSON_DIR)} · never sends anything to the terminal', className='footer'),
+        html.Div(id='alert-bar', className='alert-wrap'),
+        html.Main(className='page', children=[_pane_live(), _pane_trades(), _pane_log(), _pane_changes(),
+                                              _pane_history()]),
+        html.Div('Alcadeias · reads the bot\'s output folder (OUTPUT_DIR) · never sends anything to the terminal',
+                 className='footer'),
     ])
 
 
@@ -2978,27 +3591,77 @@ def _triggered():
 # Every callback takes the symbol (and the day) only through valid_symbol / valid_day: a request can send any value,
 # and none may name a file outside the fixed names of OUTPUT_DIR.
 
-@app.callback(Output('status', 'children'), Input('tick', 'n_intervals'), Input('symbol', 'value'))
+@app.callback(Output('status', 'children'), Output('alert-bar', 'children'), Output('alert-store', 'data'),
+              Input('tick', 'n_intervals'), Input('symbol', 'value'))
 def _status(_n, sym):
+    """The status bar and, on every tab, the banner when the open position (or a flat Turtle's entry) is close."""
     sym = valid_symbol(sym)
-    return status_bar(sym, load(sym))
+    d = load(sym)
+    alert = alert_of(d)
+    return status_bar(sym, d), alert_banner(alert), alert
+
+
+# The optional sound and browser notification: in the browser only, when the alert gets worse (amber -> red, or a new
+# position's alert); ticked in the tab bar, remembered by the browser.
+app.clientside_callback(
+    """
+    function(alert, opts, done) {
+        if (!alert || !alert.level || !alert.key) { return null; }
+        if (done === alert.key) { return window.dash_clientside.no_update; }
+        opts = opts || [];
+        var red = alert.level === 'red';
+        if (opts.indexOf('sound') >= 0) {
+            try {
+                var Ctx = window.AudioContext || window.webkitAudioContext;
+                var ctx = new Ctx();
+                [0, 0.25, red ? 0.5 : -1].forEach(function (at) {
+                    if (at < 0) { return; }
+                    var o = ctx.createOscillator(), g = ctx.createGain();
+                    o.type = 'sine'; o.frequency.value = red ? 880 : 660;
+                    g.gain.setValueAtTime(0.0001, ctx.currentTime + at);
+                    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + at + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + 0.18);
+                    o.connect(g); g.connect(ctx.destination);
+                    o.start(ctx.currentTime + at); o.stop(ctx.currentTime + at + 0.2);
+                });
+            } catch (e) {}
+        }
+        if (opts.indexOf('notify') >= 0 && window.Notification && Notification.permission === 'granted') {
+            try { new Notification((red ? 'Very close: ' : 'Getting close: ') + document.title, {body: alert.text}); }
+            catch (e) {}
+        }
+        return alert.key;
+    }
+    """,
+    Output('alert-done', 'data'), Input('alert-store', 'data'), State('alert-opts', 'value'), State('alert-done', 'data'))
+
+app.clientside_callback(
+    """
+    function(opts) {
+        if (opts && opts.indexOf('notify') >= 0 && window.Notification && Notification.permission === 'default') {
+            try { Notification.requestPermission(); } catch (e) {}
+        }
+        return (window.Notification && Notification.permission) || 'none';
+    }
+    """,
+    Output('alert-perm', 'data'), Input('alert-opts', 'value'))
 
 
 @app.callback(
     Output('live-now', 'children'), Output('live-gates', 'children'), Output('live-strategy', 'children'),
     Output('chart', 'figure'), Output('chart-note', 'children'), Output('live-position', 'children'),
-    Output('live-events', 'children'), Output('sig-live', 'data'),
+    Output('live-events', 'children'), Output('sig-live', 'data'), Output('live-close', 'children'),
     Input('tick', 'n_intervals'), Input('tabs', 'value'), Input('tf', 'value'), Input('symbol', 'value'),
     State('sig-live', 'data'))
 def _live(_n, tab, tf, sym, prev):
     if tab != 'live':
-        return [no_update] * 8
+        return [no_update] * 9
     sym = valid_symbol(sym)
     tf = tf if tf in TIMEFRAMES else 'M15'
     sig = '|'.join([sym, str(tf), file_sig(trace_path(sym), bars_path(sym), trades_path(sym), events_path(sym)),
                     str(int(_now() // 60))])
     if sig == prev and any(p.startswith('tick.') for p in _triggered()):
-        return [no_update] * 8
+        return [no_update] * 9
     d = load(sym)
     if not d.get('trace'):
         msg = html.Div([
@@ -3009,9 +3672,9 @@ def _live(_n, tab, tf, sym, prev):
                      f"bot writes it after every poll: start the bot (start_btcusd.bat / start_job.bat) and this page "
                      f"fills in.", className='line muted'),
         ])
-        return (msg, None, None, price_figure(d, tf), chart_note(d, tf), position_view(d), latest_events(sym), sig)
+        return (msg, None, None, price_figure(d, tf), chart_note(d, tf), position_view(d), latest_events(sym), sig, None)
     return (now_header(d), gates_view(d), strategy_panel(d), price_figure(d, tf), chart_note(d, tf), position_view(d),
-            latest_events(sym), sig)
+            latest_events(sym), sig, proximity_view(d))
 
 
 @app.callback(Output('trades-kpis', 'children'), Output('equity', 'figure'), Output('trades-list', 'children'),
@@ -3090,7 +3753,7 @@ def _log(_n, tab, sym, levels, search, hb, limit, view, day, follow, prev):
         keep = [ln for ln in lines if ln.strip() and (not q or q in ln.lower())
                 and (len(ln.split(' | ', 2)) < 2 or ln.split(' | ', 2)[1].strip() in levels or ln.startswith('    '))
                 and ('hb' in hb or ' | HEARTBEAT | ' not in ln) and ('cfg' in hb or ' | CONFIG | ' not in ln)]
-        shown = keep[-int(limit or 200):]
+        shown = [_scrub(ln) for ln in keep[-int(limit or 200):]]
         return (f'The last {len(shown)} of {len(keep)} matching lines of {os.path.basename(text_path)} (its newest '
                 f'{_size(TEXT_TAIL_BYTES)} at most), oldest first as in the file; the level and heartbeat filters and '
                 f'the search apply.'), html.Pre('\n'.join(shown), className='pre pre-log'), sig
@@ -3133,6 +3796,18 @@ def _download(_clicks, day, sym):
     if path is None:
         return no_update
     return dcc.send_file(path)
+
+
+@app.callback(Output('issues-view', 'children'), Output('changelog-view', 'children'), Output('sig-changes', 'data'),
+              Input('tick', 'n_intervals'), Input('tabs', 'value'), Input('symbol', 'value'), State('sig-changes', 'data'))
+def _changes(_n, tab, sym, prev):
+    if tab != 'changes':
+        return [no_update] * 3
+    sym = valid_symbol(sym)
+    sig = '|'.join([sym, file_sig(events_path(sym), os.path.join(HERE, 'CHANGELOG.md')), str(int(_now() // 60))])
+    if sig == prev and any(p.startswith('tick.') for p in _triggered()):
+        return [no_update] * 3
+    return issues_view(sym), changelog_view(), sig
 
 
 @app.callback(Output('hist-day', 'options'), Output('hist-day', 'value'), Output('hist-daily', 'children'),
