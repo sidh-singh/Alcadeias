@@ -10,7 +10,7 @@ history, then the loss pause as after any close.
 Fix E of the third review round: the basket learnt an add's position id only from the next positions read, about
 2 s after the add. A terminal outage or a restart in that window, with the entry's backstop closing the entry
 meanwhile, left a state that knew only the entry: the add was taken over as a new basket, which could add again.
-Now the add's position id is recorded from the order's answer at once (_record_add), kept 10 s while the terminal
+Now the add's position id is recorded from the order's answer at once (_record_fill), kept 10 s while the terminal
 does not list it (as the entry's fill), and saved with the state.
 """
 import types
@@ -176,7 +176,7 @@ def test_an_add_is_recorded_from_its_order_and_saved_with_the_state(mods, tmp_pa
     b = state['basket']
     b['ids'] = [e]                                                          # the state before the add
     now = clock.time()
-    assert bot._record_add(b, _done(a), now) and b['ids'] == [e, a] and bot._unlisted(b) == {a: now}
+    assert bot._record_fill(b, _done(a), now) and b['ids'] == [e, a] and bot._unlisted(b) == {a: now}
     bot._save_state('XAUUSDm', state)
     loaded = bot._load_state('XAUUSDm')['basket']                           # (a restarted bot reads it back)
     assert loaded['ids'] == [e, a] and bot._unlisted(loaded) == {a: now}
@@ -186,7 +186,7 @@ def test_an_add_is_recorded_from_its_order_and_saved_with_the_state(mods, tmp_pa
     # listed: the add is no longer waiting
     assert _sync(bot, state, _listed(h, e, a), now + 3.0)
     assert b['ids'] == [e, a] and 'unlisted' not in b and not b['close_pending']
-    assert not bot._record_add(b, _done(0), now)                            # (no ticket: nothing recorded)
+    assert not bot._record_fill(b, _done(0), now)                            # (no ticket: nothing recorded)
 
 
 def test_the_entry_closed_outside_before_the_add_is_listed_closes_the_add(mods, tmp_path):
@@ -197,7 +197,7 @@ def test_the_entry_closed_outside_before_the_add_is_listed_closes_the_add(mods, 
     b = state['basket']
     b['ids'] = [e]
     now = clock.time()
-    bot._record_add(b, _done(a), now)
+    bot._record_fill(b, _done(a), now)
     assert fake.close_by_broker(e)
     assert _sync(bot, state, _listed(h, a), now + 8.0)
     assert state['basket'] is b and b.get('opened_by') == 'bot'             # (before: a basket rebuilt from the add)
@@ -209,7 +209,7 @@ def test_an_add_that_never_shows_counts_as_closed_outside_after_10_s(mods, tmp_p
     h = m.mt5_helper.MT5PositionHelper(fake)
     b = state['basket']
     now = clock.time()
-    bot._record_add(b, _done(424242), now)                                  # filled, then gone before any listing
+    bot._record_fill(b, _done(424242), now)                                  # filled, then gone before any listing
     assert not _sync(bot, state, _listed(h, e, a), now + 9.0)
     assert _sync(bot, state, _listed(h, e, a), now + 10.0)
     assert b['close_pending'] and b['outside_ids'] == [424242] and b['ids'] == [e, a, 424242]
@@ -221,7 +221,7 @@ def test_with_nothing_listed_a_recorded_add_keeps_the_basket_10_s(mods, tmp_path
     m, fake, clock, bot, state, e, a = _two_leg_basket(mods, tmp_path)
     b = state['basket']
     now = clock.time()
-    bot._record_add(b, _done(424242), now)
+    bot._record_fill(b, _done(424242), now)
     assert fake.close_by_broker(e) and fake.close_by_broker(a)
     assert not _sync(bot, state, None, now + 5.0) and state['basket'] is b and m.app.fill_pending(b, now + 5.0)
     assert _sync(bot, state, None, now + 10.0) and state['basket'] is None and not m.app.fill_pending(b, now + 10.0)
@@ -237,7 +237,7 @@ def test_an_add_listed_under_another_id_is_that_add(mods, tmp_path):
     b = state['basket']
     b['ids'] = [e]
     now = clock.time()
-    bot._record_add(b, _done(777), now)
+    bot._record_fill(b, _done(777), now)
     assert _sync(bot, state, _listed(h, e, a), now + 2.0)
     assert b['ids'] == [e, a] and 'unlisted' not in b and not b['close_pending']
 
@@ -256,7 +256,7 @@ def test_a_close_while_the_add_is_not_listed_yet_waits_for_it(mods, tmp_path):
     b = bot._new_basket('BUY', 1, m.app.basket_levels(5.0, 1.0), now - 300)
     b.update(ids=[e], first_time=now - 300)
     state = {'basket': b, 'last_close': None}
-    bot._record_add(b, _done(a), now)
+    bot._record_fill(b, _done(a), now)
     clock.sleep(1)
     res = h.close_by_type('XAUUSDm', 0)                                         # lists the entry only
     assert res['closed_count'] == 1 and res['closed_tickets'] == [e]
