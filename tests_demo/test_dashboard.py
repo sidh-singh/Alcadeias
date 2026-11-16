@@ -234,7 +234,7 @@ def test_the_open_basket_and_its_levels_on_the_chart(D, basket):
     for lg in op['legs']:
         assert D.px(lg['price'], digits) in pos
     fig = D.price_figure(d, 'M1')
-    tags = [a.text for a in fig.layout.annotations]
+    tags = [a.text.split(' · ')[0] for a in fig.layout.annotations]          # (the distance to go after ' · ')
     on = ' (ask)' if op['judged_on'] == 'ask' else ''                    # a sell's stop / target are judged on the ask
     for name, price in ((f'TARGET{on}', op['target_price']), (f'STOP{on}', op['stop_price']),
                         ('BID', d['trace']['market']['bid']), ('ASK', d['trace']['market']['ask'])):
@@ -517,7 +517,7 @@ def _tag_names(fig):
     """{tag name: the annotation} of a price chart: 'STOP (ask)', 'BID', 'BUY LEVEL' ... (no arrow, no price)."""
     out = {}
     for a in fig.layout.annotations:
-        head = a.text.split('<br>')[0].lstrip('▲▼ ')
+        head = a.text.split('<br>')[0].split(' · ')[0].lstrip('▲▼ ')
         out[re.sub(r' -?[\d,]+(\.\d+)?$', '', head)] = a
     return out
 
@@ -706,7 +706,8 @@ def test_no_http_request_reads_a_file_outside_the_output_folder(D, tmp_path, bas
     out, up1, up2 = _secret_tree(tmp_path, basket)
     _point(D, out, BASKET)
     syms, days = _climbing_values(up1, up2)
-    tab_of = {'live-now': 'live', 'trades-kpis': 'trades', 'log-files': 'log', 'log-count': 'log', 'hist-day': 'history'}
+    tab_of = {'live-now': 'live', 'trades-kpis': 'trades', 'log-files': 'log', 'log-count': 'log', 'hist-day': 'history',
+              'issues-view': 'changes'}
     fixed = {('tick', 'n_intervals'): 1, ('tf', 'value'): 'M1', ('log-levels', 'value'): list(D.LOG_LEVELS),
              ('log-search', 'value'): '', ('log-hb', 'value'): ['hb', 'cfg'], ('log-limit', 'value'): 2000,
              ('log-follow', 'value'): 'live', ('log-dl-btn', 'n_clicks'): 1, ('url', 'search'): '?tab=history'}
@@ -717,6 +718,8 @@ def test_no_http_request_reads_a_file_outside_the_output_folder(D, tmp_path, bas
                   + [(syms[1], days[1]), (syms[10], days[3])])
         for sym, day in values:
             for key, cb in D.app.callback_map.items():
+                if 'callback' not in cb:              # (the alert's sound / notification runs in the browser only)
+                    continue
                 outs = [dict(zip(('id', 'property'), o.rsplit('.', 1))) for o in key.strip('.').split('...')]
                 for view in (('events', 'text') if outs[0]['id'] == 'log-count' else ('events',)):
                     def value(i):
@@ -760,3 +763,243 @@ def test_the_force_close_gauge_follows_the_design(D, basket):
     on['trace']['basket']['force_close_enabled'] = True
     text = _text(D.strategy_panel(on))
     assert 'force-close ON: a basket closes when this score is 1 or more against it' in text
+
+
+# ───────────────────────────── how close is it; changes & issues (the owner's requests of 16 Nov 2026) ───────────
+
+def _with_open(d, **upd):
+    dd = copy.deepcopy(d)
+    dd['trace']['basket']['open'].update(upd)
+    return dd
+
+
+def test_how_close_the_open_basket_is_to_its_target_and_stop(D, basket):
+    """The meters of the open basket: percent of the way to the target (P/L / target) and to the stop (-P/L / stop),
+    the distance in price and in $; amber from 70 %, red from 90 %; the banner on every tab (the status callback) says
+    which one, and nothing when the position is far from both or the trace is stale."""
+    d = _point(D, basket.open, BASKET)
+    op = d['trace']['basket']['open']
+    tgt, stop = op['target_usd'], op['stop_usd']
+    digits = D.digits_of(d)
+    view, alert = D.proximity(_with_open(d, pnl=0.0, to_target_usd=tgt, to_stop_usd=stop))
+    text = _text(view)
+    assert alert['level'] is None and 'To the target' in text and 'To the stop loss' in text and 'NOT CLOSE' in text
+    for bit in ('P/L in price', 'Time in trade', 'Legs · lot', 'Virtual balance', 'Spread', 'Last tick'):
+        assert json.dumps(bit)[1:-1] in text, bit
+    near_t = _with_open(d, pnl=round(tgt * 0.95, 2), to_target_usd=round(tgt * 0.05, 2))
+    view, alert = D.proximity(near_t)
+    assert alert['level'] == 'red' and 'target' in alert['text'] and '95% of the way to its target' in alert['text']
+    assert 'prog prog-red prog-exit' in _text(view) and 'VERY CLOSE' in _text(view)
+    assert D.px(op['target_price'], digits) in _text(view)
+    near_s = _with_open(d, pnl=round(-stop * 0.75, 2), to_stop_usd=round(stop * 0.25, 2))
+    view, alert = D.proximity(near_s)
+    assert alert['level'] == 'amber' and '75% of the way to its stop loss' in alert['text']
+    assert 'prog prog-amber prog-exit' in _text(view)
+    banner = _text(D.alert_banner(alert))
+    assert 'Getting close: ' in banner and 'alertbar-amber' in banner
+    assert D.alert_banner({'level': None}) is None
+    # the status callback (every tab): the bar, the banner, the alert for the sound / notification
+    status, bar, al = D._status(0, BASKET)
+    assert al == D.alert_of(D.load(BASKET))
+    # stale: no alert (the numbers are those of the last poll)
+    D._now = lambda: d['trace']['t'] + 7200
+    assert D.proximity(near_t)[1]['level'] is None and '(as of ' in _text(D.proximity_view(near_t))
+
+
+def test_how_close_the_turtle_trade_is_to_its_stop_and_next_add(D, turtle):
+    d = _point(D, turtle.open, turtle.symbol)
+    trd = d['trace']['turtle']['trade']
+    view, alert = D.proximity(d)
+    text = _text(view)
+    pct_ = (1 - trd['to_stop'] / trd['stop_dist']) * 100
+    assert 'To the stop loss' in text and f'{pct_:.0f}% of the way' in text
+    assert 'To the next add (+1 leg)' in text and 'No target: the Turtle exits only at its stop' in text
+    assert (alert['level'] is None) == (pct_ < D.ALERT_AMBER)
+    near = copy.deepcopy(d)
+    near['trace']['turtle']['trade']['to_stop'] = trd['stop_dist'] * 0.08
+    assert D.proximity(near)[1]['level'] == 'red'
+
+
+def test_how_close_a_flat_turtle_is_to_an_entry(D):
+    D._now = lambda: START + 2.0
+    view, alert = D.proximity(_turtle_d('armed'))
+    text = _text(view)
+    assert 'To a BUY entry' in text and 'To a SELL entry' in text and 'reached' in text
+    assert alert['level'] == 'red' and 'BUY entry' in alert['text']           # the buy level is reached
+    view, alert = D.proximity(_turtle_d('used'))
+    assert alert['level'] is None and "today's orders are used" in _text(view)
+
+
+@pytest.fixture(scope='module')
+def turtle_short(tmp_path_factory):
+    """The Turtle's short trip (test_turtle_bot.py, the vote -1) with the real writers: its folder with two legs open."""
+    if not HAS_TURTLE:
+        pytest.skip('no turtle.py on this branch')
+    import test_turtle_bot as TB
+    tmp = tmp_path_factory.mktemp('dash_turtle_short')
+    out, open_dir = str(tmp / 'out'), str(tmp / 'open')
+    fake, clock = TB._market(TB._short_trip())
+    snap, done = _snapshotting(out, lambda tr: len(((tr.get('turtle') or {}).get('trade') or {}).get('legs') or []) == 2,
+                               open_dir)
+    vote = TB.Vote(fake, lambda t: -1)
+
+    def on_new_bot(bot, n):
+        sys.modules[type(bot).__module__].T.closed_bar_vote = vote
+        snap(bot, n)
+    run = run_bot(fake, clock, overrides={**TB.TURTLE, 'OUTPUT_DIR': out}, symbol=TB.SYMBOL,
+                  state_dir=os.path.join(out, 'state'), keep_writers=True, on_new_bot=on_new_bot)
+    assert not run.errors, run.errors[:3]
+    assert done, 'no two-leg short in the replay'
+    return types.SimpleNamespace(end=out, open=open_dir, symbol=TB.SYMBOL)
+
+
+def test_a_short_turtle_trades_hovers_and_meters_say_the_short_side(D, turtle_short):
+    """A real short (the bot's own trace): its next add is at the bid <= the last fill - 0.5N, its stop at the ask;
+    the hovers say so (the long's words were shown before), and the meters read the short's distances."""
+    d = _point(D, turtle_short.open, turtle_short.symbol)
+    trd = d['trace']['turtle']['trade']
+    assert trd['side'] == 'SELL' and trd['next_add_judged_on'] == 'bid' and trd['judged_on'] == 'ask'
+    last_fill = trd['legs'][-1]['price']
+    assert trd['next_add'] == pytest.approx(last_fill - trd['add_step'], abs=2e-3)
+    tags = _tag_names(D.price_figure(d, 'M1'))
+    assert {'STOP (ask)', 'NEXT ADD', 'AVG'} <= set(tags), sorted(tags)
+    hover = tags['NEXT ADD'].hovertext
+    assert hover == 'next leg when the bid ≤ this (the last fill - 0.5N)', hover
+    assert '+ 0.5N' not in _text(D.price_figure(d, 'M1'))
+    text = _text(D.proximity(d)[0])
+    assert json.dumps('bid ≤ ' + D.px(trd['next_add'], D.digits_of(d)))[1:-1] in text and 'To the stop loss' in text
+
+
+def _events_file(folder, symbol, events):
+    os.makedirs(os.path.join(folder, 'logs'), exist_ok=True)
+    with open(os.path.join(folder, 'logs', f'{symbol}_events.jsonl'), 'a', encoding='utf-8') as f:
+        for e in events:
+            f.write(json.dumps(e) + '\n')
+
+
+def test_the_changes_and_issues_tab(D, tmp_path, basket):
+    """Every WARN / ERROR of the events file grouped by kind (count, first and last time, what it means and what to do);
+    the branch's CHANGELOG.md rendered version by version, the newest open."""
+    folder = str(tmp_path / 'issues')
+    shutil.copytree(basket.end, folder)
+    t = json.load(open(os.path.join(folder, f'{BASKET}_trace.json'), encoding='utf-8'))['t']
+    evs = []
+    for k in range(3):
+        evs.append({'t': t - 3000 + 60 * k, 'level': 'ERROR', 'cat': 'ACCOUNT',
+                    'msg': 'TERMINAL_IN_USE: the terminal C:\\MT5\\slot6\\terminal64.exe holds account 9 on X-Live; no login'})
+    evs.append({'t': t - 2000, 'level': 'ERROR', 'cat': 'ACCOUNT', 'msg': 'not trading: the terminal holds account 9'})
+    for k in range(4):
+        evs.append({'t': t - 1000 + 5 * k, 'level': 'ERROR', 'cat': 'TERMINAL', 'msg': f'reconnect failed: attempt {k + 1}'})
+    evs.append({'t': t - 500, 'level': 'WARN', 'cat': 'WRITE', 'msg': 'could not write the trades: PermissionError: [Errno 13]'})
+    evs.append({'t': t - 400, 'level': 'WARN', 'cat': 'DATA', 'msg': 'something new 12 times'})
+    evs.append({'t': t - 300, 'level': 'WARN', 'cat': 'DATA', 'msg': 'something new 13 times'})
+    _events_file(folder, BASKET, evs)
+    _point(D, folder, BASKET)
+    rows, _, problem = D.issues(BASKET)
+    by = {r['code']: r for r in rows}
+    assert problem is None
+    assert by['TERMINAL_IN_USE']['count'] == 3 and by['TERMINAL_IN_USE']['level'] == 'ERROR'
+    assert by['TERMINAL_IN_USE']['first'] == t - 3000 and by['TERMINAL_IN_USE']['last'] == t - 2880
+    assert by['ACCOUNT_REFUSED']['count'] == 1 and by['RECONNECT_FAILED']['count'] == 4
+    assert by['WRITE_FAILED']['level'] == 'WARN' and by['DATA: something new # times']['count'] == 2
+    assert [r['level'] for r in rows][:3] == ['ERROR'] * 3
+    issues, changes, _ = D._changes(0, 'changes', BASKET, None)
+    text = _text(issues)
+    for bit in ('TERMINAL_IN_USE', 'ACCOUNT_REFUSED', 'RECONNECT_FAILED', 'What it means: ', 'What to do: ',
+                f"{sum(r['count'] for r in rows if r['level'] == 'ERROR')} error line(s)",
+                f"{sum(r['count'] for r in rows if r['level'] == 'WARN')} warning line(s)", 'in the last hour'):
+        assert bit in text, bit
+    entries = D.changelog_entries()
+    head = (ROOT / 'CHANGELOG.md').read_text(encoding='utf-8').split('\n## [', 2)[1].split(']')[0]
+    assert entries[0][0] == head and entries[0][3]
+    assert any(e[1] == '2026-11-16' for e in entries)                       # a dated entry: its date, not '2026'
+    text = _text(changes)
+    assert head in text and '"open": true' in text and 'versions in this branch' in text
+    assert D._changes(0, 'live', BASKET, None) == [D.no_update] * 3
+
+
+def test_the_page_shows_no_folder_of_this_pc(D, tmp_path, basket):
+    """The page has no login: event lines, their values and tracebacks, the raw text and the footer name no folder of
+    the PC (the bot folder of a traceback becomes a file name, the profile folder '~'); the copy-path boxes are the one
+    exception."""
+    folder = str(tmp_path / 'paths')
+    shutil.copytree(basket.end, folder)
+    home = os.path.expanduser('~')
+    bot = os.path.join(str(D.HERE), 'app.py')
+    tb = f'Traceback (most recent call last):\n  File "{bot}", line 2341, in execute_job\nValueError: x'
+    t = json.load(open(os.path.join(folder, f'{BASKET}_trace.json'), encoding='utf-8'))['t']
+    _events_file(folder, BASKET, [{'t': t - 5, 'level': 'ERROR', 'cat': 'START', 'msg': f'the job failed in {D.HERE}',
+                                   'kv': {'path': os.path.join(home, 'x', 'state.json')}, 'traceback': tb}])
+    with open(os.path.join(folder, 'logs', f'{BASKET}_{DAY}.log'), 'a', encoding='utf-8') as f:
+        f.write(f'{DAY} 09:00:00.000 UTC | ERROR | START | the job failed\n    File "{bot}", line 1\n')
+    _point(D, folder, BASKET)
+    ev = _text(D._log(0, 'log', BASKET, list(D.LOG_LEVELS), '', [], 200, 'events', DAY, 'live', None))
+    raw = _text(D._log(0, 'log', BASKET, list(D.LOG_LEVELS), '', [], 2000, 'text', DAY, 'live', None))
+    for text in (ev, raw, _text(D.latest_events(BASKET)), _text(D.issues_view(BASKET))):
+        body = text.replace(json.dumps(os.path.abspath(D.text_log_path(BASKET, DAY)))[1:-1], '')
+        assert str(D.HERE) not in body and json.dumps(str(D.HERE))[1:-1] not in body
+        assert json.dumps(home)[1:-1] + json.dumps(os.sep)[1:-1] not in body.replace(json.dumps(folder)[1:-1], '')
+    assert 'File \\"app.py\\", line 2341' in ev and 'the bot folder' in ev and '~/x/state.json'.replace('/', os.sep) in ev.replace('\\\\', '\\')
+    layout = _text(D.serve_layout())
+    assert json.dumps(os.path.abspath(folder))[1:-1] not in layout and "reads the bot's output folder" in layout
+
+
+def test_a_day_file_named_in_another_case_is_listed_and_downloaded(D, tmp_path, basket):
+    """A start that failed before symbols.json was read named its day XAUUSDM_<day>.log (Windows keeps that case for the
+    day): the Log tab lists it and the download sends it."""
+    folder = str(tmp_path / 'case')
+    shutil.copytree(basket.end, folder)
+    logs = os.path.join(folder, 'logs')
+    for n in os.listdir(logs):
+        if n.endswith('.log'):
+            os.remove(os.path.join(logs, n))
+    with open(os.path.join(logs, f'{BASKET.upper()}_{DAY}.log'), 'w', encoding='utf-8') as f:
+        f.write(f'{DAY} 08:00:00.000 UTC | ERROR | START | mt5_credentials.json is not UTF-8 text\n')
+    _point(D, folder, BASKET)
+    assert [x[0] for x in D.log_files(BASKET)] == [DAY] and D.valid_day(BASKET, DAY) == DAY
+    got = D._download(1, DAY, BASKET)
+    assert _decoded(got).startswith(f'{DAY} 08:00:00.000 UTC | ERROR | START')
+
+
+def test_the_dashboard_holds_a_file_only_to_read_it(D, tmp_path, basket, monkeypatch):
+    """On Windows the bot cannot replace a file the dashboard has open: read_json closes the file before it parses."""
+    _point(D, basket.end, BASKET)
+    open_files = []
+    real_open = open
+
+    class Tracked:
+        def __init__(self, f):
+            self.f = f
+            open_files.append(self)
+            self.closed = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self.closed = True
+            self.f.close()
+
+        def read(self, *a):
+            return self.f.read(*a)
+    monkeypatch.setattr('builtins.open', lambda *a, **k: Tracked(real_open(*a, **k)))
+    real_loads = json.loads
+    seen = []
+
+    def loads(*a, **k):
+        seen.append(all(x.closed for x in open_files))
+        return real_loads(*a, **k)
+    monkeypatch.setattr(D.json, 'loads', loads)
+    D._CACHE.clear()
+    data, problem = D.read_json(D.trades_path(BASKET))
+    monkeypatch.undo()
+    assert problem is None and data and seen == [True]
+
+
+def test_odd_paths_get_a_plain_404(D):
+    client = D.server.test_client()
+    for path in ('/_dash-component-suites/dash/../../../constants.py', '/_dash-component-suites/dash/%2e%2e/x.js',
+                 '/assets/..%5cmt5_credentials.json', '/assets/%2E%2E/%2E%2E/mt5_credentials.json'):
+        r = client.get(path)
+        assert r.status_code == 404, (path, r.status_code)
+    assert client.get('/').status_code == 200
