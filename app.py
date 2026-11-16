@@ -529,9 +529,23 @@ class MT5TradingBot:
             pass
 
     def _boot_flush(self):
-        """The job ends before any symbol's loop started: its lines go to the log of the symbol it was started for."""
+        """The job ends before any symbol's loop started: its lines go to the log of the symbol it was started for --
+        unless its start was refused on a problem _log_limited held back this time (LIVE_TERMINAL_PATH,
+        TERMINAL_IN_USE: logged at most every _LOG_REPEAT_S): the launcher starts a refused bot again every 30 s, and
+        its start-up lines come with the refusal's own line, not at every restart."""
         if self._boot_lines and not self._tracers:
+            if self._start_held_back():
+                return
             self._tracer(self.symbols[0] if self.symbols else self._symbol_spelling(self.target_symbol))
+
+    def _start_held_back(self):
+        """True when the job's last start attempt was refused on a problem that _log_limited did not log this time (it
+        is in _limited_logged with the time of its last entry). Read only."""
+        try:
+            problem = self._init_problem
+            return bool(problem) and any(problem in seen for seen in (self._limited_logged or {}).values())
+        except Exception:
+            return False
 
     def _symbol_spelling(self, name):
         """The symbol as symbols.json spells it ('XAUUSDm' for --symbol xauusdm), else name ('bot' for none): the
@@ -802,6 +816,8 @@ class MT5TradingBot:
         if unknown is not None:
             self._init_problem = unknown
             print(f"✗ Not logging in: {unknown}; detached, trying again later")
+            self._boot('WARN', 'ACCOUNT', f'no login: {unknown}; the bot detached and tries again later (the terminal and '
+                       'its account are left as they are)')
             mt5.shutdown()                  # detach; the terminal and its account are left as they are
             return False
         if held is not None and not self._is_own_account(held):
@@ -814,6 +830,11 @@ class MT5TradingBot:
         if held is None:
             # Login to MT5 account (the terminal showed no account for _ACCOUNT_GRACE_S)
             print(f"… the terminal showed no account for {_ACCOUNT_GRACE_S:g} s: logging in")
+            _c = self.credentials if isinstance(self.credentials, dict) else {}    # (the trace's line only reads them)
+            self._boot('WARN', 'ACCOUNT', f'the terminal showed no account for {_ACCOUNT_GRACE_S:g} s: the bot logs in '
+                       f"itself (login {_c.get('login_id')} on {_c.get('server')}). Log this MetaTrader 5 into the "
+                       "slot's demo account once by hand, with Save password (README, How to run, step 2): then the bot "
+                       'never has to', {'login': _c.get('login_id'), 'server': _c.get('server')})
             authorized = mt5.login(
                 login=self.credentials['login_id'],
                 password=self.credentials['login_pass'],
@@ -1562,6 +1583,9 @@ class MT5TradingBot:
                 noted = True
                 print(f"… the terminal shows no account yet (account_info() answered {what}, last_error {err}): "
                       f"reading it again for up to {_ACCOUNT_GRACE_S:g} s before any login")
+                self._boot('INFO', 'ACCOUNT', f'the terminal shows no account yet (account_info() answered {what}, '
+                           f'last_error {err}): the bot reads it again every second for up to {_ACCOUNT_GRACE_S:g} s '
+                           'before any login (a terminal that has just started logs into its saved account by itself)')
             time.sleep(1.0)
 
     def _is_own_account(self, acct):
@@ -2648,7 +2672,8 @@ class MT5TradingBot:
                 time.sleep(5)
             else:
                 print("\n✗ All init attempts failed. Restart start_job.bat to try again.")
-                self._boot('ERROR', 'START', 'all 3 start attempts failed: the job ends (the launcher starts it again)')
+                self._boot('ERROR', 'START', f'all 3 start attempts failed ({self._init_problem or "see above"}): the job '
+                           'ends (the launcher starts it again)')
                 self._boot_flush()
                 return False
 

@@ -1154,3 +1154,163 @@ def test_the_virtual_balance_after_a_restart_in_a_trade_comes_from_the_deal_hist
     c._virtual_balance = 2001.0
     acct = tr._account(c)
     assert (acct['virtual_balance'], acct['virtual_balance_source']) == (2001.0, 'bot')
+
+
+# ───────────────────── the paths of v3.9.2-demo.5 (the third fix round) in the trace and the log ─────────────────────
+
+LIVE = r'C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe'
+
+
+class _Wall:
+    """app.time for the launcher's restarts: the wall clock, as the strategy log's times are (its entries carry
+    datetime.now(); the limit across restarts compares them with time.time()), and a sleep() that only moves it on."""
+
+    def __init__(self):
+        self.offset = 0.0
+
+    def time(self):
+        return time.time() + self.offset
+
+    def perf_counter(self):
+        return time.perf_counter() + self.offset
+
+    def sleep(self, seconds):
+        self.offset += float(seconds)
+
+
+def _refused_start(m, wall):
+    """One start of the job by the launcher (a new process) while terminal_path names the live bots' MetaTrader 5,
+    then the launcher's 30 s before the next one."""
+    bot = m.app.MT5TradingBot(mode='demo', target_symbol=SYMBOL)
+    bot.load_credentials = lambda: setattr(bot, 'credentials', dict(CREDS, terminal_path=LIVE)) or True
+    bot.load_symbols = lambda: setattr(bot, 'symbols', [SYMBOL]) or True     # (never the real files)
+    assert bot.execute_job() is False
+    wall.sleep(30)
+
+
+def _day_logs(folder):
+    """Every line of the text log's day files, in order (on the wall clock: any day)."""
+    logs = os.path.join(str(folder), 'logs')
+    out = []
+    for n in sorted(x for x in os.listdir(logs) if re.match(re.escape(SYMBOL) + r'_\d{4}-\d\d-\d\d\.log$', x)):
+        with open(os.path.join(logs, n), encoding='utf-8') as f:
+            out += f.read().splitlines()
+    return out
+
+
+def test_a_start_refused_on_the_live_terminal_is_in_the_log_once_per_the_limit(mods, tmp_path, monkeypatch):
+    """LIVE_TERMINAL_PATH: the job is refused before any terminal call. The text log has the refusal as one ERROR START
+    line that names the problem once and says what to do, the three start attempts and the job's end with the problem
+    in it -- once per the strategy log's limit: the launcher's restarts every 30 s in the next 15 minutes add no line,
+    the first one after them writes the block again."""
+    m = mods(OUTPUT_DIR=str(tmp_path))
+    wall = _Wall()
+    monkeypatch.setattr(m.app, 'time', wall)
+    _refused_start(m, wall)
+    lines = _day_logs(tmp_path)
+    text = '\n'.join(lines)
+    err = [ln for ln in lines if '| ERROR | START | LIVE_TERMINAL_PATH: terminal_path ' in ln]
+    assert len(err) == 1 and 'LIVE_TERMINAL_PATH: LIVE_TERMINAL_PATH' not in text
+    assert f'is the MetaTrader 5 of the live bots ({LIVE}): install a separate MetaTrader 5 for slot' in err[0]
+    assert 'The bot attached to no terminal and does not trade; the launcher starts it again every 30 s' in err[0]
+    assert sum('| WARN | START | start attempt ' in ln and 'LIVE_TERMINAL_PATH' in ln for ln in lines) == 3
+    assert sum('| ERROR | START | all 3 start attempts failed (LIVE_TERMINAL_PATH: ' in ln for ln in lines) == 1
+    n = len(lines)
+    for _ in range(10):                      # the launcher's restarts within the 15 minutes: nothing more is written
+        _refused_start(m, wall)
+    assert len(_day_logs(tmp_path)) == n
+    wall.sleep(900)
+    _refused_start(m, wall)                  # the first start after them: the whole block again
+    lines = _day_logs(tmp_path)
+    assert len(lines) == 2 * n and sum('| ERROR | START | LIVE_TERMINAL_PATH: ' in ln for ln in lines) == 2
+    with open(tmp_path / 'logs' / f'{SYMBOL}_strategy_log.json', encoding='utf-8') as f:
+        assert [e['event'] for e in json.load(f)] == ['LIVE_TERMINAL_PATH'] * 2
+    assert m.fake.calls == [] and 'not-a-password' not in '\n'.join(lines)
+
+
+def test_the_wait_for_the_terminals_account_and_an_unknown_account_are_in_the_log(mods, tmp_path):
+    """The third fix round's login rule in the log: a terminal still logging into its saved account (read again every
+    second, then this bot's own account: no login), an IPC error (the account is not known: no login, detached), and a
+    terminal that shows no account for 15 s (the bot logs in itself: a WARN that says how to avoid it)."""
+    fake, clock = market(300)
+    m = mods(fake=fake, clock=clock)
+    bot = F.make_bot(m, fake, SYMBOL, F.Run(), trace_dir=tmp_path)
+    bot.credentials = dict(CREDS)
+    bot.mt5_initialized, bot.position_helper = False, None
+    fake.login_delay_s = 4.0                                     # (it logs into its saved account 4 s after starting)
+    assert bot.initialize_mt5()
+    fake.login_delay_s = 0.0
+    fake.account_answers = ['ipc_timeout']
+    assert not bot.initialize_mt5()
+    fake.logged_in, fake.account_login = False, 0
+    assert bot.initialize_mt5()
+    bot._tracer(SYMBOL)                       # the first trace writes what was logged before it existed
+    lines = _read_log(tmp_path)
+    text = '\n'.join(lines)
+    wait = [ln for ln in lines if '| INFO | ACCOUNT | the terminal shows no account yet (account_info() answered None' in ln]
+    assert len(wait) == 2 and all('the bot reads it again every second for up to 15 s before any login' in ln
+                                  for ln in wait)
+    assert "| INFO | ACCOUNT | no login: the terminal already holds this bot's account 1 (Fake-Demo)" in text
+    assert ('| WARN | ACCOUNT | no login: account not known: account_info() answered None (last_error' in text
+            and 'the bot detached and tries again later' in text)
+    login = [ln for ln in lines if '| WARN | ACCOUNT | the terminal showed no account for 15 s: the bot logs in itself '
+             '(login 1 on Fake-Demo)' in ln]
+    assert len(login) == 1 and 'README, How to run, step 2' in login[0] and 'login=1 server=Fake-Demo' in login[0]
+    assert [c[0] for c in fake.calls].count('login') == 1 and text.count('| INFO | ACCOUNT | logged in:') == 1
+    assert 'not-a-password' not in text
+
+
+def test_an_entry_and_an_add_are_legs_from_their_fill_in_the_log(traced):
+    """_record_fill: the entry's and the add's position id comes from the order's answer. The BASKET line of the fill
+    says so (recorded=<id>), and the next poll, which lists it, has a DEBUG line."""
+    lines = _read_log(traced.out)
+    opened = [ln for ln in lines if '| INFO | BASKET | ' in ln and ' basket opened: ' in ln]
+    added = [ln for ln in lines if '| INFO | BASKET | added ' in ln]
+    assert opened and added
+    for ln in opened + added:
+        pid = re.search(r' recorded=(\d+)', ln)
+        assert pid and f"position {pid.group(1)} is a leg of the basket from its fill (its id from the order's answer; " \
+                       'the terminal lists it within 10 s)' in ln, ln
+        listed = [x for x in lines if f'| DEBUG | BASKET | position(s) [{pid.group(1)}] of the ' in x
+                  and 'basket listed by the terminal' in x]
+        assert listed, ln
+
+
+def _close_poll(tr, tl, state, cr, ov, now, reason='stop_loss'):
+    """The trace's view of one poll that closed a BUY basket (its log lines and headline), without a replay."""
+    c = tl._Ctx({'state': state, 'close_response': cr, 'analysis_data': {}, 'has_candle_data': True,
+                 'candle_is_fresh': True})
+    snap = {'basket': {'open': ov, 'pause': {'active': False}, 'trend': {}, 'vol': {}, 'force_close_enabled': False},
+            'account': {}}
+    dec = {'action': 'CLOSE_BUY', 'reason': reason, 'side': 'BUY', 'gates': []}
+    tr._transitions(c, snap, dec, [], now, 2)
+    head = tr._headline(dec, c, snap, 2, now)
+    tr._flush()
+    return head
+
+
+def test_a_basket_close_that_closed_nothing_or_waits_for_an_unlisted_add_is_said_so(mods, tmp_path):
+    """A close that closed nothing (close_by_type found none of this bot's positions) books nothing and is decided again
+    next poll; a close that closed every listed leg while an add recorded from its order is not listed yet keeps the
+    basket (app.py _after_close): the log and the headline say so, not 'basket closed'."""
+    m = mods(OUTPUT_DIR=str(tmp_path))
+    bot = F.make_bot(m, m.fake, SYMBOL, F.Run(), trace_dir=tmp_path)
+    tr = bot._tracer(SYMBOL)
+    now = m.clock.time()
+    ov = {'side': 'BUY', 'legs': [{'id': 100001}], 'pnl': -5.0, 'stop_usd': 5.0, 'judged_on': 'bid'}
+    b = {'side': 'BUY', 'ids': [100001], 'units': 1, 'opened_by': 'bot', 'first_time': now - 60, 'close_pending': False}
+    head = _close_poll(tr, m.tracelog, {'basket': dict(b), 'last_close': None},
+                       {'closed_count': 0, 'failed_count': 0, 'message': 'No positions to close'}, ov, now)
+    assert 'The close closed nothing' in head and 'decided again next poll' in head
+    b2 = dict(b, ids=[100001, 100002], close_pending=True, unlisted=[{'id': 100002, 'time': now - 2}])
+    head2 = _close_poll(tr, m.tracelog, {'basket': b2, 'last_close': None},
+                        {'closed_count': 1, 'failed_count': 0, 'closed_tickets': [100001]}, ov, now + 1)
+    assert 'The close is incomplete: leg(s) [100002] filled less than 10 s ago are not listed by the terminal yet' in head2
+    lines = _read_log(tmp_path)
+    nothing = [ln for ln in lines if '| WARN | CLOSE | the close of the BUY basket closed nothing' in ln]
+    assert len(nothing) == 1 and 'nothing is booked, and the close is decided again next poll' in nothing[0]
+    waits = [ln for ln in lines if '| WARN | CLOSE | the close of the BUY basket is incomplete: 1 closed; leg(s) [100002]' in ln]
+    assert len(waits) == 1 and 'the basket stays open, nothing is booked yet, and the rest is closed next poll' in waits[0]
+    assert not any('| CLOSE | CLOSE | BUY basket closed' in ln for ln in lines)
+    assert not any('is incomplete: 0 closed, 0 failed' in ln for ln in lines)
+    assert tr._pending_reason == 'stop_loss'                 # (the retry's close keeps the reason of the first one)
