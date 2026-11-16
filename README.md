@@ -85,7 +85,7 @@ strategy from the bot's trace, so here it draws the basket's page.
 ## What it writes for the dashboard, and its log
 
 Next to the files the old dashboard reads, the bot writes into its output folder (every field:
-`docs/dashboard-data.md`):
+`docs/dashboard-data.md`; `tracelog.py`, which writes them, is the same file on all six demo branches):
 
 - `XAUUSDm_trace.json`: after every poll, what the bot sees and decides: one sentence on what it does now and why,
   every check in the order it makes them (passed, blocked, fired), the votes, the trend, the volatility unit, the
@@ -94,7 +94,9 @@ Next to the files the old dashboard reads, the bot writes into its output folder
   open, close, P/L and exit reason, and the virtual-balance curve;
 - `logs\XAUUSDm_<YYYY-MM-DD>.log`: the detailed text log (UTC days, kept 30 days): the start-up and every constant,
   every decision change, order, fill, close, pause, reconnect and error with its traceback, and a heartbeat line
-  every minute. When something looks wrong, this file (and `logs\XAUUSDm_events.jsonl`) is the one to send.
+  every minute; also every safety refusal of the section below (a terminal that holds another account, the account
+  refused, every failed reconnect attempt, a basket leg closed outside the bot). When something looks wrong, this
+  file (and `logs\XAUUSDm_events.jsonl`) is the one to send.
 
 ## Safety
 

@@ -39,6 +39,10 @@ stale_since_utc, health, account, market, decision, basket, turtle (null on this
 `last_tick_age_s` · `loop_ms` (the poll's work), `trace_ms` (this module's own time in the last poll),
 `poll_gap_s` · `reconnects`, `errors_1h` (ERROR lines in the last hour), `skipped_polls`, `failed_streak`,
 `started_utc`, `uptime_s`, `log_write_failures`. A skipped poll adds `positions_problem` when the positions read failed.
+The reconnect after a lost terminal: `reconnect_failed_attempts` (failed attempts since the terminal was lost; 0 when
+connected), `next_reconnect_t` / `next_reconnect_utc` (the next attempt: 5, 10, 30, then every 60 s), `outage_s` (how
+long the terminal has been lost), `connect_problem` (why the last start-up or reconnect failed, e.g.
+`TERMINAL_IN_USE: the terminal at ... is logged into another account ...`; null once connected), `terminal_in_use`.
 
 ### account
 `virtual` (units from the virtual balance), `virtual_balance`, `virtual_start_balance`, `virtual_start_date`,
@@ -58,7 +62,7 @@ or the exit that fired), `orders` (this poll's order requests and results).
 
 | action | meaning |
 |---|---|
-| `SKIPPED` | the terminal, the account or the positions read was not right: nothing decided (`reason` terminal / account / positions) |
+| `SKIPPED` | the terminal, the account or the positions read was not right: nothing decided (`reason` terminal / account / positions / account_recheck: the account read again right after the positions is not this bot's, so the positions may be another account's) |
 | `NO_DATA` / `MARKET_CLOSED` | no M15 bars / no tick for 3 min: nothing decided (an open basket is held, its stop is not checked) |
 | `WAIT` | flat, no entry signal (`reason` 'open score' or 'agreement') |
 | `PAUSED` | flat, the pause after the last close runs (`reason` 'after a close' / 'after a losing basket') |
@@ -67,7 +71,7 @@ or the exit that fired), `orders` (this poll's order requests and results).
 | `WAIT_FILL` | the entry filled, the terminal does not list the position yet (up to 10 s; no new entry) |
 | `HOLD` | in a basket, no exit, no add |
 | `ADD_BUY` / `ADD_SELL` / `ADD_FAILED` | a ladder add was sent |
-| `CLOSE_BUY` / `CLOSE_SELL` | the basket is closed (`reason` stop_loss / target / force_close / close_retry) |
+| `CLOSE_BUY` / `CLOSE_SELL` | the basket is closed (`reason` stop_loss / target / force_close / close_retry / leg_closed_outside: a leg was closed outside the bot, so the rest is closed at once and the whole basket is booked as closed outside the bot) |
 | `BOTH_SIDES` | a buy and a sell of this bot are open: the strategy holds still |
 
 **Gates**, in the order the bot checks them: `{key, name, role, ok, value, need, note, checked}`.
@@ -79,9 +83,9 @@ or the exit that fired), `orders` (this poll's order requests and results).
 
 | path | gate keys |
 |---|---|
-| every poll | `terminal`, `account`, `positions`, (`market_data`), `market_live` |
+| every poll | `terminal`, `account`, `positions`, (`market_data`), `market_live`; a poll skipped by the account read again after the positions: `terminal`, `account`, `positions`, `account_recheck` |
 | flat | `pause`, `open_score`, `agreement`, `window`, `votes_known`, `trend`, `volatility`, (`contract_size`) |
-| basket | (`fill_listed`), (`close_retry`), `stop`, `target`, `force_close`, then `ladder` (no adds) or `ladder_trigger`, `ladder_gate`, (`ladder_gap`) |
+| basket | (`fill_listed`), (`legs_outside`: legs closed outside the bot, value their ids, or `close_retry`), `stop`, `target`, `force_close`, then `ladder` (no adds) or `ladder_trigger`, `ladder_gate`, (`ladder_gap`) |
 | both sides open | `one_side` |
 
 **orders**: `{t, kind (open / add / close), side, symbol, volume, price, sl, tp, position, magic, comment, refused,
@@ -116,7 +120,8 @@ retcode, retcode_text, done, result_price, result_volume, order, deal, result_co
   `gap_px`, `ladder` `{on, tiers, trigger, count, armed, gap_px, exhausted, tier_tf, vote, rsi, rsi_level, add_ok,
   last_fill, next_add_price, judged_on, price_now, next_add_lots}` (or `{on: false, note}`), `opened_at` /
   `opened_utc`, `opened_by` (bot / rebuild), `first_t` / `first_utc`, `age_s`, `levels_pending`, `close_pending`,
-  `ids`, `known_to_bot`, `closing` / `closed_now` (this poll closes it), `listed` / `opened_now` (just opened).
+  `ids`, `outside_ids` (its legs closed outside the bot: the rest is closed at once), `known_to_bot`, `closing` /
+  `closed_now` (this poll closes it), `listed` / `opened_now` (just opened).
 
 ## 2. `<SYMBOL>_bars.json`
 
@@ -141,7 +146,8 @@ rewrites the chart can move the last bar with the trace's `market.bid`.
   lots, open_t, open_price, close_t, close_price, closed, profit, swap, commission, net, deal_reasons, magic}`.
 - `exit_reason`: `target`, `stop`, `force_close`, `close_retry` (as the bot recorded it), `backstop` (the broker's
   stop: the position's sl), `broker_target`, `stop_out`, `closed_outside` (from the terminal, or while the bot was
-  down), `unknown` (closed by the bot before it recorded reasons).
+  down), `leg_closed_outside` (a leg closed outside the bot -- its backstop, a stop-out or by hand -- and the bot closed
+  the rest; the legs' `deal_reasons` say how), `unknown` (closed by the bot before it recorded reasons).
 - `open`: the open basket with its live levels (the trace's `basket.open`, `live: true`), or the open baskets of the
   deal history.
 - `balance_curve`: the virtual balance at the start and after every closed basket (the last value = the virtual
@@ -160,12 +166,12 @@ traceback, every line indented by 4 spaces.
 | level | lines |
 |---|---|
 | DEBUG | DECISION (every change of the action or of a checked gate, with all the gates), STATE (state saved), BASKET (a position listed, the ladder armed), SIGNAL |
-| INFO | START, CONFIG (every effective constant, symbols.json, the contract size), STATE, ACCOUNT, TERMINAL, BASKET (opened, added), PAUSE (start, end), MARKET, WINDOW, DATA, HEARTBEAT (every minute) |
+| INFO | START, CONFIG (every effective constant, symbols.json, the contract size), STATE, ACCOUNT (logged in, or no login when the terminal already holds this bot's account; the checks passed), TERMINAL (connected again, after how long and how many failed attempts), BASKET (opened, added), PAUSE (start, end), MARKET, WINDOW, DATA, HEARTBEAT (every minute) |
 | ORDER | every order request and its result (retcode, comment, price, sl, tp) |
 | FILL | an entry or add filled |
-| CLOSE | a basket closed, with the reason and the P/L (also one closed outside the bot) |
-| WARN | an order not filled, a terminal read error, missing bars, a file that could not be written, a slow poll |
-| ERROR | an exception (with its traceback), the account refused, a reconnect that failed |
+| CLOSE | a basket closed, with the reason and the P/L (also one closed outside the bot; after a leg closed outside the bot, the close of the rest and the booking of the whole basket) |
+| WARN | an order not filled, a terminal read error, missing bars, a file that could not be written, a slow poll, BASKET: legs of the basket closed outside the bot, TERMINAL: every failed reconnect attempt that the strategy log leaves out (it has RECONNECT_FAILED only when the problem starts or changes, then every 15 min) |
+| ERROR | an exception (with its traceback), the account refused (also by the account read again right after the positions), TERMINAL_IN_USE (the terminal holds another account: no login, the terminal is left as it is; once, then every 15 min), a reconnect that failed (as in the strategy log) |
 
 A HEARTBEAT line comes every minute: a gap of more than a minute means the bot was not running. The same
 exception at the same place is written again at most every 10 minutes, with the count of the repeats. Past 50 MB
