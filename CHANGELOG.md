@@ -120,6 +120,10 @@ detailed text log he can send when something goes wrong. The bot already writes 
   `test_turtle_bot.py::test_the_dashboard_draws_the_turtle`): they drew the old slope panel.
 - The whole `tests_demo`: 200 passed on `wip_dash_turtle` (test_turtle_replay.py against the backtester included),
   25 min; on `wip_dash_basket`: 138 passed, 3 skipped (the Turtle tests of `test_dashboard.py`: no `turtle.py`), 22 min.
+- On `wip_port_xauusd6` (v3.9.2-demo.6 and .7 on the code of v3.9.2-demo.4), the whole `tests_demo`:
+  159 passed, 3 skipped (the Turtle tests of `test_dashboard.py`: no `turtle.py`), 22 min.
+  The dashboard also draws the trace of every path of v3.9.2-demo.4 without an error card (a scratch check of
+  every view, not in `tests_demo`).
 - Seen in a browser: headless Chrome screenshots of every tab on a basket replay (the scaled design, an open basket
   with its add armed after 11 closed ones) and on a two-day Turtle replay (a failed breakout stopped out, then a
   breakout holding three legs; a flat, BLOCKED state by the vote), from the bot's own writers on the fake terminal.
@@ -193,21 +197,61 @@ fills (`tests_demo/test_tracelog.py`, and `test_live_equivalence.py` now runs wi
   Two shared changes reach the basket: a trade's exit reason comes from the legs that closed last, and the exit
   reasons file keeps extra fields. A fix of the trace is now made once, for all six branches.
 
+### Added: the paths of v3.9.2-demo.4 in the trace and the log
+The second fix round's new code paths, as the port found them: what was already logged stays, the rest is added.
+In `app.py` only read-only hooks, each through `_trace` / `_boot` (they cannot raise into the loop).
+- **TERMINAL_IN_USE** (the terminal holds another account): an ERROR ACCOUNT line with the whole problem (the
+  terminal's path, the account it holds, the bot's own login) and "no login: the terminal and its account are left
+  as they are", when the strategy log has the event (once, then at most every 15 min). Before: a generic EVENT line
+  that named TERMINAL_IN_USE twice. Every start-up attempt is also a WARN START line with the problem, and every
+  reconnect attempt a TERMINAL line (below). On a terminal that already holds this bot's account the log says "no
+  login" (before: "logged in").
+- **ACCOUNT_REFUSED by the account read again right after the positions**: that poll's trace is SKIPPED, `reason`
+  'account_recheck', with the gate `account_recheck` that refused and a headline. Before: the trace kept the last
+  poll's decision. The ERROR ACCOUNT line is as before.
+- **The reconnect throttle and RECONNECT_FAILED**: the strategy log has RECONNECT_FAILED once, then when the reason
+  changes or after 15 min. The text log has its ERROR line (with the next attempt) and a WARN TERMINAL line for every
+  other failed attempt, so each attempt is there. The TERMINAL_RECONNECTED line says after how long and after how
+  many failed attempts. The trace's `health`: `reconnect_failed_attempts`, `next_reconnect_t` / `_utc`, `outage_s`,
+  `connect_problem` (why the last start-up or reconnect failed), `terminal_in_use`; a skipped poll's headline names
+  the last failure.
+- **design_problems at start-up**: already in the log (ERROR START "the design in constants.py is refused: ..."),
+  the new check (a stop and a ladder need an add gap) with it; `test_tracelog.py` now checks that one.
+- **A basket that a backstop closed only partly**: LEG_CLOSED_OUTSIDE is a WARN BASKET line (which legs; the rest is
+  closed at once). The poll's decision has the exit gate `legs_outside` (its value: the legs) and its own headline.
+  Before: the gate of a close retry and "Closing the BUY basket (leg_closed_outside)". `basket.open.outside_ids`. The
+  close of the rest and the booking of the whole basket are two CLOSE lines that say what happened. In
+  `<SYMBOL>_trades.json` the trade has both legs and `exit_reason` `leg_closed_outside` ("a leg closed outside the
+  bot, the rest closed by the bot").
+- **The Turtle's paths** (the account re-read after the Turtle's positions read, `stop_passed_outside`: a leg closed
+  beyond the stop ends the trade) are in the same `tracelog.py`; they run on the Turtle branches only.
+- The trace takes the symbol's terminal name again when the loop starts (a TERMINAL_IN_USE event can make the trace
+  before the login has the symbol map).
+
 ### Files
-- `tracelog.py` (new): `TraceLog` (entry points `boot`, `loop_start`, `poll`, `poll_skipped`, `order`, `event`,
-  `state_saved`, `state_note`, `exception`, `write_failed`, `log`; each catches and logs its own errors), `LogWriter`
-  (day files, retention, size cap, events rotation; never raises), `write_json_atomic`.
+- `tracelog.py` (new; the same file on all six demo branches): `TraceLog` (entry points `boot`, `loop_start`,
+  `poll`, `poll_skipped`, `order`, `event`, `state_saved`, `state_note`, `exception`, `write_failed`,
+  `reconnect_failed`, `log`; each catches and logs its own errors), `LogWriter` (day files, retention, size cap,
+  events rotation; never raises), `write_json_atomic`.
 - `app.py`: guarded `import tracelog`; `MT5TradingBot.trace_dir` / `trace_enabled` / `_tracer` / `_trace` / `_boot` /
   `_boot_flush` / `_order_observed` / `_write_failed`; hooks: `loop_start` and `poll(locals())` in `process_symbol`,
   `poll_skipped` at its two skips, `exception` in its `except`, `_frames` / `_signals` (the poll's bars and forming
   signal lines, read only), `_last_account` (`_account_problem`), `_guard_why` (`_poll_guard`), `_reconnects_done`,
   start-up lines in `load_credentials` / `load_symbols` / `initialize_mt5` / `_init_cycle` / `execute_job`, state lines
-  in `_load_state` / `_save_state`, the event mirror in `_log_event`; the writers above.
+  in `_load_state` / `_save_state`, the event mirror in `_log_event`; the writers above. For the paths of
+  v3.9.2-demo.4: the no-login line in `initialize_mt5`, `reconnect_failed` in `_try_reconnect`,
+  `poll_skipped('account_recheck')` after the account read again right after the positions (in `process_symbol`).
 - `mt5_helper.py`: `MT5PositionHelper.order_observer` and `_observe` (called after every request with its result and
   its time; anything it raises is swallowed).
-- `tests_demo/`: `test_tracelog.py` (22 tests; the suite: 129); `fake_mt5.py` loads `tracelog`, gives every bot a temp trace folder,
-  `make_bot(trace_dir=, keep_writers=)`; `conftest.py` points `OUTPUT_DIR` at a temp folder for every test.
+- `tests_demo/`: `test_tracelog.py` (26 tests: 4 for the paths of v3.9.2-demo.4; its account test covers login and no
+  login; its job test uses the new design check, so the file is the same on every branch); `fake_mt5.py` loads
+  `tracelog`, gives every bot a temp trace folder, `make_bot(trace_dir=, keep_writers=)`; `conftest.py` points
+  `OUTPUT_DIR` at a temp folder for every test.
 - `docs/dashboard-data.md` (new): the files, their fields, the actions and gates, the log format.
+
+### Tests
+- The whole `tests_demo` on `wip_port_xauusd6` (with the dashboard of v3.9.2-demo.7): 159 passed,
+  3 skipped (the Turtle tests of `test_dashboard.py`: no `turtle.py`), 22 min.
 
 ### Rollback
 `git revert` this commit; delete `OUTPUT_DIR/<SYMBOL>_trace.json`, `_bars.json`, `_trades.json`,
