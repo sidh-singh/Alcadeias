@@ -3620,6 +3620,7 @@ app.clientside_callback(
             try {
                 var Ctx = window.AudioContext || window.webkitAudioContext;
                 var ctx = new Ctx();
+                setTimeout(function () { try { ctx.close(); } catch (e) {} }, 1500);   // (one per alert, closed after)
                 [0, 0.25, red ? 0.5 : -1].forEach(function (at) {
                     if (at < 0) { return; }
                     var o = ctx.createOscillator(), g = ctx.createGain();
