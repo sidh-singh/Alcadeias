@@ -273,3 +273,20 @@ the manual brake). Prices the bot compares (`levels`, `stop`, `n`) are exact; th
 | INFO / WARN | TURTLE | the bot's own notes (too few D1 / M15 bars, a refused order, the brake), at most every 5 min each |
 | INFO / WARN | DATA / MARKET / ACCOUNT | daily levels missing / back, the D1 bar of the day late (WARN) / there, the market live / not, the unit changing |
 | DEBUG | STATE | the Turtle book saved (the book in the events file's `data`) |
+
+## 6. Who reads them: `dashboard.py`
+
+The dashboard reads these files and nothing else (no terminal call), every `DASHBOARD_REFRESH_INTERVAL`, and draws one
+page for both strategies (it takes `strategy` from the trace; without a trace, `STRATEGY` of `constants.py`).
+
+| tab | reads |
+|---|---|
+| status bar | `<SYMBOL>_trace.json`: `t` (its age: fresh under 15 s, slow under 60 s, stale after), `health`, `account`, `market`, `stale` |
+| Live | the trace's `decision` (headline, gates in order, `blocked_by`, this poll's `orders`) and `basket` / `turtle`; `<SYMBOL>_bars.json` (the forming bar moved with `market.bid`; `overlay.turtle` on D1); `<SYMBOL>_trades.json` `closed` for the chart's entries and exits; the newest 256 KB of `logs/<SYMBOL>_events.jsonl` |
+| Trades | `<SYMBOL>_trades.json` (`summary`, `balance_curve`, `closed`, each trade's `turtle` journal) and the trace's open position |
+| Log | the newest 3 MB of `logs/<SYMBOL>_events.jsonl`, the newest 512 KB of a day's `logs/<SYMBOL>_<day>.log` (download: the whole file) |
+| History & settings | `daily_trade/<SYMBOL>/*.json`, `historical_summary.json`, `logs/<SYMBOL>_strategy_log.json`, the CONFIG lines of the bot's start (the text log of `health.started_utc`'s day; `constants.py` when they are not there), the raw files |
+
+A file that is missing, cut in the middle or of an unexpected shape shows as such (an empty state, or a card with the
+error and its traceback); the rest of the page is unaffected. The charts take times as UTC wall-clock text (a number
+would be shown in the browser's own time zone).
