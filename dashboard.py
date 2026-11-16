@@ -60,6 +60,19 @@ EVENTS_TAIL_BYTES = 3 * 2 ** 20           # the log tab parses the newest 3 MB o
 TEXT_TAIL_BYTES = 512 * 2 ** 10           # ... and shows the newest 512 KB of the day's text log
 STALE_WARN_S = 15.0                       # the trace is rewritten after every poll (about 1 s): older is slow ...
 STALE_S = 60.0                            # ... and older than this the bot is not running (or cannot write)
+TRADES_STALE_S = 180.0                    # trades.json is rewritten at least every 60 s (tracelog TRADES_INTERVAL_S)
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# What a request may name. The page's own values are the symbols of OUTPUT_DIR and the days of their text logs, but a
+# client can send any value to a callback (Dash does not check a RadioItems value against its options): a symbol is
+# taken only when symbols() lists it, a day only when it reads YYYY-MM-DD and that day's file exists, and every path
+# is built from fixed names inside OUTPUT_DIR (_path refuses any other).
+_SYMBOL_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,39}')
+_DAY_NAME = re.compile(r'\d{4}-\d{2}-\d{2}')
+
+
+class OutsideOutputDir(ValueError):
+    """A path that would leave OUTPUT_DIR: refused, nothing is read."""
 
 
 def _now():
@@ -68,7 +81,56 @@ def _now():
 
 
 def _path(*parts):
-    return os.path.join(JSON_DIR, *parts)
+    """A file of OUTPUT_DIR: refused (OutsideOutputDir) when the parts would lead out of it (.., an absolute path)."""
+    base = os.path.abspath(JSON_DIR)
+    p = os.path.abspath(os.path.join(base, *parts))
+    try:
+        inside = os.path.commonpath([base, p]) == base
+    except ValueError:                    # another drive (Windows)
+        inside = False
+    if not inside:
+        raise OutsideOutputDir('a path outside the output folder was refused')
+    return p
+
+
+def is_symbol_name(s):
+    """A plain symbol name ('XAUUSDm', 'BTCUSDm'): letters, digits, '.', '_', '-'; no folder, no '..'."""
+    return isinstance(s, str) and _SYMBOL_NAME.fullmatch(s) is not None and '..' not in s
+
+
+def valid_symbol(sym):
+    """sym when symbols() lists it, else the first symbol ('' when there is none): what a client sends never
+    reaches a path."""
+    syms = symbols()
+    if isinstance(sym, str) and sym in syms:
+        return sym
+    return syms[0] if syms else ''
+
+
+def valid_day(sym, day):
+    """day when it reads YYYY-MM-DD and the text log of that day of sym exists, else None."""
+    if not isinstance(day, str) or not _DAY_NAME.fullmatch(day):
+        return None
+    return day if any(d_ == day for d_, _, _ in log_files(sym)) else None
+
+
+def _rel(path):
+    """A file of OUTPUT_DIR by its name there ('logs/XAUUSDm_events.jsonl'): the page shows no folder of this PC."""
+    try:
+        return os.path.relpath(path, os.path.abspath(JSON_DIR))
+    except ValueError:
+        return os.path.basename(path)
+
+
+_TB_FILE = re.compile(r'File "([^"]+)"')
+
+
+def _scrub(text):
+    """An error text or a traceback with file names instead of full paths ('File "dashboard.py", line 12')."""
+    text = _TB_FILE.sub(lambda m: 'File "%s"' % os.path.basename(m.group(1).replace('\\', '/')), str(text))
+    for folder, name in ((os.path.abspath(JSON_DIR), 'OUTPUT_DIR'), (HERE, 'the bot folder')):
+        text = text.replace(folder + os.sep, '').replace(folder, name)
+    return text
 
 
 # ───────────────────────────── colours (one accent; green / red only for profit-loss and pass-fail) ─────────────
@@ -152,17 +214,18 @@ def load(sym):
 
 
 def symbols():
-    """The symbols with a trace file in OUTPUT_DIR, else those of symbols.json."""
+    """The symbols with a trace file in OUTPUT_DIR, else those of symbols.json (plain symbol names only)."""
     try:
-        found = sorted(os.path.basename(p)[:-len('_trace.json')] for p in glob.glob(_path('*_trace.json')))
+        found = sorted(n[:-len('_trace.json')] for n in os.listdir(os.path.abspath(JSON_DIR))
+                       if n.endswith('_trace.json') and is_symbol_name(n[:-len('_trace.json')]))
     except OSError:
         found = []
     if found:
         return found
     try:
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'symbols.json'), encoding='utf-8') as f:
+        with open(os.path.join(HERE, 'symbols.json'), encoding='utf-8') as f:
             cfg = json.load(f)
-        return [s.get('symbol') for s in cfg.get('symbols', []) if isinstance(s, dict) and s.get('symbol')]
+        return [s.get('symbol') for s in cfg.get('symbols', []) if isinstance(s, dict) and is_symbol_name(s.get('symbol'))]
     except (OSError, ValueError, AttributeError):
         return []
 
@@ -465,24 +528,25 @@ def meter(lo, hi, value, marks=(), bands=(), lo_label=None, hi_label=None, kind=
 
 def safe(kind='view'):
     """Wrap a view builder: an exception (a file of an unexpected shape) becomes a card with the traceback, or an
-    empty figure with the error, so the rest of the page still shows."""
+    empty figure with the error, so the rest of the page still shows. Both name files, never their folders."""
     def wrap(fn):
         @functools.wraps(fn)
         def run(*a, **k):
             try:
                 return fn(*a, **k)
             except Exception as e:  # noqa: BLE001 -- the page must not die on one bad field
-                tb = traceback.format_exc()
+                tb = _scrub(traceback.format_exc())
+                what = _scrub(f'{e.__class__.__name__}: {e}')
                 if kind == 'figure':
                     fig = go.Figure()
-                    fig.add_annotation(text=f'This chart could not be drawn: {e.__class__.__name__}: {e}', x=0.5, y=0.5,
+                    fig.add_annotation(text=f'This chart could not be drawn: {what}', x=0.5, y=0.5,
                                        xref='paper', yref='paper', showarrow=False, font=dict(color=COL['neg']))
                     fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
                     fig.update_xaxes(visible=False)
                     fig.update_yaxes(visible=False)
                     return fig
                 return card(f'{fn.__name__}: could not be shown',
-                            html.Div([html.Div(f'{e.__class__.__name__}: {e} — the rest of the page is not affected; '
+                            html.Div([html.Div(f'{what} — the rest of the page is not affected; '
                                                f'send this text if it stays.', className='line'),
                                       html.Pre(tb[-4000:], className='pre pre-err')]), cls='card-error')
         return run
@@ -506,6 +570,70 @@ def freshness(tr):
     return 'neg', f'Stale: last update {dur(age)} ago — is the bot running?'
 
 
+def trace_age(tr):
+    """Seconds since the bot wrote the trace (None without one)."""
+    t = ts(g(tr, 't'))
+    return None if t is None else _now() - t
+
+
+def is_stale(tr):
+    """The bot has not written the trace for STALE_S: everything in it is its last poll, not now."""
+    age = trace_age(tr)
+    return age is not None and age >= STALE_S
+
+
+def hm(t):
+    """'09:10' (UTC), the day in front when it is not today."""
+    return when(t, seconds=False).replace(' UTC', '')
+
+
+def as_of(d):
+    """' (as of 09:10)' when the trace is stale, else ''."""
+    tr = dd(d.get('trace')) if isinstance(d, dict) else {}
+    return f" (as of {hm(tr.get('t'))})" if is_stale(tr) else ''
+
+
+_ERR_CACHE = {}
+
+
+def errors_last_hour(sym, tail=EVENTS_TAIL_BYTES):
+    """(count, problem): the ERROR lines of logs/<SYMBOL>_events.jsonl of the last hour, from its newest `tail` bytes.
+    Unlike the trace's errors_1h it keeps counting when the trace stops (the bot down, or its loop failing)."""
+    path = events_path(sym)
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None, 'missing'
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _ERR_CACHE.get(path)
+    if hit is None or hit[0] != key:
+        try:
+            with open(path, 'rb') as f:
+                if st.st_size > tail:
+                    f.seek(st.st_size - tail)
+                raw = f.read()
+        except OSError as e:
+            return None, f'unreadable ({e.__class__.__name__})'
+        times = []
+        for ln in raw.split(b'\n'):
+            if b'"ERROR"' not in ln:                # (only those lines are parsed)
+                continue
+            try:
+                ev = json.loads(ln.decode('utf-8', 'replace'))
+            except ValueError:
+                continue
+            if not isinstance(ev, dict) or str(ev.get('level') or '').upper() != 'ERROR':
+                continue
+            t = ts(ev.get('t'))
+            if t is not None:
+                times.append(t)
+        if len(_ERR_CACHE) > 8:
+            _ERR_CACHE.clear()
+        hit = _ERR_CACHE[path] = (key, times)
+    now = _now()
+    return sum(1 for t in hit[1] if now - 3600.0 <= t <= now + 60.0), None
+
+
 @safe()
 def status_bar(sym, d):
     tr = dd(d.get('trace'))
@@ -520,30 +648,59 @@ def status_bar(sym, d):
         what = 'Basket: the bot\'s RSI / MACD votes'
     fk, ftext = freshness(tr)
     chips = [chip(ftext, fk, title=f"trace written {stamp(tr.get('t'))}, poll {smart(tr.get('poll'))}")]
+    stale = is_stale(tr)
+    asof = as_of(d)
+
+    def state_chip(text, kind, title=None, icon=None):
+        """A chip of the bot's state: neutral, with the time of the trace, once the trace is stale (it is the last
+        poll's state, not now's)."""
+        if stale:
+            return chip(text + asof, '', title=(title + ' · ' if title else '') + 'the last poll the bot wrote')
+        return chip(text, kind, title=title, icon=icon)
     if tr:
         demo = h.get('account_ok') and str(h.get('trade_mode_name') or '').lower() == 'demo'
         if demo:
-            chips.append(chip(f"Demo account {smart(h.get('login'))} · {h.get('margin_mode_name') or '?'}", 'pos', icon='✓',
-                              title='the bot trades only on the demo, hedging account of its credentials'))
+            chips.append(state_chip(f"Demo account {smart(h.get('login'))} · {h.get('margin_mode_name') or '?'}", 'pos',
+                                    icon='✓', title='the bot trades only on the demo, hedging account of its credentials'))
         else:
-            chips.append(chip(f"Account refused: {h.get('account_problem') or h.get('trade_mode_name') or 'unknown'}",
-                              'neg', icon='✗', title='the bot sends nothing until the demo account is back'))
+            chips.append(state_chip(f"Account refused: {h.get('account_problem') or h.get('trade_mode_name') or 'unknown'}",
+                                    'neg', icon='✗', title='the bot sends nothing until the demo account is back'))
         if h.get('connected'):
-            chips.append(chip('Terminal connected' + (f" · {h.get('reconnects')} reconnects" if h.get('reconnects') else ''),
-                              'pos'))
+            chips.append(state_chip('Terminal connected' + (f" · {h.get('reconnects')} reconnects"
+                                                            if h.get('reconnects') else ''), 'pos'))
         else:
-            chips.append(chip(f"Terminal: {h.get('terminal_problem') or 'not connected'}", 'neg'))
-        if h.get('market_live'):
-            chips.append(chip(f"Market open · last tick {dur(h.get('last_tick_age_s'))} ago", 'pos'))
+            chips.append(state_chip(f"Terminal: {h.get('terminal_problem') or 'not connected'}", 'neg'))
+        tick_t = ts(mk.get('tick_t'))
+        tick_age = (_now() - tick_t) if tick_t is not None else None
+        if tick_age is None or tick_age < -5:          # (the clock of this PC behind the bot's: the bot's own age)
+            tick_age = num(h.get('last_tick_age_s'))
+        if stale:
+            chips.append(chip(f"Market: last tick {dur(tick_age)} ago" + asof, '',
+                              title=f"the market was {'open' if h.get('market_live') else 'not live'} at the last poll"))
+        elif h.get('market_live') is None or str(mk.get('status') or '').upper() == 'UNKNOWN':
+            chips.append(chip('Market: unknown (terminal not read)', '',
+                              title=f"the last quote read: {when(tick_t)}" if tick_t else None))
+        elif h.get('market_live'):
+            chips.append(chip(f"Market open · last tick {dur(tick_age)} ago", 'pos'))
         else:
             chips.append(chip(f"Market closed ({mk.get('status') or 'no tick'})", 'warn', title=mk.get('message') or ''))
-        errs = num(h.get('errors_1h')) or 0
+        # errors of the last hour: the events file keeps counting when the trace stops (the bot down, its loop failing)
+        logged, problem = errors_last_hour(sym)
+        errs = int(logged or 0) if stale else max(int(num(h.get('errors_1h')) or 0), int(logged or 0))
+        src = (('the log' if stale else 'the trace and the log') if problem is None else
+               f'the trace (the events file is {problem})')
         if errs:
-            chips.append(chip(f'{int(errs)} error(s) in the last hour', 'neg', title='see the Log tab, level ERROR'))
+            chips.append(chip(f'{errs} error(s) in the last hour', 'neg', title=f'from {src}; see the Log tab, level ERROR'))
+        elif stale:
+            chips.append(chip('Errors in the last hour: not known' if problem is not None else
+                              'No error logged in the last hour', '',
+                              title=f'the events file is {problem}' if problem is not None else
+                              'from the log; the bot has not written its trace since' + asof))
         else:
-            chips.append(chip('No errors in the last hour', 'pos'))
+            chips.append(chip('No errors in the last hour', 'pos', title=f'from {src}'))
         if tr.get('stale'):
-            chips.append(chip(f"Last poll could not read the terminal (since {when(tr.get('stale_since_utc'))})", 'warn'))
+            chips.append(state_chip(f"Last poll could not read the terminal (since {when(tr.get('stale_since_utc'))})",
+                                    'warn'))
     ident = html.Div(className='ident', children=[
         html.Div(className='ident-top', children=[
             html.Span(sym or '—', className='sym'),
@@ -562,14 +719,17 @@ def status_bar(sym, d):
              if acc.get('virtual') else 'the account balance (no virtual balance)'),
         tile('Unit · lot', f"{smart(acc.get('units'))} · {fnum(acc.get('lot'), 2)} lot",
              f"next unit at {money(acc.get('next_unit_at'), dp=0)}" if acc.get('next_unit_at') else acc.get('unit_rule')),
-        tile('Open P/L (this bot)', pl(acc.get('own_open_pl')), 'floating, its magic only'),
+        tile('Open P/L (this bot)', pl(acc.get('own_open_pl')), 'floating, its magic only' + asof),
         tile('Closed P/L (this bot)', pl(acc.get('own_closed_pl')), 'since the virtual start'),
-        tile('This bot\'s equity', money(acc.get('own_equity')), 'virtual balance + open P/L'),
+        tile('This bot\'s equity', money(acc.get('own_equity')), 'virtual balance + open P/L' + asof),
         tile('Demo account (shared)', f"{money(acc.get('balance'), dp=0)} / {money(acc.get('equity'), dp=0)}",
-             'balance / equity, all 6 bots'),
-        tile('Bot running', f"{dur(h.get('uptime_s'))}" if h.get('uptime_s') is not None else '—',
-             f"poll {smart(tr.get('poll'))} · loop {fnum(h.get('loop_ms'), 1)} ms · trace {fnum(h.get('trace_ms'), 1)} ms"
-             + (f" · {smart(h.get('skipped_polls'))} skipped" if h.get('skipped_polls') else '')),
+             'balance / equity, the slot\'s 2 bots' + asof),
+        tile('Bot running', ('not writing' if stale else f"{dur(h.get('uptime_s'))}") if h.get('uptime_s') is not None
+             else '—',
+             (f"no trace since {when(tr.get('t'))}; it had run {dur(h.get('uptime_s'))} then" if stale else
+              f"poll {smart(tr.get('poll'))} · loop {fnum(h.get('loop_ms'), 1)} ms · trace {fnum(h.get('trace_ms'), 1)} ms"
+              + (f" · {smart(h.get('skipped_polls'))} skipped" if h.get('skipped_polls') else '')),
+             vcls='neg' if stale else ''),
     ])
     if not tr:
         money_row = html.Div('The balance, the unit and the P/L appear here once the bot writes its trace.',
@@ -583,7 +743,7 @@ ACTION_KIND = {
     'WAIT': 'neutral', 'MARKET_CLOSED': 'neutral', 'PAUSED': 'warn', 'BLOCKED': 'warn', 'NO_DATA': 'warn',
     'SKIPPED': 'neg', 'OPEN_FAILED': 'neg', 'ADD_FAILED': 'neg', 'BOTH_SIDES': 'warn', 'UNMANAGED': 'warn',
     'OPEN_BUY': 'accent', 'OPEN_SELL': 'accent', 'WAIT_FILL': 'accent', 'HOLD': 'accent', 'ADD_BUY': 'accent',
-    'ADD_SELL': 'accent', 'CLOSE_BUY': 'accent', 'CLOSE_SELL': 'accent',
+    'ADD_SELL': 'accent', 'CLOSE_BUY': 'accent', 'CLOSE_SELL': 'accent', 'TRACE_ERROR': 'neg',
 }
 ACTION_WORDS = {
     'WAIT': 'waiting for an entry', 'PAUSED': 'paused after a close', 'BLOCKED': 'an entry is blocked',
@@ -592,22 +752,37 @@ ACTION_WORDS = {
     'WAIT_FILL': 'waiting for the terminal to list the fill', 'HOLD': 'holding the position',
     'ADD_BUY': 'added to the buy', 'ADD_SELL': 'added to the sell', 'ADD_FAILED': 'an add was not filled',
     'CLOSE_BUY': 'closing the buy', 'CLOSE_SELL': 'closing the sell', 'BOTH_SIDES': 'a buy and a sell are open',
-    'UNMANAGED': 'positions it cannot take over',
+    'UNMANAGED': 'positions it cannot take over', 'TRACE_ERROR': 'the trace failed on this poll (see the Log tab)',
 }
+_OTHER_SIDE = {'BUY': 'SELL', 'SELL': 'BUY'}
+
+
+def close_sides(o):
+    """(the side of the position, the side of the order) of a close: a SELL position is closed with a BUY order. A
+    trace before v3.9.2-demo.5's fix had only the order's side, in `side`."""
+    if 'order_side' in o:
+        return o.get('side') or '?', o.get('order_side') or '?'
+    order = str(o.get('side') or '').upper()
+    return _OTHER_SIDE.get(order, '?'), order or '?'
 
 
 def order_line(o, digits):
     ok = o.get('done')
     kind = 'pos' if ok else 'neg'
-    what = f"{(o.get('kind') or '').upper()} {o.get('side') or ''} {fnum(o.get('volume'), 2)} lot"
-    if o.get('position'):
-        what += f" (position {o.get('position')})"
+    if str(o.get('kind') or '').lower() == 'close':
+        pos_side, order_side = close_sides(o)
+        what = (f"CLOSE {pos_side} position {o.get('position') or '?'} ({order_side} order, "
+                f"{fnum(o.get('volume'), 2)} lot)")
+    else:
+        what = f"{(o.get('kind') or '').upper()} {o.get('side') or ''} {fnum(o.get('volume'), 2)} lot"
+        if o.get('position'):
+            what += f" (position {o.get('position')})"
     res = o.get('retcode_text') or ('refused by the bot' if o.get('refused') else '—')
     return html.Div(className='order', children=[
         badge('✓ done' if ok else '✗ ' + str(res), kind),
         html.Span(what, className='order-what'),
         html.Span(f"requested {px(o.get('price'), digits)} · sl {px(o.get('sl'), digits) if num(o.get('sl')) else 'none'}"
-                  f" · filled {px(o.get('result_price'), digits)} · retcode {smart(o.get('retcode'))}"
+                  f" · filled {px(o.get('result_price'), digits)} · retcode {o.get('retcode') if o.get('retcode') is not None else '—'}"
                   + (f" · {o.get('result_comment')}" if o.get('result_comment') else '')
                   + (f" · {fnum(o.get('ms'), 0)} ms" if num(o.get('ms')) else ''), className='order-det mono'),
     ])
@@ -632,14 +807,20 @@ def now_header(d):
         chips.append(chip(f"signals: buy {sig.get('buy') or '—'} · sell {sig.get('sell') or '—'}",
                           title='the strategy\'s own signals (the old dashboard\'s BUY / SELL / DO_NOTHING)'))
     orders = dl(dec.get('orders'))
+    stale = is_stale(tr)
     head = html.Div(className='now-head', children=[
         html.Div(className='now-title', children=[
-            html.Span('What the bot is doing now', className='eyebrow'),
-            badge(act, ACTION_KIND.get(act, 'neutral')),
-            html.Span(ACTION_WORDS.get(act, ''), className='now-words'),
+            html.Span('What the bot was doing at its last poll' if stale else 'What the bot is doing now',
+                      className='eyebrow'),
+            badge(act, 'neutral' if stale else ACTION_KIND.get(act, 'neutral')),
+            html.Span(ACTION_WORDS.get(act, '') + as_of(d), className='now-words'),
         ]),
         html.Span(f"decided {when(tr.get('t'))} · poll {smart(tr.get('poll'))}", className='now-meta'),
     ])
+    # the bot has stopped writing (it is down, the PC slept, or its loop fails before the trace): said first
+    gone = html.Div(className='banner banner-neg', children=(
+        f"The bot has not written since {when(tr.get('t'))} ({dur(trace_age(tr))} ago): is it running? Everything "
+        f"below is its last poll, not now; the Log tab shows what it wrote since.")) if stale else None
     banner = None
     if tr.get('stale'):
         banner = html.Div(className='banner banner-warn', children=(
@@ -647,7 +828,8 @@ def now_header(d):
             f"and position numbers below are those of the last good poll."))
     return html.Div([
         head,
-        html.P(dec.get('headline') or 'No decision yet.', className='headline'),
+        gone,
+        html.P(dec.get('headline') or 'No decision yet.', className='headline' + (' headline-old' if stale else '')),
         html.Div(chips, className='chips chips-left') if chips else None,
         banner,
         html.Div(className='orders', children=[html.Div("This poll's orders", className='mini-title')]
@@ -723,8 +905,9 @@ def gates_view(d):
         html.Span([html.B('–', className='gi-na'), ' does not apply']),
         html.Span([html.B('▌', className='gi-fire'), ' decided this poll']),
     ])
+    this = f"its last poll{as_of(d)}" if is_stale(tr) else 'this poll'
     return card('The bot\'s checks', html.Div(rows, className='gates'),
-                sub=html.Div([html.Div(f'{len(gates)} checks this poll, in the order the bot makes them'), legend]))
+                sub=html.Div([html.Div(f'{len(gates)} checks {this}, in the order the bot makes them'), legend]))
 
 
 # ── the basket strategy ──
@@ -878,9 +1061,16 @@ def basket_panel(d):
         ]) if sparks else None,
     ])
     tiles = html.Div(className='tiles3', children=[_trend_tile(bk), _vol_tile(bk, digits), _pause_tile(bk)])
-    return card('The basket strategy, this poll', html.Div([scores, votes_box, tiles, _new_basket(bk, digits),
-                                                            _rsi_row(bk)]),
-                sub=f"design levers as the bot runs them · votes {'fresh this poll' if bk.get('fresh') else 'kept from the last poll'}")
+    # fresh = the poll computed the votes; a skipped poll (stale) or a trace the bot no longer writes keeps old ones
+    if is_stale(tr):
+        votes_when = f"votes of its last poll{as_of(d)}"
+    elif bk.get('fresh') and not tr.get('stale'):
+        votes_when = 'votes fresh this poll'
+    else:
+        votes_when = 'votes kept from the last poll'
+    return card('The basket strategy, ' + ('its last poll' if is_stale(tr) else 'this poll'),
+                html.Div([scores, votes_box, tiles, _new_basket(bk, digits), _rsi_row(bk)]),
+                sub=f"design levers as the bot runs them · {votes_when}")
 
 
 def _trend_tile(bk):
@@ -981,7 +1171,7 @@ def turtle_panel(d):
              _channels_box(tt, digits),
              _filter_box(tt, digits),
              _new_trade_box(tt, digits)]
-    return card('The Turtle, this poll', html.Div(parts),
+    return card('The Turtle, ' + (f'its last poll{as_of(d)}' if is_stale(tr) else 'this poll'), html.Div(parts),
                 sub=tt.get('rules') or f"System {tt.get('system')}")
 
 
@@ -1026,10 +1216,17 @@ def _orders_box(tt, lv, orders, n, digits):
                       lo_label=f"sell at ≤ {px(lo, digits)} · " + gap(s, bid_now, 'bid'),
                       hi_label=f"buy at ≥ {px(hi, digits)} · " + gap(b, ask_now, 'ask'))
     extra = []
+    in_trade = isinstance(tt.get('trade'), dict) and bool(tt.get('trade'))
     for side, o in (('buy', b), ('sell', s)):
-        if o.get('reached'):
+        if not o.get('reached'):
+            continue
+        if state == 'armed' and not in_trade:      # an entry trigger: it waits for the vote
             extra.append(chip(f"{side.upper()} level reached ({o.get('judged_on')} {px(o.get('price_now'), digits)}); "
                               f"needs the M15 vote {vote_glyph(o.get('vote_needed'))}", 'accent'))
+        else:                                      # not a trigger now: say why
+            why = 'a trade is open' if in_trade else ("today's orders are used" if state == 'used' else 'no orders')
+            extra.append(chip(f"{side.upper()} level passed ({o.get('judged_on')} {px(o.get('price_now'), digits)}): "
+                              f"no entry, {why}"))
     if orders.get('in_exit_bar'):
         extra.append(chip('in the M1 bar of the last exit: no entry this minute', 'warn'))
     if orders.get('last_exit_utc'):
@@ -1186,8 +1383,25 @@ def position_view(d):
     return _basket_position(d, g(tr, 'basket', 'open'), digits)
 
 
+def trades_note(d, what='the closed trades below'):
+    """None, or what is wrong with <SYMBOL>_trades.json: missing / unreadable (the closed trades are not known), or
+    old (the bot has not read the deal history for a while: `what` is as of then)."""
+    name = f"{d.get('symbol') or '<SYMBOL>'}_trades.json"
+    if d.get('trades') is None:
+        return (f"{name} is {d.get('trades_problem') or 'missing'}: the closed trades are not known here (the bot writes "
+                f"it at its first deal-history read after a start, then at least every minute)")
+    t = ts(g(d, 'trades', 't'))
+    age = None if t is None else _now() - t
+    if age is not None and age > TRADES_STALE_S:
+        return (f"{name} was last written {when(t)} ({dur(age)} ago): {what} are as of then (the bot reads the deal "
+                f"history every minute; it is not running, or the terminal gives no history)")
+    return None
+
+
 def _last_closed_line(d, digits):
     closed = dl(g(d, 'trades', 'closed'))
+    if d.get('trades') is None:
+        return f"The last closed trade is not known: {trades_note(d)}."
     if not closed:
         return 'No closed trade yet.'
     c = closed[-1]
@@ -1200,7 +1414,7 @@ def _last_closed_line(d, digits):
 
 def _basket_position(d, op, digits):
     if not isinstance(op, dict):
-        return card('Open position', html.Div([html.Div('Flat: no basket open.', className='flat'),
+        return card('Open position', html.Div([html.Div('Flat: no basket open' + (as_of(d) or '.'), className='flat'),
                                                html.Div(_last_closed_line(d, digits), className='line muted')]))
     side = op.get('side')
     pnl = num(op.get('pnl'))
@@ -1256,13 +1470,14 @@ def _basket_position(d, op, digits):
         info,
         legs_table(op.get('legs'), digits),
     ])
-    return card('Open basket', body, sub='its stop, target and add gap were fixed when it opened')
+    return card('Open basket' + as_of(d), body, sub='its stop, target and add gap were fixed when it opened'
+                + (' · the bot has not written since: the P/L and the legs are those of its last poll' if as_of(d) else ''))
 
 
 def _turtle_position(d, tt, digits):
     trd = tt.get('trade')
     if not isinstance(trd, dict):
-        return card('Open position', html.Div([html.Div('Flat: no Turtle trade open.', className='flat'),
+        return card('Open position', html.Div([html.Div('Flat: no Turtle trade open' + (as_of(d) or '.'), className='flat'),
                                                html.Div(_last_closed_line(d, digits), className='line muted')]))
     if trd.get('both_sides'):
         return card('Open position', html.Div('A buy and a sell of this bot are open: it holds still (BOTH_SIDES).',
@@ -1327,7 +1542,8 @@ def _turtle_position(d, tt, digits):
         html.Div([html.Div('Every stop move', className='mini-title'),
                   table(['time', 'stop', 'from', 'why'], stop_rows, num_cols=(1,))]) if stop_rows else None,
     ])
-    return card('Open Turtle trade', body, sub='one stop for every leg, never loosened; no target')
+    return card('Open Turtle trade' + as_of(d), body, sub='one stop for every leg, never loosened; no target'
+                + (' · the bot has not written since: the P/L and the legs are those of its last poll' if as_of(d) else ''))
 
 
 # ───────────────────────────── the chart ─────────────────────────────
@@ -1452,32 +1668,40 @@ def price_figure(d, tf):
     bk_open = g(tr, 'basket', 'open')
     trd = g(tr, 'turtle', 'trade')
     price_now = None
+    # `on`: the price the bot compares a level with. The candles are bid prices; a level judged on the ask (a sell's
+    # stop and target, a buy's add, a buy level, a sell position's broker sl) is crossed when the ask reaches it, about
+    # a spread above the bid: its tag says '(ask)' and the ASK line is drawn next to the BID line
     if isinstance(bk_open, dict):
         open_legs, open_side, open_pnl = dl(bk_open.get('legs')), bk_open.get('side'), bk_open.get('pnl')
         price_now = num(bk_open.get('price_now'))
         jo = bk_open.get('judged_on') or ''
         t_from = ts(bk_open.get('first_t') or bk_open.get('opened_at'))
+        sl_on = 'ask' if str(open_side or '').upper() == 'SELL' else 'bid'      # the broker sl of a sell: on the ask
         levels += [
             dict(y=bk_open.get('target_price'), name='TARGET', col=COL['pos'], dash='solid', t_from=t_from, key=True,
-                 hover=f"target +{money(bk_open.get('target_usd'))} (P/L > target, judged on the {jo}) · "
-                       f"{money(bk_open.get('to_target_usd'))} to go"),
-            dict(y=bk_open.get('stop_price'), name='STOP', col=COL['neg'], dash='solid', t_from=t_from, key=True,
+                 on=jo, hover=f"target +{money(bk_open.get('target_usd'))} (P/L > target, judged on the {jo}) · "
+                              f"{money(bk_open.get('to_target_usd'))} to go"),
+            dict(y=bk_open.get('stop_price'), name='STOP', col=COL['neg'], dash='solid', t_from=t_from, key=True, on=jo,
                  hover=f"stop -{money(bk_open.get('stop_usd'))} (judged on the {jo}) · {money(bk_open.get('to_stop_usd'))} away"),
             dict(y=bk_open.get('avg_price'), name='AVG', col=COL['muted'], dash='dashdot', t_from=t_from, key=True,
                  hover='the basket\'s lot-weighted average price'),
         ]
         for i, b_ in enumerate(lst(bk_open.get('backstop_prices'))):
             levels.append(dict(y=b_, name='BACKSTOP' if i == 0 else '', col=COL['neg'], dash='dot', t_from=t_from, key=False,
-                               width=1, hover=f"broker backstop (the sl of leg {i + 1}): only acts while the bot is down"))
+                               width=1, on=sl_on,
+                               hover=f"broker backstop (the sl of leg {i + 1}, hit by the {sl_on}): only acts while the "
+                                     f"bot is down"))
         ld = dd(bk_open.get('ladder'))
         if ld.get('on') and not ld.get('exhausted') and num(ld.get('next_add_price')) is not None:
             levels.append(dict(y=ld.get('next_add_price'), name='NEXT ADD', col=COL['accent'], dash='dash', t_from=t_from,
-                               key=True, hover=f"next add: {ld.get('tier_tf')} {ld.get('trigger')} "
-                                               f"({'armed' if ld.get('armed') else 'not armed'}), {ld.get('judged_on')} at this price or better"))
+                               key=True, on=ld.get('judged_on'),
+                               hover=f"next add: {ld.get('tier_tf')} {ld.get('trigger')} "
+                                     f"({'armed' if ld.get('armed') else 'not armed'}), {ld.get('judged_on')} at this price or better"))
     elif isinstance(trd, dict) and not trd.get('both_sides'):
         open_legs, open_side, open_pnl = dl(trd.get('legs')), trd.get('side'), trd.get('pnl')
         price_now = num(trd.get('price_now'))
         t_from = ts(trd.get('entry_t') or trd.get('entry_utc'))
+        stop_on = trd.get('judged_on') or ('ask' if str(open_side or '').upper() == 'SELL' else 'bid')
         # the stop as it moved: a step line from the entry to now
         stops = [s for s in dl(g(trd, 'journal', 'stops')) if ts(s.get('t') or s.get('utc')) and num(s.get('stop'))]
         if len({snap(max(ts(s.get('t') or s.get('utc')), t0)) for s in stops}) < 2:
@@ -1489,27 +1713,46 @@ def price_figure(d, tf):
                 sx.append(snap(st_t)); sy.append(num(s.get('stop')))
             sx.append(_ms(t_end)); sy.append(num(trd.get('stop')) or sy[-1])
             fig.add_trace(go.Scatter(x=sx, y=sy, mode='lines', line=dict(color=COL['neg'], width=2, shape='hv'),
-                                     name='stop (as it moved)', hovertemplate='stop %{y:,.' + str(digits) + 'f}<extra></extra>'))
+                                     name='stop (as it moved)',
+                                     hovertemplate='stop %{y:,.' + str(digits) + 'f}' + (' (judged on the ask)' if stop_on == 'ask'
+                                                                                         else '') + '<extra></extra>'))
         levels.append(dict(y=trd.get('stop'), name='STOP', col=COL['neg'], dash='solid', t_from=None if stops else t_from,
-                           key=True, line=not stops,
-                           hover=f"the one stop of every leg: {trd.get('stop_text') or trd.get('stop_origin')} · "
+                           key=True, line=not stops, on=stop_on,
+                           hover=f"the one stop of every leg, judged on the {stop_on}: {trd.get('stop_text') or trd.get('stop_origin')} · "
                                  f"{smart(trd.get('to_stop'), digits)} away · P/L there {money(trd.get('pnl_at_stop'), signed=True)}"))
         if num(trd.get('next_add')) is not None:
             levels.append(dict(y=trd.get('next_add'), name='NEXT ADD', col=COL['accent'], dash='dash', t_from=t_from, key=True,
+                               on=trd.get('next_add_judged_on') or 'ask',
                                hover=f"next leg at {trd.get('next_add_judged_on') or 'ask'} ≥ this (the last fill + 0.5N)"))
         for i, b_ in enumerate(lst(trd.get('backstop_prices'))):
             levels.append(dict(y=b_, name='BACKSTOP' if i == 0 else '', col=COL['neg'], dash='dot', t_from=t_from, key=False,
-                               width=1, hover=f"broker backstop of leg {i + 1} (1 N beyond the stop at its fill)"))
+                               width=1, on=stop_on,
+                               hover=f"broker backstop of leg {i + 1} (1 N beyond the stop at its fill, hit by the {stop_on})"))
         levels.append(dict(y=trd.get('avg_price'), name='AVG', col=COL['muted'], dash='dashdot', t_from=t_from, key=True,
                            hover='the trade\'s average price'))
-    # ── the Turtle's levels ──
+    # ── the Turtle's levels: entry triggers only while today's orders are armed and no trade is open ──
     lv = g(tr, 'turtle', 'levels')
     ov = g(d, 'bars', 'overlay', 'turtle')
+    t_orders = dd(g(tr, 'turtle', 'orders'))
+    in_trade = bool(open_side) or (isinstance(trd, dict) and bool(trd))
+    o_state = t_orders.get('state') or ('armed' if t_orders.get('armed') else None)
+    new_t = ts(t_orders.get('until_t') or t_orders.get('until_utc'))
+    new_at = utc(new_t).strftime('%H:%M') if new_t is not None else '?'       # the next D1 close: always 00:00 UTC
+    if in_trade:                       # (note in the tag, words in the hover)
+        not_now = ('no entry while in a trade', 'no entry while a trade is open (an entry needs a flat book)')
+    elif o_state == 'used':
+        by = f" by the {t_orders.get('used_by')} trade" if t_orders.get('used_by') else ''
+        not_now = (f'used, new orders at {new_at}',
+                   f"today's orders were used{by}: no entry until new orders at the next D1 close, {new_at} UTC")
+    elif o_state == 'armed':
+        not_now = None
+    else:
+        not_now = ('no orders', 'no daily levels: no orders')
     if tf == 'D1' and isinstance(ov, dict) and ov.get('from_t'):
-        steps = {'buy': ('BUY LEVEL', 'dash'), 'sell': ('SELL LEVEL', 'dash'), 'exit_long': ('EXIT (long)', 'dot'),
-                 'exit_short': ('EXIT (short)', 'dot')}
+        steps = {'buy': ('BUY LEVEL', 'dash', 'ask'), 'sell': ('SELL LEVEL', 'dash', 'bid'),
+                 'exit_long': ('EXIT (long)', 'dot', None), 'exit_short': ('EXIT (short)', 'dot', None)}
         ft = lst(ov.get('from_t'))
-        for key, (name, dash_) in steps.items():
+        for key, (name, dash_, on) in steps.items():
             ys = lst(ov.get(key))
             pts = [(ts(a), num(b_)) for a, b_ in zip(ft, ys)]
             pts = [(a, b_) for a, b_ in pts if a is not None and b_ is not None and a >= t0 - 86400]
@@ -1520,20 +1763,28 @@ def price_figure(d, tf):
                                                              dash=dash_, shape='hv'),
                                      name=name.lower(),
                                      hovertemplate=name.lower() + ' %{y:,.' + str(digits) + 'f}<extra></extra>'))
-            levels.append(dict(y=pts[-1][1], name=name.split(' (')[0] if 'EXIT' not in name else name, col=COL['blue'],
-                               dash=dash_, key=False, line=False, hover=name.lower()))
+            muted = key in ('buy', 'sell') and not_now is not None
+            levels.append(dict(y=pts[-1][1], name=name.split(' (')[0] if 'EXIT' not in name else name,
+                               col=COL['faint'] if muted else COL['blue'], dash=dash_, key=False, line=False, on=on,
+                               note=not_now[0] if muted else None,
+                               hover=(f'{name.lower()} of today: not an entry now: {not_now[1]}' if muted else name.lower())))
     elif isinstance(lv, dict) and lv.get('ok') is not False:
         day_from = ts(lv.get('from_time') or lv.get('from_utc'))
         long_ = str(open_side or '').upper() == 'BUY'
         short_ = str(open_side or '').upper() == 'SELL'
         days = g(tr, 'turtle', 'channels', 'entry', 'days') or '?'
         xdays = g(tr, 'turtle', 'channels', 'exit', 'days') or '?'
-        levels += [
-            dict(y=lv.get('buy'), name='BUY LEVEL', col=COL['blue'], dash='dash', t_from=day_from, key=not open_side, width=1.4,
-                 hover=f"today's buy level (the {days}-day high + tick): an entry when the ask reaches it with the M15 vote +1"),
-            dict(y=lv.get('sell'), name='SELL LEVEL', col=COL['blue'], dash='dash', t_from=day_from, key=not open_side, width=1.4,
-                 hover=f"today's sell level (the {days}-day low - tick): an entry when the bid reaches it with the M15 vote -1"),
-        ]
+        for key, name, on, what_, rule in (
+                ('buy', 'BUY LEVEL', 'ask', f"today's buy level (the {days}-day high + tick)",
+                 'an entry when the ask reaches it with the M15 vote +1'),
+                ('sell', 'SELL LEVEL', 'bid', f"today's sell level (the {days}-day low - tick)",
+                 'an entry when the bid reaches it with the M15 vote -1')):
+            if not_now is None:            # the orders are armed and the book is flat: an entry trigger
+                levels.append(dict(y=lv.get(key), name=name, col=COL['blue'], dash='dash', t_from=day_from, key=True,
+                                   width=1.4, on=on, hover=f'{what_}: {rule}'))
+            else:                          # used, or a trade is open: drawn muted, not a trigger now
+                levels.append(dict(y=lv.get(key), name=name, col=COL['faint'], dash='dot', t_from=day_from, key=False,
+                                   width=1, on=on, note=not_now[0], hover=f'{what_}: not an entry now: {not_now[1]}'))
         if long_:
             levels.append(dict(y=lv.get('trail_long'), name='EXIT CHANNEL', col=COL['blue'], dash='dot', t_from=day_from,
                                key=False, width=1,
@@ -1578,12 +1829,17 @@ def price_figure(d, tf):
                                      text=txt, hovertemplate='%{text}<extra></extra>', legendgroup=res,
                                      marker=dict(symbol='x', size=12, color=COL['pos'] if res == 'win' else COL['neg'],
                                                  line=dict(color=COL['surface'], width=1.5))))
-    # ── the price now ──
-    bid = num(g(tr, 'market', 'bid'))
+    # ── the price now: the bid (the candles) and the ask (what the '(ask)' levels are compared with) ──
+    bid, ask = num(g(tr, 'market', 'bid')), num(g(tr, 'market', 'ask'))
+    recent = t[max(0, len(t) - 1 - max(6, len(t) // 10))]
+    spread = smart(g(tr, 'market', 'spread'))
     if bid is not None:
-        levels.append(dict(y=bid, name='BID', col=COL['text2'], dash='dot', t_from=t[max(0, len(t) - 1 - max(6, len(t) // 10))],
-                           key=True, width=1, line=True,
-                           hover=f"the bid now · ask {px(g(tr, 'market', 'ask'), digits)} · spread {smart(g(tr, 'market', 'spread'))}"))
+        levels.append(dict(y=bid, name='BID', col=COL['text2'], dash='dot', t_from=recent, key=True, width=1, line=True,
+                           hover=f"the bid now (the candles are bid prices) · ask {px(ask, digits)} · spread {spread}"))
+    if ask is not None:
+        levels.append(dict(y=ask, name='ASK', col=COL['muted'], dash='dash', t_from=recent, key=True, width=1, line=True,
+                           hover=f"the ask now, a spread ({spread}) above the bid: the levels tagged (ask) are crossed "
+                                 f"when this line reaches them, not the candles"))
     # ── y range: the candles and the levels that matter; the others get a tag at the edge ──
     reach = (y_hi - y_lo) * 0.6          # a level this far beyond the candles still widens the range; farther: a tag
     for lvl in levels:
@@ -1599,34 +1855,42 @@ def price_figure(d, tf):
         if y is None:
             continue
         inside = lo_v <= y <= hi_v
+        label = (lvl['name'] or 'level') + (' (ask)' if lvl.get('on') == 'ask' else '')
         if lvl.get('line', True) and inside:
             x_from = snap(max(lvl['t_from'], t0)) if lvl.get('t_from') else _ms(t0)
             fig.add_trace(go.Scatter(x=[x_from, _ms(t_end)], y=[y, y], mode='lines', showlegend=False,
                                      line=dict(color=lvl['col'], width=lvl.get('width', 1.6), dash=lvl['dash']),
-                                     hovertemplate=f"<b>{lvl['name'] or 'level'} {px(y, digits)}</b><br>{lvl.get('hover', '')}<extra></extra>"))
+                                     hovertemplate=f"<b>{label} {px(y, digits)}</b><br>{lvl.get('hover', '')}<extra></extra>"))
         if lvl.get('name'):
             tags.append((y if inside else (hi_v if y > hi_v else lo_v), lvl, inside, y))
     # price tags at the right edge (over the price axis), spread so that none covers another: an upward pass,
-    # then a downward one from the top edge, so every tag stays as close to its line as the others allow
+    # then a downward one from the top edge, so every tag stays as close to its line as the others allow (a tag with
+    # a note under its price takes two lines)
     plot_h = 600 - 36 - 36
     per_px = (hi_v - lo_v) / plot_h
-    gap = 18 * per_px
     tags.sort(key=lambda z: z[0])
     ys = [z[0] for z in tags]
+    half = [(15.0 if z[1].get('note') else 9.0) * per_px for z in tags]       # half a tag's height
     for i in range(1, len(ys)):
-        ys[i] = max(ys[i], ys[i - 1] + gap)
-    top = hi_v - gap * 0.5
-    if ys and ys[-1] > top:
-        ys[-1] = top
+        ys[i] = max(ys[i], ys[i - 1] + half[i - 1] + half[i])
+    if ys and ys[-1] > hi_v - half[-1]:
+        ys[-1] = hi_v - half[-1]
         for i in range(len(ys) - 2, -1, -1):
-            ys[i] = min(ys[i], ys[i + 1] - gap)
+            ys[i] = min(ys[i], ys[i + 1] - half[i + 1] - half[i])
+    widest = 0
     for y_draw, (y_at, lvl, inside, y_true) in zip(ys, tags):
         arrow = '' if inside else ('▲ ' if y_true > hi_v else '▼ ')
+        head = f"{arrow}{lvl['name']}{' (ask)' if lvl.get('on') == 'ask' else ''} {px(y_true, digits)}"
+        text = head + (f"<br><span style='font-size:9.5px;color:{COL['muted']}'>{lvl['note']}</span>"
+                       if lvl.get('note') else '')
+        widest = max(widest, len(head) * 6.4, len(lvl.get('note') or '') * 5.8)
         fig.add_annotation(x=1.0, xref='paper', xanchor='left', y=y_draw, yref='y', showarrow=False,
-                           text=f"{arrow}{lvl['name']} {px(y_true, digits)}", align='left',
-                           font=dict(family=MONO, size=10.5, color=COL['text']),
+                           text=text, align='left',
+                           font=dict(family=MONO, size=10.5, color=COL['muted'] if lvl.get('note') else COL['text']),
                            bgcolor=COL['raised'], bordercolor=lvl['col'], borderwidth=1, borderpad=3,
                            hovertext=lvl.get('hover'), xshift=4)
+    # the right margin holds the widest tag
+    base_layout['margin'] = dict(base_layout['margin'], r=int(min(320, max(168, widest + 18))))
     # gaps in the bars (a weekend, gold's daily break on D1) are left out of the time axis
     gap_s = 1.5 * tf_s if tf_s >= 86400 else max(3 * tf_s, 3 * 3600)
     breaks = []
@@ -1654,10 +1918,14 @@ def chart_note(d, tf):
     src = g(d, 'bars', 'source', tf)
     if not t:
         return 'No bars for this timeframe yet.'
+    note = trades_note(d, what="the past entries and exits on the chart")
     return (f"{len(t)} {tf} bars (bid), {stamp(t[0])} → {stamp(t[-1])} (the last one is forming"
             f"{', moved with the bid of the trace' if g(d, 'trace', 'market', 'bid') is not None else ''}); bars file "
-            f"written {when(g(d, 'bars', 't'))}{f', from the {src}' if src else ''}. Drag to pan, scroll to zoom, "
-            f"double-click to reset; click a legend item to hide it.")
+            f"written {when(g(d, 'bars', 't'))}{f', from the {src}' if src else ''}. A tag '(ask)' marks a level the bot "
+            f"compares with the ask (the ASK line), not with the bid of the candles. "
+            + (f"No past entries or exits: {note}. " if d.get('trades') is None else
+               (f"{note[0].upper()}{note[1:]}. " if note else ''))
+            + "Drag to pan, scroll to zoom, double-click to reset; click a legend item to hide it.")
 
 
 # ───────────────────────────── the latest events (Live) and the log tab ─────────────────────────────
@@ -1757,17 +2025,28 @@ def latest_events(sym, n=12):
         dcc.Clipboard(target_id='live-log-path', className='copy', title='copy the path'),
     ])
     return card('Latest events', html.Div(rows, className='evlist evlist-compact') if rows else empty(
-        'No events yet.' if problem is None else f'The events file is {problem}: {events_path(sym)}'),
+        'No events yet.' if problem is None else f'The events file is {problem}: {_rel(events_path(sym))}'),
         right=right, sub='orders, fills, closes, warnings, errors and every change of action; the Log tab has every line')
 
 
 def log_files(sym):
-    """[(day, path, size)] of the text logs of this symbol, newest first."""
+    """[(day, path, size)] of the text logs of this symbol (logs/<SYMBOL>_<YYYY-MM-DD>.log), newest first."""
+    if not is_symbol_name(sym):
+        return []
+    folder = _path('logs')
+    name = re.compile(re.escape(sym) + r'_(\d{4}-\d{2}-\d{2})\.log')
     out = []
-    for p in glob.glob(_path('logs', f'{sym}_????-??-??.log')):
-        day = os.path.basename(p)[len(sym) + 1:-4]
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return []
+    for n in names:
+        m = name.fullmatch(n)
+        if not m:
+            continue
+        p = os.path.join(folder, n)
         try:
-            out.append((day, p, os.path.getsize(p)))
+            out.append((m.group(1), p, os.path.getsize(p)))
         except OSError:
             continue
     return sorted(out, reverse=True)
@@ -1822,7 +2101,14 @@ def trades_kpis(d):
     pf = (gw / abs(gl)) if gl else None
     ret = ((now_bal - start) / start) if (start and now_bal is not None) else None
     reasons = dd(s.get('exit_reasons'))
+    note = trades_note(d)
+    if d.get('trades') is None:             # no number at all: a 0 would read as "no trade yet"
+        return html.Div(note[0].upper() + note[1:] + '.', className='banner banner-neg')
+    written = ts(trd.get('t'))
     return html.Div([
+        html.Div(note[0].upper() + note[1:] + '.', className='banner banner-warn') if note else None,
+        html.Div(f"{d.get('symbol') or ''}_trades.json written {when(written)} ({dur(_now() - written)} ago)",
+                 className='line muted') if written is not None and not note else None,
         html.Div(className='kpis', children=[
             tile('Closed trades', smart(s.get('closed') or 0), f"{smart(s.get('wins') or 0)} won · {smart(s.get('losses') or 0)} lost"),
             tile('Win rate', pct(s.get('win_rate'), 0) if s.get('closed') else '—', 'trades with a profit'),
@@ -1852,8 +2138,11 @@ def equity_figure(d):
                                                          font=dict(family=FONT, color=COL['text'])))
     if not curve:
         fig.update_layout(**layout)
-        fig.add_annotation(text='No closed trade yet.', x=0.5, y=0.5, xref='paper', yref='paper', showarrow=False,
-                           font=dict(size=13, color=COL['muted']))
+        missing = d.get('trades') is None
+        fig.add_annotation(text=(f"No balance curve: {d.get('symbol') or '<SYMBOL>'}_trades.json is "
+                                 f"{d.get('trades_problem') or 'missing'}." if missing else 'No closed trade yet.'),
+                           x=0.5, y=0.5, xref='paper', yref='paper', showarrow=False,
+                           font=dict(size=13, color=COL['warn'] if missing else COL['muted']))
         fig.update_xaxes(visible=False)
         fig.update_yaxes(visible=False)
         return fig
@@ -1975,10 +2264,24 @@ def trades_list(d, limit=200):
         rows.append(trade_row(n - k, tr_, digits))
     head = html.Div(className='trow-head', children=[html.Span(h, className='tc' + (' num' if j in (4, 5, 7, 9, 11) else ''))
                                                     for j, h in enumerate(TRADE_HEAD)])
-    note = (f"{n} closed trade(s) since {(trd.get('since_utc') or '')[:10] or '—'} (this bot's magic {smart(trd.get('magic'))}); "
-            f"click a row for its legs" + ('' if n <= limit else f'; the newest {limit} shown'))
-    return card('Every trade, newest first', html.Div([head] + rows, className='trows') if rows else empty('No trade yet.'),
-                sub=note)
+    written = ts(trd.get('t'))
+    missing = d.get('trades') is None
+    if missing:                             # (the summary above says why)
+        sub = (f"{'the open trade, from the trace; ' if rows else ''}the closed trades are not known: "
+               f"{d.get('symbol') or '<SYMBOL>'}_trades.json is {d.get('trades_problem') or 'missing'}")
+    else:
+        sub = (f"{n} closed trade(s) since {(trd.get('since_utc') or '')[:10] or '—'} (this bot's magic {smart(trd.get('magic'))}); "
+               f"click a row for its legs" + ('' if n <= limit else f'; the newest {limit} shown')
+               + (f" · trades.json written {when(written)}" if written is not None else ''))
+    if rows:
+        body = html.Div([head] + rows, className='trows')
+    elif missing:
+        body = empty(f"{d.get('symbol') or '<SYMBOL>'}_trades.json is {d.get('trades_problem') or 'missing'}",
+                     'the closed trades are not known here; the bot writes the file at its first deal-history read after '
+                     'a start, then at least every minute')
+    else:
+        body = empty('No trade yet.', trades_note(d))
+    return card('Every trade, newest first', body, sub=sub)
 
 
 # ───────────────────────────── history (the old views) ─────────────────────────────
@@ -1990,7 +2293,9 @@ def daily_dir(sym):
 def daily_files(sym):
     """{server_date 'YYYY-MM-DD': path} of the old daily-trade files."""
     out = {}
-    for p in glob.glob(os.path.join(daily_dir(sym), '*.json')):
+    if not is_symbol_name(sym):
+        return out
+    for p in glob.glob(os.path.join(glob.escape(daily_dir(sym)), '*.json')):
         if os.path.basename(p) == HISTORICAL_SUMMARY_FILENAME:
             continue
         data, _ = read_json(p)
@@ -2196,20 +2501,27 @@ def settings_view(sym='', d=None):
     ])
 
 
+# the raw files the History tab shows: a fixed list of the bot's own files ({sym} = a symbol of symbols())
+RAW_FILES = (('trace', '{sym}_trace.json'), ('trades', '{sym}_trades.json'), ('old status', '{sym}.json'),
+             ('account', 'account.json'), ('basket state', STATE_SUBDIR + '/{sym}_state.json'),
+             ('Turtle book', STATE_SUBDIR + '/{sym}_turtle.json'),
+             ('Turtle journal', STATE_SUBDIR + '/{sym}_turtle_trades.json'),
+             ('exit reasons', STATE_SUBDIR + '/{sym}_exit_reasons.json'))
+
+
 @safe()
 def raw_view(sym):
-    items = [('trace', trace_path(sym)), ('trades', trades_path(sym)), ('old status', _path(f'{sym}.json')),
-             ('account', _path('account.json')), ('basket state', _path(STATE_SUBDIR, f'{sym}_state.json')),
-             ('Turtle book', _path(STATE_SUBDIR, f'{sym}_turtle.json')),
-             ('exit reasons', _path(STATE_SUBDIR, f'{sym}_exit_reasons.json'))]
+    if not is_symbol_name(sym):
+        return empty('No files yet.')
     kids = []
-    for label, path in items:
-        data, problem = read_json(path)
+    for label, name in RAW_FILES:
+        rel = name.format(sym=sym)
+        data, problem = read_json(_path(*rel.split('/')))
         if data is None and problem == 'missing':
             continue
         text = json.dumps(data, indent=1, default=str) if data is not None else problem
         kids.append(html.Details(className='raw', children=[
-            html.Summary([html.B(label), html.Span(f'  {path} · {_size(len(text))}', className='muted')]),
+            html.Summary([html.B(label), html.Span(f'  {rel} · {_size(len(text))}', className='muted')]),
             html.Pre(text[:300000], className='pre'),
         ]))
     bars, _ = read_json(bars_path(sym))
@@ -2217,7 +2529,7 @@ def raw_view(sym):
         meta = {k: v for k, v in bars.items() if k not in ('tf', 'overlay')}
         meta['bars'] = {tf: len(g(bars, 'tf', tf, 't') or []) for tf in (dd(bars.get('tf')))}
         kids.append(html.Details(className='raw', children=[
-            html.Summary([html.B('bars (without the columns)'), html.Span(f'  {bars_path(sym)}', className='muted')]),
+            html.Summary([html.B('bars (without the columns)'), html.Span(f'  {sym}_bars.json', className='muted')]),
             html.Pre(json.dumps(meta, indent=1, default=str), className='pre')]))
     return html.Div(kids) if kids else empty('No files yet.')
 
@@ -2295,6 +2607,8 @@ letter-spacing:.04em;border:1px solid var(--line);background:var(--raised);color
 .badge-warn{background:var(--warn-soft);border-color:rgba(240,192,64,.45);color:var(--warn)}
 .banner{border-radius:8px;padding:8px 12px;margin-top:10px;font-size:12.5px}
 .banner-warn{background:var(--warn-soft);border:1px solid rgba(240,192,64,.4)}
+.banner-neg{background:var(--neg-soft);border:1px solid rgba(224,85,85,.5);color:var(--text);font-weight:600}
+.headline-old{color:var(--text2)}
 .orders{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .order{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:4px 0}
 .order-what{font-weight:600}.order-det{color:var(--muted)}
@@ -2448,7 +2762,7 @@ background:transparent}
 .chk label:has(input:checked){color:var(--text);border-color:#34426a;background:var(--raised)}
 .chk label:has(input:checked)::before{content:'✓';color:var(--accent)}
 .search input,.search{background:#080d1b;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:6px 10px;
-font:13px var(--sans);min-width:280px;outline:none}
+font:13px var(--sans);min-width:400px;outline:none}
 .search:focus{border-color:var(--accent-line)}
 .btn{background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);border-radius:8px;padding:5px 12px;
 font:600 12px var(--sans);cursor:pointer}
@@ -2562,7 +2876,8 @@ def _pane_log():
                 dcc.Checklist(id='log-levels', options=[{'label': lv_, 'value': lv_} for lv_ in LOG_LEVELS],
                               value=list(LOG_LEVELS), className='chk', inline=True, persistence=True,
                               persistence_type='local'),
-                dcc.Input(id='log-search', type='text', placeholder='search the message, category and values…',
+                dcc.Input(id='log-search', type='text',
+                          placeholder='search the message, category and values, then press Enter',
                           debounce=True, className='search'),
                 dcc.Checklist(id='log-hb', options=[{'label': 'show heartbeats', 'value': 'hb'},
                                                     {'label': 'show start-up settings', 'value': 'cfg'}],
@@ -2660,9 +2975,13 @@ def _triggered():
         return []
 
 
+# Every callback takes the symbol (and the day) only through valid_symbol / valid_day: a request can send any value,
+# and none may name a file outside the fixed names of OUTPUT_DIR.
+
 @app.callback(Output('status', 'children'), Input('tick', 'n_intervals'), Input('symbol', 'value'))
 def _status(_n, sym):
-    return status_bar(sym, load(sym or ''))
+    sym = valid_symbol(sym)
+    return status_bar(sym, load(sym))
 
 
 @app.callback(
@@ -2674,7 +2993,8 @@ def _status(_n, sym):
 def _live(_n, tab, tf, sym, prev):
     if tab != 'live':
         return [no_update] * 8
-    sym = sym or ''
+    sym = valid_symbol(sym)
+    tf = tf if tf in TIMEFRAMES else 'M15'
     sig = '|'.join([sym, str(tf), file_sig(trace_path(sym), bars_path(sym), trades_path(sym), events_path(sym)),
                     str(int(_now() // 60))])
     if sig == prev and any(p.startswith('tick.') for p in _triggered()):
@@ -2685,8 +3005,9 @@ def _live(_n, tab, tf, sym, prev):
             html.Div(className='now-head', children=[html.Div(className='now-title', children=[
                 html.Span('What the bot is doing now', className='eyebrow'), badge('NO DATA', 'warn')])]),
             html.P('No trace from the bot yet.', className='headline'),
-            html.Div(f"{os.path.abspath(trace_path(sym))} is {d.get('trace_problem')}. The bot writes it after every "
-                     f"poll: start the bot (start_btcusd.bat / start_job.bat) and this page fills in.", className='line muted'),
+            html.Div(f"{os.path.basename(trace_path(sym))} is {d.get('trace_problem')} in the bot's output folder. The "
+                     f"bot writes it after every poll: start the bot (start_btcusd.bat / start_job.bat) and this page "
+                     f"fills in.", className='line muted'),
         ])
         return (msg, None, None, price_figure(d, tf), chart_note(d, tf), position_view(d), latest_events(sym), sig)
     return (now_header(d), gates_view(d), strategy_panel(d), price_figure(d, tf), chart_note(d, tf), position_view(d),
@@ -2699,7 +3020,7 @@ def _live(_n, tab, tf, sym, prev):
 def _trades(_n, tab, sym, prev):
     if tab != 'trades':
         return [no_update] * 4
-    sym = sym or ''
+    sym = valid_symbol(sym)
     # trades.json changes after every fill and close (and every minute); the open row's P/L follows every 30 s, so
     # a row opened to read its legs stays open
     sig = '|'.join([sym, file_sig(trades_path(sym)), str(int(_now() // 30))])
@@ -2714,9 +3035,9 @@ def _trades(_n, tab, sym, prev):
 def _log_files(_n, tab, sym, day):
     if tab != 'log':
         return [no_update] * 3
-    sym = sym or ''
+    sym = valid_symbol(sym)
     today = utc(_now()).strftime('%Y-%m-%d')
-    today_path = os.path.abspath(text_log_path(sym, today))
+    today_path = os.path.abspath(text_log_path(sym, today))      # (the path to copy: the file to send)
     files = log_files(sym)
     rows = [html.Div(className='pathbox', children=[
         html.Span("Today's text log (UTC day):", className='muted'),
@@ -2747,19 +3068,25 @@ def _log(_n, tab, sym, levels, search, hb, limit, view, day, follow, prev):
         return [no_update] * 3
     if follow == 'paused' and prev and any(p.startswith('tick.') for p in _triggered()):
         return [no_update] * 3
-    sym = sym or ''
+    sym = valid_symbol(sym)
+    day = valid_day(sym, day)
     today = utc(_now()).strftime('%Y-%m-%d')
     text_path = text_log_path(sym, day or today)
+    levels = [x for x in levels if isinstance(x, str)] if isinstance(levels, list) else []
+    hb = [x for x in hb if isinstance(x, str)] if isinstance(hb, list) else []
+    search = search if isinstance(search, str) else ''
+    limit = limit if limit in (200, 500, 2000) else 200
+    view = 'text' if view == 'text' else 'events'
     sig = '|'.join([sym, file_sig(events_path(sym), text_path), json.dumps([levels, search, hb, limit, view, day])])
     if sig == prev and any(p.startswith('tick.') for p in _triggered()):
         return [no_update] * 3
-    levels = set(levels or [])
-    q = (search or '').strip().lower()
-    hb = set(hb or [])
+    levels = set(levels)
+    q = search.strip().lower()
+    hb = set(hb)
     if view == 'text':
         lines, problem = text_tail(text_path)
         if lines is None:
-            return f'The text log {text_path} is not readable ({problem}).', None, sig
+            return f'The text log {_rel(text_path)} is not readable ({problem}).', None, sig
         keep = [ln for ln in lines if ln.strip() and (not q or q in ln.lower())
                 and (len(ln.split(' | ', 2)) < 2 or ln.split(' | ', 2)[1].strip() in levels or ln.startswith('    '))
                 and ('hb' in hb or ' | HEARTBEAT | ' not in ln) and ('cfg' in hb or ' | CONFIG | ' not in ln)]
@@ -2769,7 +3096,7 @@ def _log(_n, tab, sym, levels, search, hb, limit, view, day, follow, prev):
                 f'the search apply.'), html.Pre('\n'.join(shown), className='pre pre-log'), sig
     evs, cut, problem = read_events(sym)
     if problem:
-        return f'The events file is {problem}: {events_path(sym)}', None, sig
+        return f'The events file is {problem}: {_rel(events_path(sym))}', None, sig
     counts = Counter(str(e.get('level') or '').upper() for e in evs)
     keep = []
     for e in reversed(evs):
@@ -2798,10 +3125,12 @@ def _log(_n, tab, sym, levels, search, hb, limit, view, day, follow, prev):
 @app.callback(Output('log-dl', 'data'), Input('log-dl-btn', 'n_clicks'), State('log-day', 'value'),
               State('symbol', 'value'), prevent_initial_call=True)
 def _download(_clicks, day, sym):
-    if not day:
-        return no_update
-    path = text_log_path(sym or '', day)
-    if not os.path.exists(path):
+    """The text log of the selected day: one of the files log_files() lists (logs/<SYMBOL>_<YYYY-MM-DD>.log), else
+    nothing."""
+    sym = valid_symbol(sym)
+    day = valid_day(sym, day)
+    path = next((p for d_, p, _ in log_files(sym) if d_ == day), None) if day else None
+    if path is None:
         return no_update
     return dcc.send_file(path)
 
@@ -2814,7 +3143,7 @@ def _download(_clicks, day, sym):
 def _history(_n, tab, sym, day, prev):
     if tab != 'history':
         return [no_update] * 7
-    sym = sym or ''
+    sym = valid_symbol(sym)
     files = daily_files(sym)
     days = sorted(files, reverse=True)[:14]
     if day not in days:
