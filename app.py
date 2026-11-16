@@ -1297,14 +1297,22 @@ class MT5TradingBot:
     def _after_close(self, symbol, state, side, close_response, positions, reason, now):
         """Book this bot's close of the basket: the loss pause starts at this close decision. A close that
         closed nothing changes nothing (it is decided again next poll, as the backtester does); a partial one -- a
-        leg the terminal refused to close, or an add it has not listed yet (_record_fill) -- keeps the basket and
-        closes the rest on the next polls. Returns the new last_close or None."""
+        leg the terminal refused to close, or an add the terminal has not listed yet (_record_fill) and the close did
+        not close either -- keeps the basket and closes the rest on the next polls. Returns the new last_close or
+        None."""
         closed = int((close_response or {}).get('closed_count', 0) or 0)
         failed = int((close_response or {}).get('failed_count', 0) or 0)
         basket = state.get('basket')
         if closed <= 0:
             return None
-        young = [i for i, t in self._unlisted(basket).items() if now - t < _PENDING_FILL_S]
+        # (an add the poll's positions read did not list yet, but the close's own read did, was closed now with the rest)
+        done = set()
+        for t in (close_response or {}).get('closed_tickets') or []:
+            try:
+                done.add(int(t))
+            except (TypeError, ValueError):
+                continue
+        young = [i for i, t in self._unlisted(basket).items() if now - t < _PENDING_FILL_S and i not in done]
         if failed > 0 or young:
             if basket is not None:
                 basket['close_pending'] = True
