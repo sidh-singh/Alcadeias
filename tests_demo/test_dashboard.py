@@ -8,15 +8,21 @@ from them without an error card and shows what the bot wrote: the headline, ever
 votes and scores (basket) or N, the channels, today's levels, the vote of the closed M15 bar (Turtle), the chart's
 entries, exits and the open trade's levels on a UTC time axis, the trades, the log with its filters, the old views
 and the settings the bot started with. A folder that is empty, files that are cut or hold nulls, a stale trace and a
-refused account are shown, never raised. The dashboard only reads files: it never imports the terminal's package.
+refused account are shown, never raised. The dashboard only reads files: it never imports the terminal's package,
+and no request -- to the callbacks or over HTTP -- reads a file outside its fixed list in OUTPUT_DIR.
 """
+import base64
 import copy
 import json
+import math
 import os
 import re
 import shutil
 import sys
+import threading
 import types
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 
 import pytest
@@ -179,6 +185,20 @@ def test_the_dashboard_only_reads_files(D):
     for tab in ('"Live"', '"Trades"', '"Log"', '"History & settings"'):
         assert tab in layout
     assert f'"interval": {D.DASHBOARD_REFRESH_INTERVAL}' in layout
+    # the Log tab's search applies when Enter is pressed (one request, not one per key): its box says so
+    assert 'search the message, category and values, then press Enter' in layout
+
+
+def test_the_dashboard_launcher_installs_the_pinned_dash_and_prints_no_wrong_address():
+    """start_dashboard.bat installs the versions requirements.txt pins (an unpinned install could bring Dash 3 or
+    plotly 6) and prints no address of its own: dashboard.py prints the real one (DASHBOARD_PORT)."""
+    bat = (ROOT / 'start_dashboard.bat').read_text(encoding='utf-8')
+    pins = dict(ln.strip().split('==', 1) for ln in (ROOT / 'requirements.txt').read_text(encoding='utf-8').splitlines()
+                if '==' in ln)
+    assert f"dash=={pins['dash']}" in bat and f"plotly=={pins['plotly']}" in bat, bat
+    assert not re.search(r'pip install dash plotly\s*$', bat, flags=re.M) and 'localhost:8050' not in bat
+    src = (ROOT / 'dashboard.py').read_text(encoding='utf-8')
+    assert 'http://localhost:{DASHBOARD_PORT}' in src
 
 
 # ───────────────────────────── the basket strategy ─────────────────────────────
@@ -215,7 +235,9 @@ def test_the_open_basket_and_its_levels_on_the_chart(D, basket):
         assert D.px(lg['price'], digits) in pos
     fig = D.price_figure(d, 'M1')
     tags = [a.text for a in fig.layout.annotations]
-    for name, price in (('TARGET', op['target_price']), ('STOP', op['stop_price']), ('BID', d['trace']['market']['bid'])):
+    on = ' (ask)' if op['judged_on'] == 'ask' else ''                    # a sell's stop / target are judged on the ask
+    for name, price in ((f'TARGET{on}', op['target_price']), (f'STOP{on}', op['stop_price']),
+                        ('BID', d['trace']['market']['bid']), ('ASK', d['trace']['market']['ask'])):
         assert any(t.endswith(f'{name} {D.px(price, digits)}') for t in tags), (name, tags)
     assert any('BACKSTOP' in t for t in tags)
     names = {tr.name for tr in fig.data}
@@ -380,25 +402,354 @@ def test_every_field_may_be_null(D, tmp_path, basket):
         _no_error_card(_every_view(D, BASKET, _point(D, folder, BASKET)))
 
 
-def test_a_stale_trace_a_refused_account_and_errors_are_shown(D, tmp_path, basket):
+def test_a_skipped_poll_a_refused_account_and_errors_are_shown(D, tmp_path, basket):
+    """A poll that could not read the terminal (the trace is fresh: the bot writes it): the refused account, the lost
+    terminal and the errors in red, the market unknown (not 'closed'), the votes kept from the last poll. Five
+    minutes later the same trace is stale: only its age is red, the other chips are neutral with the time of the trace,
+    and the errors are counted from the log (it has none here), not from the trace."""
     folder = str(tmp_path / 'state')
     shutil.copytree(basket.end, folder)
     p = os.path.join(folder, f'{BASKET}_trace.json')
     with open(p, encoding='utf-8') as f:
         tr = json.load(f)
     tr['health'].update(account_ok=False, account_problem='the terminal is logged into account 7, not the demo login 1',
-                        errors_1h=3, connected=False, terminal_problem='terminal_info() is None')
+                        errors_1h=3, connected=False, terminal_problem='terminal_info() is None', market_live=None)
     tr['stale'], tr['stale_since_utc'] = True, tr['time_utc']
+    tr['market'].update(status='UNKNOWN')        # (what a skipped poll writes: the last market, marked unknown)
     with open(p, 'w', encoding='utf-8') as f:
         json.dump(tr, f)
+    d = _point(D, folder, BASKET, age=2.0)
+    status = _text(D.status_bar(BASKET, d))
+    for bit in ('Updated 2 s ago', 'Account refused: the terminal is logged into account 7', '3 error(s) in the last hour',
+                'Terminal: terminal_info() is None', 'Last poll could not read the terminal',
+                'Market: unknown (terminal not read)'):
+        assert bit in status, bit
+    assert 'Market closed' not in status
+    assert 'the account, market and position numbers below are those of the last good poll' in _text(D.now_header(d))
+    assert 'votes kept from the last poll' in _text(D.strategy_panel(d))
     d = _point(D, folder, BASKET, age=300.0)
     status = _text(D.status_bar(BASKET, d))
-    for bit in ('Stale: last update 5.0 min ago', 'Account refused: the terminal is logged into account 7',
-                '3 error(s) in the last hour', 'Terminal: terminal_info() is None',
-                'Last poll could not read the terminal'):
-        assert bit in status, bit
-    assert 'the account, market and position numbers below are those of the last good poll' in _text(D.now_header(d))
+    hhmm = datetime.fromtimestamp(tr['t'], tz=timezone.utc).strftime('%H:%M')
+    assert 'Stale: last update 5.0 min ago' in status and status.count('"chip chip-neg"') == 1
+    assert f'Account refused: the terminal is logged into account 7, not the demo login 1 (as of {hhmm})' in status
+    assert 'No error logged in the last hour' in status and '3 error(s)' not in status
     assert D.freshness({'t': START})[0] == 'neg'
+
+
+def test_a_trace_the_bot_stopped_writing_shows_its_last_poll_not_now(D, tmp_path, basket):
+    """The bot stopped writing two hours ago (killed, the PC asleep, or its loop failing before the trace hook): the
+    age chip is red; no chip is green -- the account, terminal and market chips are neutral with the time of the trace,
+    the market chip counts the last tick's age now; the errors come from the log, which kept getting ERROR lines; a
+    banner says the page is the last poll; the strategy, the checks, the position and the uptime say so too."""
+    folder = str(tmp_path / 'stopped')
+    shutil.copytree(basket.open, folder)
+    with open(os.path.join(folder, f'{BASKET}_trace.json'), encoding='utf-8') as f:
+        tr = json.load(f)
+    now = tr['t'] + 7200.0
+    with open(os.path.join(folder, 'logs', f'{BASKET}_events.jsonl'), 'a', encoding='utf-8') as f:
+        for k in (20, 10):              # the loop failing after its last trace: ERROR lines in the last hour
+            f.write(json.dumps({'t': now - 60 * k, 'level': 'ERROR', 'cat': 'LOOP', 'msg': 'the poll failed: boom'}) + '\n')
+    d = _point(D, folder, BASKET, age=7200.0)
+    status = _text(D.status_bar(BASKET, d))
+    hhmm = datetime.fromtimestamp(tr['t'], tz=timezone.utc).strftime('%H:%M')
+    assert 'Stale: last update 2.0 h ago' in status
+    assert '"chip chip-pos"' not in status                                  # nothing the trace holds is now's
+    assert json.dumps(f"Demo account {tr['health']['login']:,} · hedging (as of {hhmm})")[1:-1] in status
+    assert f'Terminal connected (as of {hhmm})' in status
+    assert f'Market: last tick 2.0 h ago (as of {hhmm})' in status
+    assert '2 error(s) in the last hour' in status                         # from the log, not the frozen trace
+    assert 'not writing' in status and f'no trace since {hhmm}' in status
+    now_ = _text(D.now_header(d))
+    assert 'The bot has not written since' in now_ and 'Everything below is its last poll, not now' in now_
+    assert 'What the bot was doing at its last poll' in now_
+    assert f'votes of its last poll (as of {hhmm})' in _text(D.strategy_panel(d))
+    assert f'checks its last poll (as of {hhmm})' in _text(D.gates_view(d))
+    assert f'Open basket (as of {hhmm})' in _text(D.position_view(d))
+    # a PC whose clock is behind the bot's: no negative age shown as hours ago; the bot's own tick age
+    d = _point(D, folder, BASKET, age=-7200.0)
+    status = _text(D.status_bar(BASKET, d))
+    assert 'the clock of this PC is behind' in status and 'last tick 2.0 h ago' not in status
+    assert f"last tick {D.dur(tr['health']['last_tick_age_s'])} ago" in status
+
+
+def test_a_missing_or_old_trades_file_is_said(D, tmp_path, basket):
+    """trades.json missing (before the first deal-history read, or a write that failed): the Trades tab, the equity
+    chart, the position card and the chart note say so -- never 'No trade yet'. An old one (the history not read for 3
+    hours) is shown with its time and a warning."""
+    folder = str(tmp_path / 'no_trades')
+    shutil.copytree(basket.end, folder)
+    os.remove(os.path.join(folder, f'{BASKET}_trades.json'))
+    d = _point(D, folder, BASKET)
+    kpis, equity, trades, _ = D._trades(0, 'trades', BASKET, None)
+    text = _text([kpis, equity, trades])
+    assert f'{BASKET}_trades.json is missing' in text and 'the closed trades are not known' in text
+    assert 'No trade yet' not in text and 'No closed trade yet' not in text and 'No balance curve' in text
+    assert 'Closed trades' not in _text(kpis)                     # no summary of zeros: they would read as no trade
+    flat = copy.deepcopy(d)
+    flat['trace']['basket']['open'] = None
+    assert 'The last closed trade is not known' in _text(D.position_view(flat))
+    assert 'No past entries or exits' in _text(D.chart_note(d, 'M1'))
+    with open(os.path.join(basket.end, f'{BASKET}_trades.json'), encoding='utf-8') as f:
+        doc = json.load(f)
+    doc['t'] = d['trace']['t'] - 3 * 3600
+    with open(os.path.join(folder, f'{BASKET}_trades.json'), 'w', encoding='utf-8') as f:
+        json.dump(doc, f)
+    _point(D, folder, BASKET)
+    text = _text(D._trades(0, 'trades', BASKET, None)[:3])
+    assert f'{BASKET}_trades.json was last written' in text and '(3.0 h ago)' in text
+    assert 'the closed trades below are as of then' in text and f"{len(doc['closed'])} closed trade(s)" in text
+
+
+def test_a_close_is_shown_with_the_side_of_its_position(D):
+    """A SELL position is closed with a BUY order: the order list names the position's side (and the order's)."""
+    o = {'kind': 'close', 'side': 'SELL', 'order_side': 'BUY', 'volume': 0.01, 'position': 100001, 'done': True,
+         'retcode': 10009, 'retcode_text': 'done', 'price': 1781.644, 'result_price': 1781.644}
+    assert 'CLOSE SELL position 100001 (BUY order, 0.01 lot)' in _text(D.order_line(o, 3))
+    assert 'retcode 10009' in _text(D.order_line(o, 3))           # a code, not an amount (no thousands comma)
+    old = {k: v for k, v in o.items() if k != 'order_side'}
+    old['side'] = 'BUY'                          # a trace written before the fix: only the order's own side
+    assert 'CLOSE SELL position 100001 (BUY order, 0.01 lot)' in _text(D.order_line(old, 3))
+    add = dict(o, kind='add', side='BUY', order_side='BUY', position=None, volume=0.02)
+    assert 'ADD BUY 0.02 lot' in _text(D.order_line(add, 3))
+
+
+def _tag_names(fig):
+    """{tag name: the annotation} of a price chart: 'STOP (ask)', 'BID', 'BUY LEVEL' ... (no arrow, no price)."""
+    out = {}
+    for a in fig.layout.annotations:
+        head = a.text.split('<br>')[0].lstrip('▲▼ ')
+        out[re.sub(r' -?[\d,]+(\.\d+)?$', '', head)] = a
+    return out
+
+
+def test_levels_judged_on_the_ask_say_so_and_the_ask_is_drawn(D, basket):
+    """The candles are bid prices. A sell basket's stop, target and broker stops are hit by the ask, a buy basket's next
+    add is bought at the ask: their tags say '(ask)', and the ASK line is drawn next to the BID line."""
+    d = _point(D, basket.open, BASKET)
+    digits = D.digits_of(d)
+    mk = d['trace']['market']
+    for side, judged, add_on in (('SELL', 'ask', 'bid'), ('BUY', 'bid', 'ask')):
+        dd = copy.deepcopy(d)
+        op = dd['trace']['basket']['open']
+        op.update(side=side, judged_on=judged)
+        op['ladder'] = dict(op.get('ladder') or {}, on=True, exhausted=False, judged_on=add_on, tier_tf='M1',
+                            next_add_price=round(mk['bid'] + (1.0 if side == 'SELL' else -1.0), digits))
+        tags = _tag_names(D.price_figure(dd, 'M1'))
+        want = {'TARGET', 'STOP', 'BACKSTOP'} if side == 'BUY' else {'TARGET (ask)', 'STOP (ask)', 'BACKSTOP (ask)'}
+        want |= {'NEXT ADD (ask)' if side == 'BUY' else 'NEXT ADD', 'AVG', 'BID', 'ASK'}
+        assert want <= set(tags), (side, sorted(tags))
+        assert tags['ASK'].text.endswith(D.px(mk['ask'], digits)) and tags['BID'].text.endswith(D.px(mk['bid'], digits))
+        assert 'judged on the ask' in (tags.get('STOP (ask)') or tags['STOP']).hovertext or side == 'BUY'
+    assert 'ASK line' in _text(D.chart_note(d, 'M1')) and "'(ask)'" in _text(D.chart_note(d, 'M1'))
+
+
+def _turtle_d(orders_state, trade_side=None):
+    """A Turtle trace and its bars, made by hand (any branch): an hour of M1 and 30 D1 bars, today's levels, the
+    day's orders in `orders_state`, a trade of `trade_side` or none."""
+    m1_t = [START - 3600 + 60 * i for i in range(60)]
+    m1_c = [60000.0 + 30.0 * math.sin(i / 6.0) for i in range(60)]
+    d1_t = [START - 86400 * (30 - i) for i in range(30)]
+    d1_c = [59000.0 + 40.0 * i for i in range(30)]
+
+    def cols(t, c):
+        return {'t': t, 'o': c, 'h': [x + 40 for x in c], 'l': [x - 40 for x in c], 'c': c}
+    midnight = (int(START) // 86400 + 1) * 86400
+    bars = {'digits': 2, 'tf': {'M1': cols(m1_t, m1_c), 'D1': cols(d1_t, d1_c)},
+            'overlay': {'turtle': {'from_t': [t + 86400 for t in d1_t], 'buy': [x + 300 for x in d1_c],
+                                   'sell': [x - 300 for x in d1_c], 'exit_long': [x - 150 for x in d1_c],
+                                   'exit_short': [x + 150 for x in d1_c]}}}
+    lv = {'ok': True, 'buy': 60110.0, 'sell': 59890.0, 'from_time': midnight - 86400, 'trail_long': 59950.0,
+          'trail_short': 60050.0, 'n': 400.0}
+    orders = {'state': orders_state, 'armed': orders_state == 'armed', 'until_t': midnight,
+              'used_by': 'BUY' if orders_state == 'used' else None,
+              'buy': {'level': lv['buy'], 'judged_on': 'ask', 'price_now': m1_c[-1] + 15.0, 'distance': -10.0,
+                      'reached': True, 'vote_needed': 1},
+              'sell': {'level': lv['sell'], 'judged_on': 'bid', 'price_now': m1_c[-1], 'distance': 100.0,
+                       'reached': False, 'vote_needed': -1}}
+    trade = None
+    if trade_side:
+        buy = trade_side == 'BUY'
+        fill = 60112.0 if buy else 59888.0
+        trade = {'side': trade_side, 'legs': [{'n': 1, 'ticket': 7, 'open_t': START - 1200, 'price': fill, 'lots': 0.01}],
+                 'legs_count': 1, 'max_legs': 4, 'entry_t': START - 1200, 'avg_price': fill, 'pnl': 1.0,
+                 'stop': fill - 800 if buy else fill + 800, 'next_add': fill + 200 if buy else fill - 200,
+                 'judged_on': 'bid' if buy else 'ask', 'next_add_judged_on': 'ask' if buy else 'bid',
+                 'backstop_prices': [fill - 1200 if buy else fill + 1200], 'price_now': m1_c[-1]}
+    tr = {'strategy': 'turtle', 't': START + 1.0,
+          'market': {'bid': m1_c[-1], 'ask': m1_c[-1] + 15.0, 'spread': 15.0, 'tick_t': START + 0.5, 'digits': 2},
+          'turtle': {'levels': lv, 'orders': orders, 'trade': trade,
+                     'channels': {'entry': {'days': 55}, 'exit': {'days': 20}}}}
+    return {'symbol': 'BTCUSDm', 'trace': tr, 'bars': bars, 'trades': {'closed': []}}
+
+
+def test_the_turtles_levels_are_entry_triggers_only_while_its_orders_are_armed(D):
+    """Today's BUY / SELL LEVEL is an entry trigger only while the day's orders are armed and no trade is open. Used, or
+    with a trade open, they are drawn muted, their tag saying why (on M1 and on D1). A short's stop and broker stop are
+    hit by the ask, a long's next add is bought at the ask: their tags say '(ask)'."""
+    D._now = lambda: START + 2.0
+    tags = _tag_names(D.price_figure(_turtle_d('armed'), 'M1'))
+    assert {'BUY LEVEL (ask)', 'SELL LEVEL', 'BID', 'ASK'} <= set(tags), sorted(tags)
+    assert tags['BUY LEVEL (ask)'].bordercolor == D.COL['blue'] and '<br>' not in tags['BUY LEVEL (ask)'].text
+    assert 'an entry when the ask reaches it' in tags['BUY LEVEL (ask)'].hovertext
+    for state, side, note in (('used', None, 'used, new orders at 00:00'), ('armed', 'BUY', 'no entry while in a trade'),
+                              ('used', 'SELL', 'no entry while in a trade')):
+        for tf in ('M1', 'D1'):
+            tags = _tag_names(D.price_figure(_turtle_d(state, side), tf))
+            for name in ('BUY LEVEL (ask)', 'SELL LEVEL'):
+                a = tags[name]
+                assert a.bordercolor == D.COL['faint'] and a.text.endswith(f'>{note}</span>'), (state, side, tf, a.text)
+                assert 'not an entry now' in a.hovertext, a.hovertext
+    tags = _tag_names(D.price_figure(_turtle_d('used', 'SELL'), 'M1'))
+    assert {'STOP (ask)', 'BACKSTOP (ask)', 'NEXT ADD', 'AVG'} <= set(tags), sorted(tags)
+    tags = _tag_names(D.price_figure(_turtle_d('used', 'BUY'), 'M1'))
+    assert {'STOP', 'BACKSTOP', 'NEXT ADD (ask)'} <= set(tags), sorted(tags)
+    # the right margin holds the widest tag
+    fig = D.price_figure(_turtle_d('used', 'BUY'), 'M1')
+    assert fig.layout.margin.r >= 168
+    # the orders panel: a level reached waits for the vote only while it is a trigger
+    assert 'BUY level reached (ask' in _text(D.turtle_panel(_turtle_d('armed'))) and 'needs the M15 vote' in \
+        _text(D.turtle_panel(_turtle_d('armed')))
+    for state, side, why in (('used', None, "no entry, today's orders are used"), ('armed', 'BUY', 'no entry, a trade is open')):
+        panel = _text(D.turtle_panel(_turtle_d(state, side)))
+        assert json.dumps(why)[1:-1] in panel and 'needs the M15 vote' not in panel, (state, side)
+
+
+# ───────────────────────────── no request reads a file outside OUTPUT_DIR ─────────────────────────────
+
+SECRET = 'FAKE-SECRET-not-a-password'
+
+
+def _secret_tree(tmp_path, basket):
+    """OUTPUT_DIR = <tmp>/up2/up1/out (a copy of the basket replay's folder) and files holding a fake secret one and two
+    folders above it: mt5_credentials.json (for the JSON views), journal_<day>.log and journal_events.jsonl (for the
+    log views and the download)."""
+    up2 = tmp_path / 'up2'
+    up1 = up2 / 'up1'
+    out = up1 / 'out'
+    shutil.copytree(basket.end, out)
+    for folder, tag in ((up1, 'one-up'), (up2, 'two-up')):
+        (folder / 'mt5_credentials.json').write_text(json.dumps(
+            {'demo': {'login_id': 1, 'login_pass': f'{SECRET}-{tag}-json', 'server': 'Fake-Demo'}}), encoding='utf-8')
+        (folder / f'journal_{DAY}.log').write_text(f'{DAY} 08:00:00.000 UTC | INFO | X | {SECRET}-{tag}-log\n',
+                                                  encoding='utf-8')
+        (folder / 'journal_events.jsonl').write_text(json.dumps(
+            {'t': START + 60, 'level': 'ERROR', 'cat': 'X', 'msg': f'{SECRET}-{tag}-events'}) + '\n', encoding='utf-8')
+    return str(out), up1, up2
+
+
+def _climbing_values(up1, up2):
+    """Symbol and day values that would climb out of OUTPUT_DIR (or its logs folder): ../ and Windows backslashes,
+    absolute paths, a symbol with a folder, empty strings and None."""
+    syms = []
+    for name in ('mt5_credentials', 'journal'):
+        syms += [f'../{name}', f'../../{name}', f'../../../{name}', f'..\\{name}', f'..\\..\\{name}',
+                 f'..\\..\\..\\{name}', str(up1 / name), str(up2 / name), 'C:' + str(up1 / name).replace('/', '\\')]
+    syms += ['', None, '.', '..', '/', f'{BASKET}/../../mt5_credentials', f'{BASKET}\\..\\..\\mt5_credentials', 7, ['x']]
+    days = [f'../../{DAY}', '../../../journal', '..\\..\\journal', str(up1 / 'journal'), '', None, f'{DAY}\n',
+            f'{DAY}/../../../journal', '2026-13-45', 20261117]
+    return syms, days
+
+
+def _decoded(dl):
+    """The bytes a download answer would send (dcc.send_file: base64), as text."""
+    if isinstance(dl, dict) and dl.get('content'):
+        return base64.b64decode(dl['content']).decode('utf-8', 'replace') if dl.get('base64') else str(dl['content'])
+    return ''
+
+
+def test_no_callback_reads_a_file_outside_the_output_folder(D, tmp_path, basket):
+    """Dash does not check a value against its options: any client can send any symbol or day. The callbacks take a
+    symbol only from symbols() and a day only when it reads YYYY-MM-DD and its file exists, so no view, raw view or
+    download shows a file above OUTPUT_DIR -- here a fake credentials file and fake logs one and two folders up."""
+    out, up1, up2 = _secret_tree(tmp_path, basket)
+    _point(D, out, BASKET)
+    syms, days = _climbing_values(up1, up2)
+    for sym, day in [(s, DAY) for s in syms] + [(BASKET, x) for x in days] + [(s, x) for s in syms[:3] for x in days[:2]]:
+        views = [D._status(0, sym), D._live(0, 'live', 'M1', sym, None), D._trades(0, 'trades', sym, None),
+                 D._log_files(0, 'log', sym, day), D._history(0, 'history', sym, day, None),
+                 D._log(0, 'log', sym, list(D.LOG_LEVELS), '', ['hb', 'cfg'], 2000, 'events', day, 'live', None),
+                 D._log(0, 'log', sym, list(D.LOG_LEVELS), '', ['hb', 'cfg'], 2000, 'text', day, 'live', None)]
+        dl = D._download(1, day, sym)
+        text = _text(views + [dl if isinstance(dl, dict) else None]) + _decoded(dl)
+        assert SECRET not in text, (sym, day, text[text.find(SECRET) - 200:text.find(SECRET) + 60])
+        assert str(up1) not in text.replace(os.path.join(out, ''), ''), (sym, day)     # no folder above it is named
+    # the bot's own files are still there: the symbol of OUTPUT_DIR, its day, its download
+    raw = _text(D._history(0, 'history', BASKET, None, None))
+    assert f'{BASKET}_trace.json' in raw and 'old status' in raw
+    assert D._download(1, DAY, BASKET)['filename'] == f'{BASKET}_{DAY}.log'
+    assert D.valid_symbol('../mt5_credentials') == BASKET and D.valid_day(BASKET, f'{DAY}\n') is None
+    with pytest.raises(D.OutsideOutputDir):
+        D._path('..', 'mt5_credentials.json')
+
+
+def _serve(D):
+    from werkzeug.serving import make_server
+    srv = make_server('127.0.0.1', 0, D.server, threaded=True)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def _post(port, body):
+    req = urllib.request.Request(f'http://127.0.0.1:{port}/_dash-update-component', data=json.dumps(body).encode('utf-8'),
+                                 headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.status, r.read().decode('utf-8', 'replace')
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode('utf-8', 'replace')
+
+
+def test_no_http_request_reads_a_file_outside_the_output_folder(D, tmp_path, basket):
+    """The same as a client on the network would send it: POSTs to a running server's /_dash-update-component for
+    every callback, with symbol and day values that climb out of OUTPUT_DIR. Every answer is 200 / 204 and none holds
+    the fake secret (the download's base64 content decoded)."""
+    out, up1, up2 = _secret_tree(tmp_path, basket)
+    _point(D, out, BASKET)
+    syms, days = _climbing_values(up1, up2)
+    tab_of = {'live-now': 'live', 'trades-kpis': 'trades', 'log-files': 'log', 'log-count': 'log', 'hist-day': 'history'}
+    fixed = {('tick', 'n_intervals'): 1, ('tf', 'value'): 'M1', ('log-levels', 'value'): list(D.LOG_LEVELS),
+             ('log-search', 'value'): '', ('log-hb', 'value'): ['hb', 'cfg'], ('log-limit', 'value'): 2000,
+             ('log-follow', 'value'): 'live', ('log-dl-btn', 'n_clicks'): 1, ('url', 'search'): '?tab=history'}
+    srv = _serve(D)
+    try:
+        answers = []
+        values = ([(s, DAY) for s in syms[:4] + syms[6:9] + syms[13:22]] + [(BASKET, x) for x in days]
+                  + [(syms[1], days[1]), (syms[10], days[3])])
+        for sym, day in values:
+            for key, cb in D.app.callback_map.items():
+                outs = [dict(zip(('id', 'property'), o.rsplit('.', 1))) for o in key.strip('.').split('...')]
+                for view in (('events', 'text') if outs[0]['id'] == 'log-count' else ('events',)):
+                    def value(i):
+                        k = (i['id'], i['property'])
+                        if k == ('symbol', 'value'):
+                            return sym
+                        if k in (('log-day', 'value'), ('hist-day', 'value')):
+                            return day
+                        if k == ('tabs', 'value'):
+                            return tab_of.get(outs[0]['id'], 'live')
+                        if k == ('log-view', 'value'):
+                            return view
+                        return fixed.get(k)
+                    ins = [dict(i, value=value(i)) for i in cb['inputs']]
+                    body = {'output': key, 'outputs': outs if key.startswith('..') else outs[0], 'inputs': ins,
+                            'state': [dict(i, value=value(i)) for i in cb.get('state', [])],
+                            'changedPropIds': [f"{ins[0]['id']}.{ins[0]['property']}"]}
+                    status, text = _post(srv.server_port, body)
+                    answers.append(status)
+                    assert status in (200, 204), (sym, day, key, status, text[-1500:])
+                    dl = (json.loads(text).get('response') or {}).get('log-dl', {}).get('data') if status == 200 else None
+                    seen = text + _decoded(dl)
+                    assert SECRET not in seen, (sym, day, key, seen[seen.find(SECRET) - 200:seen.find(SECRET) + 60])
+        assert answers.count(200) > len(values) * 5          # the callbacks answered (not only 204: no update)
+        # and the page itself: the bot's own download still works over HTTP
+        ok = {'output': 'log-dl.data', 'outputs': {'id': 'log-dl', 'property': 'data'},
+              'inputs': [{'id': 'log-dl-btn', 'property': 'n_clicks', 'value': 1}],
+              'state': [{'id': 'log-day', 'property': 'value', 'value': DAY},
+                        {'id': 'symbol', 'property': 'value', 'value': BASKET}], 'changedPropIds': ['log-dl-btn.n_clicks']}
+        status, text = _post(srv.server_port, ok)
+        assert status == 200 and _decoded(json.loads(text)['response']['log-dl']['data']).startswith(DAY)
+    finally:
+        srv.shutdown()
 
 
 def test_the_force_close_gauge_follows_the_design(D, basket):
