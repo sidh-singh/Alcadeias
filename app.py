@@ -350,8 +350,10 @@ def _ipc_error(err):
 
 
 # The MetaTrader 5 of the live bots on the server: every live branch's mt5_credentials.json names it as terminal_path.
-# A demo bot never attaches to it (LIVE_TERMINAL_PATH): any login on it, the bot's or another program's, would switch
-# the live account of every live bot attached to it.
+# A demo bot never logs in on it (LIVE_TERMINAL_PATH): a login there would switch the account of every program
+# attached to it, a live bot's too. It uses that terminal only while it already holds this bot's own demo account
+# (logged in by hand, as on a server that runs only demo bots); another account there is TERMINAL_IN_USE, no account
+# for the whole grace period is LIVE_TERMINAL_PATH.
 _LIVE_TERMINAL_PATHS = (r'C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe',)
 
 
@@ -785,13 +787,14 @@ class MT5TradingBot:
         _ACCOUNT_GRACE_S (a first None or login-0 answer can be momentary, and an IPC error means the account is not
         known: no login, retried later); a terminal that holds this bot's account (login and server of the
         credentials) is used as it is, and one that holds any other account is refused (TERMINAL_IN_USE) and left
-        alone. Then the demo-account checks. Before all that, a demo bot whose terminal_path names the live bots'
-        MetaTrader 5 (or is empty) is refused before any terminal call (LIVE_TERMINAL_PATH): it never attaches."""
+        alone. Then the demo-account checks. Before all that, an empty terminal_path is refused before any terminal
+        call (LIVE_TERMINAL_PATH). On the live bots' MetaTrader 5 the bot never logs in: it runs only while that
+        terminal already holds this bot's account, and refuses (LIVE_TERMINAL_PATH) when it shows none."""
         print(f"\n{'='*60}")
         print(f"  Initializing MT5 - {self.mode.upper()} Account")
         print(f"{'='*60}\n")
         
-        # Never the live bots' MetaTrader 5: refused before mt5.initialize() could attach to it
+        # An empty terminal_path: refused before mt5.initialize() could attach to a terminal it picks itself
         problem = self._terminal_path_problem()
         if problem:
             self._init_problem = problem
@@ -827,6 +830,16 @@ class MT5TradingBot:
             self._init_problem = problem
             print(f"✗ Refused: {problem}")
             self._terminal_in_use(problem, held)
+            mt5.shutdown()                  # detach; the terminal and its account are left as they are
+            return False
+        if held is None and self._never_login_here():
+            # The live bots' MetaTrader 5: a demo bot never logs in there (a login would switch the account of every
+            # program attached to it, a live bot's too); it uses that terminal only when it holds this bot's account.
+            problem = self._no_account_on_live_terminal_problem()
+            self._init_problem = problem
+            print(f"✗ Refused, no login: {problem}")
+            self._log_limited('LIVE_TERMINAL_PATH', problem, {
+                'terminal_path': (self.credentials or {}).get('terminal_path'), 'live_terminal': _LIVE_TERMINAL_PATHS[0]})
             mt5.shutdown()                  # detach; the terminal and its account are left as they are
             return False
         if held is None:
@@ -1624,9 +1637,9 @@ class MT5TradingBot:
             'own_login': creds.get('login_id')})
 
     def _terminal_path_problem(self):
-        """Why this demo bot may not attach to the terminal of its credentials (None = it may): terminal_path names the
-        live bots' MetaTrader 5 (_LIVE_TERMINAL_PATHS), or is empty -- then initialize() attaches to a terminal it finds
-        itself, on the server the live bots'."""
+        """Why this demo bot may not attach to the terminal of its credentials (None = it may): terminal_path is empty
+        -- then initialize() attaches to a terminal it finds itself, on the server the live bots'. (On the live bots'
+        MetaTrader 5 it attaches but never logs in: _never_login_here.)"""
         if not DEMO_BRANCH:
             return None
         path = (self.credentials or {}).get('terminal_path')
@@ -1635,10 +1648,19 @@ class MT5TradingBot:
         if not str(path or '').strip():
             return (f"LIVE_TERMINAL_PATH: terminal_path in mt5_credentials.json is empty, so initialize() would attach "
                     f"to a MetaTrader 5 it finds itself (on the server, the live bots'): {todo}")
-        if _live_terminal(path):
-            return (f"LIVE_TERMINAL_PATH: terminal_path {str(path).strip()} is the MetaTrader 5 of the live bots "
-                    f"({_LIVE_TERMINAL_PATHS[0]}): {todo}")
         return None
+
+    def _never_login_here(self):
+        """True when terminal_path is the live bots' MetaTrader 5 (_live_terminal): the demo bot never logs in on it."""
+        return bool(DEMO_BRANCH) and _live_terminal((self.credentials or {}).get('terminal_path') or '')
+
+    def _no_account_on_live_terminal_problem(self):
+        path = str((self.credentials or {}).get('terminal_path') or '').strip()
+        return (f"LIVE_TERMINAL_PATH: the MetaTrader 5 at {path} (the live bots' installation, "
+                f"{_LIVE_TERMINAL_PATHS[0]}) shows no account, and a demo bot never logs in there: log that MetaTrader 5 "
+                f"into {_slot_name()}'s demo account by hand (File > Login to Trade Account, Save password), or install "
+                f"a separate MetaTrader 5 for {_slot_name()} and set terminal_path in mt5_credentials.json to its "
+                f"terminal64.exe")
 
     _LIMITED_EVENTS = ('TERMINAL_IN_USE', 'LIVE_TERMINAL_PATH')       # the events _log_limited writes
 

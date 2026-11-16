@@ -2949,9 +2949,9 @@ ISSUE_KINDS = (
      'If another program or slot uses that terminal, give this slot its own installation instead (step 1): a login '
      'switches the account of every program attached to it. The bot tries again by itself.'),
     ('LIVE_TERMINAL_PATH', re.compile(r'LIVE_TERMINAL_PATH'),
-     f'The bot refuses to start: terminal_path in mt5_credentials.json names the live bots\' MetaTrader 5 '
-     f'({_LIVE_MT5}), or is empty. It attaches to no terminal and does not trade. The launcher starts it again every '
-     '30 s and it is refused each time; the log has the refusal at most every 15 minutes.',
+     f'The bot refuses to start: terminal_path in mt5_credentials.json is empty, or names the live bots\' MetaTrader 5 '
+     f'({_LIVE_MT5}) while that terminal shows no account (a demo bot never logs in there). It does not trade. The '
+     'launcher starts it again every 30 s and it is refused each time; the log has the refusal at most every 15 minutes.',
      f'Install a separate MetaTrader 5 for {_SLOT} in its own folder (for example {_SLOT_DIR}) and set terminal_path in '
      'mt5_credentials.json to its terminal64.exe. Then open it and log it into the slot\'s demo account once by hand, '
      'with "Save password" ticked (README, How to run, steps 1 and 2). The bot starts by itself at the launcher\'s '

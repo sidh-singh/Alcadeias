@@ -32,8 +32,9 @@ seen.
 1. **First, install this slot's own MetaTrader 5.** Install a separate MetaTrader 5 for slot 8, in its own folder
    (for example `C:\MT5\slot8`), and set `terminal_path` in `mt5_credentials.json` to its `terminal64.exe`. The
    gold and BTC bots of slot 8 both use this one. `mt5_credentials.json` still names the live bots' MetaTrader 5
-   (`C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe`); until you change it, the bot does not start and writes
-   `LIVE_TERMINAL_PATH` in the strategy log.
+   (`C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe`). On a server that runs only demo bots you may keep it:
+   the bot then uses that MetaTrader 5 only while it is logged into this slot's demo account (step 2), and never
+   logs in there itself; with no account there it writes `LIVE_TERMINAL_PATH` in the strategy log and does not trade.
 2. **Then log that MetaTrader 5 into the slot's demo account once, by hand.** Open it, log in to login 416608971 on
    `Exness-MT5Trial14` and tick "Save password". From then on the terminal logs into this account by itself when it
    starts, and the bot finds it there: it never has to log in itself (it would only on a terminal that shows no
@@ -70,7 +71,7 @@ its folder); only the Log tab's copy box has the full path of the day's file.
   lot, this bot's open and closed P/L and its equity, the shared demo account, how long the bot has run. When the bot
   has not written for a minute, the first chip is red, the others are grey with the time of its last poll ('as of
   09:10'), and a red banner says the page shows that poll, not now. When the bot's start was refused and it has not
-  started since (for example `LIVE_TERMINAL_PATH`: `terminal_path` names the live bots' MetaTrader 5), a red chip 'Not
+  started since (for example `LIVE_TERMINAL_PATH`: the live bots' MetaTrader 5 shows no account), a red chip 'Not
   started' and a red box say so, with what the bot wrote and what to do (here: steps 1 and 2 of "How to run").
 - **Live**: *what the bot is doing now*: the action and the bot's own one-sentence reason, every check in the order
   the bot makes it (✓ passed, ✗ blocks, ⚡ fires, ○ not yet; the one that decided is marked) with its value against
@@ -121,7 +122,7 @@ demo branches):
   open, close, P/L and exit reason, and the virtual-balance curve;
 - `logs\BTCUSDm_<YYYY-MM-DD>.log`: the detailed text log (UTC days, kept 30 days): the start-up and every constant,
   every decision change, order, fill, close, pause, reconnect and error with its traceback, and a heartbeat line
-  every minute; also every safety refusal of the section below (the live bots' MetaTrader 5 refused before the start,
+  every minute; also every safety refusal of the section below (the live bots' MetaTrader 5 with no account, or an empty terminal_path,
   `LIVE_TERMINAL_PATH`, at most every 15 minutes; a terminal that holds another account; the wait for the terminal's
   own account and a login by the bot; the account refused; every failed reconnect attempt; a basket leg closed outside
   the bot; a fill recorded from the order's answer; a close that closed nothing). When something looks wrong, this file
@@ -135,12 +136,15 @@ demo branches):
   demo bots use it (`demo_hedging_xauusd8` and `demo_hedging_btcusd8`, on the slot's one account). Never point a
   demo bot at the terminal of a live bot or of another slot: a login switches the account of every program
   attached to that terminal.
-- **The live bots' MetaTrader 5 is refused.** While `terminal_path` names
+- **No login on the live bots' MetaTrader 5.** While `terminal_path` names
   `C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe` (in any spelling: upper or lower case, `/` or `\`, its
-  folder) or is empty, the bot does not start. It stops before it attaches to any terminal and writes one ERROR line
-  `LIVE_TERMINAL_PATH` in the strategy log: "install a separate MetaTrader 5 for slot 8 and set terminal_path in
-  mt5_credentials.json to its terminal64.exe". While the launcher keeps restarting it, the line comes again every
-  15 minutes; nothing else happens.
+  folder), the bot never logs in on that terminal: a login there would switch the account of every program
+  attached to it, a live bot's too. It trades only while that terminal already holds this slot's demo account
+  (logged in by hand, step 2 of "How to run"; for a server that runs only demo bots). Another account there:
+  `TERMINAL_IN_USE` (below). No account there: one ERROR line `LIVE_TERMINAL_PATH` in the strategy log ("log that
+  MetaTrader 5 into slot 8's demo account by hand ... or install a separate MetaTrader 5 for slot 8"), and
+  the bot detaches and tries again. An empty `terminal_path` is refused before the bot attaches to any terminal.
+  While the launcher keeps restarting it, the line comes again every 15 minutes; nothing else happens.
 - **No login over another account.** The bot logs in only on a terminal that shows no account for 15 s. A terminal
   that holds its own account (the login and server of the credentials) it uses as it is. One logged into any other
   account it leaves alone: no login, an ERROR line `TERMINAL_IN_USE` in the strategy log (once for each account it
