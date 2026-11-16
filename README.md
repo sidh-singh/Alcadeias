@@ -62,7 +62,8 @@ trace, so here it draws the Turtle's page.
 **The dashboard has no login.** Anyone who can reach port 8071 sees this bot's account figures, its trades and its
 logs. Open the port in the server's firewall only to your own IP address, or open the dashboard on the server itself
 (`http://localhost:8071`). It shows only the bot's own files in its output folder: a request for any other file
-(for example `mt5_credentials.json`) is refused.
+(for example `mt5_credentials.json`) is refused. The page shows no folder of the PC (a traceback shows `app.py`, not
+its folder); only the Log tab's copy box has the full path of the day's file.
 
 - **Status bar** (on every tab): the symbol, the design, the branch and its magic number; whether the bot's data is
   fresh, the demo-account check, the terminal, the market, errors in the last hour; the virtual balance, the unit and
