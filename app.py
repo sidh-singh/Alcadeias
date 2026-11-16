@@ -391,6 +391,19 @@ _PENDING_FILL_S = 10.0                       # a basket the bot just opened wait
                                              # its position (as the Turtle's legs do)
 _MIN_CLOSED_BARS = 300                       # closed VOL_TF / TREND_TF bars an entry (and a rebuilt basket's unit)
                                              # needs: with fewer the EWMA unit is off by up to 12% (BTC H1, 100 bars)
+_ACCOUNT_GRACE_S = 15.0                      # right after mt5.initialize(), a terminal that shows no account is read
+                                             # again about once a second for this long before the bot logs in: a
+                                             # terminal just started or restarted logs into its saved account by itself
+_IPC_ERRORS = (-10005, -10000)               # last_error() codes of a broken connection to the terminal (IPC)
+
+
+def _ipc_error(err):
+    """True when last_error() reports a broken connection to the terminal (an IPC error, -10000 to -10005) or gives no
+    code at all: an answer the terminal gave then says nothing about its account."""
+    code = err[0] if isinstance(err, (tuple, list)) and err else None
+    if isinstance(code, bool) or not isinstance(code, int):
+        return True
+    return _IPC_ERRORS[0] <= code <= _IPC_ERRORS[1]
 
 
 def _why_key(why):
@@ -645,9 +658,11 @@ class MT5TradingBot:
             return False
     
     def initialize_mt5(self):
-        """Step 3: Initialize and login to MT5. The login only on a terminal that holds no account; a terminal that
-        holds this bot's account (login and server of the credentials) is used as it is, and one that holds any
-        other account is refused (TERMINAL_IN_USE) and left alone. Then the demo-account checks."""
+        """Step 3: Initialize and login to MT5. The login only on a terminal that shows no account for
+        _ACCOUNT_GRACE_S (a first None or login-0 answer can be momentary, and an IPC error means the account is not
+        known: no login, retried later); a terminal that holds this bot's account (login and server of the
+        credentials) is used as it is, and one that holds any other account is refused (TERMINAL_IN_USE) and left
+        alone. Then the demo-account checks."""
         print(f"\n{'='*60}")
         print(f"  Initializing MT5 - {self.mode.upper()} Account")
         print(f"{'='*60}\n")
@@ -662,11 +677,14 @@ class MT5TradingBot:
         print(f"✓ MT5 version: {mt5.version()}")
 
         # The account the terminal holds before any login: a login switches the account of EVERY process attached
-        # to the terminal (the bots of another slot, a live bot), so this bot logs in only on a terminal that holds
-        # no account, and never on one that holds another account.
-        held = mt5.account_info()
-        if held is not None and not getattr(held, 'login', None):
-            held = None                     # (login 0: no account)
+        # to the terminal (the bots of another slot, a live bot), so this bot logs in only on a terminal that shows
+        # no account for the whole grace period, and never on one that holds another account (_account_held).
+        held, unknown = self._account_held()
+        if unknown is not None:
+            self._init_problem = unknown
+            print(f"✗ Not logging in: {unknown}; detached, trying again later")
+            mt5.shutdown()                  # detach; the terminal and its account are left as they are
+            return False
         if held is not None and not self._is_own_account(held):
             problem = self._terminal_in_use_problem(held)
             self._init_problem = problem
@@ -675,7 +693,8 @@ class MT5TradingBot:
             mt5.shutdown()                  # detach; the terminal and its account are left as they are
             return False
         if held is None:
-            # Login to MT5 account
+            # Login to MT5 account (the terminal showed no account for _ACCOUNT_GRACE_S)
+            print(f"… the terminal showed no account for {_ACCOUNT_GRACE_S:g} s: logging in")
             authorized = mt5.login(
                 login=self.credentials['login_id'],
                 password=self.credentials['login_pass'],
@@ -1276,6 +1295,46 @@ class MT5TradingBot:
                 return f'the terminal is logged into account {acct.login}, not the login of the credentials ({want})'
         return None
 
+    def _account_held(self):
+        """
+        The account the terminal holds right after mt5.initialize(), before any login: (account, None); (None, None)
+        when it shows none for _ACCOUNT_GRACE_S; (None, why) when that cannot be known. An answer None or login 0 can
+        be momentary -- an IPC timeout on a busy terminal, or a terminal that initialize() has just started, or that
+        restarted (an update, a crash, a reboot), still logging into its saved account -- so it is read again about
+        once a second for the grace period; an account that appears is this bot's (used) or another (TERMINAL_IN_USE).
+        Not known (no login: the attempt fails and is retried with the back-off): an IPC error (-10000 to -10005), no
+        terminal_info(), or a terminal connected to a trade server -- so logged into some account -- that shows none.
+        """
+        t_end = time.time() + _ACCOUNT_GRACE_S
+        noted = False
+        while True:
+            try:
+                acct = mt5.account_info()
+            except Exception as e:              # (a broken connection can raise instead of answering)
+                return None, f'account not known: account_info() raised {e!r}'
+            if acct is not None and getattr(acct, 'login', None):
+                return acct, None
+            what = 'None' if acct is None else 'login 0'
+            err = self._last_error()
+            if _ipc_error(err):
+                return None, f'account not known: account_info() answered {what} (last_error {err})'
+            try:
+                info = mt5.terminal_info()
+            except Exception as e:
+                return None, f'account not known: terminal_info() raised {e!r}'
+            if info is None:
+                return None, f'account not known: terminal_info() answered None (last_error {self._last_error()})'
+            if time.time() >= t_end:
+                if bool(getattr(info, 'connected', False)):
+                    return None, (f'account not known: the terminal is connected to a trade server but shows no '
+                                  f'account (account_info() answered {what} for {_ACCOUNT_GRACE_S:g} s)')
+                return None, None
+            if not noted:
+                noted = True
+                print(f"… the terminal shows no account yet (account_info() answered {what}, last_error {err}): "
+                      f"reading it again for up to {_ACCOUNT_GRACE_S:g} s before any login")
+            time.sleep(1.0)
+
     def _is_own_account(self, acct):
         """True when the account a terminal holds is this bot's: the login and the server of the credentials."""
         creds = self.credentials or {}
@@ -1456,9 +1515,9 @@ class MT5TradingBot:
                 'outage_s': self._outage_s()})
 
     def _reconnect(self, symbol):
-        """mt5.shutdown(), then initialize_mt5() again: the terminal, the login (only on a terminal that holds no
-        account), the demo-account checks, the symbol map and a new helper behind the order guard. True when the bot
-        is on its demo account again."""
+        """mt5.shutdown(), then initialize_mt5() again: the terminal, the login (only on a terminal that shows no
+        account for _ACCOUNT_GRACE_S), the demo-account checks, the symbol map and a new helper behind the order guard.
+        True when the bot is on its demo account again."""
         print(f"[{symbol}] reconnecting to the MT5 terminal ...")
         with self.mt5_lock:
             try:

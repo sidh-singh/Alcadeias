@@ -15,9 +15,13 @@ The terminal is a hedging account on one symbol:
   * history_deals_get(date_from, date_to) returns the deals in that time range;
   * account_info() reports a demo, hedging account (login / server / trade_mode / margin_mode can be changed;
     logged_in False = the terminal holds no account: None); login() switches the terminal to the account it is
-    given, for every process attached to it, as a real terminal does;
-  * terminal_info(); while the terminal is down (down()) every call answers None, and the connection stays lost
-    until initialize() succeeds again, as with the MetaTrader5 package after a terminal restart.
+    given, for every process attached to it, as a real terminal does; login_delay_s > 0: after each initialize()
+    the terminal is still logging into its saved account for that long (account_info() None, 'Authorization
+    failed'), as one just started or restarted; account_answers: the next account_info() answers ('ipc_timeout':
+    None with last_error -10005, 'login_0': an account with login 0);
+  * terminal_info(); connected is False while the terminal holds no account or is still logging in; while the
+    terminal is down (down()) every call answers None, and the connection stays lost until initialize() succeeds
+    again, as with the MetaTrader5 package after a terminal restart.
 Failures can be injected (refused orders, failed closes, no history, a terminal down, positions_get errors), and
 anything can be scheduled at a terminal time with at(t_s, fn) (an account switch ...), or at the first call of one
 terminal function from a terminal time on with on_call(name, t_s, fn) (a switch between two reads of one poll);
@@ -214,6 +218,9 @@ class FakeMT5:
         self.logged_in = True
         self.trade_mode = self.ACCOUNT_TRADE_MODE_DEMO
         self.margin_mode = self.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING
+        self.login_delay_s = 0.0    # after each initialize() the terminal logs into its saved account for this long
+        self._logging_in_until = None
+        self.account_answers = []   # the next account_info() answers: 'ipc_timeout', 'login_0' (one per call)
         self.calls = []             # (name, terminal ms) of initialize / login / shutdown
         self._hooks = []            # [(t_ms, fn)]: fn(self) runs once the clock reaches t_ms (see at())
         self._call_hooks = []       # [(name, t_ms, fn)]: fn(self) runs once at the first call of `name` from t_ms on
@@ -346,7 +353,12 @@ class FakeMT5:
             return False
         self.ipc_ok = True
         self._error = (1, 'Success')
+        if self.login_delay_s > 0:
+            self._logging_in_until = self.clock.now_ms + int(round(self.login_delay_s * 1000))
         return True
+
+    def _logging_in(self):
+        return self._logging_in_until is not None and self.clock.now_ms < self._logging_in_until
 
     @_terminal_call
     def login(self, login=None, password=None, server=None, **k):
@@ -355,6 +367,7 @@ class FakeMT5:
         self.account_login = int(login) if login is not None else self.account_login
         self.server = server if server is not None else self.server
         self.logged_in = True
+        self._logging_in_until = None           # (the last login wins over the saved account's)
         return True
 
     def shutdown(self):
@@ -369,7 +382,8 @@ class FakeMT5:
     @_terminal_call
     def terminal_info(self):
         self._error = (1, 'Success')
-        return types.SimpleNamespace(connected=self.connected, trade_allowed=True, tradeapi_disabled=False,
+        connected = self.connected and self.logged_in and not self._logging_in()     # (no account: no trade server)
+        return types.SimpleNamespace(connected=connected, trade_allowed=True, tradeapi_disabled=False,
                                      build=4738, name='FakeMT5', company='Fake', path='')
 
     def last_error(self):
@@ -384,13 +398,18 @@ class FakeMT5:
     @_terminal_call
     def account_info(self):
         b, a = self.quote()
-        if not self.logged_in:
+        answer = self.account_answers.pop(0) if self.account_answers else None
+        if answer == 'ipc_timeout':
+            self._error = (-10005, 'IPC timeout')
+            return None
+        if not self.logged_in or self._logging_in():
             self._error = (-6, 'Terminal: Authorization failed')
             return None
+        self._error = (1, 'Success')
         profit = sum(self._pos_profit(p, b, a) for p in self.positions) if b is not None else 0.0
         margin = sum(p['volume'] * self.contract * p['price_open'] / self.leverage for p in self.positions)
         equity = self.balance + profit
-        return types.SimpleNamespace(login=self.account_login, trade_mode=self.trade_mode,
+        return types.SimpleNamespace(login=0 if answer == 'login_0' else self.account_login, trade_mode=self.trade_mode,
                                      margin_mode=self.margin_mode, server=self.server, leverage=self.leverage,
                                      balance=self.balance, equity=equity, margin=margin, margin_free=equity - margin,
                                      margin_level=(equity / margin * 100.0) if margin else 0.0, profit=profit)
