@@ -62,7 +62,8 @@ trace, so here it draws the basket's page.
 **The dashboard has no login.** Anyone who can reach port 8061 sees this bot's account figures, its trades and its
 logs. Open the port in the server's firewall only to your own IP address, or open the dashboard on the server itself
 (`http://localhost:8061`). It shows only the bot's own files in its output folder: a request for any other file
-(for example `mt5_credentials.json`) is refused.
+(for example `mt5_credentials.json`) is refused. The page shows no folder of the PC (a traceback shows `app.py`, not
+its folder); only the Log tab's copy box has the full path of the day's file.
 
 - **Status bar** (on every tab): the symbol, the design, the branch and its magic number; whether the bot's data is
   fresh, the demo-account check, the terminal, the market, errors in the last hour; the virtual balance, the unit and
@@ -80,6 +81,16 @@ logs. Open the port in the server's firewall only to your own IP address, or ope
   ask); hover any mark for its details. The candles are bid prices: a level the bot compares with the ask (a sell
   basket's stop and target, a buy basket's next add) says '(ask)'. Then the **open position** (the basket's P/L
   between its stop and its target, its levels and legs; when flat, the last trade) and the **latest events**.
+- **How close is it** (at the top of Live, under the bot's sentence): for an open position, a meter from the entry to
+  the target and one to the stop loss (the Turtle has no target: its stop and its next add). Each meter says how far
+  it has gone (percent), and the distance in price and in $. It turns **amber from 70 %** and **red from 90 %**. Below
+  it: the P/L in $ and in price, the time in the trade, the legs and the lot, the virtual balance, the spread and the
+  last tick. For a flat bot: which entry conditions pass and which one is missing; on a Turtle branch also how far the
+  price is from today's BUY and SELL level (the meter fills over the last 2 N).
+- **The alert banner** (on every tab, under the tabs): amber or red when a meter passes 70 % or 90 %, with the words
+  of that meter. Tick **sound** or **browser notification** in the tab bar to hear a beep or get a notification
+  when it starts or gets worse (the browser remembers the choice; it asks once for the notification). A stale bot
+  gives no alert: its numbers are old.
 - **Trades**: the summary (trades, win rate, net P/L, largest loss, max drawdown of the virtual balance, profit
   factor), the virtual balance after every close, and every trade, newest first (click one for its legs, its profit,
   swap and commission, and the exit reason the bot recorded).
@@ -87,6 +98,9 @@ logs. Open the port in the server's firewall only to your own IP address, or ope
   Enter), live or paused; the raw text of any day; the path of today's text log to copy and a button that downloads a
   day's file.
   **When something looks wrong, send that day's file.**
+- **Changes & issues**: every WARN and ERROR line of the bot, grouped by kind (for example `TERMINAL_IN_USE`,
+  `ACCOUNT_REFUSED`, `RECONNECT_FAILED`), with how many, the first and the last time, what it means and what to do.
+  Below it, this branch's `CHANGELOG.md`, version by version (the newest open).
 - **History & settings**: the old views (daily trades, the lifetime summary, the old strategy log), the settings the
   bot started with (a value `constants.py` has changed since is marked: the bot takes it at its next start), and the
   raw files.
