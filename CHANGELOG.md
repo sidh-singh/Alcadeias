@@ -17,6 +17,107 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2-demo.5] — 2026-11-16 — Demo branches: the third fix round [demo only]
+
+**Branches:** the `demo_hedging_*` branches (written on `demo_hedging_xauusd6`; the Turtle's own fix C on the BTC
+Turtle branches). **NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** `app.py`,
+`tests_demo/` (+ this `CHANGELOG.md`, `README.md`). **Baseline:** v3.9.2-demo.4.
+
+**Why.** The two reviews of the second fix round found that a test run could write the running demo bot's own
+files, that the bot could still log in over another account after a first "no account" answer, and three smaller
+gaps. A new guard keeps every demo bot off the live bots' MetaTrader 5. Normal trading is unchanged: this branch's
+app.py is the gold branches' file except two example symbol names in its help texts, and the demo parity replay of
+that file against the fast engine gives the same results as before with V3-lite (`demo_hedging_xauusd6`, 2026-06-30
+00:00 to 2026-07-01 14:00 UTC: 133,228 polls, 4 fills, $1,853.57) and with Top 1, the one design with an add
+(2026-11-02 22:00 to 2026-11-03 14:00: 53,960 polls, 6 fills, $2,017.85). With the levers at their live defaults the
+bot still takes the live decisions (`tests_demo/test_live_equivalence.py`).
+
+**demo.4 said too much.** Its headline for finding 1, "never a login on a terminal that holds another account", was
+true only when the terminal answers with that account. If `account_info()` answered None or login 0 for a moment (an
+IPC timeout, or a terminal still starting), the bot read "no account" and logged in over the other account. Fix B
+below closes this within a 15 s grace period. What is guaranteed now is written under B.
+
+### Added: never on the live bots' MetaTrader 5 (fix F, new guard)
+- All six demo branches' `mt5_credentials.json` still name `C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe` as
+  `terminal_path`. That is the MetaTrader 5 of the live bots: every live branch uses it. One login there switches the
+  account of every live bot on it.
+- The bot now refuses to start while `terminal_path` is that installation: its `terminal64.exe`, its folder or a file
+  in it. Upper or lower case, `/` or `\`, doubled separators and `.` do not matter; on the server another spelling of
+  the same file (a short 8.3 name, a link) is caught too. An empty `terminal_path` is refused as well (then
+  `initialize()` picks a terminal by itself).
+- It refuses **before** `mt5.initialize()`, so it never attaches. One ERROR line `LIVE_TERMINAL_PATH` goes into the
+  strategy log: "... install a separate MetaTrader 5 for slot 8 and set terminal_path in mt5_credentials.json to its
+  terminal64.exe". It is repeated at most every 15 minutes, also when the launcher restarts app.py (every 30 s).
+- Each restart reads the credentials, is refused 3 times (5 s apart) without any terminal call, and exits. Nothing
+  else happens. **So this bot does not run until slot 8 has its own MetaTrader 5.**
+
+### Fixed: no login on a first "no account" answer (fix B, medium)
+- `initialize_mt5` read `account_info()` once, right after `mt5.initialize()`, and took None or login 0 as "no
+  account". That answer can be momentary: an IPC timeout on a busy terminal, or a terminal that has just started or
+  restarted (an update, a crash, a reboot) and is still logging into its saved account. This happened at start-up,
+  at a launcher restart and at a reconnect.
+- Now an IPC error (`last_error` -10000 to -10005) means the account is not known: no login, the bot detaches and
+  tries again (start-up: 3 attempts 5 s apart, then the launcher; reconnect: 5, 10, 30, then every 60 s).
+- Otherwise the bot reads `account_info()` again about once a second for 15 s (login 0 counts as no account). An
+  account that shows is used (this bot's) or refused (`TERMINAL_IN_USE`). It logs in only if there is still no
+  account after 15 s, and not when the terminal says it is connected to a trade server (then it holds some account).
+- **Guaranteed now:** no login on a terminal that answers with another account, or that is still starting within the
+  15 s. **Not covered:** a terminal that needs more than 15 s to log into its saved account reads as holding none,
+  and the bot logs in. Only a separate MetaTrader 5 per slot closes that.
+- The review's probe (a live account held by the terminal): an IPC timeout, a terminal still logging in for 3 s, a
+  login-0 answer, a reconnect onto a terminal still logging in: 0 logins each (before: 1 each, the live account
+  switched to demo).
+
+### Fixed: the tests write nothing outside their tmp folders (fix A, medium)
+- `tests_demo/test_partial_close.py` built bots without a state folder, and the live baseline of
+  `test_live_equivalence.py` had none. Their files went to `OUTPUT_DIR`, `C:\Alcadeias\demo_hedging_btcusd8`. On the
+  server a test run there would write a stray `state\XAUUSDm_state.json` into the running BTC bot's own folder (that
+  bot reads only `BTCUSDm_state.json`; on the gold branches it is the gold bot's own state file, a fake loss that
+  blocks its entries for 4 to 12 hours). On macOS it left a folder named `C:\Alcadeias\demo_hedging_btcusd8` in the
+  working folder.
+- Now every bot the tests build writes in the test's own tmp folder. A write into the real output folder is refused
+  (it never happens) and fails the run, and so does a `C:\Alcadeias...` folder left in the working folder.
+
+### Fixed: the Turtle's exit is booked only when its close closed something (fix C, low; BTC Turtle branches)
+- On this branch the basket's close path was checked with the same case (another program switches the account just
+  before the close reads the positions again): it is safe. A close that closes nothing books nothing, and the close
+  is decided again when the demo account is back. A test pins it.
+
+### Fixed: RECONNECT_FAILED limited per reason (fix D, low)
+- The 15-minute limit remembered only the last reason. A terminal that keeps restarting fails with two reasons in
+  turn ("initialize failed", then `TERMINAL_IN_USE`), so every attempt was logged: 240 `RECONNECT_FAILED` in 4 hours
+  (down 60 s, then up 60 s on another account, and so on), enough to overwrite the 200-entry log in 3.3 hours.
+- Now each reason is logged when it is first seen, then at most every 15 minutes, with `not_logged_since` (the
+  failures in between). The same 4 hours: 30 `RECONNECT_FAILED`, 46 events in all. The back-off is unchanged.
+
+### Fixed: an add is a leg of the basket from its fill (fix E, low; XAU Top 1, the only design with an add)
+- The basket learnt an add's position id only from the next positions read, about 2 s after the add. If the terminal
+  went down, or the bot stopped, in those 2 s, and the entry's backstop closed the entry meanwhile, the bot took the
+  add over as a new basket, and its ladder added again (470 s later in the review's test).
+- Now the add's position id is recorded at once from the order's answer (its ticket: on a hedging account the
+  position's id), kept 10 s while the terminal has not listed it (as for the entry's fill), and saved in the state
+  file. The case above is then a leg closed outside the bot: `LEG_CLOSED_OUTSIDE`, the add closed at once (12 s after
+  it, the first poll after the outage; after a restart, its first poll), the whole basket booked. While the add is
+  not listed yet (at most 10 s), the basket is still open: a close waits for the add, a read that lists no position
+  books nothing, and no new entry is sent.
+
+### Files
+- `app.py`: `initialize_mt5` (the terminal-path check first, then `_account_held`); `_account_held`, `_ipc_error`,
+  `_ACCOUNT_GRACE_S` = 15 s; `_terminal_path_problem`, `_live_terminal`, `_LIVE_TERMINAL_PATHS`, `_slot_name`;
+  `_log_limited` (`TERMINAL_IN_USE` and `LIVE_TERMINAL_PATH`, replaces `_in_use_logged`); `_try_reconnect` (the limit
+  per reason); `_record_add`, `_unlisted_adds`, `fill_pending`, `_sync_basket`, `_after_close`, the add branches of
+  `process_symbol`.
+- `tests_demo/`: `conftest.py` (every bot writes in tmp_path; the write check), `fake_mt5.py` (a terminal still
+  logging into its saved account, single `account_info()` answers, not connected without an account); new
+  `test_no_writes_outside_tmp.py` and `test_live_terminal.py`; `test_terminal_in_use.py`, `test_partial_close.py`,
+  `test_reconnect.py`, `test_demo_account.py`, `test_live_equivalence.py` extended.
+
+### Rollback
+`git revert` this version's `demo(...)` commits (newest first). Nothing to clean up: the older code ignores a
+basket's `unlisted` entry in the state file.
+
+---
+
 ## [v3.9.2-demo.4] — 2026-11-16 — Demo branches: the re-review's fixes [demo only]
 
 **Branches:** the `demo_hedging_*` branches (written on `demo_hedging_xauusd6`; the Turtle's own parts on the BTC
