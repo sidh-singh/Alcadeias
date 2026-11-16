@@ -616,19 +616,21 @@ class MT5TradingBot:
         except Exception:
             pass
 
-    def _boot_flush(self):
+    def _boot_flush(self, held_back=False):
         """The job ends before any symbol's loop started: its lines go to the log of the symbol it was started for --
-        unless its start was refused on a problem _log_limited held back this time (LIVE_TERMINAL_PATH,
-        TERMINAL_IN_USE: logged at most every _LOG_REPEAT_S): the launcher starts a refused bot again every 30 s, and
-        its start-up lines come with the refusal's own line, not at every restart."""
+        unless held_back: each of its 3 start attempts was refused on a problem _log_limited held back this time
+        (LIVE_TERMINAL_PATH, TERMINAL_IN_USE: logged at most every _LOG_REPEAT_S): the launcher starts a refused bot
+        again every 30 s, and its start-up lines come with the refusal's own line, not at every restart. A start with
+        any other failure (a failed login, an exception, Ctrl+C) is always written."""
         if self._boot_lines and not self._tracers:
-            if self._start_held_back():
+            if held_back:
                 return
             self._tracer(self.symbols[0] if self.symbols else self._symbol_spelling(self.target_symbol))
 
     def _start_held_back(self):
-        """True when the job's last start attempt was refused on a problem that _log_limited did not log this time (it
-        is in _limited_logged with the time of its last entry). Read only."""
+        """True when this start attempt (execute_job: right after it, with _init_problem reset before it) was refused
+        on a problem that _log_limited did not log this time (it is in _limited_logged with the time of its last
+        entry). Read only."""
         try:
             problem = self._init_problem
             return bool(problem) and any(problem in seen for seen in (self._limited_logged or {}).values())
@@ -3332,9 +3334,12 @@ class MT5TradingBot:
                 return False
 
             # ── Initialise (retry up to 3 times) ──
+            _held = []                       # each failed attempt: refused on a problem _log_limited held back?
             for _attempt in range(1, 4):
+                self._init_problem = None    # (this attempt's own problem only)
                 if self._init_cycle():
                     break
+                _held.append(self._start_held_back())
                 print(f"\n⚠ Init attempt {_attempt}/3 failed, retrying in 5s...")
                 self._boot('WARN', 'START', f'start attempt {_attempt}/3 failed ({self._init_problem or "see above"})')
                 time.sleep(5)
@@ -3342,7 +3347,7 @@ class MT5TradingBot:
                 print("\n✗ All init attempts failed. Restart start_job.bat to try again.")
                 self._boot('ERROR', 'START', f'all 3 start attempts failed ({self._init_problem or "see above"}): the job '
                            'ends (the launcher starts it again)')
-                self._boot_flush()
+                self._boot_flush(held_back=all(_held))
                 return False
 
             # ── Run processing (blocks until Ctrl+C) ──

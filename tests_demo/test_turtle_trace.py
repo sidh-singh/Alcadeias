@@ -774,6 +774,30 @@ def test_a_turtle_trace_that_fails_changes_nothing(tmp_path, untraced):
     assert r.bars and r.trades and r.trades[-1]['closed']
 
 
+@pytest.mark.slow
+def test_a_turtle_transitions_line_that_fails_is_not_tried_again_every_poll(tmp_path, untraced):
+    """A bug in one line of the Turtle's transitions (here the day's levels line, written on the first poll and when a
+    D1 bar closes, raises): one ERROR line with its traceback. The poll hook's step keeps that poll's book for the next
+    poll, so the line is not tried again on every poll after it (before: the first poll's lines were tried, and failed,
+    on every poll); the trading is exactly the same."""
+    calls = []
+
+    def broken(bot, n):
+        def raising(self, *a, **k):
+            calls.append(1)
+            raise ValueError('boom: a bug in a Turtle transitions line')
+        sys.modules['tracelog'].TraceLog._log_levels = raising
+    r = _replay(tmp_path, on_bot=broken)
+    assert r.run.polls == untraced.run.polls and r.fake.orders == untraced.fake.orders
+    assert len(calls) == 1, len(calls)                 # (the replay's 50 minutes are inside one UTC day)
+    lines = _read_log(r.out)
+    errs = [ln for ln in lines if '| ERROR | TRACE |' in ln]
+    assert len(errs) == 1, errs[:3]
+    assert ('the trace hook poll() failed in its step _turtle_transitions: ValueError: boom: a bug in a Turtle '
+            'transitions line; ignored, its other steps and the trading go on') in errs[0]
+    assert sum('| FILL | FILL |' in ln for ln in lines) >= 4 and r.trades[-1]['closed']
+
+
 # ───────────────────── the paths of v3.9.2-demo.4 (the re-review's fixes) on the Turtle ─────────────────────
 
 CREDS = {'terminal_path': r'C:\fake\terminal64.exe', 'login_id': 1, 'login_pass': 'not-a-password',
