@@ -170,3 +170,21 @@ in a day the day's file takes only WARN and ERROR lines (the events file keeps e
 
 `logs/<SYMBOL>_events.jsonl`: one JSON object per line: `{t, time, level, cat, msg, kv, data, traceback}`;
 `data` holds the full gate list of a DECISION line, the state of a STATE line.
+
+## 5. Who reads them: `dashboard.py`
+
+The dashboard reads these files and nothing else (no terminal call), every `DASHBOARD_REFRESH_INTERVAL`. The same
+`dashboard.py` runs on the Turtle demo branches: it takes `strategy` from the trace (without a trace, `STRATEGY` of
+`constants.py`) and draws that strategy's page; on this branch the trace has the `basket` block, never `turtle`.
+
+| tab | reads |
+|---|---|
+| status bar | `<SYMBOL>_trace.json`: `t` (its age: fresh under 15 s, slow under 60 s, stale after), `health`, `account`, `market`, `stale` |
+| Live | the trace's `decision` (headline, gates in order, `blocked_by`, this poll's `orders`) and `basket`; `<SYMBOL>_bars.json` (the forming bar moved with `market.bid`); `<SYMBOL>_trades.json` `closed` for the chart's entries and exits; the newest 256 KB of `logs/<SYMBOL>_events.jsonl` |
+| Trades | `<SYMBOL>_trades.json` (`summary`, `balance_curve`, `closed`) and the trace's open basket (`basket.open`) |
+| Log | the newest 3 MB of `logs/<SYMBOL>_events.jsonl`, the newest 512 KB of a day's `logs/<SYMBOL>_<day>.log` (download: the whole file) |
+| History & settings | `daily_trade/<SYMBOL>/*.json`, `historical_summary.json`, `logs/<SYMBOL>_strategy_log.json`, the CONFIG lines of the bot's start (the text log of `health.started_utc`'s day; `constants.py` when they are not there), the raw files |
+
+A file that is missing, cut in the middle or of an unexpected shape shows as such (an empty state, or a card with the
+error and its traceback); the rest of the page is unaffected. The charts take times as UTC wall-clock text (a number
+would be shown in the browser's own time zone).

@@ -17,6 +17,130 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2-demo.7] — unreleased — Demo branches: the new dashboard (what the bot does and why, the chart, the log) [demo only]
+
+**Branches:** the six demo branches (`demo_hedging_xauusd6/7/8`, `demo_hedging_btcusd6/7/8`; written on
+`wip_dash_turtle`, which carries the trace of both strategies, and taken from there onto `wip_dash_basket`, a copy of
+an older `demo_hedging_xauusd6`, for the basket branches; ported onto `demo_hedging_xauusd6` v3.9.2-demo.4 as
+`wip_port_xauusd6`, then carried onto `demo_hedging_xauusd8` as `wip_port_xauusd8`). One `dashboard.py` for the
+basket and the Turtle.
+**NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** `dashboard.py` (rewritten),
+`assets/dark-dropdown.css` (removed), new `tests_demo/test_dashboard.py`, `tests_demo/test_design.py` (its test of the
+old slope panel removed), `README.md` (the dashboard), `docs/dashboard-data.md` (§5) (+ this `CHANGELOG.md`).
+`app.py`, `tracelog.py`, `strategy.py`, `indicator.py`, `mt5_helper.py`, `constants.py` untouched: nothing the bot
+does changes. **Baseline:** v3.9.2-demo.6. Not released yet: later fixes are folded into this entry.
+
+**On a basket branch.** `dashboard.py` is the same file as on the Turtle branches, so everything below describes it;
+the bot here writes the `basket` part of the trace only, so the page draws the basket's views (the Turtle's views
+below are never shown here). The README names this branch's port (`DASHBOARD_PORT`, 8063 on `demo_hedging_xauusd8`).
+
+**Why.** The owner: the old dashboard was built for the old live logic; he wants to see every detail of what is
+triggered and how, in a clean layout, an OHLC chart with the opening and closing points and the targets, and a
+detailed text log he can send when something goes wrong. The bot already writes all of it (v3.9.2-demo.6,
+`docs/dashboard-data.md`); this is the page that shows it.
+
+### Changed: `dashboard.py` (Dash, reads OUTPUT_DIR only; no terminal call, no MetaTrader5 import)
+- **Status bar** on every tab: symbol, design, branch, magic, strategy; chips (a shape as well as a colour): the
+  trace's age (fresh < 15 s, slow < 60 s, stale after: red), the demo-account check (`health.account_ok`, demo,
+  hedging), the terminal, the market and the last tick, errors in the last hour, a poll that could not read the
+  terminal; tiles: virtual balance (start, date), unit and lot (next unit at), this bot's open / closed P/L and
+  equity, the shared demo account, the bot's uptime, poll, loop and trace ms.
+- **Live**: *What the bot is doing now* (the action, the trace's headline, reason / side / the deciding gate / the
+  strategy's signals, this poll's orders with retcode, prices, sl, ms; a banner when the poll is stale); **the bot's
+  checks** in its order, grouped (conditions: the first not met decides; exits: any one fires; adds: all must hold),
+  ✓ / ✗ / ⚡ / ○ / –, value against the rule, the note, "decides" and "not reached this poll" marks; **the strategy**:
+  basket: open and agreement scores on meters against ±ENTRY_S / ±ENTRY_AGREE_S (force-close named only when
+  `force_close_enabled`; the old force-close gauge is gone), the votes per timeframe (roles, RSI / MACD vote, now,
+  pivot side / value / bars ago, slope, the contributions to the scores) with a small chart of each (the series,
+  the pivot, the slope to now), the trend tile, the volatility-unit tile, the pause countdown, what a new basket
+  would get (BUY / SELL entry, target, stop, backstop), the RSI of every fetched timeframe; Turtle: today's entry
+  orders (armed / used / none, a gauge from the sell to the buy level with the price, distances in price and N, a
+  level reached and the vote it needs, the last exit), N / 2N / 0.5N / the exit channel, the M15 vote of the last
+  closed bar (its RSI and MACD parts, rule, the two small charts with the signal line), the D1 channels (10 / 20 /
+  55-day highs and lows and their days, the last D1 bar, bars used, the next D1 close, a late D1 bar), System 1's
+  filter and its hypothetical trades, what a new trade would get. **Price chart** (plotly candles of the bid, M1 / M5 /
+  M15 / H1 / D1, the forming bar moved with the trace's bid, weekend gaps left out): entries ▲ / ▼ per leg, exits ✕
+  green / red with reason and P/L, a dotted line from every leg to its exit coloured by the result, the open legs and
+  a dashed line from each to the price now; the open basket's TARGET, STOP, AVG, BACKSTOP (per leg), NEXT ADD and the
+  Turtle's stop as a step line through every move, NEXT ADD, BACKSTOP, AVG, today's BUY / SELL LEVEL and the exit
+  channel of the open side (on D1 the buy / sell / exit levels of the last 200 days as steps), the BID; every level
+  labelled by a price tag at the right edge (spread so none covers another; a level far off the candles gets a tag
+  with ▲ / ▼ at the edge instead of squeezing them); hover for every detail; zoom and pan kept across refreshes.
+  **Open position**: the basket's P/L on a meter between its stop and its target, the ladder (next add on which
+  timeframe and trigger, armed, at which price), the levels, the legs (ticket, time, price, lots, P/L, swap, broker
+  sl, listed); the Turtle trade's price on a meter between its stop and its next add, the levels (entry level, N at
+  the entry, the stop and its origin, 2N, the channel, the backstops), the legs, every stop move and why; when flat,
+  the last trade. **Latest events**: the newest orders, fills, closes, warnings, errors and changes of action, and
+  the path of today's text log with a copy button.
+- **Trades**: summary tiles (closed, wins / losses, win rate, net, gross won / lost, largest loss, best, max drawdown of
+  the virtual balance with its time, virtual balance and return, profit factor, average hold, exits by reason), the
+  virtual balance after every close (dots green / red per trade, the drawdown below the running peak shaded, a dotted
+  line to the equity now with the open P/L), every trade newest first with the open one on top: click a row for its
+  legs, its P/L parts, the reason the bot recorded and, for a Turtle trade, its journal (N at the entry, entry level
+  and D1 bar, vote, unit, every leg's add level and backstop, every stop move, the exit).
+- **Log**: the path of today's text log and of the events file (copy buttons), the days with their sizes and a
+  download button; the events newest first with level chips (ERROR / WARN / ORDER / FILL / CLOSE / INFO / DEBUG),
+  a search (message, category, values), heartbeats and start-up settings on request, 200 / 500 / 2000 lines, live or
+  paused (an opened line stays open), a day separator; click a line for its key=value pairs, its data and its
+  traceback; or the raw text of a day's file (the same filters).
+- **History & settings**: the old daily-trade view (per server day, the deal P/L bars and the cumulative line, day
+  chips instead of the dropdown), the lifetime summary, the old strategy log; the settings the bot logged at its
+  start (the design and its levers, this deployment, every other setting, the start-up notes), each marked "design"
+  when the branch's design block sets it and "constants.py now: …" when the file has changed since (`constants.py`
+  itself when the start-up lines cannot be found); the raw files (trace, trades, old status, account, state files,
+  bars without the columns).
+- Kept: the imports from `constants` by name (the same 15 names), `DASHBOARD_REFRESH_INTERVAL`, host and port, the
+  mascot. Dropped: the old slope panel and its gauges (the force-close gauge with it), the SHA panel, the raw JSON of
+  `<SYMBOL>.json` as the main view, the dropdown styles. `app.run(debug=False)` (the old one ran with `debug=True`:
+  Flask's debugger on 0.0.0.0); it prints its URL at the start. The browser tab's title is the branch.
+- Robust: every file is read when it changed (cached by size and time), the events file from its newest 3 MB, the
+  text log from its newest 512 KB; a file missing, cut or with nulls anywhere shows an empty state; a view that
+  still fails shows its error and traceback in its own card, the rest of the page stays. Times on the charts are UTC
+  wall-clock text (plotly shows numbers in the browser's time zone, which shifted every mark by the PC's UTC offset
+  in the first draft).
+- Colours: the brand's gold as the one accent; green / red only for profit / loss and pass / fail; candles in two
+  greys so the bot's marks stand out; the chart's identity colours (gold, blue, green, red) checked for colour-blind
+  separation (OKLab ΔE ≥ 8 for every pair) and contrast on the dark surface.
+
+### Removed
+- `assets/dark-dropdown.css`: no dropdown is left, and its unscoped selectors (`div[class*="group"]`,
+  `div[class*="-menu"]` ...) restyled any element whose class held those words. The new styles are in
+  `dashboard.py` itself, so it needs no file from `assets/` but the mascot.
+
+### Tests
+- `tests_demo/test_dashboard.py` (13; on a branch without `turtle.py` its 3 Turtle tests skip): a basket replay (the
+  scaled design, seed 4) and the Turtle's long trip run with the real writers; their folders in an open position and at the end feed every view of every tab: no error card,
+  the headline, every gate, the scores / votes / tiles (basket), the orders / N / vote / channels (Turtle), the open
+  basket's and the Turtle trade's levels as price tags on the chart (never overlapping), the stop's steps, the
+  entries and exits counted, the candles on UTC time, the trades and the summary, the log's level filter, search,
+  heartbeats, raw text and download, the settings the bot started with; an empty folder, files cut in the middle,
+  every field null, a stale trace with a refused account and errors; the force-close text follows the design; the
+  dashboard imports no terminal package and keeps its 15 imports from `constants`.
+- `test_design.py::test_dashboard_still_imports_and_draws_the_new_analysis` removed (on the Turtle branches also
+  `test_turtle_bot.py::test_the_dashboard_draws_the_turtle`): they drew the old slope panel.
+- The whole `tests_demo`: 200 passed on `wip_dash_turtle` (test_turtle_replay.py against the backtester included),
+  25 min; on `wip_dash_basket`: 138 passed, 3 skipped (the Turtle tests of `test_dashboard.py`: no `turtle.py`), 22 min.
+- Seen in a browser: headless Chrome screenshots of every tab on a basket replay (the scaled design, an open basket
+  with its add armed after 11 closed ones) and on a two-day Turtle replay (a failed breakout stopped out, then a
+  breakout holding three legs; a flat, BLOCKED state by the vote), from the bot's own writers on the fake terminal.
+  On `wip_dash_basket`: the same in headless Chrome (Playwright) on the files of that branch's own bot on the fake
+  terminal, V3-lite as written (3 h, no entry: blocked by the H1 trend) and the tests' scaled design (12 closed
+  baskets, one with an add; a two-leg basket open): every tab, every timeframe, a trade and a log line opened, the
+  log's filters, raw text and download, the history days; every callback answered 200 / 204, no error card,
+  nothing but request lines in the server's output; also started as `python dashboard.py` starts it.
+
+### Notes for the other demo branches
+- Take `dashboard.py`, `tests_demo/test_dashboard.py`, the test removals and the `assets/dark-dropdown.css`
+  removal together (the old tests import `dashboard.build_slope_panel`, which is gone; a basket branch has only
+  the one in `test_design.py`). On a branch without `turtle.py` the Turtle tests of `test_dashboard.py` skip. The
+  page needs the trace of v3.9.2-demo.6; without it, it says so. The README's port is the branch's own
+  `DASHBOARD_PORT`.
+
+### Rollback
+`git revert` this commit (the old dashboard comes back; the bot's files are the same either way).
+
+---
+
 ## [v3.9.2-demo.6] — unreleased — Demo branches: the bot writes the dashboard's data and a detailed text log [demo only]
 
 **Branches:** the basket `demo_hedging_*` branches (written on `wip_dash_basket`, a copy of an older
