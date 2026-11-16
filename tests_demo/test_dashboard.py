@@ -942,6 +942,11 @@ def test_the_page_shows_no_folder_of_this_pc(D, tmp_path, basket):
     assert 'File \\"app.py\\", line 2341' in ev and 'the bot folder' in ev and '~/x/state.json'.replace('/', os.sep) in ev.replace('\\\\', '\\')
     layout = _text(D.serve_layout())
     assert json.dumps(os.path.abspath(folder))[1:-1] not in layout and "reads the bot's output folder" in layout
+    # the settings (OUTPUT_DIR as the bot logged it: the replay's own folder) and the raw files name no folder either
+    _point(D, basket.end, BASKET)
+    views = _text([D.settings_view(BASKET, D.load(BASKET)), D.raw_view(BASKET)])
+    assert 'OUTPUT_DIR' in views
+    assert json.dumps(os.path.abspath(basket.end))[1:-1] not in views and json.dumps(str(D.HERE))[1:-1] not in views
 
 
 def test_a_day_file_named_in_another_case_is_listed_and_downloaded(D, tmp_path, basket):
