@@ -145,6 +145,9 @@ def _scrub(text):
         folders.append((home, '~'))
     for folder, name in sorted(folders, key=lambda z: -len(z[0])):
         text = text.replace(folder + os.sep, name + '/' if name == '~' else '').replace(folder, name)
+        if '\\' in folder:                       # the same folder inside a JSON text: C:\\Alcadeias\\...
+            esc = folder.replace('\\', '\\\\')
+            text = text.replace(esc + '\\\\', name + '/' if name == '~' else '').replace(esc, name)
     return text
 
 
@@ -1709,9 +1712,11 @@ def proximity(d):
         last, nxt, lp = num(ld.get('last_fill')), num(ld.get('next_add_price')), num(ld.get('price_now'))
         if ld.get('on') and not ld.get('exhausted') and None not in (last, nxt, lp) and nxt != last:
             p = (lp - last) / (nxt - last) * 100.0
+            gap_words = (f"{px(abs(nxt - lp), digits)} away" if p < 100 else
+                         f"reached ({px(abs(nxt - lp), digits)} beyond it)")
             rows.append(prog('To the next add (price gap)', p,
-                             f"{ld.get('judged_on') or 'ask'} {px(nxt, digits)} or better, {px(abs(nxt - lp), digits)} "
-                             f"away · then a {ld.get('tier_tf') or '?'} {ld.get('trigger') or ''} "
+                             f"{ld.get('judged_on') or 'ask'} {px(nxt, digits)} or better, {gap_words} · then a "
+                             f"{ld.get('tier_tf') or '?'} {ld.get('trigger') or ''} "
                              f"({'armed' if ld.get('armed') else 'not armed yet'})", kind='info'))
         bs = [num(x) for x in lst(bk.get('backstop_prices')) if num(x) is not None]
         if bs and now_px is not None:
@@ -2698,7 +2703,7 @@ def history_strategy_log(sym):
         det = dd(e.get('details'))
         bits = [f'{k} {smart(v)}' for k, v in det.items() if k not in ('response', 'mt5_symbol')
                 and not isinstance(v, (dict, list))][:8]
-        rows.append([when(e.get('time')), e.get('event') or '—', e.get('tag') or '—', ' · '.join(bits)])
+        rows.append([when(e.get('time')), e.get('event') or '—', e.get('tag') or '—', _scrub(' · '.join(bits))])
     return table(['time (server)', 'event', 'tag', 'details'], rows, cls='tbl-log')
 
 
@@ -2798,7 +2803,7 @@ def settings_view(sym='', d=None):
             tags.append(badge(f'constants.py now: {here[name]!r}'[:60], 'warn',
                               title='constants.py has another value now: the bot uses it after its next start'))
         return html.Div(className='set-row', children=[html.Code(name, className='set-k'),
-                                                       html.Span(text[:300], className='set-v mono'),
+                                                       html.Span(_scrub(text[:300]), className='set-v mono'),
                                                        html.Span(tags, className='set-tags')])
 
     head = (f"as the bot logged them when it started, {stamp(when_)}" if from_bot else
@@ -2843,7 +2848,7 @@ def raw_view(sym):
         text = json.dumps(data, indent=1, default=str) if data is not None else problem
         kids.append(html.Details(className='raw', children=[
             html.Summary([html.B(label), html.Span(f'  {rel} · {_size(len(text))}', className='muted')]),
-            html.Pre(text[:300000], className='pre'),
+            html.Pre(_scrub(text[:300000]), className='pre'),
         ]))
     bars, _ = read_json(bars_path(sym))
     if isinstance(bars, dict):
