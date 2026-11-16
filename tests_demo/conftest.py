@@ -3,15 +3,15 @@ Tests of the demo-branch port: the design levers (trend, volatility unit, target
 macd_turn ladder), the demo isolation (magic, comment, virtual balance) and restart recovery; the Turtle
 (STRATEGY = 'turtle', turtle.py): test_turtle_*.py, its replay against the backtest in test_turtle_replay.py.
 
-Run from any folder:  python3 -m pytest <branch>/tests_demo -q -p no:cacheprovider
+Run from any folder:  python3 -B -m pytest <branch>/tests_demo -q -p no:cacheprovider
+(-B: Python writes no bytecode into the branch; -p no:cacheprovider: pytest writes no cache folder.)
 Nothing here talks to a terminal: MetaTrader5 is replaced by tests_demo/fake_mt5.py.
 Nothing here writes outside pytest's tmp folders: every bot the tests build (this branch's and the live baseline
-of test_live_equivalence.py) has its OUTPUT_DIR -- its state, logs and JSON files -- in the test's tmp_path, and a
-write into the real output folder (C:\\Alcadeias\\...: on the server the running demo bot's own files) is refused
-and fails the run (see the end of this file).
+of test_live_equivalence.py) has its OUTPUT_DIR -- its state, logs and JSON files -- in the test's tmp_path; any
+write into the real output folder (C:\\Alcadeias\\...: on the server the running demo bot's own files), whatever
+function makes it, is refused and fails the run, and so does bytecode written into the branch (a run without -B):
+see the end of this file.
 """
-import builtins
-import functools
 import ntpath
 import os
 import subprocess
@@ -79,8 +79,8 @@ def is_real_output(path):
     """True for a path in the server's output folders (C:\\Alcadeias\\...): on Windows in that folder; elsewhere a
     name that starts with 'C:\\Alcadeias' (what the Windows path becomes there, relative to the working folder)."""
     try:
-        p = os.path.abspath(os.fspath(path))
-    except TypeError:
+        p = os.path.abspath(os.fsdecode(os.fspath(path)))
+    except (TypeError, ValueError):
         return False                                   # (a file descriptor)
     if os.name == 'nt':
         p, r = os.path.normcase(p), os.path.normcase(REAL_OUTPUT_ROOT).rstrip('\\')
@@ -128,66 +128,88 @@ def run_bot(fake, clock, overrides=None, symbol='XAUUSDm', **kw):
 _LIVE_FILES = ('app.py', 'strategy.py', 'indicator.py', 'mt5_helper.py', 'constants.py', 'symbols.json')
 
 
+# The check: while pytest runs, every write into the real output folder is refused -- it never happens -- and recorded,
+# whatever function makes it. An audit hook (sys.addaudithook: Python raises an audit event inside every file
+# operation) sees open() for writing -- builtins.open, io.open, os.open, pathlib -- and mkdir, rename / replace, remove /
+# unlink, rmdir, truncate, chmod, chown, utime, link, symlink and shutil's copies, moves, rmtree and archives. At the
+# end the run fails if any was tried, if a 'C:\Alcadeias...' folder appeared in the working folder, or if Python wrote
+# bytecode into the branch (a run without -B).
+_GUARD = getattr(sys, '_tests_demo_guard', None)      # (one hook per process: an audit hook cannot be removed)
+if _GUARD is None:
+    _GUARD = sys._tests_demo_guard = {'on': False, 'refused': []}
+REFUSED_WRITES = _GUARD['refused']
+_WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
+_CHANGED_PATHS = {         # audit event -> the positions of its arguments that name a path it changes
+    'os.mkdir': (0,), 'os.rename': (0, 1), 'os.remove': (0,), 'os.rmdir': (0,), 'os.truncate': (0,),
+    'os.chmod': (0,), 'os.chown': (0,), 'os.chflags': (0,), 'os.utime': (0,), 'os.link': (1,), 'os.symlink': (1,),
+    'os.setxattr': (0,), 'os.removexattr': (0,),
+    'shutil.copyfile': (1,), 'shutil.copymode': (1,), 'shutil.copystat': (1,), 'shutil.copytree': (1,),
+    'shutil.move': (0, 1), 'shutil.rmtree': (0,), 'shutil.chown': (0,), 'shutil.make_archive': (0,),
+    'shutil.unpack_archive': (1,),
+}
+
+
+def changed_paths(event, args):
+    """The paths an audited operation would change (none for a read)."""
+    if event == 'open':
+        mode = args[1] if len(args) > 1 else None
+        flags = args[2] if len(args) > 2 else 0
+        if (isinstance(flags, int) and flags & _WRITE_FLAGS) or (isinstance(mode, str) and set(mode) & set('wax+')):
+            return tuple(args[:1])
+        return ()
+    return tuple(args[i] for i in _CHANGED_PATHS.get(event, ()) if i < len(args))
+
+
+def _audit(event, args):
+    if not _GUARD['on'] or (event != 'open' and event not in _CHANGED_PATHS):
+        return
+    for p in changed_paths(event, args):
+        if isinstance(p, (str, bytes, os.PathLike)) and is_real_output(p):
+            _GUARD['refused'].append(f'{event} {p!r}')
+            raise PermissionError(f'tests_demo: {event} {p!r} refused: a test must not write in the real output '
+                                  f'folder {REAL_OUTPUT_DIR} (its bot belongs in tmp_path)')
+
+
+if not _GUARD.get('hooked'):
+    sys.addaudithook(_audit)
+    _GUARD['hooked'] = True
+
+
+def stray_bytecode(dont_write_bytecode, pycache_prefix, folder=HERE):
+    """The bytecode files Python wrote into the branch: pytest writes this file's own (tests_demo/__pycache__/
+    conftest.*.pyc) when it loads it -- before the `sys.dont_write_bytecode = True` above -- unless Python was started
+    with -B or PYTHONDONTWRITEBYTECODE (dont_write_bytecode), or PYTHONPYCACHEPREFIX puts bytecode elsewhere."""
+    cache = Path(folder) / '__pycache__'
+    if dont_write_bytecode or pycache_prefix or not cache.is_dir():
+        return []
+    return sorted(str(p) for p in cache.iterdir())
+
+
 def pytest_configure(config):
     config.addinivalue_line('markers', 'slow: replays the whole bot loop over a synthetic market (tens of seconds)')
+    _GUARD['on'] = True                     # from before the tests are collected
 
 
-# The check: while the tests run, a write into the real output folder (open for writing, makedirs, mkdir, replace,
-# rename) is refused -- it never happens -- and recorded; at the end the run fails if any was tried, or if a
-# 'C:\Alcadeias...' folder appeared in the working folder.
-REFUSED_WRITES = []
-_REAL_FS = {'open': builtins.open, 'makedirs': os.makedirs, 'mkdir': os.mkdir, 'replace': os.replace,
-            'rename': os.rename}
-
-
-def _refuse(what, path):
-    REFUSED_WRITES.append(f'{what} {path}')
-    raise PermissionError(f'tests_demo: {what} {str(path)!r} refused: a test must not write in the real output '
-                          f'folder {REAL_OUTPUT_DIR} (its bot belongs in tmp_path)')
-
-
-@functools.wraps(_REAL_FS['open'])
-def _guarded_open(file, mode='r', *a, **k):
-    if any(c in str(mode) for c in 'wax+') and is_real_output(file):
-        _refuse('open', file)
-    return _REAL_FS['open'](file, mode, *a, **k)
-
-
-def _guarded(name):
-    real = _REAL_FS[name]
-
-    @functools.wraps(real)
-    def call(*paths, **k):
-        for p in paths[:2]:
-            if isinstance(p, (str, bytes, os.PathLike)) and is_real_output(p):
-                _refuse(name, p)
-        return real(*paths, **k)
-    return call
-
-
-_GUARDS = {'open': _guarded_open, **{n: _guarded(n) for n in ('makedirs', 'mkdir', 'replace', 'rename')}}
-
-
-def _install(fs):
-    builtins.open = fs['open']
-    os.makedirs, os.mkdir, os.replace, os.rename = fs['makedirs'], fs['mkdir'], fs['replace'], fs['rename']
+def pytest_unconfigure(config):
+    _GUARD['on'] = False
 
 
 @pytest.fixture(scope='session', autouse=True)
 def _nothing_outside_tmp(tmp_path_factory):
     """The whole run writes nothing outside pytest's tmp folders: no write into the real output folder, no
-    'C:\\Alcadeias...' folder left in the working folder."""
+    'C:\\Alcadeias...' folder left in the working folder, no bytecode in the branch."""
     cwd = Path.cwd()
     before = {p.name for p in cwd.iterdir()}
     _BotOutput.factory = tmp_path_factory
-    _install(_GUARDS)
     try:
         yield
     finally:
-        _install(_REAL_FS)
         _BotOutput.factory = None
     left = sorted(p.name for p in cwd.iterdir() if p.name not in before and is_real_output(p))
-    problems = list(REFUSED_WRITES) + [f'left in the working folder {cwd}: {n}' for n in left]
+    pyc = stray_bytecode(sys.flags.dont_write_bytecode, sys.pycache_prefix)
+    problems = (list(REFUSED_WRITES) + [f'left in the working folder {cwd}: {n}' for n in left]
+                + [f'bytecode written into the branch: {p} (run the tests with python3 -B, and delete '
+                   f'{HERE / "__pycache__"})' for p in pyc])
     if problems:
         pytest.fail('tests_demo wrote outside its tmp folders:\n  ' + '\n  '.join(problems[:20]), pytrace=False)
 
