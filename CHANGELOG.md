@@ -23,13 +23,15 @@ credential/symbol commits are preserved; never force-push). Fleet:
 Turtle branches). **NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** `app.py`,
 `tests_demo/` (+ this `CHANGELOG.md`, `README.md`). **Baseline:** v3.9.2-demo.4.
 
-**Why.** The two reviews of the second fix round found that a test run could write the running demo bot's own
-files, that the bot could still log in over another account after a first "no account" answer, and three smaller
-gaps. A new guard keeps every demo bot off the live bots' MetaTrader 5. Normal trading is unchanged: the demo parity
-replay (this branch's app.py against the fast engine running its design, V3-lite, 2026-06-30 00:00 to 2026-07-01
-14:00 UTC) gives the same 133,228 polls, 4 fills and $1,853.57 as before, and so does the Top 1 window, the one with
-an add (2026-11-02 22:00 to 2026-11-03 14:00: 53,960 polls, 6 fills, $2,017.85). With the levers at their live
-defaults the bot still takes the live decisions (`tests_demo/test_live_equivalence.py`).
+**Why.** The two reviews of the second fix round found that a test run could write the running demo bot's own files,
+that the bot could still log in over another account after a first "no account" answer, and three smaller gaps. A new
+guard keeps every demo bot off the live bots' MetaTrader 5. The final review of these fixes found six more small
+gaps; they are fixed here as well (marked "final review" under A, B, D and E below, and in the README). Normal
+trading is unchanged: the demo parity replay (this branch's app.py against the fast engine running its design,
+V3-lite, 2026-06-30 00:00 to 2026-07-01 14:00 UTC) gives the same 133,228 polls, 4 fills and $1,853.57 as before, and
+so does the Top 1 window, the one with an add (2026-11-02 22:00 to 2026-11-03 14:00: 53,960 polls, 6 fills,
+$2,017.85). With the levers at their live defaults the bot still takes the live decisions
+(`tests_demo/test_live_equivalence.py`).
 
 **demo.4 said too much.** Its headline for finding 1, "never a login on a terminal that holds another account", was
 true only when the terminal answers with that account. If `account_info()` answered None or login 0 for a moment (an
@@ -62,7 +64,11 @@ below closes this within a 15 s grace period. What is guaranteed now is written 
   account after 15 s, and not when the terminal says it is connected to a trade server (then it holds some account).
 - **Guaranteed now:** no login on a terminal that answers with another account, or that is still starting within the
   15 s. **Not covered:** a terminal that needs more than 15 s to log into its saved account reads as holding none,
-  and the bot logs in. Only a separate MetaTrader 5 per slot closes that.
+  and the bot logs in. **Final review:** so does a terminal on which another program starts a login just before the
+  15 s end: that login is still being authorised, no account shows, and the last login wins. Only a separate
+  MetaTrader 5 per slot closes these. Log it into the slot's demo account once by hand, with the password saved
+  (README, "How to run", step 2): then the terminal holds that account when the bot starts, the bot never needs to
+  log in, and a login it makes anyway is into the same account.
 - The review's probe (a live account held by the terminal): an IPC timeout, a terminal still logging in for 3 s, a
   login-0 answer, a reconnect onto a terminal still logging in: 0 logins each (before: 1 each, the live account
   switched to demo).
@@ -72,8 +78,16 @@ below closes this within a 15 s grace period. What is guaranteed now is written 
   `test_live_equivalence.py` had none. Their files went to `OUTPUT_DIR`, `C:\Alcadeias\demo_hedging_xauusd6`. On the
   server a test run there would write the running bot's own state file: a fake loss dated 2026-11-17 that blocks its
   entries for 12 hours. On macOS it left a folder named `C:\Alcadeias\demo_hedging_xauusd6` in the working folder.
-- Now every bot the tests build writes in the test's own tmp folder. A write into the real output folder is refused
+- Now every bot the tests build writes in the test's own tmp folder. Any write into the real output folder is refused
   (it never happens) and fails the run, and so does a `C:\Alcadeias...` folder left in the working folder.
+- **Final review:** that check saw only `open()`, `os.makedirs`, `os.mkdir`, `os.replace` and `os.rename`. A test
+  that wrote with `pathlib`, `io.open` or `os.open` would have written the real folder unrefused (the review's probe
+  did, and the run passed). The check is now an audit hook, which Python calls inside every file operation: opening a
+  file for writing (`open`, `io.open`, `os.open`, `pathlib`), making, renaming and removing files and folders, and
+  `shutil`. A test tries 28 ways to write there: each is refused.
+- **Final review:** run the tests with `python3 -B -m pytest tests_demo -q -p no:cacheprovider`. Without `-B`, pytest
+  wrote its bytecode of `conftest.py` into `tests_demo/__pycache__` (also before demo.5). Such a run now fails at its
+  end and says why.
 
 ### Fixed: the Turtle's exit is booked only when its close closed something (fix C, low; BTC Turtle branches)
 - On this branch the basket's close path was checked with the same case (another program switches the account just
@@ -86,28 +100,51 @@ below closes this within a 15 s grace period. What is guaranteed now is written 
   (down 60 s, then up 60 s on another account, and so on), enough to overwrite the 200-entry log in 3.3 hours.
 - Now each reason is logged when it is first seen, then at most every 15 minutes, with `not_logged_since` (the
   failures in between). The same 4 hours: 30 `RECONNECT_FAILED`, 46 events in all. The back-off is unchanged.
+- **Final review:** `TERMINAL_IN_USE` (and `LIVE_TERMINAL_PATH`) had the same flaw: their limit also remembered only
+  the last problem. A terminal held in turn by two other accounts (a live 99, then another slot's 7) logged every
+  reconnect attempt: 240 `TERMINAL_IN_USE` in 4 hours. Now each problem is limited on its own: each account when it
+  is first seen, then at most every 15 minutes (the same 4 hours: 30 `TERMINAL_IN_USE` and 62 events in all, before
+  240 and 272). A new start of app.py by the launcher reads all the lines that refused starts left at the top of the
+  strategy log, so 6 starts with the two accounts in turn give 2 lines (before: 6).
+- Not changed: `ACCOUNT_REFUSED` and `ACCOUNT_OK` stay one line for each switch of the account, because each one
+  starts or ends a pause in trading. Only a terminal shared with another program switches it.
 
-### Fixed: an add is a leg of the basket from its fill (fix E, low; XAU Top 1, the only design with an add)
-- The basket learnt an add's position id only from the next positions read, about 2 s after the add. If the terminal
-  went down, or the bot stopped, in those 2 s, and the entry's backstop closed the entry meanwhile, the bot took the
-  add over as a new basket, and its ladder added again (470 s later in the review's test).
+### Fixed: the add and the entry are legs of the basket from their fill (fix E, low)
+- **The add** (XAU Top 1, the only design with an add). The basket learnt an add's position id only from the next
+  positions read, about 2 s after the add. If the terminal went down, or the bot stopped, in those 2 s, and the
+  entry's backstop closed the entry meanwhile, the bot took the add over as a new basket, and its ladder added again
+  (470 s later in the review's test).
 - Now the add's position id is recorded at once from the order's answer (its ticket: on a hedging account the
   position's id), kept 10 s while the terminal has not listed it (as for the entry's fill), and saved in the state
   file. The case above is then a leg closed outside the bot: `LEG_CLOSED_OUTSIDE`, the add closed at once (12 s after
   it, the first poll after the outage; after a restart, its first poll), the whole basket booked. While the add is
   not listed yet (at most 10 s), the basket is still open: a close waits for the add, a read that lists no position
   books nothing, and no new entry is sent.
+- **The entry (final review; this gap is older than demo.5).** The basket learnt its entry's position id the same
+  way, about 1 s after the fill. If the bot stopped or the terminal went down in that second, and the entry's
+  backstop closed the entry meanwhile, the bot dropped the basket as a fill that "never showed up": nothing was
+  booked, the pause after the loss did not start, and it entered again at once (the review's test: 0.6 s after a
+  restart, 1.1 s after a reconnect, instead of 240 s after the loss). Now the entry's id is recorded from the order's
+  answer at once, as for an add: such an entry is booked as closed outside the bot, with its loss and time from the
+  deal history, and the pause after a loss follows.
+- **A close that closed the add (final review).** When the close itself reached an add the poll had not listed yet,
+  the bot still waited for that add: nothing was booked for 9 s, then the basket was booked as "closed outside the
+  bot" (the P/L and the pause were right, the label and the moment were not). Now such a close is booked at once,
+  with both legs, its own reason and their realised P/L.
+- In normal operation the terminal lists every fill within a second or two: nothing changes there.
 
 ### Files
 - `app.py`: `initialize_mt5` (the terminal-path check first, then `_account_held`); `_account_held`, `_ipc_error`,
   `_ACCOUNT_GRACE_S` = 15 s; `_terminal_path_problem`, `_live_terminal`, `_LIVE_TERMINAL_PATHS`, `_slot_name`;
-  `_log_limited` (`TERMINAL_IN_USE` and `LIVE_TERMINAL_PATH`, replaces `_in_use_logged`); `_try_reconnect` (the limit
-  per reason); `_record_add`, `_unlisted_adds`, `fill_pending`, `_sync_basket`, `_after_close`, the add branches of
-  `process_symbol`.
-- `tests_demo/`: `conftest.py` (every bot writes in tmp_path; the write check), `fake_mt5.py` (a terminal still
-  logging into its saved account, single `account_info()` answers, not connected without an account); new
-  `test_no_writes_outside_tmp.py` and `test_live_terminal.py`; `test_terminal_in_use.py`, `test_partial_close.py`,
-  `test_reconnect.py`, `test_demo_account.py`, `test_live_equivalence.py` extended.
+  `_log_limited` (`TERMINAL_IN_USE` and `LIVE_TERMINAL_PATH`, per problem; replaces `_in_use_logged`), `_logged_at`,
+  `_log_entries` (replaces `_newest_log_entry`); `_try_reconnect` (the limit per reason); `_record_fill`,
+  `_unlisted_fills`, `fill_pending`, `_sync_basket`, `_finish_outside_close`, `_after_close`, the entry and add
+  branches of `process_symbol`.
+- `tests_demo/`: `conftest.py` (every bot writes in tmp_path; the write check, an audit hook; the bytecode check),
+  `fake_mt5.py` (a terminal still logging into its saved account, single `account_info()` answers, not connected
+  without an account); new `test_no_writes_outside_tmp.py` and `test_live_terminal.py`; `test_terminal_in_use.py`,
+  `test_partial_close.py`, `test_pending_fill.py`, `test_reconnect.py`, `test_demo_account.py`,
+  `test_live_equivalence.py` extended.
 
 ### Rollback
 `git revert` this version's `demo(...)` commits (newest first). Nothing to clean up: the older code ignores a
