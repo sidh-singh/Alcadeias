@@ -115,6 +115,10 @@ def _replay(tmp, trip=None, vote=lambda t: 1, *, trace=True, keep_writers=True, 
     r.run = run_bot(fake, clock, overrides={**TB.TURTLE, 'OUTPUT_DIR': out, **(overrides or {})}, symbol=SYMBOL,
                     state_dir=tmp / 'state', keep_writers=keep_writers, on_new_bot=on_new_bot)
     r.vote = v
+    # (the replay stops mid-poll; a real job's last lines make the trace write what it still holds)
+    for bot in r.bots:
+        for tr in list((getattr(bot, '_tracers', None) or {}).values()):
+            tr._flush()
     return r
 
 
@@ -417,6 +421,9 @@ def test_the_text_log_tells_the_turtles_story(traced):
     assert len(orders) == len(fake.orders) and all('retcode=10009' in m.group(4) for m in orders)
     kinds = [re.search(r'kind=(\w+)', m.group(4)).group(1) for m in orders]
     assert kinds == ['open', 'add', 'add', 'add', 'close', 'close', 'close', 'close']
+    # a close names the side of the trade's leg (BUY) and its own order (SELL)
+    assert all('(BUY 0.01 lot, with a SELL order)' in m.group(4) and '| kind=close side=BUY order_side=SELL ' in m.group(4)
+               for m in orders if 'kind=close' in m.group(4))
     assert len([m for m in ms if m.group(2) == 'FILL']) == 4
     # a DEBUG line at every change of the decision, a heartbeat every minute
     decisions = [m.group(4) for m in ms if m.group(3) == 'DECISION']
@@ -571,6 +578,11 @@ def test_a_late_d1_bar_is_said_and_the_old_levels_stay(tmp_path):
     assert data[1][0] == 'INFO' and data[1][1].startswith('the new D1 bar is there')
     stop = [m for m in ms if m.group(3) == 'STOP']
     assert len(stop) == 1 and stop[0].group(1) >= '2026-11-18 00:06'
+    # the bot's own note says what it does: it goes on with the levels and the stop of the day before (not 'not trading')
+    notes = [m.group(4) for m in ms if m.group(3) == 'TURTLE' and 'closed D1 bars from the terminal, at least' in m.group(4)]
+    assert notes and all(n.endswith('needed: the bot goes on with the levels and the stop of the D1 bar before and asks '
+                                    'again every poll') for n in notes), notes
+    assert not any('not trading' in m.group(4) for m in ms)
 
 
 def test_a_trade_closed_while_the_bot_was_down_gets_its_result_once(mods, tmp_path):
@@ -719,7 +731,10 @@ def test_no_daily_levels_no_trading_and_the_trace_says_why(tmp_path):
     s = snaps[-1]
     assert s['decision']['blocked_by'] == 'd1_levels' and s['turtle']['levels'] is None and s['turtle']['trade'] is None
     assert s['decision']['headline'].startswith('No daily levels yet: the terminal gave 200 closed D1 bars, at least 300')
-    assert '| WARN | DATA | no daily levels: the terminal gave 200 closed D1 bars, 300 needed' in '\n'.join(_read_log(r.out))
+    text = '\n'.join(_read_log(r.out))
+    assert '| WARN | DATA | no daily levels: the terminal gave 200 closed D1 bars, 300 needed' in text
+    # (no levels of a day before: the bot's own note says it does not trade)
+    assert '| WARN | TURTLE | 200 closed D1 bars from the terminal, at least 300 needed: not trading' in text
 
 
 @pytest.mark.slow
@@ -735,10 +750,16 @@ def test_a_turtle_trace_that_fails_changes_nothing(tmp_path, untraced):
     lines = _read_log(r.out)
     errs = [ln for ln in lines if '| ERROR | TRACE |' in ln]
     assert 1 <= len(errs) <= 3000 // 600 + 1
-    assert "the trace hook poll() failed: ValueError('boom: a bug in the Turtle trace')" in errs[0]
+    assert ("the trace hook poll() failed in its step _turtle_section: ValueError('boom: a bug in the Turtle trace'); "
+            "ignored, its other steps and the trading go on") in errs[0]
     i = lines.index(errs[0])
-    assert lines[i + 1] == '    Traceback (most recent call last):' and 'in _poll_turtle' in '\n'.join(lines[i:i + 40])
+    assert lines[i + 1] == '    Traceback (most recent call last):' and 'in _step' in '\n'.join(lines[i:i + 40])
     assert sum('| ORDER | ORDER |' in ln for ln in lines) == len(r.fake.orders)
+    # its other steps go on: the trace says what failed, the heartbeat every minute, the bars and the trades
+    polled = [s for s, k in zip(r.snaps, r.kinds) if k == 'poll']
+    assert polled and all(s['decision']['action'] == 'TRACE_ERROR' and s['turtle'] is None for s in polled)
+    assert sum('| INFO | HEARTBEAT | TRACE_ERROR:' in ln for ln in lines) >= 3000 // 62
+    assert r.bars and r.trades and r.trades[-1]['closed']
 
 
 # ───────────────────── the paths of v3.9.2-demo.4 (the re-review's fixes) on the Turtle ─────────────────────

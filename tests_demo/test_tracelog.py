@@ -91,7 +91,16 @@ def _replay(tmp, *, trace=True, keep_writers=True, out=None, hook=None, seconds=
 
     r.run = run_bot(fake, clock, overrides={**DESIGN, 'OUTPUT_DIR': out, **(overrides or {})}, symbol=SYMBOL,
                     state_dir=tmp / 'state', keep_writers=keep_writers, on_new_bot=on_new_bot)
+    end_of_job(r.bots)
     return r
+
+
+def end_of_job(bots):
+    """The replay stops mid-poll (StopRun); a real job ends through execute_job, whose last lines make the trace write
+    what it still holds -- here, an order sent in the last 0.1 s, its lines made inside mt5_lock."""
+    for bot in bots:
+        for tr in list((getattr(bot, '_tracers', None) or {}).values()):
+            tr._flush()
 
 
 @pytest.fixture(scope='module')
@@ -285,6 +294,10 @@ def test_a_poll_that_could_not_read_the_terminal_is_in_the_trace(tmp_path):
     for s in skipped:
         assert s['stale'] and not s['health']['connected'] and 'terminal_info()' in s['health']['terminal_problem']
         assert s['decision']['gates'][0]['key'] == 'terminal' and s['decision']['gates'][0]['ok'] is False
+        # ... marked as such: the market is not known this poll (its quote is the last one read), no vote was computed
+        assert s['health']['market_live'] is None
+        assert s['market']['status'] == 'UNKNOWN' and 'the terminal was not read this poll' in s['market']['message']
+        assert s['market']['bid'] is not None and (s['basket'] is None or s['basket']['fresh'] is False)
     assert r.snaps[-1]['health']['reconnects'] == 1 and r.snaps[-1]['health']['connected']
     text = '\n'.join(_read_log(r.out))
     for needle in ('-> SKIPPED: Poll skipped, nothing decided: terminal_info() returned None', '| WARN | TERMINAL |',
@@ -472,6 +485,148 @@ def test_the_text_log(traced):
 
 
 @pytest.mark.slow
+def test_a_close_order_names_the_side_of_its_position(traced):
+    """close_by_type closes a SELL position with a BUY order: the ORDER line and the trace's orders give the side of the
+    position (side) and of the order (order_side), as the dashboard shows them."""
+    lines = [ln for ln in _read_log(traced.out) if '| ORDER | ORDER | close position' in ln]
+    reqs = [o for o in traced.fake.orders if 'position' in o]
+    assert reqs and len(lines) == len(reqs)
+    by_pos = {int(re.search(r' position=(\d+)', ln).group(1)): ln for ln in lines}
+    for o in reqs:
+        pos_side, order_side = ('SELL', 'BUY') if o['type'] == 0 else ('BUY', 'SELL')
+        ln = by_pos[o['position']]
+        assert f"close position {o['position']} ({pos_side} {o['volume']} lot, with a {order_side} order)" in ln, ln
+        assert f'| kind=close side={pos_side} order_side={order_side} ' in ln, ln
+    sent = [x for s in traced.snaps for x in s['decision']['orders'] if x['kind'] == 'close']
+    assert sent and all(x['side'] != x['order_side'] for x in sent)
+    closing = [s for s in traced.snaps if any(x['kind'] == 'close' for x in s['decision']['orders'])]
+    assert all(x['side'] == s['decision']['action'].split('_')[1] for s in closing for x in s['decision']['orders']
+               if x['kind'] == 'close')
+
+
+def test_an_add_on_the_first_poll_after_a_start_is_an_add(mods, tmp_path):
+    """A restart with a basket open: its ladder add on the very first poll -- before the trace has seen a poll -- is an
+    'add' in its ORDER / FILL lines (the basket loop's own state says the side it holds), an order of the other side
+    or one sent flat an 'open'."""
+    fake, clock = market(60)
+    m = mods(fake=fake, clock=clock)
+    bot = F.make_bot(m, fake, SYMBOL, F.Run(), trace_dir=tmp_path)
+    state = {'basket': {'side': 'BUY', 'units': 1, 'ids': [7], 'opened_by': 'bot'}, 'last_close': None}
+    tr = bot._tracer(SYMBOL)
+    tr.loop_start({'state': state, 'sym_cfg': {}, '_rebuild_pause': False})     # the state file restored
+    done = types.SimpleNamespace(retcode=10009, price=2000.5, volume=0.01, order=8, deal=9, comment='done')
+
+    def send(typ):
+        tr.order({'action': 1, 'symbol': SYMBOL, 'type': typ, 'volume': 0.01, 'price': 2000.5, 'magic': MAGIC}, done,
+                 False, 2.0)
+    send(0)                    # the ladder's add of the BUY basket
+    send(1)                    # a SELL would be a new basket
+    state['basket'] = None
+    send(0)                    # flat: an entry
+    tr._flush()
+    lines = _read_log(tmp_path)
+    assert not any('| ERROR |' in ln for ln in lines)
+    orders = [ln.split(' | ')[3] for ln in lines if '| ORDER | ORDER |' in ln]
+    fills = [ln for ln in lines if '| FILL | FILL |' in ln]
+    assert [o.split(' ', 2)[:2] for o in orders] == [['add', 'BUY'], ['open', 'SELL'], ['open', 'BUY']], orders
+    assert [('kind=add' in f, 'kind=open' in f) for f in fills] == [(True, False), (False, True), (False, True)]
+
+
+def test_no_file_is_written_while_the_bot_holds_mt5_lock(mods, tmp_path):
+    """The review's slow disk (250 ms a write: an antivirus scan, a saturated VPS disk). Closing a 4-leg basket inside
+    mt5_lock takes no longer with the trace than without it (a few ms): the ORDER lines, and an event logged inside the
+    lock, wait in memory and are written by the next write outside it (the end of the poll), every one, in order."""
+    fake, clock = market(60)
+    m = mods(fake=fake, clock=clock)
+    bot = F.make_bot(m, fake, SYMBOL, F.Run(), trace_dir=tmp_path)
+    bot._install_order_guard()                                           # the guard and the trace's order observer
+    writes = []
+    real_write = m.tracelog.LogWriter.write
+
+    def slow_write(self, recs):
+        writes.append(bot.mt5_lock.locked())
+        time.sleep(0.25)
+        return real_write(self, recs)
+    m.tracelog.LogWriter.write = slow_write
+
+    def close_four():
+        for k in range(4):
+            fake.add_position(0, 0.01, 2000.0 + k, clock.time() - 60, magic=MAGIC, comment='demo')
+        t0 = time.perf_counter()
+        with bot.mt5_lock:                                               # as process_symbol closes a basket
+            res = bot.position_helper.close_by_type(SYMBOL, 0)
+            bot._trace(SYMBOL, 'event', 'LEG_CLOSED_OUTSIDE', 'WARN', {'side': 'BUY', 'legs_gone': [1], 'legs_left': [2]})
+        took = time.perf_counter() - t0
+        assert res['closed_count'] == 4, res
+        return took
+    bot.trace_enabled = False
+    without = min(close_four() for _ in range(3))
+    bot.trace_enabled = True
+    bot._tracer(SYMBOL)
+    writes.clear()
+    with_trace = [close_four() for _ in range(3)]
+    print(f'\n4 close requests inside mt5_lock, a disk of 250 ms a write: without the trace {without * 1000:.1f} ms, with '
+          f'it {min(with_trace) * 1000:.1f} ms (worst of 3: {max(with_trace) * 1000:.1f} ms)')
+    assert not any(writes), 'a write while the lock was held'
+    assert min(with_trace) <= without + 0.03, (with_trace, without)         # the same time: a few ms
+    assert max(with_trace) < 0.5, with_trace                                # (before the fix: 4 writes, >= 1 s)
+    bot._trace(SYMBOL, 'log', 'INFO', 'TEST', 'the end of the poll')     # the next write outside the lock
+    assert writes == [False]
+    lines = _read_log(tmp_path)
+    closes = [ln for ln in lines if '| ORDER | ORDER | close position' in ln]
+    assert len(closes) == 12 and all('kind=close side=BUY order_side=SELL' in ln for ln in closes)
+    assert sum('| WARN | BASKET | leg(s) [1] of the BUY basket closed outside the bot' in ln for ln in lines) == 3
+    assert lines[-1].endswith('| INFO | TEST | the end of the poll')
+
+
+@pytest.mark.slow
+def test_a_step_of_the_poll_hook_that_fails_leaves_the_others_running(tmp_path):
+    """Two steps of the poll hook fail on every poll (the bars: an unexpected rates frame; the trades: a deal field it
+    does not expect): each is an ERROR line (at most every 10 min); the trace file, the heartbeat and the bookkeeping go
+    on; the deal history is read once a minute, not on every poll."""
+    reads = []
+
+    def hook(bot, n):
+        TL = sys.modules['tracelog'].TraceLog
+
+        def bad_bars(self, *a, **k):
+            raise ValueError('boom: an unexpected rates frame')
+
+        def bad_build(self, *a, **k):
+            raise KeyError('a deal field the trace does not expect')
+        real_trades, real_deals = TL._trades, bot.position_helper.get_bot_deals
+        inside = []
+
+        def trades(self, *a, **k):
+            inside.append(1)
+            try:
+                return real_trades(self, *a, **k)
+            finally:
+                inside.pop()
+
+        def deals(*a, **k):
+            if inside:
+                reads.append(bot.position_helper.mt5.clock.time())
+            return real_deals(*a, **k)
+        TL._bars, TL._build_trades, TL._trades = bad_bars, bad_build, trades
+        bot.position_helper.get_bot_deals = deals
+    seconds = 300
+    r = _replay(tmp_path, seconds=seconds, hook=hook)
+    assert not r.run.errors
+    lines = _read_log(r.out)
+    errs = [ln for ln in lines if '| ERROR | TRACE |' in ln]
+    assert len([e for e in errs if 'failed in its step _bars: ValueError' in e]) == 1
+    assert len([e for e in errs if 'failed in its step _trades: KeyError' in e]) == 1
+    assert sum('| INFO | HEARTBEAT |' in ln for ln in lines) >= seconds // 62
+    polled = [s for s in r.snaps if s['decision']['action'] != 'SKIPPED']
+    assert len(polled) >= len(r.run.polls) - 1 and polled[-1]['t'] > START + seconds - 5
+    assert polled[-1]['health']['poll_gap_s'] is not None and polled[-1]['health']['poll_gap_s'] < 5
+    assert 2 <= len(reads) <= seconds // 60 + 2, reads
+    assert all(b - a >= 59.0 for a, b in zip(reads, reads[1:])), reads
+    assert not os.path.exists(os.path.join(r.out, f'{SYMBOL}_bars.json'))
+
+
+@pytest.mark.slow
 def test_the_old_dashboard_files_are_still_written(traced):
     for rel in (f'{SYMBOL}.json', 'account.json', f'logs/{SYMBOL}_strategy_log.json',
                 f'daily_trade/{SYMBOL}/historical_summary.json', f"daily_trade/{SYMBOL}/17_nov_2026.json"):
@@ -538,8 +693,9 @@ def test_a_failing_disk_does_not_stop_the_trading(tmp_path, untraced):
 
 @pytest.mark.slow
 def test_a_hook_that_raises_is_an_error_with_its_traceback(tmp_path, untraced):
-    """A bug in the trace (here every poll hook raises): an ERROR with the full traceback, the repeats counted and
-    written again at most every 10 minutes; the trading goes on exactly as before."""
+    """A bug in the trace (here a step of every poll hook raises): an ERROR with the full traceback, the repeats counted
+    and written again at most every 10 minutes; the trading goes on exactly as before, and so do the hook's other
+    steps: the trace file (its decision TRACE_ERROR, says why), the bars, the trades and the heartbeat."""
     def hook(bot, n):
         def boom(self, *a, **k):
             raise ValueError('boom: a bug in the trace')
@@ -550,18 +706,25 @@ def test_a_hook_that_raises_is_an_error_with_its_traceback(tmp_path, untraced):
     errs = [i for i, (m, _) in enumerate(_parsed(lines)) if m and m.group(2) == 'ERROR']
     assert 1 <= len(errs) <= SECONDS // 600 + 1
     first = lines[errs[0]]
-    assert "| ERROR | TRACE | the trace hook poll() failed: ValueError('boom: a bug in the trace')" in first
+    assert ("| ERROR | TRACE | the trace hook poll() failed in its step _basket_section: ValueError('boom: a bug in the "
+            "trace'); ignored, its other steps and the trading go on") in first
     tb = []
     for ln in lines[errs[0] + 1:]:
         if not ln.startswith('    '):
             break
         tb.append(ln[4:])
     assert tb[0] == 'Traceback (most recent call last):' and tb[-1] == 'ValueError: boom: a bug in the trace'
-    assert any('in boom' in ln for ln in tb) and any('in _poll' in ln for ln in tb)
+    assert any('in boom' in ln for ln in tb) and any('in _step' in ln for ln in tb)
     if len(errs) > 1:
         assert 'more times since it was last written' in lines[errs[1]]
     # the order lines come from another hook, which still works
     assert sum('| ORDER | ORDER |' in ln for ln in lines) == len(r.fake.orders)
+    # the hook's other steps go on: the trace says what failed, the heartbeat comes every minute, bars and trades
+    polled = [s for s in r.snaps if s['decision']['action'] != 'SKIPPED']
+    assert polled and all(s['decision']['action'] == 'TRACE_ERROR' and s['basket'] is None for s in polled)
+    assert 'its step _basket_section failed' in polled[-1]['decision']['headline'] and polled[-1]['account']['units']
+    assert sum('| INFO | HEARTBEAT | TRACE_ERROR:' in ln for ln in lines) >= SECONDS // 62
+    assert r.bars_t and r.trades and r.trades[-1]['closed']
 
 
 def test_an_exception_in_the_loop_is_an_error_with_its_traceback(tmp_path):
