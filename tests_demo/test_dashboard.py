@@ -1028,7 +1028,7 @@ def test_a_start_refused_on_the_live_terminal_is_shown_with_what_to_do(D, mods, 
     sym = D.symbols()[0]                                # no trace yet: the branch's own symbol (symbols.json)
     m = mods(OUTPUT_DIR=folder)
     bot = m.app.MT5TradingBot(mode='demo', target_symbol=sym)
-    bot.load_credentials = lambda: setattr(bot, 'credentials', {'terminal_path': LIVE_MT5, 'login_id': 1,
+    bot.load_credentials = lambda: setattr(bot, 'credentials', {'terminal_path': '', 'login_id': 1,
                                                                 'login_pass': 'not-a-password',
                                                                 'server': 'Fake-Demo'}) or True
     bot.load_symbols = lambda: setattr(bot, 'symbols', [sym]) or True             # (never the real files)
@@ -1049,7 +1049,7 @@ def test_a_start_refused_on_the_live_terminal_is_shown_with_what_to_do(D, mods, 
     assert problem is None and rows[0]['code'] == 'LIVE_TERMINAL_PATH' and rows[0]['level'] == 'ERROR'
     assert rows[0]['count'] == 5                        # the refusal, the three start attempts, the job's end
     text = _text(D._changes(0, 'changes', sym, None)[0])
-    assert 'The bot refuses to start: terminal_path in mt5_credentials.json names the live bots' in text
+    assert 'The bot refuses to start: terminal_path in mt5_credentials.json is empty, or names the live bots' in text
     # the trading loop started after it: the bot runs, no box
     _events_file(folder, sym, [{'t': ref['t'] + 60, 'level': 'INFO', 'cat': 'START',
                                 'msg': f'trading loop started for {sym} ({sym} at the terminal)'}])
