@@ -56,6 +56,44 @@ replayed, five quarters (13 Aug 2025 → 13 Nov 2026), each run eight times with
 
 ---
 
+## 2026-11-17 · Silver and the major forex pairs: add none (pre-registered study)
+
+**Status:** *rejected* (backtest only; nothing changes in the bot). Write-up: `backtest_results/multisymbol/MULTISYMBOL.md`;
+rules frozen before any run: `PREREG.md` (sha256 f8557434…), deviations: `DEVIATIONS.md`; code:
+`backtesting/research/multisymbol.py`, `multiportfolio.py`.
+
+**What.** The six demo designs, unchanged, on XAGUSDm and the 7 major pairs (budget scope; the 13 crosses were not run; GBPUSDm failed
+the data gate). Choice on Nov 2021 – May 2024, confirmation on May 2024 – Nov 2026, one $2,000 account per symbol-design pair.
+
+**Result.** 2 of 42 pairs qualified on the choice half (USDJPYm with gold Top 2, EURUSDm with BTC Top 2); together they lost $136 in
+the confirmation half (best single pair +$0.37 a week). No portfolio size reached the pre-registered bar, so N* = 0; adding them to
+the six demo bots changed the confirmation-half profit from $202.55 to $201.51 – $202.92 a week. Silver + 6 majors all on V3-lite:
++$3 a week for the 7 bots together. With swap charged, the USDJPYm pair's small profit would likely turn into a loss.
+
+**Lesson.** The designs' edge belongs to gold and BTC (long trends); the major pairs mostly range. The bot also converts P/L to USD
+correctly only for USD-quoted symbols, so 16 of the 21 candidates would need code changes before they could trade.
+
+---
+
+## 2026-11-17 · How aggressive the unit rule can be: the sizing study
+
+**Status:** *adopted on two demo branches* (v3.9.2-demo.9: gold Top 2 at $1,250, BTC Top 2 at $1,750; the others stay at $2,500).
+Write-up: `backtest_results/sizing/SIZING.md`; code: `backtesting/research/sizing.py`.
+
+**What.** Each of the six demo designs at STEP $2,500 / 2,000 / 1,750 / 1,500 / 1,250 / 1,000 / 750 / 500 (0.01 lot per STEP of
+balance, cap 10 units and no cap), in the four final-ten windows and in a fresh $2,000 account started every month for 12 months.
+Drawdown on equity with floating losses; margin at 1:200. All 24 published final-ten figures reproduced exactly at $2,500; the
+tick-engine designs were re-run in the engine at every STEP (a one-unit replay drifts once units grow).
+
+**Result.** $500 is unsafe for every design (worst drops 66 – 98%; Turtle System 1 wiped twice); $750 stays under 50% only for gold
+Top 2 (47.8%). The lowest STEP with the worst drop <= 35% everywhere: gold Top 2 $1,250 ($72 / $42 a week last year / 8-year
+average, worst 32.7%), BTC Top 2 $1,750 (worst 33.3%). V3-lite, Top 1 and both Turtles already exceed 35% at $2,500, so they stay.
+The six together: $197 a week last year at those levels against $162 today, combined drop about 16 – 17%.
+
+**Lesson.** Drawdown grows faster than profit as STEP falls, and it is the drawdown, not the margin, that limits it.
+
+---
+
 ## 2026-11-15 · René Balke's strategies (BM Trading GmbH), rebuilt and backtested
 
 **Status:** *done* (backtest only; the live files are unchanged). Full write-up: `backtest_results/balke/BALKE.md`. Code: `backtesting/research/balke.py`; tests: `tests/test_balke.py`.

@@ -1,0 +1,10 @@
+[05:18:33] GBPUSDm: df free 150.6 GB, batch 1.02 GB, new market data held 4.38 GB
+[05:19:43]   GBPUSDm: 20/109 months downloaded (CRC checked), built, zips deleted (70s)
+[05:20:30]   GBPUSDm: 40/109 months downloaded (CRC checked), built, zips deleted (118s)
+[05:21:30]   GBPUSDm: 60/109 months downloaded (CRC checked), built, zips deleted (177s)
+[05:22:41]   GBPUSDm: 80/109 months downloaded (CRC checked), built, zips deleted (248s)
+[05:23:52]   GBPUSDm: 100/109 months downloaded (CRC checked), built, zips deleted (320s)
+[05:24:21] GBPUSDm: 109 months built in 348s; data gate
+[05:24:53] GBPUSDm: gate turtle span FAIL, basket span FAIL (32s)
+[05:24:53] GBPUSDm: freed 0.87 GB (per-second files before 2021-11)
+[05:24:53] GBPUSDm: specs written: med 0.00090573, caps gold 0.00510771 / BTC 0.0107522, G 9.4680, M 3.8400, L 0.02; fetch done in 381s

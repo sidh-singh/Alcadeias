@@ -1,0 +1,3 @@
+symbol,period,design,account,lot,direct_final,replay_final,diff,bound,diff_pct_of_profit,direct_dd_pct,replay_dd_pct,measured_dd_pct,direct_wiped,replay_wiped,same_baskets,first_diff_basket,baskets_direct,baskets_replay,ok,runtime_s
+BTCUSDm,sel,btop2,a,0.01,2170.49,2170.49,0.0,3.18,0.0,10.412,10.393,10.393,False,False,True,-1,317,317,True,22.5
+BTCUSDm,sel,btop2,b,0.01,2170.49,2170.49,0.0,3.18,0.0,10.412,10.393,10.393,False,False,True,-1,317,317,True,21.9

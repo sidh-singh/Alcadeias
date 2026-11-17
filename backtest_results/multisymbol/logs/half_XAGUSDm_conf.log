@@ -1,0 +1,6 @@
+[05:31:20] XAGUSDm conf: 27,444,870 per-second rows ready (1s)
+[05:31:34]   XAGUSDm conf v3lite        14s  baskets  258  stream   3317.35  (a)   2412.80 DD  58.2%  (b, L=0.01)    2412.80 DD  58.2%
+[05:31:47]   XAGUSDm conf gtop2         13s  baskets  458  stream   3970.20  (a)   4765.60 DD  30.9%  (b, L=0.01)    4765.60 DD  30.9%
+[05:32:06]   XAGUSDm conf gtop1add      19s  baskets  388  stream   3116.40  (a)   2399.40 DD  67.9%  (b, L=0.01)    2399.40 DD  67.9%
+[05:32:20]   XAGUSDm conf btop2         13s  baskets  276  stream   3068.80  (a)   2210.45 DD  71.9%  (b, L=0.01)    2210.45 DD  71.9%
+[05:32:20] XAGUSDm conf: done in 61s

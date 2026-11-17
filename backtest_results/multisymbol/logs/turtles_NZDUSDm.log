@@ -1,0 +1,10 @@
+[05:43:42] NZDUSDm: 3,320,394 M1 bars 2017-11-01 .. 2026-11-12, votes ready (35s)
+[05:43:42]   NZDUSDm ts2 tsel trades  40  stream   1569.25  (a)   1569.25 DD  26.4%  (b)     707.76 DD  70.5%
+[05:43:42]   NZDUSDm ts2 conf trades  21  stream   1791.43  (a)   1791.43 DD  11.3%  (b)    1374.28 DD  33.2%
+[05:43:42]   NZDUSDm ts2 sel  trades  19  stream   1695.62  (a)   1695.62 DD  16.9%  (b)    1086.85 DD  48.7%
+[05:43:42]   NZDUSDm ts2 8y   trades  61  stream   1360.68  (a)   1360.68 DD  36.2%  (b)      82.04 DD  96.6%
+[05:43:43]   NZDUSDm ts1 tsel trades  58  stream   1647.25  (a)   1647.25 DD  24.7%  (b)     941.75 DD  63.2%
+[05:43:43]   NZDUSDm ts1 conf trades  29  stream   1794.13  (a)   1794.13 DD  15.3%  (b)    1382.38 DD  43.1%
+[05:43:43]   NZDUSDm ts1 sel  trades  25  stream   1867.06  (a)   1867.06 DD  13.1%  (b)    1601.18 DD  34.5%
+[05:43:43]   NZDUSDm ts1 8y   trades  87  stream   1441.38  (a)   1441.38 DD  36.0%  (b)     324.13 DD  92.3%
+[05:43:43] NZDUSDm: Turtles done in 36s

@@ -1,0 +1,9 @@
+symbol,period,design,account,lot,direct_final,replay_final,diff,bound,diff_pct_of_profit,direct_dd_pct,replay_dd_pct,measured_dd_pct,direct_wiped,replay_wiped,same_baskets,first_diff_basket,baskets_direct,baskets_replay,ok,runtime_s
+EURUSDm,sel,v3lite,a,0.01,1987.72,1987.72,0.0,2.52,-0.0,5.498,5.491,5.491,False,False,True,-1,252,252,True,14.2
+EURUSDm,sel,v3lite,b,0.03,1963.16,1963.16,0.0,7.56,-0.0,15.645,15.627,15.627,False,False,True,-1,252,252,True,13.8
+EURUSDm,sel,gtop2,a,0.01,1943.76,1943.76,0.0,4.17,-0.0,6.286,6.285,6.285,False,False,True,-1,417,417,True,13.9
+EURUSDm,sel,gtop2,b,0.03,1831.28,1831.28,0.0,12.51,-0.0,17.601,17.598,17.598,False,False,True,-1,417,417,True,14.0
+EURUSDm,sel,gtop1add,a,0.01,1762.25,1762.25,-0.0,6.21,0.0,14.422,14.402,14.402,False,False,True,-1,393,393,True,20.5
+EURUSDm,sel,gtop1add,b,0.03,1286.75,1286.75,-0.0,18.63,0.0,41.419,41.379,41.379,False,False,True,-1,393,393,True,20.5
+EURUSDm,sel,btop2,a,0.01,2108.46,2108.46,0.0,2.51,0.0,4.236,4.236,4.236,False,False,True,-1,250,250,True,14.5
+EURUSDm,sel,btop2,b,0.03,2325.38,2325.38,0.0,7.53,0.0,11.145,11.145,11.145,False,False,True,-1,250,250,True,14.6

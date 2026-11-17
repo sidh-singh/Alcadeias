@@ -1,0 +1,9 @@
+[05:44:36]   direct NZDUSDm sel v3lite    (a)    1781.03 replay    1781.03 diff +0.0000 (bound 2.46)  DD 11.76 vs 11.76  same baskets True (first diff -1)  ok  14s
+[05:44:49]   direct NZDUSDm sel v3lite    (b)    1343.09 replay    1343.09 diff +0.0000 (bound 7.38)  DD 34.78 vs 34.78  same baskets True (first diff -1)  ok  13s
+[05:45:03]   direct NZDUSDm sel gtop2     (a)    1716.42 replay    1716.42 diff +0.0000 (bound 3.94)  DD 14.29 vs 14.29  same baskets True (first diff -1)  ok  13s
+[05:45:16]   direct NZDUSDm sel gtop2     (b)    1149.26 replay    1149.26 diff +0.0000 (bound 11.82)  DD 42.82 vs 42.81  same baskets True (first diff -1)  ok  13s
+[05:45:36]   direct NZDUSDm sel gtop1add  (a)    1618.53 replay    1618.53 diff +0.0000 (bound 5.72)  DD 19.39 vs 19.39  same baskets True (first diff -1)  ok  20s
+[05:45:55]   direct NZDUSDm sel gtop1add  (b)     855.59 replay     855.59 diff +0.0000 (bound 17.16)  DD 57.86 vs 57.86  same baskets True (first diff -1)  ok  20s
+[05:46:09]   direct NZDUSDm sel btop2     (a)    1850.13 replay    1850.13 diff +0.0000 (bound 2.49)  DD 9.53 vs 9.53  same baskets True (first diff -1)  ok  14s
+[05:46:23]   direct NZDUSDm sel btop2     (b)    1550.39 replay    1550.39 diff +0.0000 (bound 7.47)  DD 27.80 vs 27.79  same baskets True (first diff -1)  ok  14s
+[05:46:23] direct_vs_replay NZDUSDm sel: within the bound

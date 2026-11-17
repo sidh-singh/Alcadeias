@@ -1,0 +1,6 @@
+[05:43:07] NZDUSDm sel: 18,970,158 per-second rows ready (1s)
+[05:43:21]   NZDUSDm sel v3lite        14s  baskets  246  stream   1781.03  (a)   1781.03 DD  11.8%  (b, L=0.03)    1343.09 DD  34.8%
+[05:43:35]   NZDUSDm sel gtop2         14s  baskets  394  stream   1716.42  (a)   1716.42 DD  14.3%  (b, L=0.03)    1149.26 DD  42.8%
+[05:43:55]   NZDUSDm sel gtop1add      20s  baskets  349  stream   1618.53  (a)   1618.53 DD  19.4%  (b, L=0.03)     855.59 DD  57.9%
+[05:44:08]   NZDUSDm sel btop2         14s  baskets  249  stream   1850.13  (a)   1850.13 DD   9.5%  (b, L=0.03)    1550.39 DD  27.8%
+[05:44:08] NZDUSDm sel: done in 62s

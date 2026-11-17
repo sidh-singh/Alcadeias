@@ -1,0 +1,6 @@
+[05:40:22] USDCHFm conf: 19,030,048 per-second rows ready (1s)
+[05:40:37]   USDCHFm conf v3lite        15s  baskets  251  stream   1868.40  (a)   1868.40 DD   8.4%  (b, L=0.03)    1605.21 DD  24.7%
+[05:40:51]   USDCHFm conf gtop2         14s  baskets  424  stream   1783.66  (a)   1783.66 DD  12.7%  (b, L=0.03)    1350.98 DD  37.4%
+[05:41:11]   USDCHFm conf gtop1add      20s  baskets  399  stream   1812.11  (a)   1812.11 DD  13.5%  (b, L=0.03)    1436.33 DD  37.7%
+[05:41:26]   USDCHFm conf btop2         14s  baskets  266  stream   1938.30  (a)   1938.30 DD   8.8%  (b, L=0.03)    1814.89 DD  24.1%
+[05:41:26] USDCHFm conf: done in 65s

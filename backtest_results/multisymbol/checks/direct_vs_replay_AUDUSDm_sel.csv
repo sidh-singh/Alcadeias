@@ -1,0 +1,9 @@
+symbol,period,design,account,lot,direct_final,replay_final,diff,bound,diff_pct_of_profit,direct_dd_pct,replay_dd_pct,measured_dd_pct,direct_wiped,replay_wiped,same_baskets,first_diff_basket,baskets_direct,baskets_replay,ok,runtime_s
+AUDUSDm,sel,v3lite,a,0.01,1799.24,1799.24,0.0,2.42,-0.0,10.452,10.449,10.449,False,False,True,-1,241,241,True,14.4
+AUDUSDm,sel,v3lite,b,0.03,1397.72,1397.72,0.0,7.26,-0.0,31.115,31.11,31.11,False,False,True,-1,241,241,True,14.0
+AUDUSDm,sel,gtop2,a,0.01,1686.44,1686.44,0.0,4.11,-0.0,16.078,16.072,16.072,False,False,True,-1,411,411,True,13.9
+AUDUSDm,sel,gtop2,b,0.03,1059.32,1059.32,0.0,12.33,-0.0,47.781,47.77,47.77,False,False,True,-1,411,411,True,13.9
+AUDUSDm,sel,gtop1add,a,0.01,1529.81,1529.81,0.0,6.15,-0.0,24.42,24.416,24.416,False,False,True,-1,378,378,True,20.4
+AUDUSDm,sel,gtop1add,b,0.03,589.43,589.43,0.0,18.45,-0.0,71.556,71.552,71.552,False,False,True,-1,378,378,True,20.3
+AUDUSDm,sel,btop2,a,0.01,1750.46,1750.46,0.0,2.59,-0.0,13.404,13.397,13.397,False,False,True,-1,258,258,True,14.6
+AUDUSDm,sel,btop2,b,0.03,1251.38,1251.38,0.0,7.77,-0.0,39.404,39.39,39.39,False,False,True,-1,258,258,True,14.5

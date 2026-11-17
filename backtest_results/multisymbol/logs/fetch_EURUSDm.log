@@ -1,0 +1,10 @@
+[05:13:02] EURUSDm: df free 155.0 GB, batch 0.81 GB, new market data held 0.00 GB
+[05:14:15]   EURUSDm: 20/109 months downloaded (CRC checked), built, zips deleted (73s)
+[05:15:01]   EURUSDm: 40/109 months downloaded (CRC checked), built, zips deleted (119s)
+[05:15:53]   EURUSDm: 60/109 months downloaded (CRC checked), built, zips deleted (171s)
+[05:16:44]   EURUSDm: 80/109 months downloaded (CRC checked), built, zips deleted (223s)
+[05:17:43]   EURUSDm: 100/109 months downloaded (CRC checked), built, zips deleted (281s)
+[05:18:04] EURUSDm: 109 months built in 302s; data gate
+[05:18:30] EURUSDm: gate turtle span FAIL, basket span FAIL (27s)
+[05:18:30] EURUSDm: full per-second store kept (check symbol)
+[05:18:31] EURUSDm: specs written: med 0.000712861, caps gold 0.00402006 / BTC 0.00846261, G 9.4680, M 3.2500, L 0.03; fetch done in 329s

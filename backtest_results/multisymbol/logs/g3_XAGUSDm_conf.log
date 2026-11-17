@@ -1,0 +1,9 @@
+[05:32:48]   direct XAGUSDm conf v3lite    (a)    2412.80 replay    2412.80 diff +0.0000 (bound 3.11)  DD 58.27 vs 58.16  same baskets True (first diff -1)  ok  13s
+[05:33:01]   direct XAGUSDm conf v3lite    (b)    2412.80 replay    2412.80 diff +0.0000 (bound 3.11)  DD 58.27 vs 58.16  same baskets True (first diff -1)  ok  13s
+[05:33:14]   direct XAGUSDm conf gtop2     (a)    4765.60 replay    4765.60 diff +0.0000 (bound 6.72)  DD 31.06 vs 30.92  same baskets True (first diff -1)  ok  13s
+[05:33:27]   direct XAGUSDm conf gtop2     (b)    4765.60 replay    4765.60 diff +0.0000 (bound 6.72)  DD 31.06 vs 30.92  same baskets True (first diff -1)  ok  13s
+[05:33:45]   direct XAGUSDm conf gtop1add  (a)    2399.40 replay    2399.40 diff -0.0000 (bound 6.54)  DD 67.98 vs 67.87  same baskets True (first diff -1)  ok  18s
+[05:34:04]   direct XAGUSDm conf gtop1add  (b)    2399.40 replay    2399.40 diff -0.0000 (bound 6.54)  DD 67.98 vs 67.87  same baskets True (first diff -1)  ok  19s
+[05:34:17]   direct XAGUSDm conf btop2     (a)    2210.45 replay    2210.45 diff +0.0000 (bound 3.04)  DD 71.98 vs 71.95  same baskets True (first diff -1)  ok  13s
+[05:34:30]   direct XAGUSDm conf btop2     (b)    2210.45 replay    2210.45 diff +0.0000 (bound 3.04)  DD 71.98 vs 71.95  same baskets True (first diff -1)  ok  13s
+[05:34:30] G3 XAGUSDm conf: within the bound

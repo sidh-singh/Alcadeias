@@ -1,0 +1,9 @@
+symbol,period,design,account,lot,direct_final,replay_final,diff,bound,diff_pct_of_profit,direct_dd_pct,replay_dd_pct,measured_dd_pct,direct_wiped,replay_wiped,same_baskets,first_diff_basket,baskets_direct,baskets_replay,ok,runtime_s
+NZDUSDm,sel,v3lite,a,0.01,1781.03,1781.03,0.0,2.46,-0.0,11.759,11.757,11.757,False,False,True,-1,245,245,True,13.7
+NZDUSDm,sel,v3lite,b,0.03,1343.09,1343.09,0.0,7.38,-0.0,34.783,34.778,34.778,False,False,True,-1,245,245,True,13.4
+NZDUSDm,sel,gtop2,a,0.01,1716.42,1716.42,0.0,3.94,-0.0,14.29,14.286,14.286,False,False,True,-1,393,393,True,13.2
+NZDUSDm,sel,gtop2,b,0.03,1149.26,1149.26,0.0,11.82,-0.0,42.819,42.812,42.812,False,False,True,-1,393,393,True,13.3
+NZDUSDm,sel,gtop1add,a,0.01,1618.53,1618.53,0.0,5.72,-0.0,19.389,19.387,19.387,False,False,True,-1,348,348,True,19.5
+NZDUSDm,sel,gtop1add,b,0.03,855.59,855.59,0.0,17.16,-0.0,57.86,57.857,57.857,False,False,True,-1,348,348,True,19.6
+NZDUSDm,sel,btop2,a,0.01,1850.13,1850.13,0.0,2.49,-0.0,9.532,9.53,9.53,False,False,True,-1,248,248,True,13.8
+NZDUSDm,sel,btop2,b,0.03,1550.39,1550.39,0.0,7.47,-0.0,27.801,27.795,27.795,False,False,True,-1,248,248,True,13.8

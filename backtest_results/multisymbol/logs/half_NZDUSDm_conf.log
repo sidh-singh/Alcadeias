@@ -1,0 +1,6 @@
+[05:43:07] NZDUSDm conf: 15,848,198 per-second rows ready (1s)
+[05:43:21]   NZDUSDm conf v3lite        14s  baskets  260  stream   2022.80  (a)   2022.80 DD   2.5%  (b, L=0.03)    2068.40 DD   7.3%
+[05:43:35]   NZDUSDm conf gtop2         14s  baskets  409  stream   1884.02  (a)   1884.02 DD   7.0%  (b, L=0.03)    1652.06 DD  21.0%
+[05:43:55]   NZDUSDm conf gtop1add      20s  baskets  365  stream   1898.39  (a)   1898.39 DD   6.2%  (b, L=0.03)    1695.17 DD  18.4%
+[05:44:09]   NZDUSDm conf btop2         14s  baskets  242  stream   1988.06  (a)   1988.06 DD   4.0%  (b, L=0.03)    1964.18 DD  11.9%
+[05:44:09] NZDUSDm conf: done in 62s

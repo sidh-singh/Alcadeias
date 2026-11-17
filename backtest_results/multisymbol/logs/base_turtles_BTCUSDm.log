@@ -1,0 +1,11 @@
+[05:14:28] BTCUSDm: 4,642,163 M1 bars 2018-01-01 .. 2026-11-12, votes ready (57s)
+[05:14:30]   BTCUSDm ts2 tsel trades  41  stream   4589.40  (a)   5179.99 DD  31.8%  (b)    5179.99 DD  31.8%
+[05:14:30]   BTCUSDm ts2 conf trades  18  stream   3165.50  (a)   3166.94 DD  36.8%  (b)    3166.94 DD  36.8%
+[05:14:30]   BTCUSDm ts2 sel  trades  22  stream   2548.43  (a)   2442.66 DD  26.5%  (b)    2442.66 DD  26.5%
+[05:14:30]   BTCUSDm ts2 8y   trades  59  stream   5754.90  (a)   7814.72 DD  32.5%  (b)    7814.72 DD  32.5%
+[05:14:30]   BTCUSDm ts1 tsel trades  59  stream   4697.68  (a)   5706.31 DD  41.3%  (b)    5706.31 DD  41.3%
+[05:14:30]   BTCUSDm ts1 conf trades  28  stream   3023.76  (a)   3278.72 DD  45.5%  (b)    3278.72 DD  45.5%
+[05:14:30]   BTCUSDm ts1 sel  trades  29  stream   3450.65  (a)   4249.22 DD  22.4%  (b)    4249.22 DD  22.4%
+[05:14:31]   BTCUSDm ts1 8y   trades  87  stream   5721.43  (a)   6977.48 DD  46.0%  (b)    6977.48 DD  46.0%
+[05:14:31] BTCUSDm: Turtle account with FX = 1 vs external.account: all equal
+[05:14:31] BTCUSDm: Turtles done in 59s

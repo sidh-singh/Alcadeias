@@ -1,0 +1,6 @@
+[05:34:36] USDJPYm sel: 20,174,312 per-second rows ready (1s)
+[05:34:50]   USDJPYm sel v3lite        14s  baskets  265  stream   1913.09  (a)   1913.09 DD   8.6%  (b, L=0.03)    1739.28 DD  24.1%
+[05:35:04]   USDJPYm sel gtop2         14s  baskets  418  stream   2115.73  (a)   2115.73 DD   3.6%  (b, L=0.03)    2347.20 DD   9.7%
+[05:35:24]   USDJPYm sel gtop1add      20s  baskets  392  stream   1983.35  (a)   1983.35 DD   8.3%  (b, L=0.03)    1950.05 DD  21.8%
+[05:35:39]   USDJPYm sel btop2         14s  baskets  284  stream   1973.77  (a)   1973.77 DD   7.4%  (b, L=0.03)    1921.31 DD  20.2%
+[05:35:39] USDJPYm sel: done in 64s

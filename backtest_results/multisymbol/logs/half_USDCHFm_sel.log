@@ -1,0 +1,6 @@
+[05:40:22] USDCHFm sel: 18,598,840 per-second rows ready (1s)
+[05:40:36]   USDCHFm sel v3lite        14s  baskets  240  stream   1885.76  (a)   1885.76 DD   8.0%  (b, L=0.03)    1657.27 DD  23.2%
+[05:40:50]   USDCHFm sel gtop2         13s  baskets  418  stream   2072.88  (a)   2072.88 DD   3.5%  (b, L=0.03)    2218.63 DD   9.3%
+[05:41:09]   USDCHFm sel gtop1add      20s  baskets  375  stream   1899.61  (a)   1899.61 DD   9.6%  (b, L=0.03)    1698.84 DD  26.5%
+[05:41:23]   USDCHFm sel btop2         14s  baskets  265  stream   2058.26  (a)   2058.26 DD   4.8%  (b, L=0.03)    2174.77 DD  12.9%
+[05:41:23] USDCHFm sel: done in 62s

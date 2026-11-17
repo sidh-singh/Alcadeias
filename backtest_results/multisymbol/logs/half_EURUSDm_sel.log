@@ -1,0 +1,6 @@
+[05:27:49] EURUSDm sel: 18,889,928 per-second rows ready (1s)
+[05:28:04]   EURUSDm sel v3lite        14s  baskets  252  stream   1987.72  (a)   1987.72 DD   5.5%  (b, L=0.03)    1963.16 DD  15.6%
+[05:28:18]   EURUSDm sel gtop2         14s  baskets  417  stream   1943.76  (a)   1943.76 DD   6.3%  (b, L=0.03)    1831.28 DD  17.6%
+[05:28:38]   EURUSDm sel gtop1add      20s  baskets  393  stream   1762.25  (a)   1762.25 DD  14.4%  (b, L=0.03)    1286.75 DD  41.4%
+[05:28:53]   EURUSDm sel btop2         14s  baskets  251  stream   2108.46  (a)   2108.46 DD   4.2%  (b, L=0.03)    2325.38 DD  11.1%
+[05:28:53] EURUSDm sel: done in 64s

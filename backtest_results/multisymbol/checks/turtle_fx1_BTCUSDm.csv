@@ -1,0 +1,9 @@
+symbol,design,period,external_final,new_final,external_dd_pct,new_dd_pct,trades,same_trades,ok
+BTCUSDm,ts2,tsel,5179.99,5179.99,31.750192,31.750192,41,True,True
+BTCUSDm,ts2,conf,3166.94,3166.94,36.751019,36.751019,19,True,True
+BTCUSDm,ts2,sel,2442.66,2442.66,26.462595,26.462595,22,True,True
+BTCUSDm,ts2,8y,7814.72,7814.72,32.540698,32.540698,60,True,True
+BTCUSDm,ts1,tsel,5706.31,5706.31,41.265337,41.265337,59,True,True
+BTCUSDm,ts1,conf,3278.72,3278.72,45.45026,45.45026,29,True,True
+BTCUSDm,ts1,sel,4249.22,4249.22,22.358913,22.358913,29,True,True
+BTCUSDm,ts1,8y,6977.48,6977.48,46.025321,46.025321,88,True,True

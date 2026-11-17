@@ -1,0 +1,9 @@
+symbol,period,design,account,lot,direct_final,replay_final,diff,bound,diff_pct_of_profit,direct_dd_pct,replay_dd_pct,measured_dd_pct,direct_wiped,replay_wiped,same_baskets,first_diff_basket,baskets_direct,baskets_replay,ok,runtime_s
+XAGUSDm,sel,v3lite,a,0.01,1326.85,1326.85,0.0,2.52,-0.0,51.207,51.206,51.206,False,False,True,-1,252,252,True,13.5
+XAGUSDm,sel,v3lite,b,0.01,1326.85,1326.85,0.0,2.52,-0.0,51.207,51.206,51.206,False,False,True,-1,252,252,True,13.3
+XAGUSDm,sel,gtop2,a,0.01,1089.75,1089.75,0.0,4.26,-0.0,52.265,52.252,52.252,False,False,True,-1,426,426,True,13.0
+XAGUSDm,sel,gtop2,b,0.01,1089.75,1089.75,0.0,4.26,-0.0,52.265,52.252,52.252,False,False,True,-1,426,426,True,13.0
+XAGUSDm,sel,gtop1add,a,0.01,1170.05,1170.05,-0.0,5.6,0.0,57.864,57.852,57.852,False,False,True,-1,363,363,True,19.3
+XAGUSDm,sel,gtop1add,b,0.01,1170.05,1170.05,-0.0,5.6,0.0,57.864,57.852,57.852,False,False,True,-1,363,363,True,19.2
+XAGUSDm,sel,btop2,a,0.01,1440.75,1440.75,0.0,2.58,-0.0,49.467,49.453,49.453,False,False,True,-1,257,257,True,13.3
+XAGUSDm,sel,btop2,b,0.01,1440.75,1440.75,0.0,2.58,-0.0,49.467,49.453,49.453,False,False,True,-1,257,257,True,13.7

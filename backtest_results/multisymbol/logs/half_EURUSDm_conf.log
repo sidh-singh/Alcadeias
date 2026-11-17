@@ -1,0 +1,6 @@
+[05:27:50] EURUSDm conf: 21,397,835 per-second rows ready (1s)
+[05:28:05]   EURUSDm conf v3lite        14s  baskets  273  stream   1960.53  (a)   1960.53 DD   4.9%  (b, L=0.03)    1881.59 DD  14.6%
+[05:28:18]   EURUSDm conf gtop2         14s  baskets  427  stream   1918.74  (a)   1918.74 DD   6.5%  (b, L=0.03)    1756.22 DD  18.8%
+[05:28:39]   EURUSDm conf gtop1add      20s  baskets  403  stream   1900.55  (a)   1900.55 DD   8.7%  (b, L=0.03)    1701.65 DD  25.0%
+[05:28:53]   EURUSDm conf btop2         14s  baskets  281  stream   1938.64  (a)   1938.64 DD   6.9%  (b, L=0.03)    1815.92 DD  19.7%
+[05:28:53] EURUSDm conf: done in 65s

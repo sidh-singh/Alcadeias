@@ -1,0 +1,9 @@
+[05:29:19]   direct EURUSDm conf v3lite    (a)    1960.53 replay    1960.53 diff +0.0000 (bound 2.73)  DD 4.94 vs 4.94  same baskets True (first diff -1)  ok  14s
+[05:29:33]   direct EURUSDm conf v3lite    (b)    1881.59 replay    1881.59 diff +0.0000 (bound 8.19)  DD 14.61 vs 14.60  same baskets True (first diff -1)  ok  14s
+[05:29:47]   direct EURUSDm conf gtop2     (a)    1918.74 replay    1918.74 diff +0.0000 (bound 4.27)  DD 6.49 vs 6.46  same baskets True (first diff -1)  ok  14s
+[05:30:01]   direct EURUSDm conf gtop2     (b)    1756.22 replay    1756.22 diff +0.0000 (bound 12.81)  DD 18.81 vs 18.75  same baskets True (first diff -1)  ok  14s
+[05:30:22]   direct EURUSDm conf gtop1add  (a)    1900.55 replay    1900.55 diff +0.0000 (bound 6.37)  DD 8.76 vs 8.73  same baskets True (first diff -1)  ok  21s
+[05:30:43]   direct EURUSDm conf gtop1add  (b)    1701.65 replay    1701.65 diff +0.0000 (bound 19.11)  DD 25.05 vs 24.98  same baskets True (first diff -1)  ok  21s
+[05:30:58]   direct EURUSDm conf btop2     (a)    1938.64 replay    1938.64 diff +0.0000 (bound 2.81)  DD 6.87 vs 6.87  same baskets True (first diff -1)  ok  15s
+[05:31:12]   direct EURUSDm conf btop2     (b)    1815.92 replay    1815.92 diff +0.0000 (bound 8.43)  DD 19.74 vs 19.73  same baskets True (first diff -1)  ok  15s
+[05:31:12] G3 EURUSDm conf: within the bound

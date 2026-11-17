@@ -1,0 +1,7 @@
+symbol,period,design,account,lot,direct_final,replay_final,diff,bound,diff_pct_of_profit,direct_dd_pct,replay_dd_pct,measured_dd_pct,direct_wiped,replay_wiped,same_baskets,first_diff_basket,baskets_direct,baskets_replay,ok,runtime_s
+XAUUSDm,conf,v3lite,a,0.01,7491.23,7490.46,0.77,4.93,0.014,35.965,35.922,35.918,False,False,False,159,254,254,True,15.0
+XAUUSDm,conf,v3lite,b,0.01,7491.23,7490.46,0.77,4.93,0.014,35.965,35.922,35.918,False,False,False,159,254,254,True,13.7
+XAUUSDm,conf,gtop2,a,0.01,8500.08,8499.97,0.11,8.31,0.0017,15.079,15.05,15.05,False,False,False,159,404,404,True,13.5
+XAUUSDm,conf,gtop2,b,0.01,8500.08,8499.97,0.11,8.31,0.0017,15.079,15.05,15.05,False,False,False,159,404,404,True,13.4
+XAUUSDm,conf,gtop1add,a,0.01,12424.5,12419.58,4.92,15.65,0.0472,31.189,31.161,31.144,False,False,False,138,382,382,True,19.7
+XAUUSDm,conf,gtop1add,b,0.01,12424.5,12419.58,4.92,15.65,0.0472,31.189,31.161,31.144,False,False,False,138,382,382,True,19.5

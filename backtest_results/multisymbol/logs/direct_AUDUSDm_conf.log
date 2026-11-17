@@ -1,0 +1,9 @@
+[05:37:20]   direct AUDUSDm conf v3lite    (a)    2025.27 replay    2025.27 diff +0.0000 (bound 2.42)  DD 2.83 vs 2.82  same baskets True (first diff -1)  ok  14s
+[05:37:35]   direct AUDUSDm conf v3lite    (b)    2075.81 replay    2075.81 diff +0.0000 (bound 7.26)  DD 7.97 vs 7.96  same baskets True (first diff -1)  ok  14s
+[05:37:49]   direct AUDUSDm conf gtop2     (a)    1959.48 replay    1959.48 diff +0.0000 (bound 3.97)  DD 3.97 vs 3.96  same baskets True (first diff -1)  ok  14s
+[05:38:03]   direct AUDUSDm conf gtop2     (b)    1878.44 replay    1878.44 diff +0.0000 (bound 11.91)  DD 11.49 vs 11.48  same baskets True (first diff -1)  ok  14s
+[05:38:23]   direct AUDUSDm conf gtop1add  (a)    2007.37 replay    2007.37 diff +0.0000 (bound 6.07)  DD 3.75 vs 3.74  same baskets True (first diff -1)  ok  21s
+[05:38:44]   direct AUDUSDm conf gtop1add  (b)    2022.11 replay    2022.11 diff -0.0000 (bound 18.21)  DD 10.63 vs 10.62  same baskets True (first diff -1)  ok  20s
+[05:38:58]   direct AUDUSDm conf btop2     (a)    2019.35 replay    2019.35 diff +0.0000 (bound 2.49)  DD 4.12 vs 4.12  same baskets True (first diff -1)  ok  14s
+[05:39:13]   direct AUDUSDm conf btop2     (b)    2058.05 replay    2058.05 diff +0.0000 (bound 7.47)  DD 11.52 vs 11.51  same baskets True (first diff -1)  ok  14s
+[05:39:13] direct_vs_replay AUDUSDm conf: within the bound

@@ -1,0 +1,10 @@
+[05:40:59] USDCHFm: 3,302,767 M1 bars 2017-11-01 .. 2026-11-12, votes ready (38s)
+[05:40:59]   USDCHFm ts2 tsel trades  33  stream   1593.79  (a)   1593.79 DD  25.5%  (b)     781.37 DD  73.7%
+[05:40:59]   USDCHFm ts2 conf trades  12  stream   2260.01  (a)   2260.01 DD  11.0%  (b)    2406.31 DD  33.5%
+[05:40:59]   USDCHFm ts2 sel  trades  14  stream   1781.05  (a)   1781.05 DD  22.1%  (b)    1343.16 DD  56.5%
+[05:40:59]   USDCHFm ts2 8y   trades  46  stream   1828.01  (a)   1828.01 DD  26.2%  (b)    1484.04 DD  75.6%
+[05:40:59]   USDCHFm ts1 tsel trades  53  stream   1719.30  (a)   1719.30 DD  26.3%  (b)    1157.89 DD  77.9%
+[05:40:59]   USDCHFm ts1 conf trades  18  stream   2234.76  (a)   2234.76 DD  10.4%  (b)    2501.83 DD  34.8%
+[05:40:59]   USDCHFm ts1 sel  trades  24  stream   1899.01  (a)   1899.01 DD  21.7%  (b)    1697.02 DD  58.3%
+[05:41:00]   USDCHFm ts1 8y   trades  71  stream   1954.06  (a)   1954.06 DD  26.3%  (b)    1862.17 DD  77.9%
+[05:41:00] USDCHFm: Turtles done in 39s

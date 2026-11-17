@@ -1,0 +1,10 @@
+[05:13:17] XAGUSDm: df free 154.9 GB, batch 0.58 GB, new market data held 0.13 GB
+[05:13:41]   XAGUSDm: 20/109 months downloaded (CRC checked), built, zips deleted (25s)
+[05:14:13]   XAGUSDm: 40/109 months downloaded (CRC checked), built, zips deleted (56s)
+[05:14:33]   XAGUSDm: 60/109 months downloaded (CRC checked), built, zips deleted (76s)
+[05:14:55]   XAGUSDm: 80/109 months downloaded (CRC checked), built, zips deleted (98s)
+[05:15:46]   XAGUSDm: 100/109 months downloaded (CRC checked), built, zips deleted (150s)
+[05:16:45] XAGUSDm: 109 months built in 208s; data gate
+[05:17:05] XAGUSDm: gate turtle span FAIL, basket span FAIL (21s)
+[05:17:05] XAGUSDm: full per-second store kept (check symbol)
+[05:17:06] XAGUSDm: specs written: med 0.0521937, caps gold 0.294337 / BTC 0.619608, G 9.4680, M 10.9500, L 0.01; fetch done in 229s

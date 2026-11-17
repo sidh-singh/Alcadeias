@@ -1,0 +1,10 @@
+[05:36:28] AUDUSDm: 3,333,669 M1 bars 2017-11-01 .. 2026-11-12, votes ready (38s)
+[05:36:28]   AUDUSDm ts2 tsel trades  36  stream   1656.38  (a)   1656.38 DD  28.6%  (b)     871.75 DD  72.7%
+[05:36:28]   AUDUSDm ts2 conf trades  21  stream   1811.35  (a)   1811.35 DD  12.4%  (b)    1434.06 DD  36.7%
+[05:36:28]   AUDUSDm ts2 sel  trades  17  stream   1566.80  (a)   1566.80 DD  24.5%  (b)     700.40 DD  70.5%
+[05:36:28]   AUDUSDm ts2 8y   trades  57  stream   1467.73  (a)   1467.73 DD  37.7%  (b)     305.81 DD  94.1%
+[05:36:29]   AUDUSDm ts1 tsel trades  53  stream   1539.97  (a)   1539.97 DD  30.5%  (b)     619.90 DD  76.6%
+[05:36:29]   AUDUSDm ts1 conf trades  30  stream   1761.71  (a)   1761.71 DD  14.0%  (b)    1285.13 DD  40.9%
+[05:36:29]   AUDUSDm ts1 sel  trades  26  stream   1464.77  (a)   1464.77 DD  28.3%  (b)     394.30 DD  81.5%
+[05:36:29]   AUDUSDm ts1 8y   trades  83  stream   1301.67  (a)   1301.67 DD  42.0%  (b)       0.00 DD 100.0%  WIPED
+[05:36:29] AUDUSDm: Turtles done in 39s

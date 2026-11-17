@@ -1,0 +1,6 @@
+[05:28:34] XAGUSDm sel: 11,252,024 per-second rows ready (1s)
+[05:28:48]   XAGUSDm sel v3lite        14s  baskets  252  stream   1326.85  (a)   1326.85 DD  51.2%  (b, L=0.01)    1326.85 DD  51.2%
+[05:29:00]   XAGUSDm sel gtop2         12s  baskets  426  stream   1089.75  (a)   1089.75 DD  52.3%  (b, L=0.01)    1089.75 DD  52.3%
+[05:29:19]   XAGUSDm sel gtop1add      19s  baskets  363  stream   1170.05  (a)   1170.05 DD  57.9%  (b, L=0.01)    1170.05 DD  57.9%
+[05:29:33]   XAGUSDm sel btop2         13s  baskets  258  stream   1440.75  (a)   1440.75 DD  49.5%  (b, L=0.01)    1440.75 DD  49.5%
+[05:29:33] XAGUSDm sel: done in 59s

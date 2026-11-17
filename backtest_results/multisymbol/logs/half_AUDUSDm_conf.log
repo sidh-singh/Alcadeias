@@ -1,0 +1,6 @@
+[05:35:51] AUDUSDm conf: 17,886,709 per-second rows ready (1s)
+[05:36:05]   AUDUSDm conf v3lite        14s  baskets  242  stream   2025.27  (a)   2025.27 DD   2.8%  (b, L=0.03)    2075.81 DD   8.0%
+[05:36:20]   AUDUSDm conf gtop2         15s  baskets  397  stream   1959.48  (a)   1959.48 DD   4.0%  (b, L=0.03)    1878.44 DD  11.5%
+[05:36:41]   AUDUSDm conf gtop1add      20s  baskets  382  stream   2007.37  (a)   2007.37 DD   3.7%  (b, L=0.03)    2022.11 DD  10.6%
+[05:36:55]   AUDUSDm conf btop2         14s  baskets  249  stream   2019.35  (a)   2019.35 DD   4.1%  (b, L=0.03)    2058.05 DD  11.5%
+[05:36:55] AUDUSDm conf: done in 65s

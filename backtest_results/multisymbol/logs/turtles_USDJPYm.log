@@ -1,0 +1,10 @@
+[05:35:12] USDJPYm: 3,327,484 M1 bars 2017-11-01 .. 2026-11-12, votes ready (37s)
+[05:35:12]   USDJPYm ts2 tsel trades  31  stream   2072.86  (a)   2072.86 DD  20.2%  (b)    2218.59 DD  51.9%
+[05:35:12]   USDJPYm ts2 conf trades  18  stream   1604.45  (a)   1604.45 DD  28.7%  (b)     813.34 DD  70.4%
+[05:35:12]   USDJPYm ts2 sel  trades  14  stream   2222.64  (a)   2222.64 DD  17.2%  (b)    2182.18 DD  49.2%
+[05:35:12]   USDJPYm ts2 8y   trades  49  stream   1744.03  (a)   1744.03 DD  27.0%  (b)    1082.32 DD  67.7%
+[05:35:13]   USDJPYm ts1 tsel trades  48  stream   1814.00  (a)   1814.00 DD  41.5%  (b)       0.00 DD 100.0%  WIPED
+[05:35:13]   USDJPYm ts1 conf trades  26  stream   1635.99  (a)   1635.99 DD  28.2%  (b)     873.53 DD  70.8%
+[05:35:13]   USDJPYm ts1 sel  trades  23  stream   2388.03  (a)   2388.03 DD  12.5%  (b)    2320.44 DD  37.4%
+[05:35:13]   USDJPYm ts1 8y   trades  74  stream   1450.00  (a)   1450.00 DD  41.5%  (b)       0.00 DD 100.0%  WIPED
+[05:35:13] USDJPYm: Turtles done in 38s

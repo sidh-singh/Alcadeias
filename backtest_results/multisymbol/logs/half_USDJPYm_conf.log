@@ -1,0 +1,6 @@
+[05:34:36] USDJPYm conf: 27,973,086 per-second rows ready (2s)
+[05:34:51]   USDJPYm conf v3lite        14s  baskets  262  stream   2105.43  (a)   2105.43 DD   3.6%  (b, L=0.03)    2316.29 DD   9.9%
+[05:35:05]   USDJPYm conf gtop2         14s  baskets  419  stream   2016.14  (a)   2016.14 DD   5.0%  (b, L=0.03)    2048.41 DD  14.1%
+[05:35:25]   USDJPYm conf gtop1add      21s  baskets  376  stream   2115.28  (a)   2115.28 DD   4.8%  (b, L=0.03)    2276.46 DD  13.9%
+[05:35:40]   USDJPYm conf btop2         14s  baskets  270  stream   2058.64  (a)   2058.64 DD   4.0%  (b, L=0.03)    2175.92 DD  11.7%
+[05:35:40] USDJPYm conf: done in 66s

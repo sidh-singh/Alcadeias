@@ -1,0 +1,11 @@
+[05:36:05] USDCHFm: df free 147.6 GB, batch 0.62 GB, new market data held 7.33 GB
+[05:36:59]   USDCHFm: 20/109 months downloaded (CRC checked), built, zips deleted (54s)
+[05:37:26]   USDCHFm: 40/109 months downloaded (CRC checked), built, zips deleted (81s)
+[05:38:00]   USDCHFm: 60/109 months downloaded (CRC checked), built, zips deleted (115s)
+[05:38:49]   USDCHFm: 80/109 months downloaded (CRC checked), built, zips deleted (164s)
+[05:39:33]   USDCHFm: 100/109 months downloaded (CRC checked), built, zips deleted (208s)
+[05:39:47] USDCHFm: 109 months built in 222s; data gate
+[05:40:14] USDCHFm: gate turtle span FAIL, basket span FAIL (28s)
+[05:40:15] USDCHFm: freed 0.64 GB (per-second files before 2021-11)
+[05:40:15] USDCHFm: gate (DEVIATIONS E) turtle span PASS, basket span PASS; flagged silences 2021-03-02T13:21 34.64h own 0.0h, 2024-04-09T15:02 8.96h own 0.0h, 2024-04-12T17:02 52.39h own 3.9h, 2024-04-09T15:02 8.96h own 0.0h, 2024-04-12T17:02 52.39h own 3.9h
+[05:40:15] USDCHFm: specs written: med 0.000649237, caps gold 0.00366126 / BTC 0.00770731, G 9.4680, M 2.9679, L 0.03; fetch done in 250s

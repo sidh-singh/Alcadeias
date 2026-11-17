@@ -1,0 +1,10 @@
+symbol,design,scope,n_trades,avg_hold_h,median_hold_h,nights_total,nights_per_trade,share_overnight,long_n,long_avg_hold_h,long_share_overnight,long_nights_total,short_n,short_avg_hold_h,short_share_overnight,short_nights_total
+XAUUSDm,v3lite,selection + confirmation,517,45.18,25.74,708,1.3694,0.7176,291,43.387,0.6976,377,226,47.49,0.7434,331
+XAUUSDm,v3lite,conf,254,45.293,26.483,348,1.3701,0.752,145,44.191,0.7379,194,109,46.759,0.7706,154
+XAUUSDm,v3lite,sel,263,45.072,24.544,360,1.3688,0.6844,146,42.588,0.6575,183,117,48.171,0.7179,177
+XAUUSDm,gtop2,selection + confirmation,815,23.346,12.842,582,0.7141,0.5141,458,22.54,0.4891,313,357,24.38,0.5462,269
+XAUUSDm,gtop2,conf,405,24.896,14.447,303,0.7481,0.5556,235,23.979,0.5489,172,170,26.163,0.5647,131
+XAUUSDm,gtop2,sel,410,21.816,10.966,279,0.6805,0.4732,223,21.024,0.426,141,187,22.76,0.5294,138
+XAUUSDm,gtop1add,selection + confirmation,784,35.568,21.969,841,1.0727,0.7003,430,36.041,0.6814,454,354,34.992,0.7232,387
+XAUUSDm,gtop1add,conf,383,36.701,23.138,423,1.1044,0.7389,216,37.475,0.7546,240,167,35.7,0.7186,183
+XAUUSDm,gtop1add,sel,401,34.485,21.442,418,1.0424,0.6633,214,34.594,0.6075,214,187,34.36,0.7273,204

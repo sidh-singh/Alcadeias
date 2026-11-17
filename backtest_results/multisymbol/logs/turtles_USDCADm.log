@@ -1,0 +1,10 @@
+[05:40:01] USDCADm: 3,312,398 M1 bars 2017-11-01 .. 2026-11-12, votes ready (40s)
+[05:40:01]   USDCADm ts2 tsel trades  38  stream   1399.93  (a)   1399.93 DD  31.4%  (b)       0.00 DD 100.0%  WIPED
+[05:40:01]   USDCADm ts2 conf trades  22  stream   1671.69  (a)   1671.69 DD  17.4%  (b)     686.75 DD  67.2%
+[05:40:01]   USDCADm ts2 sel  trades  15  stream   1720.45  (a)   1720.45 DD  16.4%  (b)     881.80 DD  62.5%
+[05:40:01]   USDCADm ts2 8y   trades  61  stream   1051.79  (a)   1051.79 DD  47.7%  (b)       0.00 DD 100.0%  WIPED
+[05:40:02]   USDCADm ts1 tsel trades  56  stream   1173.78  (a)   1173.78 DD  44.0%  (b)       0.00 DD 100.0%  WIPED
+[05:40:02]   USDCADm ts1 conf trades  21  stream   2066.48  (a)   2066.48 DD   9.3%  (b)    2130.34 DD  34.5%
+[05:40:02]   USDCADm ts1 sel  trades  23  stream   1722.17  (a)   1722.17 DD  16.8%  (b)     888.68 DD  65.9%
+[05:40:02]   USDCADm ts1 8y   trades  77  stream   1240.25  (a)   1240.25 DD  44.0%  (b)       0.00 DD 100.0%  WIPED
+[05:40:02] USDCADm: Turtles done in 41s

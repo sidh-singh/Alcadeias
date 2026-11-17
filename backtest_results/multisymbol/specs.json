@@ -1,0 +1,395 @@
+{
+ "XAGUSDm": {
+  "symbol": "XAGUSDm",
+  "written": "2026-11-16T23:47:06.585869+00:00",
+  "spec": {
+   "contract_size": 5000.0,
+   "digits": 3,
+   "point": 0.001,
+   "quote": "USD",
+   "min_lot": 0.01,
+   "lot_step": 0.01,
+   "leverage": 2000.0,
+   "data_hole_s": 0.0
+  },
+  "conversion": "x 1",
+  "med_h1_vol": 0.052193681629451226,
+  "med_h1_vol_XAUUSDm": 2.1279127322055675,
+  "med_h1_vol_BTCUSDm": 101.08388164572204,
+  "caps": {
+   "gtop2": 0.294337342915484,
+   "btop2": 0.6196083582826296
+  },
+  "G_usd": 9.468000000000075,
+  "M_usd": 10.949999999999882,
+  "L_raw": 0.008646575342465915,
+  "L": 0.01,
+  "gate": {
+   "turtle": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 4,
+    "rule": "DEVIATIONS E"
+   },
+   "basket": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 5,
+    "rule": "DEVIATIONS E"
+   }
+  }
+ },
+ "EURUSDm": {
+  "symbol": "EURUSDm",
+  "written": "2026-11-16T23:48:31.594628+00:00",
+  "spec": {
+   "contract_size": 100000.0,
+   "digits": 5,
+   "point": 1e-05,
+   "quote": "USD",
+   "min_lot": 0.01,
+   "lot_step": 0.01,
+   "leverage": 2000.0,
+   "data_hole_s": 0.0
+  },
+  "conversion": "x 1",
+  "med_h1_vol": 0.0007128609406214172,
+  "med_h1_vol_XAUUSDm": 2.1279127322055675,
+  "med_h1_vol_BTCUSDm": 101.08388164572204,
+  "caps": {
+   "gtop2": 0.00402005738204804,
+   "btop2": 0.008462606647257726
+  },
+  "G_usd": 9.468000000000075,
+  "M_usd": 3.249999999999975,
+  "L_raw": 0.029132307692308144,
+  "L": 0.03,
+  "gate": {
+   "turtle": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 3,
+    "rule": "DEVIATIONS E"
+   },
+   "basket": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 2,
+    "rule": "DEVIATIONS E"
+   }
+  }
+ },
+ "USDJPYm": {
+  "symbol": "USDJPYm",
+  "written": "2026-11-16T23:53:28.415306+00:00",
+  "spec": {
+   "contract_size": 100000.0,
+   "digits": 3,
+   "point": 0.001,
+   "quote": "JPY",
+   "min_lot": 0.01,
+   "lot_step": 0.01,
+   "leverage": 2000.0,
+   "data_hole_s": 0.0
+  },
+  "conversion": {
+   "pair": "USDJPYm",
+   "how": "div"
+  },
+  "med_h1_vol": 0.10314996183329905,
+  "med_h1_vol_XAUUSDm": 2.1279127322055675,
+  "med_h1_vol_BTCUSDm": 101.08388164572204,
+  "caps": {
+   "gtop2": 0.5816965720754054,
+   "btop2": 1.2245271173279815
+  },
+  "G_usd": 9.468000000000075,
+  "M_usd": 3.47638456005753,
+  "L_raw": 0.027235191724138227,
+  "L": 0.03,
+  "gate": {
+   "turtle": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 3,
+    "rule": "DEVIATIONS E"
+   },
+   "basket": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 2,
+    "rule": "DEVIATIONS E"
+   }
+  }
+ },
+ "GBPUSDm": {
+  "symbol": "GBPUSDm",
+  "written": "2026-11-16T23:54:53.767717+00:00",
+  "spec": {
+   "contract_size": 100000.0,
+   "digits": 5,
+   "point": 1e-05,
+   "quote": "USD",
+   "min_lot": 0.01,
+   "lot_step": 0.01,
+   "leverage": 2000.0,
+   "data_hole_s": 0.0
+  },
+  "conversion": "x 1",
+  "med_h1_vol": 0.0009057301007317036,
+  "med_h1_vol_XAUUSDm": 2.1279127322055675,
+  "med_h1_vol_BTCUSDm": 101.08388164572204,
+  "caps": {
+   "gtop2": 0.0051077100316586025,
+   "btop2": 0.010752219871090018
+  },
+  "G_usd": 9.468000000000075,
+  "M_usd": 3.8400000000000656,
+  "L_raw": 0.024656249999999776,
+  "L": 0.02,
+  "gate": {
+   "turtle": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 1,
+    "rule": "DEVIATIONS E"
+   },
+   "basket": {
+    "passed": false,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 1,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 0,
+    "rule": "DEVIATIONS E"
+   }
+  }
+ },
+ "AUDUSDm": {
+  "symbol": "AUDUSDm",
+  "written": "2026-11-16T23:57:31.668152+00:00",
+  "spec": {
+   "contract_size": 100000.0,
+   "digits": 5,
+   "point": 1e-05,
+   "quote": "USD",
+   "min_lot": 0.01,
+   "lot_step": 0.01,
+   "leverage": 2000.0,
+   "data_hole_s": 0.0
+  },
+  "conversion": "x 1",
+  "med_h1_vol": 0.0006592915944471007,
+  "med_h1_vol_XAUUSDm": 2.1279127322055675,
+  "med_h1_vol_BTCUSDm": 101.08388164572204,
+  "caps": {
+   "gtop2": 0.0037179622141576226,
+   "btop2": 0.00782666732278185
+  },
+  "G_usd": 9.468000000000075,
+  "M_usd": 2.910000000000079,
+  "L_raw": 0.03253608247422617,
+  "L": 0.03,
+  "gate": {
+   "turtle": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 1,
+    "rule": "DEVIATIONS E"
+   },
+   "basket": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 0,
+    "rule": "DEVIATIONS E"
+   }
+  }
+ },
+ "USDCADm": {
+  "symbol": "USDCADm",
+  "written": "2026-11-17T00:09:01.098233+00:00",
+  "spec": {
+   "contract_size": 100000.0,
+   "digits": 5,
+   "point": 1e-05,
+   "quote": "CAD",
+   "min_lot": 0.01,
+   "lot_step": 0.01,
+   "leverage": 2000.0,
+   "data_hole_s": 0.0
+  },
+  "conversion": {
+   "pair": "USDCADm",
+   "how": "div"
+  },
+  "med_h1_vol": 0.0007697399826586684,
+  "med_h1_vol_XAUUSDm": 2.1279127322055675,
+  "med_h1_vol_BTCUSDm": 101.08388164572204,
+  "caps": {
+   "gtop2": 0.004340817013830288,
+   "btop2": 0.009137836459701221
+  },
+  "G_usd": 9.468000000000075,
+  "M_usd": 2.6207330732120937,
+  "L_raw": 0.03612729620111845,
+  "L": 0.04,
+  "gate": {
+   "turtle": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 2,
+    "rule": "DEVIATIONS E"
+   },
+   "basket": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 1,
+    "rule": "DEVIATIONS E"
+   }
+  }
+ },
+ "USDCHFm": {
+  "symbol": "USDCHFm",
+  "written": "2026-11-17T00:10:15.839821+00:00",
+  "spec": {
+   "contract_size": 100000.0,
+   "digits": 5,
+   "point": 1e-05,
+   "quote": "CHF",
+   "min_lot": 0.01,
+   "lot_step": 0.01,
+   "leverage": 2000.0,
+   "data_hole_s": 0.0
+  },
+  "conversion": {
+   "pair": "USDCHFm",
+   "how": "div"
+  },
+  "med_h1_vol": 0.0006492370081747139,
+  "med_h1_vol_XAUUSDm": 2.1279127322055675,
+  "med_h1_vol_BTCUSDm": 101.08388164572204,
+  "caps": {
+   "gtop2": 0.0036612610941151747,
+   "btop2": 0.007707306022736497
+  },
+  "G_usd": 9.468000000000075,
+  "M_usd": 2.9678825299641716,
+  "L_raw": 0.03190153216783271,
+  "L": 0.03,
+  "gate": {
+   "turtle": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 3,
+    "rule": "DEVIATIONS E"
+   },
+   "basket": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 2,
+    "rule": "DEVIATIONS E"
+   }
+  }
+ },
+ "NZDUSDm": {
+  "symbol": "NZDUSDm",
+  "written": "2026-11-17T00:13:05.436858+00:00",
+  "spec": {
+   "contract_size": 100000.0,
+   "digits": 5,
+   "point": 1e-05,
+   "quote": "USD",
+   "min_lot": 0.01,
+   "lot_step": 0.01,
+   "leverage": 2000.0,
+   "data_hole_s": 0.0
+  },
+  "conversion": "x 1",
+  "med_h1_vol": 0.0006323846890230379,
+  "med_h1_vol_XAUUSDm": 2.1279127322055675,
+  "med_h1_vol_BTCUSDm": 101.08388164572204,
+  "caps": {
+   "gtop2": 0.0035662253218490324,
+   "btop2": 0.0075072466002769605
+  },
+  "G_usd": 9.468000000000075,
+  "M_usd": 2.73000000000001,
+  "L_raw": 0.03468131868131882,
+  "L": 0.03,
+  "gate": {
+   "turtle": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 2,
+    "rule": "DEVIATIONS E"
+   },
+   "basket": {
+    "passed": true,
+    "missing_months": [],
+    "bad_silences": 0,
+    "thin_weeks": 0,
+    "decimals_bad_months": [],
+    "decimals_use_all": true,
+    "bad_silences_literal": 1,
+    "rule": "DEVIATIONS E"
+   }
+  }
+ }
+}

@@ -1,0 +1,10 @@
+[05:23:33] AUDUSDm: df free 147.8 GB, batch 0.65 GB, new market data held 7.19 GB
+[05:24:20]   AUDUSDm: 20/109 months downloaded (CRC checked), built, zips deleted (47s)
+[05:24:52]   AUDUSDm: 40/109 months downloaded (CRC checked), built, zips deleted (79s)
+[05:25:29]   AUDUSDm: 60/109 months downloaded (CRC checked), built, zips deleted (116s)
+[05:26:13]   AUDUSDm: 80/109 months downloaded (CRC checked), built, zips deleted (159s)
+[05:26:50]   AUDUSDm: 100/109 months downloaded (CRC checked), built, zips deleted (197s)
+[05:27:07] AUDUSDm: 109 months built in 214s; data gate
+[05:27:31] AUDUSDm: gate turtle span FAIL, basket span PASS (24s)
+[05:27:31] AUDUSDm: freed 0.70 GB (per-second files before 2021-11)
+[05:27:31] AUDUSDm: specs written: med 0.000659292, caps gold 0.00371796 / BTC 0.00782667, G 9.4680, M 2.9100, L 0.03; fetch done in 238s

@@ -1,0 +1,6 @@
+[05:39:07] USDCADm conf: 15,860,304 per-second rows ready (1s)
+[05:39:21]   USDCADm conf v3lite        14s  baskets  254  stream   2008.01  (a)   2008.01 DD   3.4%  (b, L=0.04)    2032.04 DD  13.5%
+[05:39:35]   USDCADm conf gtop2         14s  baskets  426  stream   2051.49  (a)   2051.49 DD   3.9%  (b, L=0.04)    2205.95 DD  14.6%
+[05:39:58]   USDCADm conf gtop1add      22s  baskets  389  stream   2065.41  (a)   2065.41 DD   3.6%  (b, L=0.04)    2261.65 DD  14.4%
+[05:40:13]   USDCADm conf btop2         15s  baskets  251  stream   2049.94  (a)   2049.94 DD   4.3%  (b, L=0.04)    2199.76 DD  17.0%
+[05:40:13] USDCADm conf: done in 67s

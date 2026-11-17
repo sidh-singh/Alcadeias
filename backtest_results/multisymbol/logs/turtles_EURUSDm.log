@@ -1,0 +1,11 @@
+[05:28:25] EURUSDm: 3,312,958 M1 bars 2017-11-01 .. 2026-11-12, votes ready (36s)
+[05:28:26]   EURUSDm ts2 tsel trades  39  stream   1533.06  (a)   1533.06 DD  25.1%  (b)     599.18 DD  72.0%
+[05:28:26]   EURUSDm ts2 conf trades  15  stream   2007.61  (a)   2007.61 DD  16.1%  (b)    1914.77 DD  40.7%
+[05:28:26]   EURUSDm ts2 sel  trades  17  stream   1715.67  (a)   1715.67 DD  17.8%  (b)    1147.01 DD  49.3%
+[05:28:26]   EURUSDm ts2 8y   trades  54  stream   1540.67  (a)   1540.67 DD  28.3%  (b)     622.00 DD  81.2%
+[05:28:26]   EURUSDm ts1 tsel trades  57  stream   1553.90  (a)   1553.90 DD  23.8%  (b)     661.70 DD  71.0%
+[05:28:26]   EURUSDm ts1 conf trades  27  stream   1799.43  (a)   1799.43 DD  15.4%  (b)    1398.29 DD  43.7%
+[05:28:26]   EURUSDm ts1 sel  trades  21  stream   1844.96  (a)   1844.96 DD  14.2%  (b)    1534.87 DD  37.9%
+[05:28:27]   EURUSDm ts1 8y   trades  84  stream   1353.33  (a)   1353.33 DD  35.3%  (b)       0.00 DD 100.0%  WIPED
+[05:28:27] EURUSDm: Turtle account with FX = 1 vs external.account: all equal
+[05:28:27] EURUSDm: Turtles done in 38s

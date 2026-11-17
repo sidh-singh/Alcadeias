@@ -1,0 +1,6 @@
+[05:39:07] USDCADm sel: 19,097,620 per-second rows ready (1s)
+[05:39:21]   USDCADm sel v3lite        14s  baskets  263  stream   1820.05  (a)   1820.05 DD  10.7%  (b, L=0.04)    1280.18 DD  41.4%
+[05:39:35]   USDCADm sel gtop2         14s  baskets  405  stream   1841.68  (a)   1841.68 DD  10.5%  (b, L=0.04)    1366.72 DD  39.9%
+[05:39:57]   USDCADm sel gtop1add      22s  baskets  392  stream   1702.72  (a)   1702.72 DD  17.2%  (b, L=0.04)     810.89 DD  64.6%
+[05:40:12]   USDCADm sel btop2         15s  baskets  251  stream   1822.95  (a)   1822.95 DD   9.7%  (b, L=0.04)    1291.78 DD  37.9%
+[05:40:12] USDCADm sel: done in 66s

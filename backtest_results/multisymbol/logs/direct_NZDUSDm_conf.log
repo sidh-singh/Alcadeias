@@ -1,0 +1,9 @@
+[05:44:36]   direct NZDUSDm conf v3lite    (a)    2022.80 replay    2022.80 diff +0.0000 (bound 2.60)  DD 2.53 vs 2.53  same baskets True (first diff -1)  ok  14s
+[05:44:49]   direct NZDUSDm conf v3lite    (b)    2068.40 replay    2068.40 diff +0.0000 (bound 7.80)  DD 7.27 vs 7.26  same baskets True (first diff -1)  ok  13s
+[05:45:03]   direct NZDUSDm conf gtop2     (a)    1884.02 replay    1884.02 diff +0.0000 (bound 4.09)  DD 7.02 vs 7.02  same baskets True (first diff -1)  ok  13s
+[05:45:16]   direct NZDUSDm conf gtop2     (b)    1652.06 replay    1652.06 diff +0.0000 (bound 12.27)  DD 21.05 vs 21.04  same baskets True (first diff -1)  ok  13s
+[05:45:36]   direct NZDUSDm conf gtop1add  (a)    1898.39 replay    1898.39 diff +0.0000 (bound 5.81)  DD 6.20 vs 6.16  same baskets True (first diff -1)  ok  20s
+[05:45:55]   direct NZDUSDm conf gtop1add  (b)    1695.17 replay    1695.17 diff +0.0000 (bound 17.43)  DD 18.47 vs 18.38  same baskets True (first diff -1)  ok  20s
+[05:46:09]   direct NZDUSDm conf btop2     (a)    1988.06 replay    1988.06 diff +0.0000 (bound 2.42)  DD 3.98 vs 3.98  same baskets True (first diff -1)  ok  14s
+[05:46:23]   direct NZDUSDm conf btop2     (b)    1964.18 replay    1964.18 diff +0.0000 (bound 7.26)  DD 11.91 vs 11.91  same baskets True (first diff -1)  ok  14s
+[05:46:23] direct_vs_replay NZDUSDm conf: within the bound

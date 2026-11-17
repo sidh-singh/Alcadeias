@@ -1,0 +1,6 @@
+[05:35:21] AUDUSDm sel: 21,386,414 per-second rows ready (1s)
+[05:35:35]   AUDUSDm sel v3lite        14s  baskets  242  stream   1799.24  (a)   1799.24 DD  10.4%  (b, L=0.03)    1397.72 DD  31.1%
+[05:35:49]   AUDUSDm sel gtop2         14s  baskets  411  stream   1686.44  (a)   1686.44 DD  16.1%  (b, L=0.03)    1059.32 DD  47.8%
+[05:36:09]   AUDUSDm sel gtop1add      21s  baskets  378  stream   1529.81  (a)   1529.81 DD  24.4%  (b, L=0.03)     589.43 DD  71.6%
+[05:36:25]   AUDUSDm sel btop2         16s  baskets  259  stream   1750.46  (a)   1750.46 DD  13.4%  (b, L=0.03)    1251.38 DD  39.4%
+[05:36:25] AUDUSDm sel: done in 65s

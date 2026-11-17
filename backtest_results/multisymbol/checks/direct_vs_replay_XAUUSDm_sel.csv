@@ -1,0 +1,7 @@
+symbol,period,design,account,lot,direct_final,replay_final,diff,bound,diff_pct_of_profit,direct_dd_pct,replay_dd_pct,measured_dd_pct,direct_wiped,replay_wiped,same_baskets,first_diff_basket,baskets_direct,baskets_replay,ok,runtime_s
+XAUUSDm,sel,v3lite,a,0.01,2654.63,2654.63,0.0,2.78,0.0,11.843,11.843,11.843,False,False,True,-1,263,263,True,12.7
+XAUUSDm,sel,v3lite,b,0.01,2654.63,2654.63,0.0,2.78,0.0,11.843,11.843,11.843,False,False,True,-1,263,263,True,12.6
+XAUUSDm,sel,gtop2,a,0.01,2210.07,2210.07,0.0,4.1,0.0,10.549,10.548,10.548,False,False,True,-1,410,410,True,12.4
+XAUUSDm,sel,gtop2,b,0.01,2210.07,2210.07,0.0,4.1,0.0,10.549,10.548,10.548,False,False,True,-1,410,410,True,12.4
+XAUUSDm,sel,gtop1add,a,0.01,1870.23,1870.23,-0.0,6.24,0.0,29.272,29.252,29.252,False,False,True,-1,401,401,True,18.1
+XAUUSDm,sel,gtop1add,b,0.01,1870.23,1870.23,-0.0,6.24,0.0,29.272,29.252,29.252,False,False,True,-1,401,401,True,18.2

@@ -1,0 +1,9 @@
+symbol,design,period,external_final,new_final,external_dd_pct,new_dd_pct,trades,same_trades,ok
+XAGUSDm,ts2,tsel,209.33,209.33,95.0979,95.0979,37,True,True
+XAGUSDm,ts2,conf,2348.87,2348.87,93.729363,93.729363,16,True,True
+XAGUSDm,ts2,sel,665.0,665.0,67.498851,67.498851,17,True,True
+XAGUSDm,ts2,8y,0.0,0.0,100.0,100.0,39,True,True
+XAGUSDm,ts1,tsel,1827.5,1827.5,73.497488,73.497488,48,True,True
+XAGUSDm,ts1,conf,0.0,0.0,100.0,100.0,20,True,True
+XAGUSDm,ts1,sel,1580.6,1580.6,59.263413,59.263413,23,True,True
+XAGUSDm,ts1,8y,0.0,0.0,100.0,100.0,70,True,True

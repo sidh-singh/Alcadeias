@@ -1,0 +1,9 @@
+symbol,design,period,external_final,new_final,external_dd_pct,new_dd_pct,trades,same_trades,ok
+EURUSDm,ts2,tsel,1533.06,1533.06,25.052836,25.052836,39,True,True
+EURUSDm,ts2,conf,2007.61,2007.61,16.124709,16.124709,16,True,True
+EURUSDm,ts2,sel,1715.67,1715.67,17.831113,17.831113,17,True,True
+EURUSDm,ts2,8y,1540.67,1540.67,28.279791,28.279791,55,True,True
+EURUSDm,ts1,tsel,1553.9,1553.9,23.766683,23.766683,57,True,True
+EURUSDm,ts1,conf,1799.43,1799.43,15.447116,15.447116,28,True,True
+EURUSDm,ts1,sel,1844.96,1844.96,14.207063,14.207063,21,True,True
+EURUSDm,ts1,8y,1353.33,1353.33,35.26823,35.26823,85,True,True

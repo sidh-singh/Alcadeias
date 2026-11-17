@@ -1,0 +1,11 @@
+[05:34:50] USDCADm: df free 147.2 GB, batch 0.65 GB, new market data held 7.73 GB
+[05:35:49]   USDCADm: 20/109 months downloaded (CRC checked), built, zips deleted (59s)
+[05:36:20]   USDCADm: 40/109 months downloaded (CRC checked), built, zips deleted (90s)
+[05:37:03]   USDCADm: 60/109 months downloaded (CRC checked), built, zips deleted (134s)
+[05:37:47]   USDCADm: 80/109 months downloaded (CRC checked), built, zips deleted (177s)
+[05:38:21]   USDCADm: 100/109 months downloaded (CRC checked), built, zips deleted (211s)
+[05:38:33] USDCADm: 109 months built in 223s; data gate
+[05:39:00] USDCADm: gate turtle span FAIL, basket span FAIL (27s)
+[05:39:00] USDCADm: freed 0.76 GB (per-second files before 2021-11)
+[05:39:01] USDCADm: gate (DEVIATIONS E) turtle span PASS, basket span PASS; flagged silences 2021-03-02T13:22 34.63h own 0.0h, 2024-04-09T15:02 8.96h own 0.0h, 2024-04-09T15:02 8.96h own 0.0h
+[05:39:01] USDCADm: specs written: med 0.00076974, caps gold 0.00434082 / BTC 0.00913784, G 9.4680, M 2.6207, L 0.04; fetch done in 251s

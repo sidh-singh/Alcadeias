@@ -1,0 +1,10 @@
+gate,symbol,design,window,published,reproduced,ok,pipeline_config_identical,runtime_s
+G1,XAUUSDm,v3lite,5y,10747.58,10747.58,True,True,38.9
+G1,XAUUSDm,gtop2,5y,8879.85,8879.85,True,True,27.1
+G1,XAUUSDm,gtop1add,5y,12433.38,12433.38,True,True,39.3
+G1,XAUUSDm,v3lite,8y,11957.34,11957.34,True,True,43.9
+G1,BTCUSDm,btop2,5y,3918.63,3918.63,True,True,41.8
+G1,BTCUSDm,ts1,5y,6304.88,6304.88,True,True,
+G1,BTCUSDm,ts1,8y,6977.48,6977.48,True,True,
+G1,BTCUSDm,ts2,5y,3546.56,3546.56,True,True,
+G1,BTCUSDm,ts2,8y,7814.72,7814.72,True,True,

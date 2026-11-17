@@ -1,0 +1,10 @@
+gate,symbol,design,window,direct_final,replay_final,diff,bound,direct_dd_pct,replay_dd_pct,same_baskets,baskets,ok,runtime_s
+G2,XAUUSDm,v3lite,5y,10747.58,10746.76,0.82,9.83,30.581,30.544,False,517,False,27.6
+G2,XAUUSDm,gtop2,5y,8879.85,8879.75,0.1,13.14,15.302,15.277,False,814,False,27.2
+G2,XAUUSDm,gtop1add,5y,12433.38,11707.85,725.53,21.58,31.508,31.781,False,783,False,39.3
+G2,XAUUSDm,v3lite,8y,11957.34,11956.33,1.01,14.35,32.997,32.956,False,809,False,43.7
+G2,BTCUSDm,btop2,5y,3918.63,3918.76,-0.13,9.45,16.059,16.01,False,675,False,41.7
+G2,BTCUSDm,ts1,5y,6304.88,6304.88,0.0,0.0,44.5561,44.5561,True,58,True,
+G2,BTCUSDm,ts1,8y,6977.48,6977.48,0.0,0.0,46.0253,46.0253,True,88,True,
+G2,BTCUSDm,ts2,5y,3546.56,3546.56,0.0,0.0,38.4036,38.4036,True,41,True,
+G2,BTCUSDm,ts2,8y,7814.72,7814.72,0.0,0.0,32.5407,32.5407,True,60,True,

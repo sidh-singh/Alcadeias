@@ -1,0 +1,11 @@
+[05:39:36] NZDUSDm: df free 146.5 GB, batch 0.55 GB, new market data held 8.42 GB
+[05:40:30]   NZDUSDm: 20/109 months downloaded (CRC checked), built, zips deleted (55s)
+[05:40:55]   NZDUSDm: 40/109 months downloaded (CRC checked), built, zips deleted (79s)
+[05:41:31]   NZDUSDm: 60/109 months downloaded (CRC checked), built, zips deleted (115s)
+[05:42:05]   NZDUSDm: 80/109 months downloaded (CRC checked), built, zips deleted (149s)
+[05:42:33]   NZDUSDm: 100/109 months downloaded (CRC checked), built, zips deleted (177s)
+[05:42:43] NZDUSDm: 109 months built in 187s; data gate
+[05:43:04] NZDUSDm: gate turtle span FAIL, basket span FAIL (22s)
+[05:43:04] NZDUSDm: freed 0.67 GB (per-second files before 2021-11)
+[05:43:05] NZDUSDm: gate (DEVIATIONS E) turtle span PASS, basket span PASS; flagged silences 2021-03-02T13:21 34.64h own 0.0h, 2024-04-09T13:01 10.98h own 2.02h, 2024-04-09T13:01 10.98h own 2.02h
+[05:43:05] NZDUSDm: specs written: med 0.000632385, caps gold 0.00356623 / BTC 0.00750725, G 9.4680, M 2.7300, L 0.03; fetch done in 209s

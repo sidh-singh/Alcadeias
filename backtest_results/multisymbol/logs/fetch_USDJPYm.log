@@ -1,0 +1,10 @@
+[05:17:17] USDJPYm: df free 151.5 GB, batch 0.97 GB, new market data held 3.46 GB
+[05:18:17]   USDJPYm: 20/109 months downloaded (CRC checked), built, zips deleted (59s)
+[05:18:51]   USDJPYm: 40/109 months downloaded (CRC checked), built, zips deleted (94s)
+[05:19:40]   USDJPYm: 60/109 months downloaded (CRC checked), built, zips deleted (142s)
+[05:20:51]   USDJPYm: 80/109 months downloaded (CRC checked), built, zips deleted (213s)
+[05:22:31]   USDJPYm: 100/109 months downloaded (CRC checked), built, zips deleted (313s)
+[05:22:58] USDJPYm: 109 months built in 341s; data gate
+[05:23:27] USDJPYm: gate turtle span FAIL, basket span FAIL (29s)
+[05:23:27] USDJPYm: freed 0.76 GB (per-second files before 2021-11)
+[05:23:28] USDJPYm: specs written: med 0.10315, caps gold 0.581697 / BTC 1.22453, G 9.4680, M 3.4764, L 0.03; fetch done in 371s

@@ -1,0 +1,43 @@
+rank,symbol,design,design_name,evidence,profit,max_dd_usd,profit_per_dd,blocks_pos,blocks_n,trades,b_wiped,b_max_dd_pct,sharpe_weekly,Q1,Q2,Q3,Q4,Q5,qualified,summary_row_stream,summary_row_b
+1,USDJPYm,gtop2,Gold Top 2,sel,115.73,77.9,1.4857,7,10,417,False,9.6564,0.814,True,True,True,True,True,True,335,334
+2,EURUSDm,btop2,BTC Top 2,sel,108.46,91.12,1.1903,6,10,250,False,11.1447,0.5876,True,True,True,True,True,True,139,137
+3,USDCHFm,gtop2,Gold Top 2,sel,72.88,74.47,0.9785,6,10,418,False,9.3301,0.4807,True,False,True,True,True,False,287,286
+4,USDCHFm,btop2,BTC Top 2,sel,58.26,102.91,0.5661,5,10,264,False,12.9386,0.3279,True,False,False,True,True,False,299,298
+5,XAGUSDm,ts1,BTC Turtle System 1 + bot votes,tsel,517.52,2653.06,0.1951,5,11,48,False,73.4975,0.1177,True,False,False,True,False,False,435,434
+6,USDJPYm,ts2,BTC Turtle System 2 + bot votes,tsel,72.86,440.35,0.1655,5,11,31,False,51.912,0.0665,True,False,False,True,False,False,359,358
+7,EURUSDm,v3lite,Gold V3-lite,sel,-12.28,112.87,-0.1088,5,10,252,False,15.6265,-0.0721,False,False,False,True,True,False,109,107
+8,USDJPYm,gtop1add,Gold Top 1 + add,sel,-16.65,179.22,-0.0929,4,10,391,False,21.8062,-0.0729,False,False,False,True,True,False,341,340
+9,USDJPYm,ts1,BTC Turtle System 1 + bot votes,tsel,-186.0,901.82,-0.2062,5,11,48,True,100.0,-0.1093,False,False,False,True,False,False,371,370
+10,USDJPYm,btop2,BTC Top 2,sel,-26.23,154.42,-0.1699,4,10,283,False,20.1889,-0.1383,False,False,False,True,True,False,347,346
+11,XAGUSDm,ts2,BTC Turtle System 2 + bot votes,tsel,-1158.26,3428.4,-0.3378,3,11,37,False,95.0979,-0.2778,False,False,False,True,False,False,423,422
+12,USDCHFm,ts1,BTC Turtle System 1 + bot votes,tsel,-280.7,528.42,-0.5312,5,11,53,False,77.8828,-0.3041,False,False,False,True,False,False,323,322
+13,AUDUSDm,ts2,BTC Turtle System 2 + bot votes,tsel,-343.62,652.53,-0.5266,4,11,36,False,72.6932,-0.3096,False,False,False,True,False,False,53,52
+14,EURUSDm,gtop2,Gold Top 2,sel,-56.24,130.36,-0.4314,4,10,417,False,17.5975,-0.3729,False,False,False,True,True,False,119,117
+15,NZDUSDm,ts1,BTC Turtle System 1 + bot votes,tsel,-352.75,539.99,-0.6533,2,11,58,False,63.2374,-0.4069,False,False,False,True,False,False,227,226
+16,USDCHFm,ts2,BTC Turtle System 2 + bot votes,tsel,-406.21,519.99,-0.7812,4,11,33,False,73.7171,-0.4779,False,False,False,True,False,False,311,310
+17,USDCHFm,gtop1add,Gold Top 1 + add,sel,-100.39,200.02,-0.5019,4,10,375,False,26.5219,-0.4815,False,False,False,True,True,False,293,292
+18,AUDUSDm,ts1,BTC Turtle System 1 + bot votes,tsel,-460.03,675.43,-0.6811,4,11,53,False,76.5741,-0.494,False,False,False,True,False,False,65,64
+19,EURUSDm,ts1,BTC Turtle System 1 + bot votes,tsel,-446.1,476.21,-0.9368,4,11,57,False,71.0395,-0.5056,False,False,False,True,False,False,163,162
+20,NZDUSDm,ts2,BTC Turtle System 2 + bot votes,tsel,-430.75,562.98,-0.7651,3,11,40,False,70.4696,-0.5243,False,False,False,True,False,False,215,214
+21,USDJPYm,v3lite,Gold V3-lite,sel,-86.91,179.56,-0.484,5,10,264,False,24.0772,-0.5263,False,False,False,True,True,False,329,328
+22,EURUSDm,ts2,BTC Turtle System 2 + bot votes,tsel,-466.94,512.46,-0.9112,2,11,39,False,71.9559,-0.5729,False,False,False,True,False,False,151,150
+23,USDCHFm,v3lite,Gold V3-lite,sel,-114.24,162.13,-0.7047,4,10,239,False,23.1719,-0.8068,False,False,False,True,True,False,281,280
+24,XAGUSDm,btop2,BTC Top 2,sel,-559.25,1105.8,-0.5057,5,10,257,False,49.4533,-0.8179,False,False,False,True,True,False,411,409
+25,USDCADm,ts2,BTC Turtle System 2 + bot votes,tsel,-600.07,632.46,-0.9488,2,11,38,True,100.0,-0.8658,False,False,False,True,False,False,263,262
+26,NZDUSDm,btop2,BTC Top 2,sel,-149.87,193.36,-0.7751,2,10,248,False,27.7949,-0.8805,False,False,False,True,True,False,203,201
+27,XAGUSDm,gtop1add,Gold Top 1 + add,sel,-829.95,1261.7,-0.6578,4,10,363,False,57.8523,-1.024,False,False,False,True,False,False,401,399
+28,EURUSDm,gtop1add,Gold Top 1 + add,sel,-237.75,294.54,-0.8072,2,10,393,False,41.3792,-1.0811,False,False,False,True,True,False,129,127
+29,USDCADm,ts1,BTC Turtle System 1 + bot votes,tsel,-826.22,885.73,-0.9328,1,11,56,True,100.0,-1.1362,False,False,False,True,False,False,275,274
+30,XAGUSDm,v3lite,Gold V3-lite,sel,-673.15,1100.6,-0.6116,2,10,252,False,51.2062,-1.2259,False,False,False,True,False,False,381,379
+31,USDCADm,btop2,BTC Top 2,sel,-177.05,194.61,-0.9098,3,10,251,False,37.926,-1.2427,False,False,False,True,True,False,251,250
+32,AUDUSDm,v3lite,Gold V3-lite,sel,-200.76,209.79,-0.957,3,10,241,False,31.1097,-1.493,False,False,False,True,True,False,11,9
+33,USDCADm,v3lite,Gold V3-lite,sel,-179.95,216.14,-0.8326,2,10,263,False,41.4493,-1.5125,False,False,False,True,True,False,233,232
+34,AUDUSDm,btop2,BTC Top 2,sel,-249.54,270.69,-0.9219,3,10,258,False,39.3899,-1.5385,False,False,False,True,True,False,41,39
+35,USDCADm,gtop2,Gold Top 2,sel,-158.32,214.97,-0.7365,2,10,405,False,39.8854,-1.6164,False,False,False,True,True,False,239,238
+36,NZDUSDm,v3lite,Gold V3-lite,sel,-218.97,236.82,-0.9246,0,10,245,False,34.7781,-1.7196,False,False,False,True,True,False,173,171
+37,XAGUSDm,gtop2,Gold Top 2,sel,-910.25,1052.35,-0.865,2,10,426,False,52.2517,-1.837,False,False,False,True,False,False,391,389
+38,USDCADm,gtop1add,Gold Top 1 + add,sel,-297.28,350.41,-0.8484,2,10,392,False,64.619,-1.9202,False,False,False,True,False,False,245,244
+39,NZDUSDm,gtop1add,Gold Top 1 + add,sel,-381.47,388.77,-0.9812,0,10,348,False,57.8573,-2.1501,False,False,False,True,False,False,193,191
+40,AUDUSDm,gtop1add,Gold Top 1 + add,sel,-470.19,494.18,-0.9515,1,10,378,False,71.5522,-2.3499,False,False,False,True,False,False,31,29
+41,NZDUSDm,gtop2,Gold Top 2,sel,-283.58,285.88,-0.992,0,10,393,False,42.812,-2.7243,False,False,False,True,True,False,183,181
+42,AUDUSDm,gtop2,Gold Top 2,sel,-313.56,322.96,-0.9709,1,10,411,False,47.7704,-2.9404,False,False,False,True,True,False,21,19

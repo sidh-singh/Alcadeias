@@ -1,0 +1,11 @@
+[05:31:54] XAGUSDm: 3,140,616 M1 bars 2017-11-01 .. 2026-11-12, votes ready (35s)
+[05:31:54]   XAGUSDm ts2 tsel trades  37  stream    841.74  (a)    209.33 DD  95.1%  (b)     209.33 DD  95.1%
+[05:31:54]   XAGUSDm ts2 conf trades  15  stream   4380.91  (a)   2348.87 DD  93.7%  (b)    2348.87 DD  93.7%
+[05:31:54]   XAGUSDm ts2 sel  trades  17  stream    665.00  (a)    665.00 DD  67.5%  (b)     665.00 DD  67.5%
+[05:31:54]   XAGUSDm ts2 8y   trades  52  stream      0.00  (a)      0.00 DD 100.0%  (b)       0.00 DD 100.0%  WIPED
+[05:31:55]   XAGUSDm ts1 tsel trades  48  stream   2517.52  (a)   1827.50 DD  73.5%  (b)    1827.50 DD  73.5%
+[05:31:55]   XAGUSDm ts1 conf trades  22  stream   6940.06  (a)      0.00 DD 100.0%  (b)       0.00 DD 100.0%  WIPED
+[05:31:55]   XAGUSDm ts1 sel  trades  23  stream   1580.60  (a)   1580.60 DD  59.3%  (b)    1580.60 DD  59.3%
+[05:31:55]   XAGUSDm ts1 8y   trades  70  stream   7457.58  (a)      0.00 DD 100.0%  (b)       0.00 DD 100.0%  WIPED
+[05:31:55] XAGUSDm: Turtle account with FX = 1 vs external.account: all equal
+[05:31:55] XAGUSDm: Turtles done in 36s

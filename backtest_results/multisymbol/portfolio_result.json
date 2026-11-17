@@ -1,0 +1,30 @@
+{
+ "Q": 2,
+ "n_candidates": 42,
+ "b": {
+  "success": false,
+  "P_Q_profit": -135.67,
+  "P_Q_score": -0.2453,
+  "N_star": 0,
+  "N_best_in_1_Q": 1,
+  "best_score": 0.1811,
+  "within_10pct": [
+   1
+  ],
+  "N_sel": 2,
+  "N_sel_conf_score": -0.2453
+ },
+ "a": {
+  "success": false,
+  "P_Q_profit": -45.22,
+  "P_Q_score": -0.2453,
+  "N_star": 0,
+  "N_best_in_1_Q": 1,
+  "best_score": 0.1811,
+  "within_10pct": [
+   1
+  ],
+  "N_sel": 2,
+  "N_sel_conf_score": -0.2453
+ }
+}

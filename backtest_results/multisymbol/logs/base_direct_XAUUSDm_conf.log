@@ -1,0 +1,7 @@
+[05:14:19]   direct XAUUSDm conf v3lite    (a)    7491.23 replay    7490.46 diff +0.7700 (bound 4.93)  DD 35.97 vs 35.92  same baskets False (first diff 159)  ok  15s
+[05:14:33]   direct XAUUSDm conf v3lite    (b)    7491.23 replay    7490.46 diff +0.7700 (bound 4.93)  DD 35.97 vs 35.92  same baskets False (first diff 159)  ok  14s
+[05:14:47]   direct XAUUSDm conf gtop2     (a)    8500.08 replay    8499.97 diff +0.1100 (bound 8.31)  DD 15.08 vs 15.05  same baskets False (first diff 159)  ok  13s
+[05:15:00]   direct XAUUSDm conf gtop2     (b)    8500.08 replay    8499.97 diff +0.1100 (bound 8.31)  DD 15.08 vs 15.05  same baskets False (first diff 159)  ok  13s
+[05:15:20]   direct XAUUSDm conf gtop1add  (a)   12424.50 replay   12419.58 diff +4.9200 (bound 15.65)  DD 31.19 vs 31.16  same baskets False (first diff 138)  ok  20s
+[05:15:39]   direct XAUUSDm conf gtop1add  (b)   12424.50 replay   12419.58 diff +4.9200 (bound 15.65)  DD 31.19 vs 31.16  same baskets False (first diff 138)  ok  19s
+[05:15:40] direct_vs_replay XAUUSDm conf: within the bound

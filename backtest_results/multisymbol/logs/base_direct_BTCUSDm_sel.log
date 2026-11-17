@@ -1,0 +1,3 @@
+[05:13:59]   direct BTCUSDm sel btop2     (a)    2170.49 replay    2170.49 diff +0.0000 (bound 3.18)  DD 10.41 vs 10.39  same baskets True (first diff -1)  ok  22s
+[05:14:21]   direct BTCUSDm sel btop2     (b)    2170.49 replay    2170.49 diff +0.0000 (bound 3.18)  DD 10.41 vs 10.39  same baskets True (first diff -1)  ok  22s
+[05:14:21] direct_vs_replay BTCUSDm sel: within the bound

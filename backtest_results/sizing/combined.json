@@ -1,0 +1,882 @@
+[
+ {
+  "levels": "today: STEP $2,500, cap 10",
+  "window": "8y",
+  "start": "2018-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 54610.630734497165,
+  "net": 42610.630734497165,
+  "profit_per_week": 102.07885528455857,
+  "max_dd_pct_minute": 16.910906642375707,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    11957.34
+   ],
+   "xau_top2": [
+    2500,
+    "10",
+    8544.75
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    15167.68
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    7814.72
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    6977.48
+   ],
+   "btc_top2": [
+    2500,
+    "10",
+    4148.66
+   ]
+  }
+ },
+ {
+  "levels": "(c) levels, cap 10 ($2,500 where no lower STEP passes)",
+  "window": "8y",
+  "start": "2018-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 66567.11073449717,
+  "net": 54567.11073449717,
+  "profit_per_week": 130.72203119147164,
+  "max_dd_pct_minute": 15.927449617670655,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    11957.34
+   ],
+   "xau_top2": [
+    1250,
+    "10",
+    19422.11
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    15167.68
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    7814.72
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    6977.48
+   ],
+   "btc_top2": [
+    1750,
+    "10",
+    5227.78
+   ]
+  }
+ },
+ {
+  "levels": "(c) levels, cap none ($2,500 where no lower STEP passes)",
+  "window": "8y",
+  "start": "2018-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 67048.05073449717,
+  "net": 55048.05073449717,
+  "profit_per_week": 131.87418040433954,
+  "max_dd_pct_minute": 15.927449617670655,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    11957.34
+   ],
+   "xau_top2": [
+    1250,
+    "none",
+    19903.05
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    15167.68
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    7814.72
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    6977.48
+   ],
+   "btc_top2": [
+    1750,
+    "none",
+    5227.78
+   ]
+  }
+ },
+ {
+  "levels": "(b) levels, cap 10 ($2,500 where no lower STEP passes)",
+  "window": "8y",
+  "start": "2018-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 104048.2225858886,
+  "net": 92048.2225858886,
+  "profit_per_week": 220.5125113282752,
+  "max_dd_pct_minute": 17.183629524505363,
+  "accounts_detail": {
+   "xau_v3lite": [
+    1750,
+    "10",
+    23345.71
+   ],
+   "xau_top2": [
+    750,
+    "10",
+    25541.58
+   ],
+   "xau_top1": [
+    1750,
+    "10",
+    27760.28
+   ],
+   "btc_turtle_s2": [
+    2000,
+    "10",
+    13163.08
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    6977.48
+   ],
+   "btc_top2": [
+    1000,
+    "10",
+    7260.1
+   ]
+  }
+ },
+ {
+  "levels": "(b) levels, cap none ($2,500 where no lower STEP passes)",
+  "window": "8y",
+  "start": "2018-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 129758.57258588863,
+  "net": 117758.57258588863,
+  "profit_per_week": 282.1047255650994,
+  "max_dd_pct_minute": 23.331209165079493,
+  "accounts_detail": {
+   "xau_v3lite": [
+    1750,
+    "none",
+    23013.67
+   ],
+   "xau_top2": [
+    750,
+    "none",
+    52223.24
+   ],
+   "xau_top1": [
+    1750,
+    "none",
+    27121.01
+   ],
+   "btc_turtle_s2": [
+    2000,
+    "none",
+    13163.08
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    6977.48
+   ],
+   "btc_top2": [
+    1000,
+    "none",
+    7260.1
+   ]
+  }
+ },
+ {
+  "levels": "today: STEP $2,500, cap 10",
+  "window": "5y",
+  "start": "2021-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 45830.87642110891,
+  "net": 33830.87642110891,
+  "profit_per_week": 129.6912020524438,
+  "max_dd_pct_minute": 14.934297519925954,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    10747.58
+   ],
+   "xau_top2": [
+    2500,
+    "10",
+    8879.85
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    12433.38
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    3546.56
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    6304.88
+   ],
+   "btc_top2": [
+    2500,
+    "10",
+    3918.63
+   ]
+  }
+ },
+ {
+  "levels": "(c) levels, cap 10 ($2,500 where no lower STEP passes)",
+  "window": "5y",
+  "start": "2021-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 59112.7964211089,
+  "net": 47112.7964211089,
+  "profit_per_week": 180.60765331202757,
+  "max_dd_pct_minute": 14.592222504005406,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    10747.58
+   ],
+   "xau_top2": [
+    1250,
+    "10",
+    21536.35
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    12433.38
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    3546.56
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    6304.88
+   ],
+   "btc_top2": [
+    1750,
+    "10",
+    4544.05
+   ]
+  }
+ },
+ {
+  "levels": "(c) levels, cap none ($2,500 where no lower STEP passes)",
+  "window": "5y",
+  "start": "2021-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 61162.16642110892,
+  "net": 49162.16642110892,
+  "profit_per_week": 188.4639457545249,
+  "max_dd_pct_minute": 15.219043526019963,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    10747.58
+   ],
+   "xau_top2": [
+    1250,
+    "none",
+    23585.72
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    12433.38
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    3546.56
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    6304.88
+   ],
+   "btc_top2": [
+    1750,
+    "none",
+    4544.05
+   ]
+  }
+ },
+ {
+  "levels": "(b) levels, cap 10 ($2,500 where no lower STEP passes)",
+  "window": "5y",
+  "start": "2021-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 83786.78035930342,
+  "net": 71786.78035930342,
+  "profit_per_week": 275.1957626041205,
+  "max_dd_pct_minute": 16.890219722555674,
+  "accounts_detail": {
+   "xau_v3lite": [
+    1750,
+    "10",
+    18977.71
+   ],
+   "xau_top2": [
+    750,
+    "10",
+    28816.41
+   ],
+   "xau_top1": [
+    1750,
+    "10",
+    19059.95
+   ],
+   "btc_turtle_s2": [
+    2000,
+    "10",
+    3635.53
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    6304.88
+   ],
+   "btc_top2": [
+    1000,
+    "10",
+    6992.3
+   ]
+  }
+ },
+ {
+  "levels": "(b) levels, cap none ($2,500 where no lower STEP passes)",
+  "window": "5y",
+  "start": "2021-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 131124.8903593034,
+  "net": 119124.89035930339,
+  "profit_per_week": 456.66715909919157,
+  "max_dd_pct_minute": 26.68171284033204,
+  "accounts_detail": {
+   "xau_v3lite": [
+    1750,
+    "none",
+    18521.73
+   ],
+   "xau_top2": [
+    750,
+    "none",
+    78363.0
+   ],
+   "xau_top1": [
+    1750,
+    "none",
+    17307.45
+   ],
+   "btc_turtle_s2": [
+    2000,
+    "none",
+    3635.53
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    6304.88
+   ],
+   "btc_top2": [
+    1000,
+    "none",
+    6992.3
+   ]
+  }
+ },
+ {
+  "levels": "today: STEP $2,500, cap 10",
+  "window": "new",
+  "start": "2018-11-13",
+  "end": "2021-01-01",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 14157.224888211475,
+  "net": 2157.2248882114745,
+  "profit_per_week": 19.35971053523118,
+  "max_dd_pct_minute": 6.129895159137308,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    2339.78
+   ],
+   "xau_top2": [
+    2500,
+    "10",
+    1910.25
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    2225.91
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    2857.89
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    2742.2
+   ],
+   "btc_top2": [
+    2500,
+    "10",
+    2081.2
+   ]
+  }
+ },
+ {
+  "levels": "(c) levels, cap 10 ($2,500 where no lower STEP passes)",
+  "window": "new",
+  "start": "2018-11-13",
+  "end": "2021-01-01",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 14152.334888211475,
+  "net": 2152.334888211475,
+  "profit_per_week": 19.31582591984657,
+  "max_dd_pct_minute": 7.531734861628298,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    2339.78
+   ],
+   "xau_top2": [
+    1250,
+    "10",
+    1820.49
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    2225.91
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    2857.89
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    2742.2
+   ],
+   "btc_top2": [
+    1750,
+    "10",
+    2166.07
+   ]
+  }
+ },
+ {
+  "levels": "(c) levels, cap none ($2,500 where no lower STEP passes)",
+  "window": "new",
+  "start": "2018-11-13",
+  "end": "2021-01-01",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 14152.334888211475,
+  "net": 2152.334888211475,
+  "profit_per_week": 19.31582591984657,
+  "max_dd_pct_minute": 7.531734861628298,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    2339.78
+   ],
+   "xau_top2": [
+    1250,
+    "none",
+    1820.49
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    2225.91
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    2857.89
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    2742.2
+   ],
+   "btc_top2": [
+    1750,
+    "none",
+    2166.07
+   ]
+  }
+ },
+ {
+  "levels": "(b) levels, cap 10 ($2,500 where no lower STEP passes)",
+  "window": "new",
+  "start": "2018-11-13",
+  "end": "2021-01-01",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 15690.522279384688,
+  "net": 3690.522279384688,
+  "profit_per_week": 33.12007173806771,
+  "max_dd_pct_minute": 11.45710897525598,
+  "accounts_detail": {
+   "xau_v3lite": [
+    1750,
+    "10",
+    2679.38
+   ],
+   "xau_top2": [
+    750,
+    "10",
+    1731.47
+   ],
+   "xau_top1": [
+    1750,
+    "10",
+    2638.62
+   ],
+   "btc_turtle_s2": [
+    2000,
+    "10",
+    3681.1
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    2742.2
+   ],
+   "btc_top2": [
+    1000,
+    "10",
+    2217.76
+   ]
+  }
+ },
+ {
+  "levels": "(b) levels, cap none ($2,500 where no lower STEP passes)",
+  "window": "new",
+  "start": "2018-11-13",
+  "end": "2021-01-01",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 15690.522279384688,
+  "net": 3690.522279384688,
+  "profit_per_week": 33.12007173806771,
+  "max_dd_pct_minute": 11.45710897525598,
+  "accounts_detail": {
+   "xau_v3lite": [
+    1750,
+    "none",
+    2679.38
+   ],
+   "xau_top2": [
+    750,
+    "none",
+    1731.47
+   ],
+   "xau_top1": [
+    1750,
+    "none",
+    2638.62
+   ],
+   "btc_turtle_s2": [
+    2000,
+    "none",
+    3681.1
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    2742.2
+   ],
+   "btc_top2": [
+    1000,
+    "none",
+    2217.76
+   ]
+  }
+ },
+ {
+  "levels": "today: STEP $2,500, cap 10",
+  "window": "1y",
+  "start": "2025-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 20446.91607396599,
+  "net": 8446.91607396599,
+  "profit_per_week": 161.99565073359432,
+  "max_dd_pct_minute": 15.975095231823246,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    3664.11
+   ],
+   "xau_top2": [
+    2500,
+    "10",
+    4026.27
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    4179.18
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    3039.45
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    3412.49
+   ],
+   "btc_top2": [
+    2500,
+    "10",
+    2125.41
+   ]
+  }
+ },
+ {
+  "levels": "(c) levels, cap 10 ($2,500 where no lower STEP passes)",
+  "window": "1y",
+  "start": "2025-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 22291.11607396599,
+  "net": 10291.11607396599,
+  "profit_per_week": 197.36386991167652,
+  "max_dd_pct_minute": 16.571194664283542,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    3664.11
+   ],
+   "xau_top2": [
+    1250,
+    "10",
+    5745.26
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    4179.18
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    3039.45
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    3412.49
+   ],
+   "btc_top2": [
+    1750,
+    "10",
+    2250.62
+   ]
+  }
+ },
+ {
+  "levels": "(c) levels, cap none ($2,500 where no lower STEP passes)",
+  "window": "1y",
+  "start": "2025-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 22291.11607396599,
+  "net": 10291.11607396599,
+  "profit_per_week": 197.36386991167652,
+  "max_dd_pct_minute": 16.571194664283542,
+  "accounts_detail": {
+   "xau_v3lite": [
+    2500,
+    "10",
+    3664.11
+   ],
+   "xau_top2": [
+    1250,
+    "none",
+    5745.26
+   ],
+   "xau_top1": [
+    2500,
+    "10",
+    4179.18
+   ],
+   "btc_turtle_s2": [
+    2500,
+    "10",
+    3039.45
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    3412.49
+   ],
+   "btc_top2": [
+    1750,
+    "none",
+    2250.62
+   ]
+  }
+ },
+ {
+  "levels": "(b) levels, cap 10 ($2,500 where no lower STEP passes)",
+  "window": "1y",
+  "start": "2025-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 33708.315097467035,
+  "net": 21708.315097467035,
+  "profit_per_week": 416.32385118429926,
+  "max_dd_pct_minute": 18.47075270816464,
+  "accounts_detail": {
+   "xau_v3lite": [
+    1750,
+    "10",
+    6375.36
+   ],
+   "xau_top2": [
+    750,
+    "10",
+    10992.68
+   ],
+   "xau_top1": [
+    1750,
+    "10",
+    6861.1
+   ],
+   "btc_turtle_s2": [
+    2000,
+    "10",
+    3733.01
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    3412.49
+   ],
+   "btc_top2": [
+    1000,
+    "10",
+    2333.67
+   ]
+  }
+ },
+ {
+  "levels": "(b) levels, cap none ($2,500 where no lower STEP passes)",
+  "window": "1y",
+  "start": "2025-11-13",
+  "end": "2026-11-13",
+  "accounts": 6,
+  "start_equity": 12000.0,
+  "final_equity": 32320.065097467035,
+  "net": 20320.065097467035,
+  "profit_per_week": 389.6998785815596,
+  "max_dd_pct_minute": 22.050385348764046,
+  "accounts_detail": {
+   "xau_v3lite": [
+    1750,
+    "none",
+    6375.36
+   ],
+   "xau_top2": [
+    750,
+    "none",
+    9604.43
+   ],
+   "xau_top1": [
+    1750,
+    "none",
+    6861.1
+   ],
+   "btc_turtle_s2": [
+    2000,
+    "none",
+    3733.01
+   ],
+   "btc_turtle_s1": [
+    2500,
+    "10",
+    3412.49
+   ],
+   "btc_top2": [
+    1000,
+    "none",
+    2333.67
+   ]
+  }
+ }
+]

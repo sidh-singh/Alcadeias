@@ -1,0 +1,9 @@
+[05:29:48]   direct XAGUSDm sel v3lite    (a)    1326.85 replay    1326.85 diff +0.0000 (bound 2.52)  DD 51.21 vs 51.21  same baskets True (first diff -1)  ok  13s
+[05:30:01]   direct XAGUSDm sel v3lite    (b)    1326.85 replay    1326.85 diff +0.0000 (bound 2.52)  DD 51.21 vs 51.21  same baskets True (first diff -1)  ok  13s
+[05:30:14]   direct XAGUSDm sel gtop2     (a)    1089.75 replay    1089.75 diff +0.0000 (bound 4.26)  DD 52.26 vs 52.25  same baskets True (first diff -1)  ok  13s
+[05:30:27]   direct XAGUSDm sel gtop2     (b)    1089.75 replay    1089.75 diff +0.0000 (bound 4.26)  DD 52.26 vs 52.25  same baskets True (first diff -1)  ok  13s
+[05:30:47]   direct XAGUSDm sel gtop1add  (a)    1170.05 replay    1170.05 diff -0.0000 (bound 5.60)  DD 57.86 vs 57.85  same baskets True (first diff -1)  ok  19s
+[05:31:06]   direct XAGUSDm sel gtop1add  (b)    1170.05 replay    1170.05 diff -0.0000 (bound 5.60)  DD 57.86 vs 57.85  same baskets True (first diff -1)  ok  19s
+[05:31:19]   direct XAGUSDm sel btop2     (a)    1440.75 replay    1440.75 diff +0.0000 (bound 2.58)  DD 49.47 vs 49.45  same baskets True (first diff -1)  ok  13s
+[05:31:33]   direct XAGUSDm sel btop2     (b)    1440.75 replay    1440.75 diff +0.0000 (bound 2.58)  DD 49.47 vs 49.45  same baskets True (first diff -1)  ok  14s
+[05:31:33] G3 XAGUSDm sel: within the bound

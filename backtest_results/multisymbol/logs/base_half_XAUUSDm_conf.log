@@ -1,0 +1,5 @@
+[05:13:06] XAUUSDm conf: 46,497,910 per-second rows ready (4s)
+[05:13:20]   XAUUSDm conf v3lite        14s  baskets  254  stream   5005.65  (a)   7490.46 DD  35.9%  (b, L=0.01)    7490.46 DD  35.9%
+[05:13:35]   XAUUSDm conf gtop2         15s  baskets  405  stream   4907.92  (a)   8499.97 DD  15.1%  (b, L=0.01)    8499.97 DD  15.1%
+[05:13:57]   XAUUSDm conf gtop1add      22s  baskets  383  stream   6324.67  (a)  12419.58 DD  31.2%  (b, L=0.01)   12419.58 DD  31.2%
+[05:13:57] XAUUSDm conf: done in 55s

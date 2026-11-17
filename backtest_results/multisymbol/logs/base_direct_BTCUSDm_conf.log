@@ -1,0 +1,3 @@
+[05:14:55]   direct BTCUSDm conf btop2     (a)    3585.24 replay    3585.41 diff -0.1700 (bound 6.12)  DD 17.82 vs 17.76  same baskets False (first diff 252)  ok  21s
+[05:15:16]   direct BTCUSDm conf btop2     (b)    3585.24 replay    3585.41 diff -0.1700 (bound 6.12)  DD 17.82 vs 17.76  same baskets False (first diff 252)  ok  20s
+[05:15:16] direct_vs_replay BTCUSDm conf: within the bound

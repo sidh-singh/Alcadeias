@@ -1,0 +1,9 @@
+[05:36:51]   direct AUDUSDm sel v3lite    (a)    1799.24 replay    1799.24 diff +0.0000 (bound 2.42)  DD 10.45 vs 10.45  same baskets True (first diff -1)  ok  14s
+[05:37:05]   direct AUDUSDm sel v3lite    (b)    1397.72 replay    1397.72 diff +0.0000 (bound 7.26)  DD 31.11 vs 31.11  same baskets True (first diff -1)  ok  14s
+[05:37:19]   direct AUDUSDm sel gtop2     (a)    1686.44 replay    1686.44 diff +0.0000 (bound 4.11)  DD 16.08 vs 16.07  same baskets True (first diff -1)  ok  14s
+[05:37:33]   direct AUDUSDm sel gtop2     (b)    1059.32 replay    1059.32 diff +0.0000 (bound 12.33)  DD 47.78 vs 47.77  same baskets True (first diff -1)  ok  14s
+[05:37:53]   direct AUDUSDm sel gtop1add  (a)    1529.81 replay    1529.81 diff +0.0000 (bound 6.15)  DD 24.42 vs 24.42  same baskets True (first diff -1)  ok  20s
+[05:38:14]   direct AUDUSDm sel gtop1add  (b)     589.43 replay     589.43 diff +0.0000 (bound 18.45)  DD 71.56 vs 71.55  same baskets True (first diff -1)  ok  20s
+[05:38:28]   direct AUDUSDm sel btop2     (a)    1750.46 replay    1750.46 diff +0.0000 (bound 2.59)  DD 13.40 vs 13.40  same baskets True (first diff -1)  ok  15s
+[05:38:43]   direct AUDUSDm sel btop2     (b)    1251.38 replay    1251.38 diff +0.0000 (bound 7.77)  DD 39.40 vs 39.39  same baskets True (first diff -1)  ok  14s
+[05:38:43] direct_vs_replay AUDUSDm sel: within the bound
