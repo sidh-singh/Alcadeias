@@ -17,6 +17,20 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2-slot5.1] — 2026-11-17 — Slot 5 only: flat DCA ladder and H4 force-close [hedging_btcusd5 only]
+
+**What changed** (only on `hedging_xauusd5` and `hedging_btcusd5`; every other branch keeps v3.9.2):
+- **Flat DCA ladder.** Every add is the base size, 0.01 lot x unit: 0.01, 0.01, 0.01, 0.01, 0.01, 0.01 instead of
+  0.01, 0.02, 0.03, 0.05, 0.08, 0.13. It still steps up with the unit (unit 2: 0.02 each). The ladder's timeframe tiers
+  (M1, M5, M15, H1, H4) and its RSI triggers are unchanged. Switch: `LADDER_FLAT` in constants.py (False = Fibonacci).
+- **Force-close on H4.** `FORCE_CLOSE_SCORE_WEIGHTS` {'M15': 1} -> {'H4': 1}: a basket is force-closed when the H4 RSI/MACD
+  votes turn against it (FORCE_CLOSE_S = 1, unchanged). The entry agreement gate (ENTRY_AGREE_S = 2) reads the same score,
+  so a fresh entry now also needs both H4 votes on its side (this keeps a new basket from being force-closed at once).
+
+**Files:** constants.py (LADDER_FLAT, FORCE_CLOSE_SCORE_WEIGHTS), strategy.py (`_get_next_fibo_volume`).
+
+---
+
 ## [v3.9.2] — 2026-11-13 — Dashboard: show the entry-agreement threshold on the FORCE-CLOSE meter [netting/hedging deploy]
 
 **Branches:** all 40 `netting_`/`hedging_` deployment branches. **Files touched:** `dashboard.py` (+ this
