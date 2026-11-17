@@ -1,7 +1,7 @@
 from enum import Enum
 from constants import (
     STRATEGY_HEDGE,
-    FIBO_SEQUENCE_LENGTH,
+    FIBO_SEQUENCE_LENGTH, LADDER_FLAT,
     RSI_OVERSOLD, RSI_OVERBOUGHT,
     ENTRY_S, ENTRY_AGREE_S, LADDER_S, FORCE_CLOSE_S,
     OPEN_SCORE_WEIGHTS, FORCE_CLOSE_SCORE_WEIGHTS,
@@ -52,6 +52,9 @@ class Strategy:
         Returns:
             float: Next fibo volume in lots
         """
+        if LADDER_FLAT:
+            # Flat ladder (slot 5, 2026-11-17): every add is the base size, 0.01 lot x unit.
+            return round(0.01 * times, 2)
         fib = [self._recur_fibo(i) for i in range(FIBO_SEQUENCE_LENGTH)][2:]
         total_units = round(total_volume * 100 / times) if times else 0
         cumulative = 0

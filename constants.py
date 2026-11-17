@@ -21,6 +21,9 @@ MARKET_LOOKBACK_MINUTES = 3                # Max minutes since last candle → s
 # ─── Strategy Parameters ───
 STRATEGY_HEDGE = 1                  # Hedge / profit target multiplier
 FIBO_SEQUENCE_LENGTH = 25           # Fibonacci sequence length (first 2 dropped)
+LADDER_FLAT = True                  # 2026-11-17 (slot 5 only): every DCA add is the base size, 0.01 lot x unit
+                                    # (0.01, 0.01, ... instead of 0.01, 0.02, 0.03, 0.05, 0.08, 0.13); it still
+                                    # steps up with the unit. False = the Fibonacci ladder.
 
 # ─── RSI Indicator ───
 RSI_LENGTH = 14                     # RSI period
@@ -75,7 +78,7 @@ ENTRY_AGREE_S = 2                    # agreement gate (2026-10-29; raised 0->2 2
 LADDER_S = 2                        # DCA ladder add blocked once OPEN score is this far adverse
                                     # (BUY add needs open_score > -2; SELL add needs < +2)
 FORCE_CLOSE_S = 1                  # force-close when the FORCE-CLOSE score is this far AGAINST the
-                                    # basket. FORCE-CLOSE range is ±2 (M15 only). BUY close fc_score
+                                    # basket. FORCE-CLOSE range is ±2 (H4 only since 2026-11-17). BUY close fc_score
                                     # <= -1; SELL fc_score >= +1. (Unchanged by the raw rescale.)
 
 # ─── Per-section timeframe weights (config-driven; 2026-10-30) ───
@@ -89,7 +92,9 @@ FORCE_CLOSE_S = 1                  # force-close when the FORCE-CLOSE score is t
 #   FORCE_CLOSE -> force-close (kept at the original 4/3/2/1 set, so its score == the old exit_score).
 # (This h6/variant-B pair books profit via the +$unit target, so there is NO BOOK section here.)
 OPEN_SCORE_WEIGHTS        = {'H1': 1, 'M15': 1}                       # 2026-11-12: H1 + M15 (was H4 + M5)
-FORCE_CLOSE_SCORE_WEIGHTS = {'M15': 1}  # 2026-11-12: M15-only reversal (was M15/H1/H4/D1)
+FORCE_CLOSE_SCORE_WEIGHTS = {'H4': 1}   # 2026-11-17 (slot 5 only): H4-only reversal (was M15-only since 2026-11-12).
+                                        # The entry agreement gate (ENTRY_AGREE_S) reads the same score, so a fresh
+                                        # entry now also needs the H4 votes to agree.
 
 # ─── Slope fetch list (auto-derived) ───
 # Every timeframe named in ANY section above is fetched for slopes (app.py reads SLOPE_TIMEFRAMES),
