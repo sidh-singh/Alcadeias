@@ -17,6 +17,19 @@ credential/symbol commits are preserved; never force-push). Fleet:
 
 ---
 
+## [v3.9.2-demo.9] — 2026-11-17 — demo_hedging_btcusd8 (BTC Top 2): 0.01 lot per $1,750 of balance instead of $2,500 [demo only]
+
+**Why:** the sizing study (`backtest_results/sizing/SIZING.md` on `backtest_hedging`) tested every step-up from $2,500 down to
+$500 for the six demo designs, in four windows and in a fresh 12-month account started every month. $1,750 is the lowest
+step-up at which BTC Top 2's worst drop stayed at or under 35% everywhere (the margin kept for a future drop deeper than any seen).
+Backtest at $1,750: $5 a week last year and $8 on the 8-year average (at $2,500: $2 and $5); worst drop anywhere 33.3% (at $2,500: 17.8%). $500 and $750 were not safe.
+
+**What changed:** `symbols.json` `step_up_balance` 2500 -> 1750 (the unit cap stays 10 units, 0.10 lot). From the virtual
+$2,000 the bot now trades 2 units (0.02 lot) at once. The unit is re-derived only while flat, so a running bot picks
+the new value up when it is restarted after `git pull`. To undo, set `step_up_balance` back to 2500.
+
+---
+
 ## [v3.9.2-demo.8] — 2026-11-17 — Demo branches: the live bots' MetaTrader 5 is used while it holds this bot's demo account [demo only]
 
 **Why:** on the owner's demo server the MetaTrader 5 at `C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe` (the path
