@@ -27,6 +27,9 @@ deepest fall from an equity peak.
 Every year from 2018 to 2026 had been read by earlier studies, so this demo run is the first test on data no study has
 seen.
 
+**Sizing since v3.9.2-demo.9:** this branch adds 0.01 lot for every $1,250 of balance (not $2,500), the safe level
+found by the sizing study (`backtest_results/sizing/SIZING.md` on `backtest_hedging`): $72 a week last year and $42 on the 8-year average (at $2,500: $39 and $16); worst drop anywhere 32.7% (at $2,500: 19.1%).
+
 ## How to run
 
 1. **First, install this slot's own MetaTrader 5.** Install a separate MetaTrader 5 for slot 7, in its own folder
