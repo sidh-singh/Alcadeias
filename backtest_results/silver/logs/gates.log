@@ -1,0 +1,23 @@
+12:34:26 [PASS] G4 the cut assertion fires on a bar dated 2023-01-01: G4 test: data at or after the cut 2023-01-01 (2023-01-01 00:00:00)
+12:34:26 [PASS] G4b a load reaching the hold-out is refused before FINALISTS.md.sha256
+12:34:26 [PASS] G4c the DEV market ends before 2023-01-01: 2022-12-30 21:57:00
+12:34:27 [PASS] G2 silver Turtle S1 + votes stream 2021-11-13..2024-05-13: profit -419.40 (want -419.40), max DD 1394.55 (want 1394.55), trades 23 (want 23)
+12:34:28 [PASS] G2b S1: study sizing kernel (unit rule) = external.account: 1580.60 vs 1580.60; DD 59.2634% vs 59.2634%
+12:34:28 [PASS] G2 silver Turtle S2 + votes stream 2021-11-13..2024-05-13: profit -1335.00 (want -1335.00), max DD 1381.08 (want 1381.08), trades 17 (want 17)
+12:34:28 [PASS] G2b S2: study sizing kernel (unit rule) = external.account: 665.00 vs 665.00; DD 67.4989% vs 67.4989%
+12:34:29 [PASS] published XAUUSDm London breakout (risk-sized) (new window) reproduced: final 1624.85 (published 1624.85), trades 343 (343), DD 21.8014% (21.8014%)
+12:34:29 [PASS] published BTCUSDm Turtle + bot votes (new window) reproduced: final 2742.20 (published 2742.20), trades 21 (21), DD 10.6613% (10.6613%)
+12:34:30 rho (silver/gold London-window range in % of price, DEV): {'server': 2.0406644959248816, 'utc': 2.014559039206843}
+12:34:30 [PASS] G3 bars C14[R=30,Xt=13:25] March 2021: net P/L + slippage = price move x lots x 5,000: 18 trades, 31 charged fills, move $-89.92, net $-184.66, slippage $94.75
+12:34:30 [PASS] G3 bars C03[P=4,kN=2.0,votes=False] March 2021: net P/L + slippage = price move x lots x 5,000: 2 trades, 9 charged fills, move $-174.82, net $-203.16, slippage $28.34
+12:34:30 C14 R=30, exit 13:25 NY, 2021-03-04..08 (NY times; bid prices; buys fill at the ask):
+12:34:30   2021-03-04: range 08:25-08:55 high 26.103 low 25.861; buy stop 26.104, sell stop 25.860, stop at the other side
+12:34:30   2021-03-05: range 08:25-08:55 high 25.295 low 24.877; buy stop 25.296, sell stop 24.876, stop at the other side
+12:34:30   2021-03-08: range 08:25-08:55 high 25.232 low 25.078; buy stop 25.233, sell stop 25.077, stop at the other side
+12:34:30   trade 1: BUY at 2021-03-04 08:57 fill 26.104 (+ 0.067 stop-entry slippage -> 26.171); exit stop at 10:17 price 25.861 (+ stop slippage 0.059 -> 25.802); P/L by hand (25.802 - 26.171) x +1 x $50 = $-18.44
+12:34:30   trade 2: BUY at 2021-03-05 09:15 fill 25.296 (+ 0.067 stop-entry slippage -> 25.363); exit stop at 11:47 price 24.877 (+ stop slippage 0.058 -> 24.819); P/L by hand (24.819 - 25.363) x +1 x $50 = $-27.17
+12:34:30   trade 3: BUY at 2021-03-08 08:56 fill 25.233 (+ 0.067 stop-entry slippage -> 25.300); exit stop at 10:48 price 25.078 (+ stop slippage 0.066 -> 25.012); P/L by hand (25.012 - 25.300) x +1 x $50 = $-14.41
+12:34:30   stream trades' P/L: $-18.44, $-27.17, $-14.41
+12:34:31 [PASS] G3 ticks v3lite March 2021: basket P/L = move x lots x 5,000; slippage = count x spread x k: 9 baskets, move $22.70, engine $22.70, extra $12.75 on 4 fills; mae sign: min -45.45 max -3.95
+12:34:31 [PASS] G3 ticks gtop2 March 2021: basket P/L = move x lots x 5,000; slippage = count x spread x k: 12 baskets, move $31.90, engine $31.90, extra $22.80 on 7 fills; mae sign: min -19.50 max -4.75
+12:34:31 GATES: ALL PASS

@@ -56,6 +56,26 @@ replayed, five quarters (13 Aug 2025 → 13 Nov 2026), each run eight times with
 
 ---
 
+## 2026-11-17 · Silver (XAGUSDm) deep research: no strategy works after costs
+
+**Status:** *rejected* (backtest only; no silver bot). Write-up: `backtest_results/silver/SILVER.md`; market profile `MARKET.md`;
+internet survey `WEB_SURVEY.md`; rules frozen before any run: `PREREG_SILVER.md` (sha256 d11df94d…), `FINALISTS.md` (0 finalists,
+sha256 0e321a23…); deviations `DEVIATIONS_SILVER.md`; code: `backtesting/research/silver.py`, `silver_develop.py`, `silver_market.py`.
+
+**What.** 40 strategies, 144 variants (trend, breakouts, intraday momentum, mean-reversion and calendar controls, gold-led and
+gold/silver-ratio rules, the bot's six basket designs) on development 2018-11 – 2022-12; validation and the hold-out
+(2024-07 – 2026-11) were to follow for finalists.
+
+**Result.** None of the 144 passed the development shortlist, so the hold-out stays unused. Costs decide silver: the median
+spread was about 21 bps of price (gold 1.6 bps); 44 of the 55 rules that hold under a day made money before costs and none after.
+The best near miss (Supertrend H4 10/4.0, +$2.75 a week per 0.01 lot) barely beat holding silver (+$2.20) and its neighbour lost;
+Hansen's SPA test p = 0.29 (no better than luck). The bot's designs all lose after costs on silver (the slot-5 variant: +$810 –
+$1,692 before costs, −$9 – 11k after). An independent re-implementation matched the near misses within about $1. Caveat: costs
+are 2018 – 22 spreads; silver's spread relative to price is about 5x lower since 2024, and at that level a few short rules come
+near break-even, but none shows a robust edge.
+
+---
+
 ## 2026-11-17 · Silver and the major forex pairs: add none (pre-registered study)
 
 **Status:** *rejected* (backtest only; nothing changes in the bot). Write-up: `backtest_results/multisymbol/MULTISYMBOL.md`;

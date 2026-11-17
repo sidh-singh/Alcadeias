@@ -1,0 +1,55 @@
+spec: contract 5000.0, digits 3, quote USD, data_hole_s 0.0
+  [PASS] engine table holds silver at 5,000 oz / 3 digits
+
+1. tick engine, sec mode: 2021-03-01 -> 2021-04-01
+  prepare: 610,703 per-second rows, warm bars {'M1': 600, 'M5': 600, 'M15': 600, 'H1': 600, 'H4': 600}, 0.0s
+  v3lite: window 60-7080 min, cap $0.00/unit, 9 baskets, 18 fills, 0.7s
+  [PASS] v3lite: trades happened
+  [PASS] v3lite: P/L = price move x lots x 5,000 on single-position baskets: max diff $0.0000
+    fill actions: {'open': 9, 'close': 9}
+  [PASS] v3lite: no order inside the daily break, every fill had a quote within 3 min: 0 in break, max quote age 5s
+    exit reasons: {'target': 5, 'stop_loss': 4}; session counters {'dead_market_skips': 25, 'closes_data_hole': 0, 'polls_entry_blocked_data_hole': 0, 'orders_refused_market_closed': 0, 'polls_order_blocked_close_only': 0}
+  gtop2: window 60-7080 min, cap $14.72/unit, 12 baskets, 25 fills, 0.4s
+  [PASS] Top 2 cap translated to 0.2943 price = $14.72 per 0.01 lot
+  [PASS] gtop2: trades happened
+  [PASS] gtop2: P/L = price move x lots x 5,000 on single-position baskets: max diff $0.0000
+    fill actions: {'open': 13, 'close': 12}
+  [PASS] gtop2: no order inside the daily break, every fill had a quote within 3 min: 0 in break, max quote age 3s
+    exit reasons: {'stop_loss': 7, 'target': 5}; session counters {'dead_market_skips': 25, 'closes_data_hole': 0, 'polls_entry_blocked_data_hole': 0, 'orders_refused_market_closed': 0, 'polls_order_blocked_close_only': 0}
+
+2. M1-bar simulator: 2020-01-01 history, 2021-03-01 -> 2021-04-01
+  market + bot votes: 437,481 M1 bars, k = $50 per 1.00 of price per 0.01 lot, tick 0.001, around the clock False, 4.4s
+  [PASS] bar simulator: k = 50 USD per 1.00 per 0.01 lot, tick 0.001
+  [PASS] D1 bars: none ends on a Sunday or Saturday (Sunday-evening stub merged into Monday): 321 D1 bars, weekdays [0, 1, 2, 3, 4]
+  Turtle S1 + bot votes: 1 trades (0 at zero size), 0.0s
+  [PASS] Turtle S1 + bot votes: no entry inside the daily break
+  Supertrend H4: 3 trades (0 at zero size), 0.0s
+  [PASS] Supertrend H4: P/L = price move x units x $50: max diff $0.000000
+  [PASS] Supertrend H4: no entry inside the daily break
+
+3. balke multi-position account: 2021-03-01 -> 2021-04-01
+  ATR Breakout, risk-sized 0.5%: 5 trades (0 at zero size), 0 entered while another was open, 0.0s
+  [PASS] ATR Breakout risk-sized 0.5%: P/L = price move x units x $50: max diff $0.000000
+  ATR Breakout, bot unit rule: 5 trades (0 at zero size), 0 entered while another was open, 0.0s
+  [PASS] ATR Breakout bot unit rule: P/L = price move x units x $50: max diff $0.000000
+  [PASS] balke multi-account produced trades
+
+ALL PASS
+        6.30 real         9.24 user         0.40 sys
+           359677952  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               30972  page reclaims
+                   1  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                3820  involuntary context switches
+        107336676241  instructions retired
+         28289704201  cycles elapsed
+           196871272  peak memory footprint

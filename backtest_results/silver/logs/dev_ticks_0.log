@@ -1,0 +1,26 @@
+12:35:31 ticks dev part 0/3: 20,700,345 rows (4s), 24 runs
+12:35:59   C35[target=5.0]                      x1     27.3s baskets 9573
+12:36:25   C35[target=5.0]                      gross  26.1s baskets 13532
+12:36:52   C35[target=10.0]                     pct    26.4s baskets 8376
+12:37:18   C35[target=20.0]                     x15    26.5s baskets 7276
+12:37:53   C36[target=5.0]                      x1     34.5s baskets 2512
+12:38:27   C36[target=5.0]                      gross  34.0s baskets 3787
+12:39:01   C36[target=10.0]                     pct    34.3s baskets 1867
+12:39:35   C36[target=20.0]                     x15    34.4s baskets 1287
+12:39:57   C37[tv=6.0,sv=6.0]                   x1     21.3s baskets 549
+12:40:18   C37[tv=6.0,sv=6.0]                   gross  21.3s baskets 559
+12:40:40   C37[tv=8.0,sv=8.0]                   pct    21.6s baskets 391
+12:41:02   C37[tv=10.0,sv=10.0]                 x15    21.9s baskets 284
+12:41:23   C38[tv=8.0,sv=4.0,cap=14.72]         x1     21.2s baskets 702
+12:41:44   C38[tv=8.0,sv=4.0,cap=14.72]         gross  21.4s baskets 687
+12:42:05   C38[tv=8.0,sv=4.0,cap=30.0]          pct    21.2s baskets 698
+12:42:27   C38[tv=10.0,sv=5.0,cap=14.72]        x15    21.4s baskets 566
+12:42:58   C39[tv=8.0,sv=8.0]                   x1     30.7s baskets 708
+12:43:29   C39[tv=8.0,sv=8.0]                   gross  30.9s baskets 745
+12:43:59   C39[tv=10.0,sv=8.0]                  pct    30.9s baskets 623
+12:44:31   C39[tv=12.0,sv=10.0]                 x15    31.1s baskets 522
+12:44:53   C40[tv=10.0,sv=8.0,cap=30.98]        x1     22.1s baskets 429
+12:45:15   C40[tv=10.0,sv=8.0,cap=30.98]        gross  22.0s baskets 405
+12:45:37   C40[tv=8.0,sv=8.0,cap=30.98]         pct    22.0s baskets 488
+12:45:59   C40[tv=10.0,sv=8.0,cap=0.0]          x15    22.0s baskets 422
+12:45:59 ticks part 0 done in 631s

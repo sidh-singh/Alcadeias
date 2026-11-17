@@ -1,0 +1,51 @@
+[12:02:52] bars: load 3,140,616 M1 bars 0.1s
+[12:03:25] bars: the bot's votes 32.4s
+[12:03:25] bars: V3-lite (bar level) plan + 8y account 0.1s, 540 trades
+[12:03:25] bars: tsmom      default  build   0.1s | standalone 0.1s/33tr/0zero | risk-sized 0.0s/28tr/0zero | + bot votes 0.0s/33tr/0zero
+[12:03:25] bars: tsmom      alt      build   0.0s | standalone 0.0s/10tr/0zero | risk-sized 0.0s/11tr/0zero | + bot votes 0.0s/10tr/0zero
+[12:03:26] bars: turtle     default  build   0.0s | standalone 0.0s/68tr/0zero | risk-sized 0.0s/31tr/50zero | + bot votes 0.0s/70tr/0zero
+[12:03:26] bars: turtle     alt      build   0.0s | standalone 0.1s/39tr/0zero | risk-sized 0.0s/10tr/43zero | + bot votes 0.0s/39tr/0zero
+[12:03:26] bars: donchian   default  build   0.0s | standalone 0.0s/48tr/0zero | risk-sized 0.0s/70tr/0zero | + bot votes 0.0s/33tr/0zero
+[12:03:26] bars: donchian   alt      build   0.0s | standalone 0.0s/95tr/0zero | risk-sized 0.0s/107tr/0zero | + bot votes 0.0s/67tr/0zero
+[12:03:27] bars: ma         default  build   0.3s | standalone 0.1s/1365tr/0zero | + bot votes 0.1s/1159tr/0zero
+[12:03:27] bars: ma         alt      build   0.1s | standalone 0.1s/1304tr/0zero | + bot votes 0.1s/1230tr/0zero
+[12:03:27] bars: supertrend default  build   0.1s | standalone 0.0s/325tr/0zero | + bot votes 0.0s/323tr/0zero
+[12:03:27] bars: supertrend alt      build   0.0s | standalone 0.0s/162tr/0zero | + bot votes 0.0s/161tr/0zero
+[12:03:28] bars: london     default  build   0.3s | standalone 0.0s/882tr/0zero | risk-sized 0.0s/414tr/1127zero | + bot votes 0.0s/848tr/0zero
+[12:03:28] bars: london     alt      build   0.1s | standalone 0.0s/875tr/0zero | risk-sized 0.0s/445tr/1177zero | + bot votes 0.0s/827tr/0zero
+[12:03:28] bars: noise      default  build   0.1s | standalone 0.0s/1045tr/0zero | risk-sized 0.0s/586tr/1217zero | + bot votes 0.0s/880tr/0zero
+[12:03:29] bars: noise      alt      build   0.2s | standalone 0.0s/1184tr/0zero | risk-sized 0.0s/480tr/5655zero | + bot votes 0.0s/855tr/0zero
+[12:03:29] bars: lasthalf   default  build   0.1s | standalone 0.0s/955tr/0zero | + bot votes 0.0s/413tr/0zero
+[12:03:29] bars: lasthalf   alt      build   0.1s | standalone 0.0s/976tr/0zero | + bot votes 0.0s/668tr/0zero
+[12:03:29] bars: rsi2       default  build   0.0s | standalone 0.0s/46tr/0zero | + bot votes 0.0s/30tr/0zero
+[12:03:29] bars: rsi2       alt      build   0.0s | standalone 0.0s/72tr/0zero | + bot votes 0.0s/46tr/0zero
+[12:03:29] bars: maxmin     default  build   0.0s | standalone 0.0s/384tr/0zero | + bot votes 0.0s/146tr/0zero
+[12:03:29] bars: maxmin     alt      build   0.0s | standalone 0.0s/914tr/0zero | + bot votes 0.0s/315tr/0zero
+[12:03:29] balke ATR Breakout (multi): build 0.0s | standalone 0.1s/1006tr/0zero | risk-sized 0.1s/455tr/719zero
+[12:03:30] balke Range Breakout, gold settings: build 0.1s | standalone 0.0s/964tr/0zero | risk-sized 0.0s/452tr/1388zero
+[12:03:30] balke Go Long: build 0.0s | standalone 0.0s/736tr/0zero | risk-sized 0.0s/630tr/1420zero
+[12:03:30] balke Turnaround Tuesday SMA 25: build 0.1s | standalone 0.0s/190tr/0zero | risk-sized 0.0s/48tr/142zero
+[12:03:33] ticks: prepare 8y 54,784,220 per-second rows 3.6s
+[12:04:17] ticks: v3lite 8y 43.3s, 777 baskets
+[12:04:59] ticks: gtop2 8y 42.6s, 1381 baskets
+[12:06:01] ticks: gtop1add 8y 62.1s, 1209 baskets
+[12:06:51] ticks: Live logic (Fibonacci ladder, $1/unit target, as is) 8y 49.6s, 37822 baskets
+[12:06:51] done
+      239.42 real       236.22 user         3.83 sys
+          3241852928  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              818507  page reclaims
+                   1  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  19  voluntary context switches
+               42136  involuntary context switches
+       2607791912948  instructions retired
+        756196544893  cycles elapsed
+          2860584824  peak memory footprint
