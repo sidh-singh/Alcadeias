@@ -1,0 +1,28 @@
+{
+ "rows": {
+  "XAUUSDm F1 (2 years, whole months)": 39382958,
+  "XAUUSDm F2 (2 years, whole months)": 51159834,
+  "XAUUSDm F3 (2 years, whole months)": 67176987,
+  "XAUUSDm F4 (2 years, whole months)": 167417731,
+  "XAUUSDm largest one-year account of F4 (2025-11 to 2026-11, whole months)": 97556279,
+  "BTCUSDm F1 (2 years, whole months)": 66444791,
+  "BTCUSDm F2 (2 years, whole months)": 82772995,
+  "BTCUSDm F3 (2 years, whole months)": 116552694,
+  "BTCUSDm F4 (2 years, whole months)": 203911065,
+  "BTCUSDm largest one-year account of F4 (2025-11 to 2026-11, whole months)": 36683952
+ },
+ "XAUUSDm": {
+  "window": "2023-11-13 to 2024-11-13",
+  "rows": 37274833,
+  "prepare_s": 7.4,
+  "prepare_gb": 1.04,
+  "peak_gb_with_6_workers": 2.09
+ },
+ "BTCUSDm": {
+  "window": "2023-11-13 to 2024-11-13",
+  "rows": 71694250,
+  "prepare_s": 8.7,
+  "prepare_gb": 0.44,
+  "peak_gb_with_6_workers": 1.93
+ }
+}

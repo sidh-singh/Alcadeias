@@ -1,0 +1,77 @@
+symbol,feature,baskets,adds,net,checks,failed,acct_checks,acct_failed,notes,events,run_s
+XAUUSDm,size flat,1456,730,-593.89,730,0,1457,0,,{},29.6
+XAUUSDm,size +1,1602,934,-624.41,934,0,1603,0,,{},1.6
+XAUUSDm,size doubling,1160,765,-2000.0,765,0,1161,0,,{},1.1
+XAUUSDm,tiers T12 M2-M20,834,593,-2000.0,593,0,835,0,,{},1.7
+XAUUSDm,tiers T13 M10-H6,549,495,-2000.0,495,0,550,0,,{},0.9
+XAUUSDm,tiers T6 +D1+W1,1600,996,-763.81,996,0,1601,0,,{},2.7
+XAUUSDm,per-tier stricter,1535,604,-608.54,604,0,1536,0,,{},1.6
+XAUUSDm,trigger macd_hist,1288,1877,-2000.0,1877,0,1289,0,,{},0.9
+XAUUSDm,trigger macd_cross,1770,1423,-1328.58,1423,0,1771,0,,{},1.8
+XAUUSDm,trigger rsi_macd,1500,492,-782.56,492,0,1501,0,,{},3.0
+XAUUSDm,trigger stoch,676,518,-2000.0,518,0,677,0,,{},3.2
+XAUUSDm,trigger emadist,1491,530,-813.36,530,0,1492,0,,{},4.8
+XAUUSDm,gap geometric 1.5,1401,314,-436.54,314,0,1402,0,,{},1.6
+XAUUSDm,gap D1 0.15,1499,466,-306.41,466,0,1500,0,,{},1.7
+XAUUSDm,stop 20% balance,1605,945,-1535.75,1605,0,1606,0,,{},1.6
+XAUUSDm,time 24h deep,1132,741,-2000.0,1029,0,1133,0,deep baskets older than 24 h not closed by the time stop: 1,{},1.1
+XAUUSDm,target b/e after 3,1597,895,-1124.14,1293,0,1598,0,,{},1.6
+XAUUSDm,target shrink,1620,887,-1097.25,1322,0,1621,0,,{},1.6
+XAUUSDm,final close H6 full,1623,1008,-1326.16,58,0,1624,0,,{'closes_final': 58},1.7
+XAUUSDm,add gate H1 trend,1194,83,-528.11,83,0,1195,0,,{'polls_add_blocked_trend': 139521},1.6
+XAUUSDm,add gate EMA200 D1,1352,419,-414.76,419,0,1353,0,,{'polls_add_blocked_gate': 96236},1.6
+XAUUSDm,add gate ADX H1>30,1434,570,-549.63,570,0,1435,0,,{'polls_add_blocked_gate': 57251},1.6
+XAUUSDm,add gate abnormal day,1522,770,-613.05,770,0,1523,0,,{'polls_add_blocked_abnormal_day': 22476},1.6
+XAUUSDm,add gate 20:30-22:30,1591,901,-678.32,901,0,1592,0,,{'polls_add_blocked_hours': 6296},1.6
+XAUUSDm,Friday flat,1603,914,-612.27,1611,0,1604,0,,"{'closes_weekend_flat': 8, 'polls_entry_blocked_flat_week': 25823}",1.6
+XAUUSDm,entry gate ATR pct,1228,701,-943.15,1228,0,1229,0,,{'polls_entry_blocked_gate': 370011},1.7
+XAUUSDm,confirm Supertrend H4,590,294,-284.68,590,0,591,0,,{'polls_entry_blocked_gate': 1253550},1.5
+XAUUSDm,side D1 RSI,1572,923,-1428.67,1572,0,1573,0,,{'polls_entry_blocked_side_rsi': 10586},1.7
+XAUUSDm,stop-and-reverse x1,1814,1009,-1273.23,550,0,1815,0,,"{'reverse_opens': 273, 'reverse_dropped': 5}",1.7
+XAUUSDm,stop-and-reverse x2,1814,1009,-1335.97,550,0,1815,0,,"{'reverse_opens': 273, 'reverse_dropped': 5}",1.7
+XAUUSDm,hedge-on-depth,1549,847,-1011.78,86,0,1550,0,,"{'hedge_opens': 37, 'hedge_unwinds': 21, 'closes_hedge_stop': 18}",1.6
+XAUUSDm,counter-ladder,1115,164,-398.13,164,0,1116,0,,{},1.6
+XAUUSDm,partial LIFO,862,1036,-2000.0,666,0,863,0,,{'partial_closes': 666},1.4
+XAUUSDm,partial overlap,1625,955,-1018.5,271,0,1626,0,,"{'partial_closes': 35, 'closes_overlap': 236}",1.6
+XAUUSDm,sizing pre-funded,1595,928,-1229.23,1595,0,1596,0,,{},1.6
+XAUUSDm,sizing vol-target,1595,928,-1229.23,1595,0,1596,0,,{},1.6
+XAUUSDm,sizing vol-target k x3,470,366,-2000.0,470,0,471,0,,{},0.5
+XAUUSDm,"sizing pre-funded $20,000",1591,931,-6094.72,1591,0,1592,0,,{},1.6
+BTCUSDm,size flat,1250,1125,-703.81,1125,0,1251,0,,{},2.3
+BTCUSDm,size +1,1407,1303,-1734.18,1303,0,1408,0,,{},2.3
+BTCUSDm,size doubling,993,908,-2000.0,908,0,994,0,,{},1.7
+BTCUSDm,tiers T12 M2-M20,1282,1286,-2000.0,1286,0,1283,0,,{},3.4
+BTCUSDm,tiers T13 M10-H6,988,877,-2000.0,877,0,989,0,,{},2.3
+BTCUSDm,tiers T6 +D1+W1,1026,1014,-2000.0,1014,0,1027,0,,{},3.1
+BTCUSDm,per-tier stricter,1359,940,-1288.59,940,0,1360,0,,{},2.3
+BTCUSDm,trigger macd_hist,1127,2036,-2000.0,2036,0,1128,0,,{},1.4
+BTCUSDm,trigger macd_cross,1607,1967,-1702.74,1967,0,1608,0,,{},2.6
+BTCUSDm,trigger rsi_macd,1287,709,-856.59,709,0,1288,0,,{},4.4
+BTCUSDm,trigger stoch,1493,1410,-1300.73,1410,0,1494,0,,{},11.8
+BTCUSDm,trigger emadist,1291,646,-808.58,646,0,1292,0,,{},7.7
+BTCUSDm,gap geometric 1.5,1198,421,-609.68,421,0,1199,0,,{},2.3
+BTCUSDm,gap D1 0.15,1273,612,-855.75,612,0,1274,0,,{},2.4
+BTCUSDm,stop 20% balance,1334,1227,-1999.42,1334,0,1335,0,,{},2.3
+BTCUSDm,time 24h deep,1323,1219,-2000.0,1158,0,1324,0,deep baskets older than 24 h not closed by the time stop: 0,{},2.2
+BTCUSDm,target b/e after 3,1307,1183,-2000.0,766,0,1308,0,,{},2.2
+BTCUSDm,target shrink,1411,1272,-2000.0,852,0,1412,0,,{},2.3
+BTCUSDm,final close H6 full,1435,1468,-2000.0,94,0,1436,0,,{'closes_final': 94},2.4
+BTCUSDm,add gate H1 trend,1086,182,-416.59,182,0,1087,0,,{'polls_add_blocked_trend': 162011},2.3
+BTCUSDm,add gate EMA200 D1,1220,692,-1032.83,692,0,1221,0,,{'polls_add_blocked_gate': 86561},2.3
+BTCUSDm,add gate ADX H1>30,1256,728,-797.13,728,0,1257,0,,{'polls_add_blocked_gate': 89188},2.4
+BTCUSDm,add gate abnormal day,1353,1119,-1945.91,1119,0,1354,0,,{'polls_add_blocked_abnormal_day': 16423},2.3
+BTCUSDm,add gate 20:30-22:30,1365,1215,-2000.0,1215,0,1366,0,,{'polls_add_blocked_hours': 18314},2.3
+BTCUSDm,Friday flat,1075,1051,-1882.01,1082,0,1076,0,,"{'closes_weekend_flat': 7, 'polls_entry_blocked_flat_week': 878051}",2.3
+BTCUSDm,entry gate ATR pct,1032,1034,-1772.57,1032,0,1033,0,,{'polls_entry_blocked_gate': 805275},2.4
+BTCUSDm,confirm Supertrend H4,614,413,-329.88,614,0,615,0,,{'polls_entry_blocked_gate': 2068715},2.2
+BTCUSDm,side D1 RSI,1302,1232,-2000.0,1302,0,1303,0,,{'polls_entry_blocked_side_rsi': 28327},2.3
+BTCUSDm,stop-and-reverse x1,1430,1273,-2000.0,816,0,1431,0,,{'reverse_opens': 408},1.9
+BTCUSDm,stop-and-reverse x2,1393,1212,-1999.81,794,0,1394,0,,"{'reverse_opens': 397, 'reverse_dropped': 1}",2.3
+BTCUSDm,hedge-on-depth,1045,1011,-1999.84,125,0,1046,0,,"{'hedge_opens': 64, 'hedge_unwinds': 11, 'closes_hedge_stop': 48}",2.3
+BTCUSDm,counter-ladder,1012,227,-375.23,227,0,1013,0,,{},2.3
+BTCUSDm,partial LIFO,972,1078,-2000.0,290,0,973,0,,{'partial_closes': 290},2.0
+BTCUSDm,partial overlap,1314,1229,-2000.0,206,0,1315,0,,"{'partial_closes': 33, 'closes_overlap': 173}",2.2
+BTCUSDm,sizing pre-funded,1323,1219,-2000.0,1323,0,1324,0,,{},2.2
+BTCUSDm,sizing vol-target,1323,1219,-2000.0,1323,0,1324,0,,{},2.2
+BTCUSDm,sizing vol-target k x3,886,819,-2000.0,886,0,887,0,,{},1.6
+BTCUSDm,"sizing pre-funded $20,000",1417,1335,-14075.54,1417,0,1418,0,,{},2.3

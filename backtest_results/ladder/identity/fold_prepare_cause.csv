@@ -1,0 +1,25 @@
+symbol,design,start,timing,fold_final,own_final,fold_baskets,own_baskets,fills_identical
+XAUUSDm,L0,2018-12-13,jitter seed 2,0.0,0.0,1707,1714,False
+XAUUSDm,L0,2018-12-13,no jitter,0.0,0.0,1707,1707,True
+XAUUSDm,V3L,2018-12-13,jitter seed 2,2015.88,2015.83,145,145,False
+XAUUSDm,V3L,2018-12-13,no jitter,1973.1,1973.1,144,144,True
+XAUUSDm,L0,2019-05-13,jitter seed 2,0.0,0.0,513,513,False
+XAUUSDm,L0,2019-05-13,no jitter,0.0,0.0,505,505,True
+XAUUSDm,V3L,2019-05-13,jitter seed 2,2365.85,2365.89,152,152,False
+XAUUSDm,V3L,2019-05-13,no jitter,2331.52,2331.52,152,152,True
+XAUUSDm,L0,2019-11-13,jitter seed 2,0.0,0.0,2054,2077,False
+XAUUSDm,L0,2019-11-13,no jitter,0.0,0.0,2007,2007,True
+XAUUSDm,V3L,2019-11-13,jitter seed 2,2473.27,2350.44,153,155,False
+XAUUSDm,V3L,2019-11-13,no jitter,2429.8,2429.8,158,158,True
+BTCUSDm,L0,2018-12-13,jitter seed 2,0.0,0.0,1878,1879,False
+BTCUSDm,L0,2018-12-13,no jitter,0.0,0.0,1888,1888,True
+BTCUSDm,V3L,2018-12-13,jitter seed 2,2044.46,2058.38,269,269,False
+BTCUSDm,V3L,2018-12-13,no jitter,2051.11,2051.11,270,270,True
+BTCUSDm,L0,2019-05-13,jitter seed 2,0.0,0.0,1090,1083,False
+BTCUSDm,L0,2019-05-13,no jitter,0.0,0.0,1076,1076,True
+BTCUSDm,V3L,2019-05-13,jitter seed 2,2026.9,2027.14,247,247,False
+BTCUSDm,V3L,2019-05-13,no jitter,2033.56,2033.56,246,246,True
+BTCUSDm,L0,2019-11-13,jitter seed 2,0.0,0.0,1988,1974,False
+BTCUSDm,L0,2019-11-13,no jitter,0.0,0.0,1994,1994,True
+BTCUSDm,V3L,2019-11-13,jitter seed 2,1968.22,1968.19,245,245,False
+BTCUSDm,V3L,2019-11-13,no jitter,1947.85,1947.85,247,247,True

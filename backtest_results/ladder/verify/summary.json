@@ -1,0 +1,166 @@
+{
+ "rowmatch": {
+  "B1 BTCUSDm": {
+   "rows": 458,
+   "matched_rows": 458,
+   "net_exact_cent": 458,
+   "max_net_diff": 0.0,
+   "dd_exact": 458,
+   "wiped_same": 458,
+   "baskets_same": 458
+  },
+  "G1 XAUUSDm": {
+   "rows": 458,
+   "matched_rows": 458,
+   "net_exact_cent": 458,
+   "max_net_diff": 0.0,
+   "dd_exact": 458,
+   "wiped_same": 458,
+   "baskets_same": 458
+  },
+  "G5 XAUUSDm": {
+   "rows": 458,
+   "matched_rows": 458,
+   "net_exact_cent": 458,
+   "max_net_diff": 0.0,
+   "dd_exact": 458,
+   "wiped_same": 458,
+   "baskets_same": 458
+  },
+  "L0 BTCUSDm": {
+   "rows": 458,
+   "matched_rows": 456,
+   "net_exact_cent": 456,
+   "max_net_diff": 0.0,
+   "dd_exact": 456,
+   "wiped_same": 456,
+   "baskets_same": 456
+  },
+  "L0 XAUUSDm": {
+   "rows": 458,
+   "matched_rows": 458,
+   "net_exact_cent": 458,
+   "max_net_diff": 0.0,
+   "dd_exact": 458,
+   "wiped_same": 458,
+   "baskets_same": 458
+  }
+ },
+ "tables": {
+  "B1 BTCUSDm": {
+   "accounts": 170,
+   "wiped": 0,
+   "worst_dd": 40.0,
+   "median_dd": 26.7,
+   "mean": 31.9,
+   "median": 29.3,
+   "p10": -4.4,
+   "worst": -18.7,
+   "usd_wk_median": 11,
+   "usd_wk_p10": -2,
+   "fold_accounts": 384,
+   "wiped_of_384": 0,
+   "timing_mean_range": [
+    30.4,
+    33.2
+   ],
+   "timings_pos": 8,
+   "F1": "-3.1 / 0 of 96; worstDD 30.7",
+   "F2": "+11.1 / 0 of 96; worstDD 34.9",
+   "F3": "+54.8 / 0 of 96; worstDD 31.6",
+   "F4": "+64.3 / 0 of 96; worstDD 38.7"
+  },
+  "G1 XAUUSDm": {
+   "accounts": 170,
+   "wiped": 0,
+   "worst_dd": 83.4,
+   "median_dd": 57.5,
+   "mean": 158.0,
+   "median": 140.6,
+   "p10": -4.2,
+   "worst": -65.4,
+   "usd_wk_median": 54,
+   "usd_wk_p10": -2,
+   "fold_accounts": 384,
+   "wiped_of_384": 0,
+   "timing_mean_range": [
+    182.5,
+    218.0
+   ],
+   "timings_pos": 8,
+   "F1": "+112.8 / 0 of 96; worstDD 75.9",
+   "F2": "+182.7 / 0 of 96; worstDD 75.6",
+   "F3": "+153.7 / 0 of 96; worstDD 83.0",
+   "F4": "+349.1 / 0 of 96; worstDD 65.9"
+  },
+  "G5 XAUUSDm": {
+   "accounts": 170,
+   "wiped": 0,
+   "worst_dd": 63.6,
+   "median_dd": 12.1,
+   "mean": 18.0,
+   "median": 15.5,
+   "p10": -2.0,
+   "worst": -19.3,
+   "usd_wk_median": 6,
+   "usd_wk_p10": -1,
+   "fold_accounts": 384,
+   "wiped_of_384": 0,
+   "timing_mean_range": [
+    14.8,
+    16.6
+   ],
+   "timings_pos": 8,
+   "F1": "+15.6 / 0 of 96; worstDD 11.7",
+   "F2": "+2.4 / 0 of 96; worstDD 19.7",
+   "F3": "+10.3 / 0 of 96; worstDD 15.4",
+   "F4": "+34.5 / 0 of 96; worstDD 59.4"
+  },
+  "L0 BTCUSDm": {
+   "accounts": 170,
+   "wiped": 169,
+   "worst_dd": 102.4,
+   "median_dd": 100.1,
+   "mean": -99.7,
+   "median": -100.0,
+   "p10": -100.0,
+   "worst": -100.0,
+   "usd_wk_median": -38,
+   "usd_wk_p10": -38,
+   "fold_accounts": 384,
+   "wiped_of_384": 383,
+   "timing_mean_range": [
+    -100.0,
+    -98.9
+   ],
+   "timings_pos": 0,
+   "F1": "-100.0 / 96 of 96; worstDD 100.1",
+   "F2": "-100.0 / 96 of 96; worstDD 102.5",
+   "F3": "-100.0 / 96 of 96; worstDD 100.9",
+   "F4": "-99.5 / 95 of 96; worstDD 105.2"
+  },
+  "L0 XAUUSDm": {
+   "accounts": 170,
+   "wiped": 170,
+   "worst_dd": 113.9,
+   "median_dd": 100.1,
+   "mean": -100.0,
+   "median": -100.0,
+   "p10": -100.0,
+   "worst": -100.0,
+   "usd_wk_median": -38,
+   "usd_wk_p10": -38,
+   "fold_accounts": 384,
+   "wiped_of_384": 384,
+   "timing_mean_range": [
+    -100.0,
+    -100.0
+   ],
+   "timings_pos": 0,
+   "F1": "-100.0 / 96 of 96; worstDD 104.0",
+   "F2": "-100.0 / 96 of 96; worstDD 101.2",
+   "F3": "-100.0 / 96 of 96; worstDD 113.9",
+   "F4": "-100.0 / 96 of 96; worstDD 111.7"
+  }
+ }
+}

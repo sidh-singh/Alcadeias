@@ -1,0 +1,31 @@
+symbol,mode,tf,warm_bars,window_bars,window_vs_rows,warmup_vs_m1,window_vs_m1_store,mt5_grid,all
+XAUUSDm,ticks,M4,600,6870,True,True,True,True,True
+XAUUSDm,ticks,M6,600,4583,True,True,True,True,True
+XAUUSDm,ticks,M12,600,2292,True,True,True,True,True
+XAUUSDm,ticks,M20,600,1375,True,True,True,True,True
+XAUUSDm,ticks,H3,600,164,True,True,True,True,True
+XAUUSDm,ticks,W1,319,5,True,True,True,True,True
+XAUUSDm,sec,M4,600,6870,True,True,True,True,True
+XAUUSDm,sec,M6,600,4583,True,True,True,True,True
+XAUUSDm,sec,M12,600,2292,True,True,True,True,True
+XAUUSDm,sec,M20,600,1375,True,True,True,True,True
+XAUUSDm,sec,H3,600,164,True,True,True,True,True
+XAUUSDm,sec,W1,319,5,True,True,True,True,True
+XAUUSDm,m1,W1 week of 2019-03-10,0,1,True,True,True,True,True
+XAUUSDm,m1,W1 week of 2021-05-16,0,1,True,True,True,True,True
+XAUUSDm,m1,W1 week of 2024-08-04,0,1,True,True,True,True,True
+BTCUSDm,ticks,M4,600,10080,True,True,True,True,True
+BTCUSDm,ticks,M6,600,6720,True,True,True,True,True
+BTCUSDm,ticks,M12,600,3360,True,True,True,True,True
+BTCUSDm,ticks,M20,600,2016,True,True,True,True,True
+BTCUSDm,ticks,H3,600,224,True,True,True,True,True
+BTCUSDm,ticks,W1,267,5,True,True,True,True,True
+BTCUSDm,sec,M4,600,10080,True,True,True,True,True
+BTCUSDm,sec,M6,600,6720,True,True,True,True,True
+BTCUSDm,sec,M12,600,3360,True,True,True,True,True
+BTCUSDm,sec,M20,600,2016,True,True,True,True,True
+BTCUSDm,sec,H3,600,224,True,True,True,True,True
+BTCUSDm,sec,W1,267,5,True,True,True,True,True
+BTCUSDm,m1,W1 week of 2019-03-10,0,1,True,True,True,True,True
+BTCUSDm,m1,W1 week of 2021-05-16,0,1,True,True,True,True,True
+BTCUSDm,m1,W1 week of 2024-08-04,0,1,True,True,True,True,True

@@ -1,0 +1,61 @@
+{
+ "importance": {
+  "LEVEL": 11500.2224,
+  "CONFIRM": 7666.8546,
+  "ENTRY": 6000.1324,
+  "TIERS": 0.0587,
+  "FC": 0.0505,
+  "SIDE": 0.0492,
+  "TRIG-MACD": 0.048,
+  "TRIG-3RD": 0.0383,
+  "GRAN": 0.0382,
+  "GATE": 0.032,
+  "GAP": 0.0219,
+  "TARGET": 0.0144,
+  "DEPTH": 0.0139,
+  "STOP": 0.0116,
+  "SIZING": 0.004,
+  "PARTIAL": 0.0,
+  "SIZE": -0.0023,
+  "TIME": -0.0128,
+  "CONTROL": -0.2856
+ },
+ "dims": [
+  "LEVEL",
+  "CONFIRM",
+  "ENTRY",
+  "TIERS"
+ ],
+ "bases": [
+  "V3L",
+  "L5"
+ ],
+ "best_single": [
+  "V3L|TIERS=T11",
+  "L5|ENTRY=E6",
+  "LB|CONFIRM=C4",
+  "L0|CONFIRM=C2"
+ ],
+ "levels": {
+  "LEVEL": [
+   "=",
+   "LV20",
+   "LV25"
+  ],
+  "CONFIRM": [
+   "C8",
+   "C11",
+   "C9"
+  ],
+  "ENTRY": [
+   "E6",
+   "E1",
+   "="
+  ],
+  "TIERS": [
+   "T11",
+   "T7",
+   "T4"
+  ]
+ }
+}

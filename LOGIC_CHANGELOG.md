@@ -56,6 +56,26 @@ replayed, five quarters (13 Aug 2025 → 13 Nov 2026), each run eight times with
 
 ---
 
+## 2026-11-19 · DCA ladder deep research (gold, BTC): no ladder works
+
+**Status:** *rejected* (backtest only). Write-up: `backtest_results/ladder/LADDER.md` (per symbol: `SEARCH_XAUUSDm.md`,
+`SEARCH_BTCUSDm.md`); rules frozen first: `PREREG_LADDER.md`; deviations `DEVIATIONS.md`; code `backtesting/research/ladder_*.py`.
+
+**What.** The owner's nine ladder dimensions (sizes flat / +1 / doubling / Fibonacci; trigger timeframe lists incl. D1 and
+M10/M20/H2/H3; RSI, MACD and third-indicator triggers; side-switching and hedge ladders; depth, gaps, stops, ADX gates), entries
+({H4,M5}, {H1,M15}, each with D1; RSI + a second indicator) and exits, around the live v3.9.2 logic; about 1,500 designs on gold and
+a similar search on BTC; walk-forward folds; fresh $2,000 accounts started every month (Nov 2018 – Nov 2025).
+
+**Result.** Live v3.9.2 wiped 170/170 (gold) and 169/170 (BTC) twelve-month accounts; the slot-5 variant (flat ladder, H4
+force-close) wiped 170/170 and 164/170. Every multi-add ladder lost (flat < +1 < Fibonacci < doubling in losses). The survivors are
+V3-lite with at most one add: the walk-forward pick fell 75 – 83% at its worst; none passed the multiple-testing correction.
+Gold verdict "earns, does not survive"; BTC "survives, does not earn". Independent re-run: 2,290 accounts matched to the cent.
+
+**Lesson.** No ladder may go to live money; the live logic and the slot-5 variant should come off real money. V3-lite (and Top 1's
+single add) remain the best gold designs.
+
+---
+
 ## 2026-11-17 · Silver (XAGUSDm) deep research: no strategy works after costs
 
 **Status:** *rejected* (backtest only; no silver bot). Write-up: `backtest_results/silver/SILVER.md`; market profile `MARKET.md`;

@@ -1,0 +1,858 @@
+{
+ "seed": 20261118,
+ "bases": {
+  "L0": {},
+  "L5": {
+   "ladder_multipliers": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "fc_weights": {
+    "H4": 1
+   },
+   "agree_weights": {
+    "M15": 1
+   }
+  },
+  "LB": {
+   "max_adds": 3,
+   "ladder_gap_vol": 1.0,
+   "stop_vol": 8.0,
+   "max_hold_s": 259200.0,
+   "trend_tf": "H1",
+   "trend_mode": 1,
+   "vol_tf": "H1",
+   "vol_len": 24
+  },
+  "V3L": {
+   "entry_agree_s": 0.0,
+   "entry_rsi_block_mode": "any",
+   "entry_rsi_block_tfs": null,
+   "force_close_enabled": false,
+   "ladder_gap_vol": 1.0,
+   "ladder_multipliers": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ladder_tfs": [
+    "M5",
+    "M15",
+    "H1",
+    "H1",
+    "H1"
+   ],
+   "ladder_trigger": "macd_turn",
+   "loss_cooldown_s": 14400.0,
+   "max_adds": 1,
+   "open_weights": {
+    "H1": 1
+   },
+   "stop_loss_usd_per_unit": null,
+   "stop_vol": 8.0,
+   "target_usd_per_unit": null,
+   "target_vol": 10.0,
+   "trend_tf": "H1",
+   "vol_cap_usd_per_unit": 0.0,
+   "vol_len": 24,
+   "vol_tf": "H1"
+  },
+  "V3": {
+   "trend_tf": "H1",
+   "force_close_enabled": false,
+   "loss_cooldown_s": 43200.0,
+   "vol_tf": "H1",
+   "vol_len": 24,
+   "target_usd_per_unit": null,
+   "stop_loss_usd_per_unit": null,
+   "max_adds": 0,
+   "open_weights": {
+    "H1": 1
+   },
+   "entry_agree_s": 2.0,
+   "target_vol": 8.0,
+   "stop_vol": 8.0
+  }
+ },
+ "levels": [
+  {
+   "dimension": "ENTRY",
+   "code": "E1",
+   "what": "{H4,M5}, v3.9.2 force-close and agreement"
+  },
+  {
+   "dimension": "ENTRY",
+   "code": "E2",
+   "what": "pre-v3.9.0: {H4,M5}, fc {M15:4,H1:3,H4:2,D1:1}, force_close_s 12, entry_agree_s 0"
+  },
+  {
+   "dimension": "ENTRY",
+   "code": "E3",
+   "what": "{H1,M15,D1}, entry_s 2"
+  },
+  {
+   "dimension": "ENTRY",
+   "code": "E4",
+   "what": "{H1,M15,D1}, entry_s 4"
+  },
+  {
+   "dimension": "ENTRY",
+   "code": "E5",
+   "what": "{H4,M5,D1}, entry_s 2"
+  },
+  {
+   "dimension": "ENTRY",
+   "code": "E6",
+   "what": "{H4,M5,D1}, entry_s 4"
+  },
+  {
+   "dimension": "ENTRY",
+   "code": "E7",
+   "what": "{H1} alone"
+  },
+  {
+   "dimension": "ENTRY",
+   "code": "E8",
+   "what": "{H4,H1,M15}, entry_s 4"
+  },
+  {
+   "dimension": "ENTRY",
+   "code": "E9",
+   "what": "RSI-only votes {H1,M15}"
+  },
+  {
+   "dimension": "ENTRY",
+   "code": "E10",
+   "what": "entry_agree_s 0"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C1",
+   "what": "EMA200(D1) side"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C2",
+   "what": "EMA50(H4) side"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C3",
+   "what": "Supertrend(10,3) H4 side"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C4",
+   "what": "ADX(14,H4) < 25"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C5",
+   "what": "ADX(14,H4) >= 25: +DI/-DI side only"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C6",
+   "what": "Stochastic(14,3,3) H1 <= 30 buys / >= 70 sells"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C7",
+   "what": "CCI(20) H1 <= -100 buys / >= 100 sells"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C8",
+   "what": "Bollinger %B(20,2) H1 <= 0.2 buys / >= 0.8 sells"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C9",
+   "what": "Donchian(20) H4 breakout side"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C10",
+   "what": "variance ratio VR(4) < 1 on 100 H1 bars"
+  },
+  {
+   "dimension": "CONFIRM",
+   "code": "C11",
+   "what": "D1 MACD-signal trend"
+  },
+  {
+   "dimension": "SIDE",
+   "code": "S1",
+   "what": "entries with the H4 trend"
+  },
+  {
+   "dimension": "SIDE",
+   "code": "S2",
+   "what": "entries against the H4 trend"
+  },
+  {
+   "dimension": "SIDE",
+   "code": "S3",
+   "what": "entries with the D1 trend"
+  },
+  {
+   "dimension": "SIDE",
+   "code": "S4",
+   "what": "entries against the D1 trend"
+  },
+  {
+   "dimension": "SIDE",
+   "code": "S5",
+   "what": "D1 RSI reversal (>= 70 sells only, <= 30 buys only)"
+  },
+  {
+   "dimension": "SIDE",
+   "code": "S6",
+   "what": "stop-and-reverse at the stop / force-close, same size"
+  },
+  {
+   "dimension": "SIDE",
+   "code": "S7",
+   "what": "stop-and-reverse, entry size x 2"
+  },
+  {
+   "dimension": "SIDE",
+   "code": "S8",
+   "what": "hedge-on-depth"
+  },
+  {
+   "dimension": "SIDE",
+   "code": "S9",
+   "what": "counter-ladder"
+  },
+  {
+   "dimension": "FC",
+   "code": "FC1",
+   "what": "force-close {H1:1}"
+  },
+  {
+   "dimension": "FC",
+   "code": "FC2",
+   "what": "force-close {H4:1}"
+  },
+  {
+   "dimension": "FC",
+   "code": "FC3",
+   "what": "force-close {D1:1}"
+  },
+  {
+   "dimension": "FC",
+   "code": "FC4",
+   "what": "force-close off"
+  },
+  {
+   "dimension": "FC",
+   "code": "FC5",
+   "what": "owner's RSI force-close (H1 and H4)"
+  },
+  {
+   "dimension": "FC",
+   "code": "FC6",
+   "what": "H6 RSI final close when the ladder is full"
+  },
+  {
+   "dimension": "TARGET",
+   "code": "TG1",
+   "what": "$0.5 per unit"
+  },
+  {
+   "dimension": "TARGET",
+   "code": "TG2",
+   "what": "$2 per unit"
+  },
+  {
+   "dimension": "TARGET",
+   "code": "TG3",
+   "what": "$5 per unit"
+  },
+  {
+   "dimension": "TARGET",
+   "code": "TG4",
+   "what": "$10 per unit"
+  },
+  {
+   "dimension": "TARGET",
+   "code": "TG5",
+   "what": "target 2 vol units"
+  },
+  {
+   "dimension": "TARGET",
+   "code": "TG6",
+   "what": "target 4 vol units"
+  },
+  {
+   "dimension": "TARGET",
+   "code": "TG7",
+   "what": "target 8 vol units"
+  },
+  {
+   "dimension": "TARGET",
+   "code": "TG8",
+   "what": "break-even + one spread once depth >= 3"
+  },
+  {
+   "dimension": "TARGET",
+   "code": "TG9",
+   "what": "target_0 / positions (never below one spread)"
+  },
+  {
+   "dimension": "STOP",
+   "code": "ST1",
+   "what": "stop 4 vol units"
+  },
+  {
+   "dimension": "STOP",
+   "code": "ST2",
+   "what": "stop 8 vol units"
+  },
+  {
+   "dimension": "STOP",
+   "code": "ST3",
+   "what": "stop 12 vol units"
+  },
+  {
+   "dimension": "STOP",
+   "code": "ST4",
+   "what": "basket stop 10% of the balance"
+  },
+  {
+   "dimension": "STOP",
+   "code": "ST5",
+   "what": "basket stop 20% of the balance"
+  },
+  {
+   "dimension": "STOP",
+   "code": "ST6",
+   "what": "basket stop 30% of the balance"
+  },
+  {
+   "dimension": "TIME",
+   "code": "TM1",
+   "what": "time stop 24 h"
+  },
+  {
+   "dimension": "TIME",
+   "code": "TM2",
+   "what": "time stop 72 h"
+  },
+  {
+   "dimension": "TIME",
+   "code": "TM3",
+   "what": "time stop 168 h"
+  },
+  {
+   "dimension": "TIME",
+   "code": "TM4",
+   "what": "time stop 24 h once depth >= 3"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T1",
+   "what": "tiers T1 ['M5', 'M15', 'H1']"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T2",
+   "what": "tiers T2 ['M1', 'M5', 'M15']"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T3",
+   "what": "tiers T3 ['M5', 'M15', 'H1', 'H4', 'D1']"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T4",
+   "what": "tiers T4 ['M15', 'H1', 'H4', 'D1', 'W1']"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T5",
+   "what": "tiers T5 ['M1', 'M5', 'M15', 'H1', 'H4', 'D1']"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T6",
+   "what": "tiers T6 ['M1', 'M5', 'M15', 'H1', 'H4', 'D1', 'W1']"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T7",
+   "what": "tiers T7 ['H1', 'H4', 'D1']"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T8",
+   "what": "tiers T8 ['M5', 'M5', 'M5', 'M5', 'M5']"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T9",
+   "what": "tiers T9 ['M15', 'M15', 'M15', 'M15', 'M15']"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T10",
+   "what": "tiers T10 ['H1', 'H1', 'H1', 'H1', 'H1']"
+  },
+  {
+   "dimension": "TIERS",
+   "code": "T11",
+   "what": "tiers T11 ['H4', 'H4', 'H4', 'H4', 'H4']"
+  },
+  {
+   "dimension": "GRAN",
+   "code": "T12",
+   "what": "tiers T12 ['M2', 'M4', 'M6', 'M10', 'M20']"
+  },
+  {
+   "dimension": "GRAN",
+   "code": "T13",
+   "what": "tiers T13 ['M10', 'M20', 'H2', 'H3', 'H6']"
+  },
+  {
+   "dimension": "GRAN",
+   "code": "T14",
+   "what": "tiers T14 ['M30', 'H2', 'H3', 'H6', 'H8', 'H12']"
+  },
+  {
+   "dimension": "GRAN",
+   "code": "T15",
+   "what": "tiers T15 ['M1', 'M3', 'M5', 'M10', 'M15', 'M30', 'H1', 'H2', 'H4']"
+  },
+  {
+   "dimension": "GRAN",
+   "code": "T16",
+   "what": "tiers T16 ['M6', 'M12', 'M20', 'H3', 'H8']"
+  },
+  {
+   "dimension": "DEPTH",
+   "code": "D1",
+   "what": "max_adds 1"
+  },
+  {
+   "dimension": "DEPTH",
+   "code": "D2",
+   "what": "max_adds 2"
+  },
+  {
+   "dimension": "DEPTH",
+   "code": "D3",
+   "what": "max_adds 3"
+  },
+  {
+   "dimension": "DEPTH",
+   "code": "D5",
+   "what": "max_adds 5"
+  },
+  {
+   "dimension": "DEPTH",
+   "code": "D8",
+   "what": "max_adds 8"
+  },
+  {
+   "dimension": "DEPTH",
+   "code": "D12",
+   "what": "max_adds 12"
+  },
+  {
+   "dimension": "SIZE",
+   "code": "flat",
+   "what": "size flat"
+  },
+  {
+   "dimension": "SIZE",
+   "code": "plus1",
+   "what": "size plus1"
+  },
+  {
+   "dimension": "SIZE",
+   "code": "double",
+   "what": "size double"
+  },
+  {
+   "dimension": "SIZE",
+   "code": "fibo",
+   "what": "size fibo"
+  },
+  {
+   "dimension": "LEVEL",
+   "code": "LV20",
+   "what": "RSI 20/80"
+  },
+  {
+   "dimension": "LEVEL",
+   "code": "LV25",
+   "what": "RSI 25/75"
+  },
+  {
+   "dimension": "LEVEL",
+   "code": "LV30",
+   "what": "RSI 30/70"
+  },
+  {
+   "dimension": "LEVEL",
+   "code": "LV40",
+   "what": "RSI 40/60"
+  },
+  {
+   "dimension": "LEVEL",
+   "code": "LV45",
+   "what": "RSI 45/55"
+  },
+  {
+   "dimension": "LEVEL",
+   "code": "LVS",
+   "what": "per tier stricter when deeper (35, 32, 29, ...)"
+  },
+  {
+   "dimension": "LEVEL",
+   "code": "LVL",
+   "what": "per tier looser when deeper (35, 38, 41, ...)"
+  },
+  {
+   "dimension": "TRIG-MACD",
+   "code": "M1",
+   "what": "MACD turn (macd_turn)"
+  },
+  {
+   "dimension": "TRIG-MACD",
+   "code": "M2",
+   "what": "MACD histogram on the wrong side, forming bar"
+  },
+  {
+   "dimension": "TRIG-MACD",
+   "code": "M3",
+   "what": "MACD signal-line cross back, forming bar"
+  },
+  {
+   "dimension": "TRIG-MACD",
+   "code": "M4",
+   "what": "RSI level and MACD turn (wait for the turn)"
+  },
+  {
+   "dimension": "TRIG-3RD",
+   "code": "X-stoch",
+   "what": "closed-bar stoch {'ind': 'stoch', 'n': 14, 'smooth': 3, 'lo': 20, 'hi': 80}"
+  },
+  {
+   "dimension": "TRIG-3RD",
+   "code": "X-willr",
+   "what": "closed-bar willr {'ind': 'willr', 'n': 14, 'lo': -80, 'hi': -20}"
+  },
+  {
+   "dimension": "TRIG-3RD",
+   "code": "X-cci",
+   "what": "closed-bar cci {'ind': 'cci', 'n': 20, 'lo': -100, 'hi': 100}"
+  },
+  {
+   "dimension": "TRIG-3RD",
+   "code": "X-bb",
+   "what": "closed-bar bb {'ind': 'bb', 'n': 20, 'k': 2.0, 'lo': 0.0, 'hi': 1.0}"
+  },
+  {
+   "dimension": "TRIG-3RD",
+   "code": "X-emadist",
+   "what": "closed-bar emadist {'ind': 'emadist', 'n': 20, 'atr': 14, 'lo': -2.0, 'hi': 2.0}"
+  },
+  {
+   "dimension": "TRIG-3RD",
+   "code": "X-rsi2",
+   "what": "closed-bar rsi2 {'ind': 'rsi', 'n': 2, 'lo': 10, 'hi': 90}"
+  },
+  {
+   "dimension": "TRIG-3RD",
+   "code": "X-rsicross",
+   "what": "RSI cross-back (rsi_cross)"
+  },
+  {
+   "dimension": "TRIG-3RD",
+   "code": "X-pricestep",
+   "what": "price step 1 vol unit (price_step)"
+  },
+  {
+   "dimension": "GAP",
+   "code": "G0.5",
+   "what": "gap 0.5 vol units"
+  },
+  {
+   "dimension": "GAP",
+   "code": "G1",
+   "what": "gap 1 vol unit"
+  },
+  {
+   "dimension": "GAP",
+   "code": "G2",
+   "what": "gap 2 vol units"
+  },
+  {
+   "dimension": "GAP",
+   "code": "Ggeo1.5",
+   "what": "gap 1 vol unit x 1.5^(n-1)"
+  },
+  {
+   "dimension": "GAP",
+   "code": "Ggeo2",
+   "what": "gap 1 vol unit x 2^(n-1)"
+  },
+  {
+   "dimension": "GAP",
+   "code": "GD1",
+   "what": "gap 0.15 D1 vol units (vol_len 14)"
+  },
+  {
+   "dimension": "GAP",
+   "code": "Gint300",
+   "what": "300 s between fills"
+  },
+  {
+   "dimension": "GATE",
+   "code": "GT1",
+   "what": "ladder_s off"
+  },
+  {
+   "dimension": "GATE",
+   "code": "GT2",
+   "what": "adds only with the H1 trend"
+  },
+  {
+   "dimension": "GATE",
+   "code": "GT3",
+   "what": "adds only with the H4 trend"
+  },
+  {
+   "dimension": "GATE",
+   "code": "GT4",
+   "what": "adds only on the EMA200(D1) side"
+  },
+  {
+   "dimension": "GATE",
+   "code": "GT5",
+   "what": "no adds while ADX(14,H1) > 30"
+  },
+  {
+   "dimension": "GATE",
+   "code": "GT6",
+   "what": "abnormal-day pause for adds"
+  },
+  {
+   "dimension": "GATE",
+   "code": "GT7",
+   "what": "no adds 20:30-22:30 UTC"
+  },
+  {
+   "dimension": "GATE",
+   "code": "GT8",
+   "what": "flat Friday 20:00 UTC, no new basket until Monday 01:00"
+  },
+  {
+   "dimension": "GATE",
+   "code": "GT9",
+   "what": "no new basket while ATR(H4) > its 100-day 90th percentile"
+  },
+  {
+   "dimension": "SIZING",
+   "code": "Z1",
+   "what": "pre-funded unit (30% of the balance, 1.5 ATR(D1))"
+  },
+  {
+   "dimension": "SIZING",
+   "code": "Z2",
+   "what": "volatility-targeted unit"
+  },
+  {
+   "dimension": "SIZING",
+   "code": "Z3",
+   "what": "fixed_units 1"
+  },
+  {
+   "dimension": "PARTIAL",
+   "code": "P1",
+   "what": "LIFO: close the newest add at its own target"
+  },
+  {
+   "dimension": "PARTIAL",
+   "code": "P2",
+   "what": "overlap close (newest pays for oldest)"
+  },
+  {
+   "dimension": "CONTROL",
+   "code": "AM",
+   "what": "anti-martingale: adds to winners 0.5 vol units, <= 3, 2 vol-unit trailing exit"
+  }
+ ],
+ "tier_lists": {
+  "T0": [
+   "M1",
+   "M5",
+   "M15",
+   "H1",
+   "H4"
+  ],
+  "T1": [
+   "M5",
+   "M15",
+   "H1"
+  ],
+  "T2": [
+   "M1",
+   "M5",
+   "M15"
+  ],
+  "T3": [
+   "M5",
+   "M15",
+   "H1",
+   "H4",
+   "D1"
+  ],
+  "T4": [
+   "M15",
+   "H1",
+   "H4",
+   "D1",
+   "W1"
+  ],
+  "T5": [
+   "M1",
+   "M5",
+   "M15",
+   "H1",
+   "H4",
+   "D1"
+  ],
+  "T6": [
+   "M1",
+   "M5",
+   "M15",
+   "H1",
+   "H4",
+   "D1",
+   "W1"
+  ],
+  "T7": [
+   "H1",
+   "H4",
+   "D1"
+  ],
+  "T8": [
+   "M5",
+   "M5",
+   "M5",
+   "M5",
+   "M5"
+  ],
+  "T9": [
+   "M15",
+   "M15",
+   "M15",
+   "M15",
+   "M15"
+  ],
+  "T10": [
+   "H1",
+   "H1",
+   "H1",
+   "H1",
+   "H1"
+  ],
+  "T11": [
+   "H4",
+   "H4",
+   "H4",
+   "H4",
+   "H4"
+  ],
+  "T12": [
+   "M2",
+   "M4",
+   "M6",
+   "M10",
+   "M20"
+  ],
+  "T13": [
+   "M10",
+   "M20",
+   "H2",
+   "H3",
+   "H6"
+  ],
+  "T14": [
+   "M30",
+   "H2",
+   "H3",
+   "H6",
+   "H8",
+   "H12"
+  ],
+  "T15": [
+   "M1",
+   "M3",
+   "M5",
+   "M10",
+   "M15",
+   "M30",
+   "H1",
+   "H2",
+   "H4"
+  ],
+  "T16": [
+   "M6",
+   "M12",
+   "M20",
+   "H3",
+   "H8"
+  ]
+ },
+ "trig3": {
+  "stoch": {
+   "ind": "stoch",
+   "n": 14,
+   "smooth": 3,
+   "lo": 20,
+   "hi": 80
+  },
+  "willr": {
+   "ind": "willr",
+   "n": 14,
+   "lo": -80,
+   "hi": -20
+  },
+  "cci": {
+   "ind": "cci",
+   "n": 20,
+   "lo": -100,
+   "hi": 100
+  },
+  "bb": {
+   "ind": "bb",
+   "n": 20,
+   "k": 2.0,
+   "lo": 0.0,
+   "hi": 1.0
+  },
+  "emadist": {
+   "ind": "emadist",
+   "n": 20,
+   "atr": 14,
+   "lo": -2.0,
+   "hi": 2.0
+  },
+  "rsi2": {
+   "ind": "rsi",
+   "n": 2,
+   "lo": 10,
+   "hi": 90
+  }
+ }
+}

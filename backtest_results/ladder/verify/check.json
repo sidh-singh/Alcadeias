@@ -1,0 +1,75 @@
+{
+ "G5_gate": {
+  "adds_gated": 5,
+  "adds_gated_with_own_adx_gt30": 0,
+  "max_own_adx_gated": 29.600545212831037,
+  "adds_ungated": 10,
+  "adds_ungated_with_own_adx_gt30": 5,
+  "net_gated": -647.0,
+  "net_ungated": 55.64,
+  "units_seen": [
+   1
+  ]
+ },
+ "G1_prefund": {
+  "baskets": 19,
+  "units_equal": 19,
+  "units_off_by_1": 0,
+  "engine_units": [
+   0,
+   6,
+   3,
+   9,
+   1
+  ],
+  "own_units": [
+   0,
+   6,
+   3,
+   9,
+   1
+  ],
+  "adds": 11,
+  "add_tiers": [
+   "M2"
+  ]
+ },
+ "M2_bars": {
+  "engine_bars": 23944,
+  "own_bars": 23944,
+  "common": 23944,
+  "max_abs_close_diff": 0.0,
+  "n_diff": 0
+ },
+ "B1": {
+  "baskets": 52,
+  "opens_on_own_donchian_side": 52,
+  "ungated_baskets": 69,
+  "ungated_opens_against_own_donchian": 26,
+  "adds": 5,
+  "adds_with_own_pctb_extreme": 5,
+  "own_pctb_at_adds": [
+   1.039,
+   1.105,
+   1.117,
+   1.013,
+   1.037
+  ],
+  "units_equal": 52,
+  "units_off_by_1": 0,
+  "engine_units": [
+   0,
+   1,
+   46,
+   5
+  ],
+  "own_units": [
+   0,
+   1,
+   46,
+   5
+  ],
+  "net": -43.28,
+  "net_ungated": -184.09
+ }
+}

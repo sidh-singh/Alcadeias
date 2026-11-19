@@ -1,0 +1,35 @@
+{
+ "WF1": {
+  "train": [
+   "F1"
+  ],
+  "test": "F2",
+  "pick": "V3L|FC=FC5|TRIG-3RD=X-stoch|SIZING=Z1",
+  "wiped_sum": 0,
+  "minQ": 4.408425835263399,
+  "written": "2026-11-18 23:56:32"
+ },
+ "WF2": {
+  "train": [
+   "F1",
+   "F2"
+  ],
+  "test": "F3",
+  "pick": "V3L|STOP=ST3|GRAN=T12|SIZING=Z1",
+  "wiped_sum": 0,
+  "minQ": 1.4863681212608386,
+  "written": "2026-11-19 00:55:44"
+ },
+ "WF3": {
+  "train": [
+   "F1",
+   "F2",
+   "F3"
+  ],
+  "test": "F4",
+  "pick": "V3L|STOP=ST3|GRAN=T12|SIZING=Z1",
+  "wiped_sum": 0,
+  "minQ": 1.4863681212608386,
+  "written": "2026-11-19 01:54:42"
+ }
+}

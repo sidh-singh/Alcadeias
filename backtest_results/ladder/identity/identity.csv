@@ -1,0 +1,41 @@
+symbol,window,design,seed,net,baskets,fills,eq_fills,eq_baskets,eq_counters,eq_scalars,new_fields_default,fast_run_same,all
+XAUUSDm,2026-08-13 → 2026-11-13,Live,1,-154.42,3645,9641,True,True,True,True,True,True,True
+XAUUSDm,2026-08-13 → 2026-11-13,Live,2,58.2,3653,9591,True,True,True,True,True,True,True
+XAUUSDm,2026-08-13 → 2026-11-13,V3-lite,1,160.61,24,48,True,True,True,True,True,True,True
+XAUUSDm,2026-08-13 → 2026-11-13,V3-lite,2,259.4,23,46,True,True,True,True,True,True,True
+XAUUSDm,2026-08-13 → 2026-11-13,gold Top 1,1,-393.64,39,127,True,True,True,True,True,True,True
+XAUUSDm,2026-08-13 → 2026-11-13,gold Top 1,2,-239.03,39,125,True,True,True,True,True,True,True
+XAUUSDm,2026-08-13 → 2026-11-13,price_step flat,1,-4.55,3234,7465,True,True,True,True,True,True,True
+XAUUSDm,2026-08-13 → 2026-11-13,price_step flat,2,-184.54,3171,7359,True,True,True,True,True,True,True
+XAUUSDm,2026-08-13 → 2026-11-13,rsi_cross,1,-1214.67,3482,8355,True,True,True,True,True,True,True
+XAUUSDm,2026-08-13 → 2026-11-13,rsi_cross,2,-1205.83,3487,8377,True,True,True,True,True,True,True
+XAUUSDm,2021-02-13 → 2021-05-13,Live,1,-889.22,1535,5001,True,True,True,True,True,True,True
+XAUUSDm,2021-02-13 → 2021-05-13,Live,2,-937.92,1532,4947,True,True,True,True,True,True,True
+XAUUSDm,2021-02-13 → 2021-05-13,V3-lite,1,-52.68,25,50,True,True,True,True,True,True,True
+XAUUSDm,2021-02-13 → 2021-05-13,V3-lite,2,-51.56,25,50,True,True,True,True,True,True,True
+XAUUSDm,2021-02-13 → 2021-05-13,gold Top 1,1,274.33,32,99,True,True,True,True,True,True,True
+XAUUSDm,2021-02-13 → 2021-05-13,gold Top 1,2,279.4,32,99,True,True,True,True,True,True,True
+XAUUSDm,2021-02-13 → 2021-05-13,price_step flat,1,-498.21,1385,3967,True,True,True,True,True,True,True
+XAUUSDm,2021-02-13 → 2021-05-13,price_step flat,2,-523.44,1381,3973,True,True,True,True,True,True,True
+XAUUSDm,2021-02-13 → 2021-05-13,rsi_cross,1,-863.1,1452,4135,True,True,True,True,True,True,True
+XAUUSDm,2021-02-13 → 2021-05-13,rsi_cross,2,-793.44,1472,4189,True,True,True,True,True,True,True
+BTCUSDm,2026-08-13 → 2026-11-13,Live,1,355.81,2591,8339,True,True,True,True,True,True,True
+BTCUSDm,2026-08-13 → 2026-11-13,Live,2,170.57,2595,8339,True,True,True,True,True,True,True
+BTCUSDm,2026-08-13 → 2026-11-13,V3-lite,1,41.75,37,75,True,True,True,True,True,True,True
+BTCUSDm,2026-08-13 → 2026-11-13,V3-lite,2,32.63,37,75,True,True,True,True,True,True,True
+BTCUSDm,2026-08-13 → 2026-11-13,gold Top 1,1,-63.12,61,193,True,True,True,True,True,True,True
+BTCUSDm,2026-08-13 → 2026-11-13,gold Top 1,2,-32.73,64,201,True,True,True,True,True,True,True
+BTCUSDm,2026-08-13 → 2026-11-13,price_step flat,1,-45.94,2231,6329,True,True,True,True,True,True,True
+BTCUSDm,2026-08-13 → 2026-11-13,price_step flat,2,-34.88,2245,6335,True,True,True,True,True,True,True
+BTCUSDm,2026-08-13 → 2026-11-13,rsi_cross,1,-238.52,2436,6785,True,True,True,True,True,True,True
+BTCUSDm,2026-08-13 → 2026-11-13,rsi_cross,2,-218.72,2456,6821,True,True,True,True,True,True,True
+BTCUSDm,2021-02-13 → 2021-05-13,Live,1,-2000.0,1145,3694,True,True,True,True,True,True,True
+BTCUSDm,2021-02-13 → 2021-05-13,Live,2,-2000.0,1114,3594,True,True,True,True,True,True,True
+BTCUSDm,2021-02-13 → 2021-05-13,V3-lite,1,-43.55,30,61,True,True,True,True,True,True,True
+BTCUSDm,2021-02-13 → 2021-05-13,V3-lite,2,-15.95,29,59,True,True,True,True,True,True,True
+BTCUSDm,2021-02-13 → 2021-05-13,gold Top 1,1,125.2,50,160,True,True,True,True,True,True,True
+BTCUSDm,2021-02-13 → 2021-05-13,gold Top 1,2,157.05,49,150,True,True,True,True,True,True,True
+BTCUSDm,2021-02-13 → 2021-05-13,price_step flat,1,-2000.0,1425,4112,True,True,True,True,True,True,True
+BTCUSDm,2021-02-13 → 2021-05-13,price_step flat,2,-2000.0,1353,3916,True,True,True,True,True,True,True
+BTCUSDm,2021-02-13 → 2021-05-13,rsi_cross,1,-2000.0,970,2762,True,True,True,True,True,True,True
+BTCUSDm,2021-02-13 → 2021-05-13,rsi_cross,2,-2000.0,968,2764,True,True,True,True,True,True,True

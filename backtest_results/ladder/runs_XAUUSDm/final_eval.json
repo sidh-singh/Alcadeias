@@ -1,0 +1,625 @@
+{
+ "WF1": {
+  "pick": "V3L|FC=FC5|TRIG-3RD=X-stoch|SIZING=Z1",
+  "test": "F2",
+  "metrics": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 80.057,
+   "median_dd": 60.766999999999996,
+   "mean_r": 17.92539583333333,
+   "median_r": 9.0875,
+   "worst_r": -71.776,
+   "share_pos_q": 0.4401041666666667,
+   "med_r_over_dd": 0.14770878474309185,
+   "Q": 0.2239079135282777,
+   "worst_basket": -586.42,
+   "worst_basket_per_unit": -58.95,
+   "deepest_float": -586.42,
+   "share_add": 0.616413201575922,
+   "mean_pos": 1.616403926887554,
+   "max_pos": 2,
+   "time_in_market": 0.64800625,
+   "baskets_per_month": 13.450104166666668,
+   "margin_rejects": 0,
+   "timings_pos": 8,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    13.4,
+    22.12,
+    11.26,
+    17.09,
+    16.6,
+    19.2,
+    21.24,
+    22.49
+   ]
+  },
+  "metrics_s15": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 75.646,
+   "median_dd": 61.6425,
+   "mean_r": 15.450062500000001,
+   "median_r": 8.373999999999999,
+   "worst_r": -67.307,
+   "share_pos_q": 0.4166666666666667,
+   "med_r_over_dd": 0.12527342063361593,
+   "Q": 0.20424163207572113,
+   "worst_basket": -590.99,
+   "worst_basket_per_unit": -59.25,
+   "deepest_float": -590.99,
+   "share_add": 0.6103383119383826,
+   "mean_pos": 1.6103069319640566,
+   "max_pos": 2,
+   "time_in_market": 0.64270625,
+   "baskets_per_month": 13.534270833333336,
+   "margin_rejects": 0,
+   "timings_pos": 8,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    14.45,
+    20.83,
+    11.65,
+    18.46,
+    13.0,
+    11.79,
+    15.41,
+    18.01
+   ]
+  },
+  "twin": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 86.982,
+   "median_dd": 58.448,
+   "mean_r": 9.093489583333334,
+   "median_r": 12.893999999999998,
+   "worst_r": -73.332,
+   "share_pos_q": 0.4557291666666667,
+   "med_r_over_dd": 0.27510105054383494,
+   "Q": 0.10454449867022296,
+   "worst_basket": -449.1,
+   "worst_basket_per_unit": -44.91,
+   "deepest_float": -449.1,
+   "share_add": 0.0,
+   "mean_pos": 1.0,
+   "max_pos": 1,
+   "time_in_market": 0.6945614583333333,
+   "baskets_per_month": 8.661562500000002,
+   "margin_rejects": 0,
+   "timings_pos": 8,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    9.22,
+    11.13,
+    8.14,
+    8.82,
+    6.94,
+    9.27,
+    10.27,
+    8.97
+   ]
+  },
+  "criteria": {
+   "S1": {
+    "pass": true,
+    "detail": "wiped 0/96, x1.5 0"
+   },
+   "S2": {
+    "pass": false,
+    "detail": "worst DD 80.1%"
+   },
+   "S3": {
+    "pass": true,
+    "detail": "mean 17.9%, median 9.1%, x1.5 mean 15.5%"
+   },
+   "S4": {
+    "pass": false,
+    "detail": "positive quarters 44%"
+   },
+   "S5": {
+    "pass": false,
+    "detail": "median r/DD 0.15, x1.5 0.13"
+   },
+   "S6": {
+    "pass": true,
+    "detail": "8/8 timings positive, 8/8 wipe-free"
+   },
+   "S7": {
+    "pass": false,
+    "detail": "8y ok net 32368 DD 46.4%; 5y ok net 24252 DD 67.3%; 1y wiped 0/8"
+   },
+   "S8": {
+    "pass": true,
+    "detail": "share with an add 62%, mean 17.9% vs no-ladder twin 9.1%"
+   }
+  },
+  "comfortable": {
+   "S2": false,
+   "S3": true,
+   "S4": false,
+   "S5": false,
+   "S6": true
+  },
+  "metrics_s20": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 84.161,
+   "median_dd": 68.55199999999999,
+   "mean_r": -10.39984375,
+   "median_r": -12.1955,
+   "worst_r": -81.308,
+   "share_pos_q": 0.3802083333333333,
+   "med_r_over_dd": -0.17092565498222828,
+   "Q": -0.12357081961953875,
+   "worst_basket": -535.15,
+   "worst_basket_per_unit": -59.46,
+   "deepest_float": -535.15,
+   "share_add": 0.6070396507281867,
+   "mean_pos": 1.6070215233921898,
+   "max_pos": 2,
+   "time_in_market": 0.644390625,
+   "baskets_per_month": 13.480520833333335,
+   "margin_rejects": 0,
+   "timings_pos": 0,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    -12.19,
+    -10.35,
+    -12.8,
+    -12.2,
+    -8.5,
+    -5.9,
+    -9.29,
+    -11.96
+   ]
+  }
+ },
+ "WF2": {
+  "pick": "V3L|STOP=ST3|GRAN=T12|SIZING=Z1",
+  "test": "F3",
+  "metrics": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 82.95,
+   "median_dd": 60.149,
+   "mean_r": 153.69094791666666,
+   "median_r": 163.8765,
+   "worst_r": -45.28,
+   "share_pos_q": 0.71875,
+   "med_r_over_dd": 2.679195962100416,
+   "Q": 1.8528143208760295,
+   "worst_basket": -682.11,
+   "worst_basket_per_unit": -68.21,
+   "deepest_float": -682.11,
+   "share_add": 0.7377890398666838,
+   "mean_pos": 1.7378425842840661,
+   "max_pos": 2,
+   "time_in_market": 0.6240104166666667,
+   "baskets_per_month": 13.527499999999998,
+   "margin_rejects": 0,
+   "timings_pos": 8,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    159.21,
+    164.83,
+    167.22,
+    157.78,
+    145.48,
+    144.53,
+    148.85,
+    141.62
+   ]
+  },
+  "metrics_s15": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 78.553,
+   "median_dd": 54.992999999999995,
+   "mean_r": 175.66494791666665,
+   "median_r": 180.33800000000002,
+   "worst_r": -47.966,
+   "share_pos_q": 0.7552083333333334,
+   "med_r_over_dd": 3.4542309696003164,
+   "Q": 2.236260205423939,
+   "worst_basket": -692.8,
+   "worst_basket_per_unit": -69.28,
+   "deepest_float": -692.8,
+   "share_add": 0.7262192757840286,
+   "mean_pos": 1.7262606530876172,
+   "max_pos": 2,
+   "time_in_market": 0.63323125,
+   "baskets_per_month": 13.409270833333332,
+   "margin_rejects": 0,
+   "timings_pos": 8,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    172.3,
+    186.11,
+    176.81,
+    172.96,
+    175.79,
+    158.64,
+    183.6,
+    179.1
+   ]
+  },
+  "twin": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 87.684,
+   "median_dd": 49.670500000000004,
+   "mean_r": 197.46845833333336,
+   "median_r": 207.5035,
+   "worst_r": 4.248,
+   "share_pos_q": 0.6588541666666666,
+   "med_r_over_dd": 4.844841477308599,
+   "Q": 2.2520466485713855,
+   "worst_basket": -604.13,
+   "worst_basket_per_unit": -60.41,
+   "deepest_float": -764.92,
+   "share_add": 0.0,
+   "mean_pos": 1.0,
+   "max_pos": 1,
+   "time_in_market": 0.7683552083333334,
+   "baskets_per_month": 7.082395833333334,
+   "margin_rejects": 0,
+   "timings_pos": 8,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    196.27,
+    197.44,
+    195.2,
+    194.06,
+    198.24,
+    205.47,
+    198.35,
+    194.71
+   ]
+  },
+  "criteria": {
+   "S1": {
+    "pass": true,
+    "detail": "wiped 0/96, x1.5 0"
+   },
+   "S2": {
+    "pass": false,
+    "detail": "worst DD 83.0%"
+   },
+   "S3": {
+    "pass": true,
+    "detail": "mean 153.7%, median 163.9%, x1.5 mean 175.7%"
+   },
+   "S4": {
+    "pass": true,
+    "detail": "positive quarters 72%"
+   },
+   "S5": {
+    "pass": true,
+    "detail": "median r/DD 2.68, x1.5 3.45"
+   },
+   "S6": {
+    "pass": true,
+    "detail": "8/8 timings positive, 8/8 wipe-free"
+   },
+   "S7": {
+    "pass": false,
+    "detail": "8y ok net 42836 DD 75.3%; 5y ok net 40753 DD 41.8%; 1y wiped 0/8"
+   },
+   "S8": {
+    "pass": false,
+    "detail": "share with an add 74%, mean 153.7% vs no-ladder twin 197.5%"
+   }
+  },
+  "comfortable": {
+   "S2": false,
+   "S3": true,
+   "S4": true,
+   "S5": true,
+   "S6": true
+  },
+  "metrics_s20": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 76.719,
+   "median_dd": 51.818,
+   "mean_r": 185.18758333333335,
+   "median_r": 195.0635,
+   "worst_r": -35.142,
+   "share_pos_q": 0.8046875,
+   "med_r_over_dd": 3.6557288500145653,
+   "Q": 2.4138425075057466,
+   "worst_basket": -632.33,
+   "worst_basket_per_unit": -63.23,
+   "deepest_float": -632.33,
+   "share_add": 0.7310413560411313,
+   "mean_pos": 1.7309829048843186,
+   "max_pos": 2,
+   "time_in_market": 0.636321875,
+   "baskets_per_month": 13.490729166666668,
+   "margin_rejects": 0,
+   "timings_pos": 8,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    190.24,
+    184.08,
+    185.77,
+    186.67,
+    194.95,
+    176.45,
+    183.96,
+    179.38
+   ]
+  }
+ },
+ "WF3": {
+  "pick": "V3L|STOP=ST3|GRAN=T12|SIZING=Z1",
+  "test": "F4",
+  "metrics": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 65.897,
+   "median_dd": 57.686,
+   "mean_r": 349.14621874999995,
+   "median_r": 299.909,
+   "worst_r": 63.002,
+   "share_pos_q": 0.7916666666666666,
+   "med_r_over_dd": 5.194065162987238,
+   "Q": 5.29836288070777,
+   "worst_basket": -5627.02,
+   "worst_basket_per_unit": -565.14,
+   "deepest_float": -5627.02,
+   "share_add": 0.6826804055527291,
+   "mean_pos": 1.682653753906534,
+   "max_pos": 2,
+   "time_in_market": 0.655603125,
+   "baskets_per_month": 11.95125,
+   "margin_rejects": 0,
+   "timings_pos": 8,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    369.4,
+    351.43,
+    273.56,
+    418.09,
+    307.44,
+    310.18,
+    416.22,
+    346.84
+   ]
+  },
+  "metrics_s15": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 66.291,
+   "median_dd": 57.727000000000004,
+   "mean_r": 314.3318229166667,
+   "median_r": 241.2935,
+   "worst_r": 47.385,
+   "share_pos_q": 0.78125,
+   "med_r_over_dd": 4.222212080010751,
+   "Q": 4.74169680524757,
+   "worst_basket": -5645.15,
+   "worst_basket_per_unit": -565.5,
+   "deepest_float": -5645.15,
+   "share_add": 0.6842854474652051,
+   "mean_pos": 1.6842390567534435,
+   "max_pos": 2,
+   "time_in_market": 0.658159375,
+   "baskets_per_month": 12.045416666666666,
+   "margin_rejects": 0,
+   "timings_pos": 8,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    311.72,
+    324.74,
+    221.61,
+    382.88,
+    306.91,
+    294.65,
+    340.4,
+    331.75
+   ]
+  },
+  "twin": {
+   "accounts": 96,
+   "wiped": 40,
+   "worst_dd": 100.16,
+   "median_dd": 96.65350000000001,
+   "mean_r": 54.4078125,
+   "median_r": -77.938,
+   "worst_r": -100.0,
+   "share_pos_q": 0.375,
+   "med_r_over_dd": -0.8140910260660255,
+   "Q": 0.5432089906150159,
+   "worst_basket": -5817.67,
+   "worst_basket_per_unit": -582.36,
+   "deepest_float": -5817.67,
+   "share_add": 0.0,
+   "mean_pos": 1.0,
+   "max_pos": 1,
+   "time_in_market": 0.7165708333333333,
+   "baskets_per_month": 6.009166666666666,
+   "margin_rejects": 19870,
+   "timings_pos": 8,
+   "timings_wipe_free": 0,
+   "per_timing_mean_r": [
+    52.37,
+    51.9,
+    53.22,
+    55.72,
+    58.98,
+    58.21,
+    49.96,
+    54.91
+   ]
+  },
+  "criteria": {
+   "S1": {
+    "pass": true,
+    "detail": "wiped 0/96, x1.5 0"
+   },
+   "S2": {
+    "pass": false,
+    "detail": "worst DD 65.9%"
+   },
+   "S3": {
+    "pass": true,
+    "detail": "mean 349.1%, median 299.9%, x1.5 mean 314.3%"
+   },
+   "S4": {
+    "pass": true,
+    "detail": "positive quarters 79%"
+   },
+   "S5": {
+    "pass": true,
+    "detail": "median r/DD 5.19, x1.5 4.22"
+   },
+   "S6": {
+    "pass": true,
+    "detail": "8/8 timings positive, 8/8 wipe-free"
+   },
+   "S7": {
+    "pass": false,
+    "detail": "8y ok net 42836 DD 75.3%; 5y ok net 40753 DD 41.8%; 1y wiped 0/8"
+   },
+   "S8": {
+    "pass": true,
+    "detail": "share with an add 68%, mean 349.1% vs no-ladder twin 54.4%"
+   }
+  },
+  "comfortable": {
+   "S2": false,
+   "S3": true,
+   "S4": true,
+   "S5": true,
+   "S6": true
+  },
+  "metrics_s20": {
+   "accounts": 96,
+   "wiped": 0,
+   "worst_dd": 66.441,
+   "median_dd": 58.079499999999996,
+   "mean_r": 303.49446874999995,
+   "median_r": 230.819,
+   "worst_r": 35.483,
+   "share_pos_q": 0.7916666666666666,
+   "med_r_over_dd": 3.9208279928019323,
+   "Q": 4.567879302689604,
+   "worst_basket": -5648.75,
+   "worst_basket_per_unit": -565.03,
+   "deepest_float": -5648.75,
+   "share_add": 0.6846517278695621,
+   "mean_pos": 1.6846223937666835,
+   "max_pos": 2,
+   "time_in_market": 0.6604395833333333,
+   "baskets_per_month": 12.040208333333332,
+   "margin_rejects": 0,
+   "timings_pos": 8,
+   "timings_wipe_free": 8,
+   "per_timing_mean_r": [
+    308.55,
+    288.39,
+    243.53,
+    365.93,
+    304.43,
+    289.57,
+    297.61,
+    329.96
+   ]
+  }
+ },
+ "DSR": {
+  "SR_hat_daily": 0.0675609014534678,
+  "T": 516,
+  "skew": 0.4835772733630451,
+  "kurt": 11.121224254529048,
+  "var_SR_trials": 0.0026337461066360396,
+  "N": 1493,
+  "SR0": 0.17281555912184818,
+  "DSR": 0.007884026642462776,
+  "DSR_N+1200": 0.004633674664652862,
+  "SR0_N+1200": 0.18100274045781115,
+  "net_per_unit_F4": 2708.4,
+  "R3_unit_daily_sr_F1F3": 0.0562934474092257,
+  "R3_net_per_unit_F1F3": 1827.61,
+  "unit_F4_all": [
+   {
+    "design": "V3L|STOP=ST3|GRAN=T12|SIZING=Z1",
+    "net_per_unit": 2708.4,
+    "daily_sr": 0.0675609014534678,
+    "worst_basket": -562.31,
+    "deepest_float": -562.31
+   },
+   {
+    "design": "L0",
+    "net_per_unit": -6863.15,
+    "daily_sr": -0.0854459097650999,
+    "worst_basket": -1687.09,
+    "deepest_float": -1687.09
+   },
+   {
+    "design": "L5",
+    "net_per_unit": -10397.65,
+    "daily_sr": -0.1342759044721693,
+    "worst_basket": -2820.64,
+    "deepest_float": -2820.64
+   },
+   {
+    "design": "LB",
+    "net_per_unit": -44.54,
+    "daily_sr": -0.0051964837140786,
+    "worst_basket": -93.91,
+    "deepest_float": -123.07
+   },
+   {
+    "design": "V3L",
+    "net_per_unit": 4031.65,
+    "daily_sr": 0.1096283038998676,
+    "worst_basket": -420.25,
+    "deepest_float": -420.25
+   },
+   {
+    "design": "V3",
+    "net_per_unit": 2848.25,
+    "daily_sr": 0.1173781235077158,
+    "worst_basket": -393.74,
+    "deepest_float": -393.74
+   }
+  ]
+ },
+ "xasset_BTC_F4": {
+  "accounts": 96,
+  "wiped": 5,
+  "worst_dd": 95.856,
+  "median_dd": 81.9825,
+  "mean_r": 24.735468749999995,
+  "median_r": -23.204,
+  "worst_r": -67.246,
+  "share_pos_q": 0.515625,
+  "med_r_over_dd": -0.2668141476165966,
+  "Q": 0.25804820512018023,
+  "worst_basket": -762.84,
+  "worst_basket_per_unit": -96.12,
+  "deepest_float": -762.84,
+  "share_add": 0.737990081591025,
+  "mean_pos": 1.7380201937786843,
+  "max_pos": 2,
+  "time_in_market": 0.651165625,
+  "baskets_per_month": 17.034375,
+  "margin_rejects": 0,
+  "timings_pos": 8,
+  "timings_wipe_free": 3,
+  "per_timing_mean_r": [
+   24.44,
+   50.47,
+   17.76,
+   28.61,
+   22.92,
+   22.63,
+   23.42,
+   7.64
+  ]
+ }
+}

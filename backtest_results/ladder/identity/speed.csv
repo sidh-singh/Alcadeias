@@ -1,0 +1,25 @@
+symbol,case,rows,prepare_s,run_s_median
+XAUUSDm,"existing engine, live",7685801,0.7,1.38
+XAUUSDm,"new engine, live",7685801,0.7,1.41
+XAUUSDm,"new engine, trigger stoch",7685801,0.7,0.57
+XAUUSDm,"new engine, trigger macd_cross",7685801,0.7,1.43
+XAUUSDm,"new engine, gap D1 0.15",7685801,0.7,1.41
+XAUUSDm,"new engine, hedge-on-depth",7685801,0.7,1.41
+XAUUSDm,"new engine, counter-ladder",7685801,0.7,1.41
+XAUUSDm,"new engine, partial LIFO",7685801,0.7,1.04
+XAUUSDm,"new engine, sizing pre-funded",7685801,0.7,1.41
+XAUUSDm,"new engine, Friday flat",7685801,0.7,1.41
+XAUUSDm,"new engine, add gate EMA200 D1",7685801,0.7,1.42
+XAUUSDm,"new engine, confirm Supertrend H4",7685801,0.7,1.38
+BTCUSDm,"existing engine, live",8296341,0.8,1.91
+BTCUSDm,"new engine, live",8296341,0.8,1.94
+BTCUSDm,"new engine, trigger stoch",8296341,0.8,2.15
+BTCUSDm,"new engine, trigger macd_cross",8296341,0.8,2.11
+BTCUSDm,"new engine, gap D1 0.15",8296341,0.8,2.06
+BTCUSDm,"new engine, hedge-on-depth",8296341,0.8,2.02
+BTCUSDm,"new engine, counter-ladder",8296341,0.8,2.06
+BTCUSDm,"new engine, partial LIFO",8296341,0.8,1.69
+BTCUSDm,"new engine, sizing pre-funded",8296341,0.8,1.95
+BTCUSDm,"new engine, Friday flat",8296341,0.8,2.02
+BTCUSDm,"new engine, add gate EMA200 D1",8296341,0.8,2.07
+BTCUSDm,"new engine, confirm Supertrend H4",8296341,0.8,2.0
