@@ -139,6 +139,31 @@ class Indicator:
             index=series.index,
         )
 
+    @staticmethod
+    def vol_unit(closes, length=24):
+        """
+        Volatility unit of a series of CLOSED-bar closes (pass the closes without the forming bar):
+        the exponentially weighted mean, weight 1/length per bar, of the absolute bar-to-bar change of
+        the close, seeded with the first change:
+            v = |C1 - C0|;  v += (|Ck - Ck-1| - v) / length   for k = 2 .. last
+        = pandas abs(close.diff()).ewm(alpha=1/length, adjust=False).mean(), the backtester's
+        kernels.vol_array (same recursion, same arithmetic order). Not an ATR (no high/low) and not a
+        simple mean. Read at the last element = the last closed bar.
+
+        Returns 0.0 while it is not known: fewer than `length` bar-to-bar changes (length + 1 closes),
+        as the backtester, which opens no basket on an unknown unit. 500 fetched bars match the value
+        over the whole history to ~1e-9 (gold and BTC H1).
+        """
+        c = np.asarray(closes, dtype=float)
+        n = int(length)
+        if n < 1 or c.shape[0] < n + 1:
+            return 0.0
+        v = abs(c[1] - c[0])
+        for k in range(2, c.shape[0]):
+            v += (abs(c[k] - c[k - 1]) - v) / n
+        v = float(v)
+        return v if v == v else 0.0
+
     def latest_pivot_slope(self, series, lookback=20, width=2, ob_level=None, os_level=None, side=None):
         """
         Latest-pivot direction of a series (RSI or MACD histogram).
