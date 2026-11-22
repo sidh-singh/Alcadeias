@@ -1,0 +1,20 @@
+rule,scope_type,scope,value,trips_per_year_recent24,trips_per_year_all84,trips_per_year_last12,trips_per_year_late9,trips_per_year_8y_account,distinct_trip_days_recent24,distinct_trip_days_all84,tighter_value,tighter_trips_recent24,tighter_trips_all84,wider_value,wider_trips_recent24,wider_trips_all84,value_if_last12_too,value_if_latest_too,note
+DROP,pair,P1,15.0,0.1667,0.369,0.0,1.9782,0.375,2.0,15.0,,,,20.0,0.0,0.119,15.0,20.0,the tightest value of the grid: a tighter limit was not tried
+DROP,pair,P2,15.0,0.3333,0.2143,0.6667,3.5968,0.25,4.0,8.0,,,,20.0,0.125,0.0595,20.0,30.0,the tightest value of the grid: a tighter limit was not tried
+DROP,pair,P3,25.0,0.0,0.1786,0.0,1.079,0.125,0.0,9.0,20.0,0.75,0.7024,30.0,0.0,0.119,25.0,30.0,
+DROP,pair,P4,20.0,0.375,0.2381,0.0,0.1798,0.0,5.0,7.0,15.0,0.5833,0.4048,25.0,0.2083,0.119,20.0,20.0,
+DROP,pair,P5,20.0,0.0833,0.25,0.0,0.1798,0.125,1.0,12.0,15.0,0.625,0.5952,25.0,0.0,0.0952,20.0,20.0,
+DROP,pair,P6,25.0,0.0,0.3333,0.0,0.1798,0.125,0.0,15.0,20.0,0.9167,0.7738,30.0,0.0,0.2262,25.0,25.0,information only
+DROP,common,P1-P5,25.0,0.2083,0.1786,0.0,1.079,0.125,,,20.0,0.75,0.7024,30.0,0.0,0.119,25.0,30.0,trips: the worst of P1..P5 at this value
+DAY,pair,P1,7.5,0.0,0.0,0.0,0.0,0.0,0.0,0.0,5.0,0.75,0.3571,10.0,0.0,0.0,7.5,7.5,
+DAY,pair,P2,7.5,0.4583,0.131,0.9167,2.3379,0.125,3.0,3.0,5.0,1.25,0.5,10.0,0.375,0.1071,12.5,20.0,
+DAY,pair,P3,15.0,0.375,0.1071,0.75,0.5395,0.0,2.0,2.0,12.5,0.9167,0.2619,20.0,0.0417,0.0119,20.0,20.0,
+DAY,pair,P4,12.5,0.4583,0.131,0.9167,0.5395,0.125,2.0,2.0,10.0,0.5833,0.1786,15.0,0.1667,0.0476,15.0,20.0,
+DAY,pair,P5,10.0,0.1667,0.1429,0.3333,0.0,0.0,2.0,3.0,7.5,0.625,0.5119,12.5,0.0,0.0,10.0,10.0,
+DAY,pair,P6,12.5,0.4167,0.119,0.8333,0.8992,0.125,2.0,2.0,10.0,0.6667,0.2857,15.0,0.2917,0.0833,25.0,25.0,information only
+DAY,common,P1-P5,15.0,0.375,0.1071,0.75,0.5395,0.0,,,12.5,0.9167,0.2619,20.0,0.0833,0.0238,20.0,20.0,trips: the worst of P1..P5 at this value
+STREAK,design,xv3,6.0,0.0,0.1429,0.0,0.0,0.125,,,5.0,0.875,1.2143,7.0,0.0,0.131,6.0,6.0,"N needed by pair type: P2 6, P4 6; 1 trips in the 8 years at one unit"
+STREAK,design,xt1,9.0,0.0,0.1548,0.0,0.0,0.25,,,8.0,0.0,0.6905,10.0,0.0,0.131,9.0,9.0,N needed by pair type: P3 9; 2 trips in the 8 years at one unit
+STREAK,design,xt2,10.0,0.0,0.4643,0.0,0.0,0.5,,,9.0,0.0,0.869,11.0,0.0,0.3333,10.0,10.0,"N needed by pair type: P1 10, P5 10; 4 trips in the 8 years at one unit"
+STREAK,design,bt2,8.0,0.125,0.2976,0.25,1.4387,0.375,,,7.0,0.125,0.8214,9.0,0.0,0.0,8.0,9.0,"N needed by pair type: P1 8, P2 8, P3 8; 3 trips in the 8 years at one unit"
+STREAK,design,bs2,5.0,0.0,0.1429,0.0,0.0,0.125,,,4.0,0.5833,0.4524,6.0,0.0,0.1071,5.0,5.0,"N needed by pair type: P4 5, P5 5; 1 trips in the 8 years at one unit"

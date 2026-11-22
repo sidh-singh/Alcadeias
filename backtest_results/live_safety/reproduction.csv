@@ -1,0 +1,6 @@
+design,name,engine,trades,published_final,published_trades,published_name,sizing_final,sizing_max_units,rebuilt_final_engine,unit_mismatches_engine,max_recorded_units_engine,two_leg_trades,recorded_closed_balance,rebuilt_final_spec,unit_mismatches_spec,max_recorded_units_spec,open_at_end_floating,open_at_end_units,open_at_end_floating_per_unit
+xv3,Gold V3-lite,ticks,809,11957.34,809,V3-lite,11957.34,6.0,11957.34,0,6.0,0,11957.34,11957.34,0,6.0,0.0,5,0.0
+xt1,Gold Top 1,ticks,1240,15167.68,1240,Top 1,15167.68,8.0,15246.13,0,8.0,672,15246.13,29584.46,754,16.0,-78.45,7,-11.2071
+xt2,Gold Top 2,ticks,1316,8544.75,1316,Top 2,8544.75,4.0,8589.58,0,4.0,0,8589.58,8589.58,0,4.0,-44.83,4,-11.2075
+bt2,BTC Top 2,ticks,1110,4148.66,1110,Top 2,4148.66,2.0,4128.13,0,2.0,0,4128.13,4128.13,0,2.0,20.53,2,10.265
+bs2,BTC Turtle S2,bars,60,7814.72,60,Turtle System 2 + bot votes,7814.7238,4.0,7814.72,0,4.0,0,7814.72,7814.72,0,4.0,0.0,4,0.0

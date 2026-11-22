@@ -1,0 +1,32 @@
+what,scope,given,computed,computed_daily_sums,earlier_division,earlier_division_daily_sums,reproduced,explained_by
+worst_stretch_8y,xv3,-394,-393.7425,-393.7425,-393.7425,-393.7425,True,trade by trade
+worst_stretch_24m,xv3,-394,-393.7425,-393.7425,-393.7425,-393.7425,True,trade by trade
+worst_trade_24m,xv3,-394,-393.7425,-393.7425,-393.7425,-393.7425,True,trade by trade
+net_24m,xv3,2849,2848.5965,2848.5965,2848.5965,2848.5965,True,trade by trade
+trades_24m,xv3,198,198.0,198.0,198.0,198.0,True,trade by trade
+worst_stretch_8y,xt1,-660,-659.9,-646.13,-659.9,-646.13,True,trade by trade
+worst_stretch_24m,xt1,-476,-475.835,-475.835,-475.835,-475.835,True,trade by trade
+worst_trade_24m,xt1,-420,-420.252,-420.252,-420.252,-420.252,True,trade by trade
+net_24m,xt1,4044,4044.0606,4044.0606,4044.0606,4044.0606,True,trade by trade
+trades_24m,xt1,301,301.0,301.0,301.0,301.0,True,trade by trade
+worst_stretch_8y,xt2,-335,-335.13,-333.55,-335.13,-333.55,True,trade by trade
+worst_stretch_24m,xt2,-262,-262.3867,-248.8433,-262.3867,-248.8433,True,trade by trade
+worst_trade_24m,xt2,-61,-61.28,-61.28,-61.28,-61.28,True,trade by trade
+net_24m,xt2,2725,2724.5967,2724.5967,2724.5967,2724.5967,True,trade by trade
+trades_24m,xt2,325,325.0,325.0,325.0,325.0,True,trade by trade
+worst_stretch_8y,bt2,-370,-370.26,-370.26,-370.26,-370.26,True,trade by trade
+worst_stretch_24m,bt2,-279,-278.79,-278.79,-278.79,-278.79,True,trade by trade
+worst_trade_24m,bt2,-52,-51.505,-51.505,-51.505,-51.505,True,trade by trade
+net_24m,bt2,853,852.94,852.94,852.94,852.94,True,trade by trade
+trades_24m,bt2,275,275.0,275.0,275.0,275.0,True,trade by trade
+worst_stretch_8y,bs2,-747,-396.6695,-396.6695,-746.6525,-746.6525,False,earlier division
+worst_stretch_24m,bs2,-696,-396.6695,-396.6695,-696.074,-696.074,False,earlier division
+worst_trade_24m,bs2,-514,-171.4981,-171.4981,-514.4943,-514.4943,False,earlier division
+net_24m,bs2,3763,1431.262,1431.262,3762.5339,3762.5339,False,earlier division
+trades_24m,bs2,16,16.0,16.0,16.0,16.0,True,trade by trade
+worst_stretch_24m,xv3+bt2,-461,-508.616,-460.526,-508.616,-460.526,False,daily sums
+worst_stretch_24m,xv3+bs2,-666,-393.7425,-393.7425,-665.6195,-665.6195,False,earlier division
+worst_stretch_24m,xt2+bt2,-360,-359.55,-359.55,-359.55,-359.55,True,trade by trade
+worst_stretch_24m,xt2+bs2,-673,-341.9988,-341.9988,-673.3302,-673.3302,False,earlier division
+worst_stretch_24m,xt1+bt2,-599,-598.5973,-598.5973,-598.5973,-598.5973,True,trade by trade
+worst_stretch_24m,xt1+bs2,-912,-581.0461,-581.0461,-912.3775,-912.3775,False,earlier division
