@@ -5,6 +5,8 @@ All tuneable parameters in one place.
 Edit this file to adjust strategy, indicator, dashboard, or system behaviour.
 """
 
+VERSION = '3.9.2-live.1'            # this code line (CHANGELOG.md): the same on every real-money branch
+
 # ─── Price Data Feed ───
 # Main OHLC candle feed pulled each loop. This previously fed the SHA entry
 # indicator (removed in the RSI+MACD rebuild); it is retained for market-liveness
@@ -19,7 +21,8 @@ MARKET_STATUS_TIMEFRAME = 'TIMEFRAME_M1'   # Timeframe used to check market open
 MARKET_LOOKBACK_MINUTES = 3                # Max minutes since last candle → still "open"
 
 # ─── Strategy Parameters ───
-STRATEGY_HEDGE = 1                  # Hedge / profit target multiplier
+STRATEGY_HEDGE = 1                  # the live basket target: $ per unit (close when basket profit > STRATEGY_HEDGE x unit;
+                                    # used while TARGET_USD_PER_UNIT = 'live', see the design levers below)
 FIBO_SEQUENCE_LENGTH = 25           # Fibonacci sequence length (first 2 dropped)
 
 # ─── RSI Indicator ───
@@ -97,6 +100,10 @@ FORCE_CLOSE_SCORE_WEIGHTS = {'M15': 1}  # 2026-11-12: M15-only reversal (was M15
 # Order-preserving union, mapped short-key -> 'TIMEFRAME_<key>'.
 # NOTE: D1 is not fetched elsewhere, so including it costs +1 MT5 rates call per loop; M5/M15/H1/H4
 # are already fetched for the RSI ladder, so they are free.
+# This list is derived from the live weights above. A design block at the END of this file may change
+# the weights afterwards; app.py therefore adds, on every poll, each timeframe the strategy reads votes
+# from (Strategy.slope_timeframes(): the section weights as they finally are, plus the tier timeframes of
+# a 'macd_turn' ladder), so a stale list here never drops a timeframe.
 SLOPE_TIMEFRAMES = ['TIMEFRAME_' + _tf for _tf in dict.fromkeys(
     _k for _d in (OPEN_SCORE_WEIGHTS, FORCE_CLOSE_SCORE_WEIGHTS) for _k in _d
 )]
@@ -121,15 +128,12 @@ PROFIT_PROTECT_MIN_USD = 0.0
 RISK_REWARD_RATIO = [1, 1]          # [risk, reward] multiplier for auto SL/TP calculation
 
 # ─── File System / Output ───
-OUTPUT_DIR = r'C:\Alcadeias'                    # Root directory for JSON data files
 DAILY_TRADE_SUBDIR = 'daily_trade'              # Sub-folder for per-symbol daily trade logs
 HISTORICAL_SUMMARY_DAYS = 3650                  # Days of deal history (≈ 10 years)
 HISTORICAL_SUMMARY_FILENAME = 'historical_summary.json'
 
 # ─── Dashboard ───
 DASHBOARD_REFRESH_INTERVAL = 5000   # Auto-refresh interval in milliseconds
-DASHBOARD_HOST = '0.0.0.0'
-DASHBOARD_PORT = 8050
 DASHBOARD_MAX_HEIGHT_JSON = 300     # Max-height (px) for raw JSON viewer
 
 # ─── Daily Trade Graph ───
@@ -143,5 +147,208 @@ ORDER_COOLDOWN_SECONDS = 1                       # Mandatory sleep after placing
 STRATEGY_LOG_FILENAME = 'strategy_log.json'     # Log file name inside OUTPUT_DIR
 STRATEGY_LOG_MAX_ENTRIES = 200                   # Max log entries kept per symbol
 
-# ─── Active Config (Dashboard ↔ Bot) ───
-ACTIVE_CONFIG_FILENAME = 'active_config.json'   # Dashboard writes, bot reads on startup
+# ─── Active Config (written by the bot) ───
+ACTIVE_CONFIG_FILENAME = 'active_config.json'   # The bot writes its mode into it at every start (other keys are kept)
+
+# ─── Design levers (2026-11-15) ───
+# Every lever below defaults to the live bot v3.9.2 exactly. A branch sets its design in a block at
+# the END of this file (one commented example per design there). Their meaning is the backtester's
+# (backtesting/engine/kernels.py on backtest_hedging), which the bot is meant to reproduce:
+#   * every exit / add is decided on the poll's forming-bar votes, as live;
+#   * the trend and the volatility unit are read on the last CLOSED bar of their timeframe;
+#   * a basket's target, stop and add gap are fixed when it opens and kept for its life (persisted in
+#     OUTPUT_DIR/state, so a restart keeps them);
+#   * in a basket the stop is checked first, then the target, then the force-close, then the ladder.
+DESIGN_NAME = 'live'                 # a label only (startup print, dashboard JSON, state file)
+STRATEGY = 'basket'                  # 'basket' = this bot's logic with the levers below; 'turtle' = the Turtle
+                                     # (turtle.py, the TURTLE_* constants below; BTC 6/7), the levers then unused
+FORCE_CLOSE_ENABLED = True           # False: the M15 force-close never fires; the M15 votes (FORCE_CLOSE_SCORE_WEIGHTS)
+                                     # still feed the ENTRY_AGREE_S agreement gate, so keep that dict as it is
+TREND_TF = None                      # 'H1': a fresh entry only if sign(MACD signal line of the last CLOSED H1 bar)
+                                     # equals the side; a signal of exactly 0 (or NaN) blocks both sides. None = off
+VOL_TF = None                        # 'H1': the volatility unit = EWMA(alpha=1/VOL_LEN, adjust=False) of |delta close|
+                                     # of the CLOSED bars (bid closes), read when a basket opens. None = off
+VOL_LEN = 24
+TARGET_USD_PER_UNIT = 'live'         # 'live' = STRATEGY_HEDGE $ per unit (the live $1 x unit target, strict >);
+                                     # a number = that many $ per unit; None = no $ target
+STOP_LOSS_USD_PER_UNIT = None        # None = no $ stop; a number = close the basket at profit <= -(that x unit)
+TARGET_VOL = 0.0                     # > 0 (needs VOL_TF): target per unit (USD) = TARGET_VOL x unit x contract_size x mtqty,
+                                     # fixed at the open; replaces TARGET_USD_PER_UNIT
+STOP_VOL = 0.0                       # > 0 (needs VOL_TF): stop per unit, the same way; replaces STOP_LOSS_USD_PER_UNIT
+BACKSTOP_FACTOR = 2.0                # a design with a stop (STOP_VOL > 0 or a $ stop) sends every fill (entry, add)
+                                     # with a broker-side stop (request sl) this many basket stop distances (STOP_VOL
+                                     # x unit, capped) beyond it, no broker target: it guards the position while the
+                                     # bot or the terminal is down; the bot's own stop, nearer, always closes first.
+                                     # A design without a stop (live) keeps the live request
+VOL_CAP_USD_PER_UNIT = 0.0           # > 0 (needs VOL_TF): the unit is capped at cap / (contract_size x mtqty) price units
+                                     # (USD per 0.01 lot: gold $12 = a $12 move, BTC $12 = a $1,200 move); caps target, stop, gap
+LOSS_COOLDOWN_S = 0                  # > 0: after a basket that closed with a net loss (realised P/L from the deal
+                                     # history) the next entry waits this long INSTEAD of REENTRY_COOLDOWN_SECONDS,
+                                     # counted from the close decision (wall clock, through weekends)
+MAX_ADDS = 99                        # ladder adds = min(len(LADDER_TFS), MAX_ADDS); 0 = no ladder
+LADDER_TRIGGER = 'rsi_level'         # 'rsi_level' (live): the tier timeframe's forming-bar RSI is at/beyond
+                                     #   RSI_OVERSOLD (buy) / RSI_OVERBOUGHT (sell);
+                                     # 'macd_turn': the tier timeframe's MACD vote was not with the basket on some
+                                     #   poll since the last fill (armed) and now is
+LADDER_TFS = ['M1', 'M5', 'M15', 'H1', 'H4']   # tier timeframe of add n = LADDER_TFS[n-1]
+LADDER_GAP_VOL = 0.0                 # > 0 (needs VOL_TF): an add also needs the price >= LADDER_GAP_VOL x unit (price
+                                     # units, fixed at the open) worse than the last fill (buy: last fill - ask)
+LADDER_MULTIPLIERS = None            # None = the live Fibonacci sizes; a list = units per position (index n for add n;
+                                     # index 0 is the entry and must be 1; padded with its last value)
+# Contract size (units of the asset per 1.00 lot) when the terminal's symbol_info() has none: the volatility
+# levers convert price moves to USD with contract_size x mtqty (gold 100 x 0.01 = $1, BTC 1 x 0.01 = $0.01).
+CONTRACT_SIZE_FALLBACK = {'XAU': 100.0, 'BTC': 1.0}
+STATE_SUBDIR = 'state'               # OUTPUT_DIR/state/<symbol>_state.json: the open basket's fixed distances, its
+                                     # ladder arming and the loss pause (a sub-folder: the dashboard lists every
+                                     # top-level JSON of OUTPUT_DIR as a symbol)
+
+# ─── The Turtle (STRATEGY = 'turtle'; the rules: turtle.py) ───
+# The final ten's BTC Turtles, "Turtle + bot votes" (System 1) and "Turtle System 2 + bot votes", with the
+# backtest's parameters (backtesting/research/external.py turtle() on backtest_hedging). Read only with
+# STRATEGY = 'turtle'. Levels from UTC D1 bars (Exness MT5 server time is UTC); entries need the bot's M15
+# votes on CLOSED bars to agree; one stop for all legs, held by the bot (checked every poll, every leg closed
+# at market); a broker-side backstop further out on every leg (TURTLE_BACKSTOP_N), no broker target. As in
+# the backtest: no trading window (symbols.json 'brake' still stops new entries), no re-entry cooldown beyond
+# the next M1 bar, no target. The book (N at the entry, unit, stop, the armed orders) is kept in
+# OUTPUT_DIR/state/<symbol>_turtle.json and rebuilt from the positions without it.
+TURTLE_SYSTEM = 2                    # 1: 20-day breakout, skipped after a winning breakout (then the 55-day
+                                     #    failsafe), 10-day exit; 2: 55-day breakout, 20-day exit
+TURTLE_N_LEN = 20                    # N = Wilder's RMA of the daily true range over this many days
+TURTLE_STOP_N = 2.0                  # the stop: this many N from the newest fill, or the exit channel if tighter
+TURTLE_BACKSTOP_N = 1.0              # every leg goes out with a broker-side stop (request sl) this many N_entry beyond
+                                     # the trade's stop at its fill, never moved: it guards the legs while the bot or
+                                     # the terminal is down; the bot's stop, nearer (it never loosens), stays the exit
+TURTLE_ADD_N = 0.5                   # one more leg each time the price is this many N beyond the previous fill
+TURTLE_MAX_LEGS = 4                  # legs per trade, the entry included; each leg = the unit x 0.01 lot
+TURTLE_TICK = 0.01                   # entry levels: channel high + this / channel low - this
+TURTLE_VOTE_TF = 'M15'               # the bot's votes on the CLOSED bars of this timeframe gate the entries
+TURTLE_VOTE_BARS = 1000              # closed bars read for the votes
+TURTLE_D1_BARS = 1000                # closed D1 bars read for N, the channels and the System 1 filter (1000: the
+                                     # backtest's levels to the cent)
+TURTLE_MIN_D1_BARS = 300             # fewer closed D1 bars from the terminal: no trading (N not settled yet)
+
+# What differs from one real-money branch to the next is in the block below and nowhere else in this file: the
+# branch generator writes it, one block per branch, and tests_demo/test_live_deployment.py checks that every name
+# in it is assigned once, there. This bot trades REAL MONEY: one MetaTrader 5 account is shared by two bots
+# (gold + BTC), each on its own branch.
+#   BRANCH, PARTNER_BRANCH   this bot's label (logs, dashboard, the order comment) and the other bot of the account
+#   ACCOUNT_SLOT             which of the owner's accounts (1..10) the two bots trade
+#   ACCOUNT_FOLDER           the folder the two bots and their dashboards share, beside OUTPUT_DIR (the safety files)
+#   MAGIC                    this bot's orders and positions carry this magic number: the two bots of the account
+#                            never touch each other's trades
+#   ORDER_COMMENT            None -> BRANCH cut to 31 characters (the MT5 limit)
+#   OUTPUT_DIR               root directory of this bot's own files (JSON data, state, logs)
+#   DASHBOARD_HOST, _PORT    where this bot's dashboard listens
+#   ACCOUNT_SHARE            units are sized from this share of the account balance (the other bot has the rest)
+#   SAFETY_*                 the auto-safety: on at the first start; no new trade once the account is DROP % below
+#                            its high or lost DAY % since 00:00 UTC, or this bot lost STREAK_N trades in a row
+#   LOG_KEEP_DAYS            the text logs keep today and this many days before it
+#   OLD_LOGINS_SHA256        the accounts the old bots traded (as SHA-256, never the numbers): a credentials file
+#                            that still names one of them is refused
+# ─── Deployment: this branch (written by the branch generator; one block per branch) ───
+BRANCH = 'live7_bs2'
+PARTNER_BRANCH = 'live7_xv3'
+ACCOUNT_SLOT = 7
+ACCOUNT_FOLDER = 'live7_account'
+MAGIC = 270724
+ORDER_COMMENT = None
+OUTPUT_DIR = r'C:\Alcadeias\live7_bs2'
+DASHBOARD_HOST = '0.0.0.0'
+DASHBOARD_PORT = 8207
+ACCOUNT_SHARE = 0.5
+SAFETY_DEFAULT_ON = True
+SAFETY_DROP_PCT = 25.0
+SAFETY_DAY_PCT = 15.0
+SAFETY_STREAK_N = 5
+LOG_KEEP_DAYS = 7
+OLD_LOGINS_SHA256 = ('33a507449da8ac1f0d2188af651e5cd2a30e6f80bd1cd36aa06392981d8dcc75', '418e6046922fdd899469b700e61f93cd32b57e257f97bbd6c08e09ddca20d715', '49ebf823b8e560b5949b2137b75387dca8f379bd6119e46cdcc3494704a2a77d', '67d5a2cc169eda3c86abcca90011202cd7863b077cbd25fad34f6fa3718d4a6a', '6d8b47bcaa8e0ae1af101ba23e8c42d6cb0c31aaa709e2c242687a53ad2eae7e', '73ec652b3290455fa16dda30d564ac7dddfb320a273fa7e45cf2074c0d371f11', 'a10ba04313732470b6bc73ebf024ddda9de484d7adb75f000b8cc89b933cae25', 'b5cc4a1adb24e5165bc85265f61980e50ac3f46940865c9c72e4c4a8bc2098f8', 'da14d16964ae89e766b34b29dd202d0be16b8697588116d61a8b392fb28e95f9')
+# ─── End of deployment ───
+
+# ─── Design examples ───
+# Copy ONE block below to the very end of this file and remove the leading '# '. Everything not listed
+# stays at the live value above. Effective parameters from the backtester's top3_v4 designs; the two
+# Turtles are the final ten's rows (the TURTLE_* values above are theirs).
+#
+# ── XAU V3-lite ──
+# DESIGN_NAME = 'xau_v3lite'
+# OPEN_SCORE_WEIGHTS = {'H1': 1}
+# ENTRY_AGREE_S = 2
+# FORCE_CLOSE_ENABLED = False
+# TREND_TF = 'H1'
+# VOL_TF = 'H1'
+# VOL_LEN = 24
+# TARGET_USD_PER_UNIT = None
+# STOP_LOSS_USD_PER_UNIT = None
+# TARGET_VOL = 8.0
+# STOP_VOL = 8.0
+# VOL_CAP_USD_PER_UNIT = 0.0
+# LOSS_COOLDOWN_S = 43200
+# MAX_ADDS = 0
+#
+# ── XAU Top 2 ──
+# DESIGN_NAME = 'xau_top2'
+# OPEN_SCORE_WEIGHTS = {'H1': 1}
+# ENTRY_AGREE_S = 0
+# FORCE_CLOSE_ENABLED = False
+# TREND_TF = 'H1'
+# VOL_TF = 'H1'
+# VOL_LEN = 24
+# TARGET_USD_PER_UNIT = None
+# STOP_LOSS_USD_PER_UNIT = None
+# TARGET_VOL = 8.0
+# STOP_VOL = 4.0
+# VOL_CAP_USD_PER_UNIT = 12.0
+# LOSS_COOLDOWN_S = 43200
+# MAX_ADDS = 0
+#
+# ── XAU Top 1 ──
+# DESIGN_NAME = 'xau_top1'
+# OPEN_SCORE_WEIGHTS = {'H1': 1}
+# ENTRY_AGREE_S = 0
+# FORCE_CLOSE_ENABLED = False
+# TREND_TF = 'H1'
+# VOL_TF = 'H1'
+# VOL_LEN = 24
+# TARGET_USD_PER_UNIT = None
+# STOP_LOSS_USD_PER_UNIT = None
+# TARGET_VOL = 10.0
+# STOP_VOL = 8.0
+# VOL_CAP_USD_PER_UNIT = 0.0
+# LOSS_COOLDOWN_S = 14400
+# MAX_ADDS = 1
+# LADDER_TRIGGER = 'macd_turn'
+# LADDER_TFS = ['M5', 'M15', 'H1', 'H1', 'H1']
+# LADDER_GAP_VOL = 1.0
+# LADDER_MULTIPLIERS = [1, 1, 1, 1]
+#
+# ── BTC Top 2 ──
+# DESIGN_NAME = 'btc_top2'
+# OPEN_SCORE_WEIGHTS = {'H1': 1}
+# ENTRY_AGREE_S = 0
+# FORCE_CLOSE_ENABLED = False
+# TREND_TF = 'H1'
+# VOL_TF = 'H1'
+# VOL_LEN = 24
+# TARGET_USD_PER_UNIT = None
+# STOP_LOSS_USD_PER_UNIT = None
+# TARGET_VOL = 10.0
+# STOP_VOL = 8.0
+# VOL_CAP_USD_PER_UNIT = 12.0
+# LOSS_COOLDOWN_S = 14400
+# MAX_ADDS = 0
+#
+# ── BTC Turtle System 2 + bot votes ──
+# DESIGN_NAME = 'btc_turtle_s2'
+# STRATEGY = 'turtle'
+# TURTLE_SYSTEM = 2
+#
+# ── BTC Turtle System 1 + bot votes ──
+# DESIGN_NAME = 'btc_turtle_s1'
+# STRATEGY = 'turtle'
+# TURTLE_SYSTEM = 1
+
+# ─── Design of this branch (live7_bs2): BTC Turtle System 2 + bot votes, as tested on demo_hedging_btcusd6 ───
+# The example block 'BTC Turtle System 2 + bot votes' above, uncommented. Everything not set here stays at the live value.
+DESIGN_NAME = 'btc_turtle_s2'
+STRATEGY = 'turtle'
+TURTLE_SYSTEM = 2
