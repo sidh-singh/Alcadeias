@@ -4,30 +4,1485 @@ All notable changes to the Alcadeias trading bot are recorded here, newest first
 Each version lists **exactly what changed per file** and a **Rollback** section so any
 version can be reversed cleanly.
 
-Versioning is feature-based (`vMAJOR.MINOR.PATCH`). Each entry names the git
-**baseline commit** it was applied on top of, so you can always return to a known state.
+Versioning is feature-based (`vMAJOR.MINOR.PATCH`). The real-money branches carry `v3.9.2-live.N`: the live layer
+`N` on the demo code `v3.9.2-demo.8`. `VERSION` in `constants.py` holds the same text, and the bot writes it into
+its start line. Each entry names the **baseline** it was applied on top of, so you can always return to a known
+state.
 
-**Maintenance policy (every change, no exceptions):** every change — however small — is
-recorded here with per-file detail (down to the small stuff), committed together with its
-code, and propagated to **all 20 live-money fleet branches** in the same change
-(cherry-pick; rebase onto `origin/<branch>` for any branch behind so remote-only
-credential/symbol commits are preserved; never force-push). Fleet:
-`dev_btcusd1_v2`…`dev_btcusd10_v2` (BTCUSDm) and `dev_xauusd1_v2`…`dev_xauusd10_v2`
-(XAUUSDm).
+**The real-money branches.** 20 branches `live<n>_<code>`: account `n` = 1 to 10, one gold bot and one BTC bot per
+account (`live<n>_xv3` / `xt2` / `xt1` for gold V3-lite / Top 2 / Top 1, `live<n>_bt2` / `bs2` for BTC Top 2 /
+Turtle System 2 + bot votes). All 20 run **one code line**. A branch differs from the others only in the files
+the branch generator stamps: the deployment block and the design block of `constants.py`, `symbols.json`,
+`branch_env.bat`, the name of `start_<symbol>.bat`, the first section of `README.md`, and `mt5_credentials.json`.
+This file is the same on all 20. The entries below `v3.9.2-live.1` are the history of the code it was built
+from (the demo branches, and before them the old `netting_` / `hedging_` branches); they are kept as they were
+written.
+
+**Maintenance policy (every change, no exceptions):** every change, however small, is recorded here with per-file
+detail, committed together with its code, and released to **all 20 real-money branches** in the same change.
+
+## Updating a live branch
+
+After its first push a live branch holds the owner's own edits: he puts each account's details into
+`mt5_credentials.json` on GitHub, and he may set the brake in `symbols.json`. A bot with open trades restarts into
+whatever the branch holds. So:
+
+1. **Never force-push a live branch, and never cut it again.** A fix is one or more commits on top of
+   `origin/live<n>_<code>`.
+2. **`mt5_credentials.json` and `symbols.json` of a pushed branch are the owner's.** A fix never contains them:
+   `git diff --name-only origin/live<n>_<code> <the new commit>` lists neither file, on every branch, before the
+   push.
+3. **The stamped values of a branch are not computed again.** The deployment block of `constants.py` is carried
+   over as it is. `OLD_LOGINS_SHA256` in particular is never worked out from the branch's own credentials file:
+   after the owner's edit that file names the new account, and the bot would refuse it.
+4. **The same code on all 20.** A fix is made once on the code line and applied to every branch; the branch
+   checks (`tests_demo/test_launchers.py`, the `constants.py` tests, the lead's per-branch verification) run on
+   every stamped tree before the push.
+5. **On the server, before `git pull`: close the bot's window and the dashboard's window of that branch.** Pull,
+   then start them again. cmd.exe reads a running `.bat` file by position, so a pull that changes a launcher
+   under a running window lets that window go on in the middle of the new file; and Python would change version
+   at its next unattended restart.
 
 ---
 
-## [v3.9.2-slot5.1] — 2026-11-17 — Slot 5 only: flat DCA ladder and H4 force-close [hedging_xauusd5 only]
+## [v3.9.2-live.1] — 2026-11-21 — real-money layer [live only]
 
-**What changed** (only on `hedging_xauusd5` and `hedging_btcusd5`; every other branch keeps v3.9.2):
-- **Flat DCA ladder.** Every add is the base size, 0.01 lot x unit: 0.01, 0.01, 0.01, 0.01, 0.01, 0.01 instead of
-  0.01, 0.02, 0.03, 0.05, 0.08, 0.13. It still steps up with the unit (unit 2: 0.02 each). The ladder's timeframe tiers
-  (M1, M5, M15, H1, H4) and its RSI triggers are unchanged. Switch: `LADDER_FLAT` in constants.py (False = Fibonacci).
-- **Force-close on H4.** `FORCE_CLOSE_SCORE_WEIGHTS` {'M15': 1} -> {'H4': 1}: a basket is force-closed when the H4 RSI/MACD
-  votes turn against it (FORCE_CLOSE_S = 1, unchanged). The entry agreement gate (ENTRY_AGREE_S = 2) reads the same score,
-  so a fresh entry now also needs both H4 votes on its side (this keeps a new basket from being force-closed at once).
+**Branches:** the 20 real-money branches `live<n>_<code>` (above), cut from one code line (`wip_live_turtle`,
+which started from `demo_hedging_btcusd6`). **NOT** the demo branches (`demo_hedging_*`) and **NOT** the old
+real-money branches (`netting_*`, `hedging_*`, `dev_*_v2`): none of them is changed. **Files touched:** `app.py`,
+`mt5_helper.py`, `constants.py`, `tracelog.py`, `dashboard.py`, new `safety.py`, new `collect_logs.py`,
+`start_job.bat`, `start_<symbol>.bat`, `start_dashboard.bat`, new `branch_env.bat`, `find_python.bat`, `safety.bat`,
+`collect_logs.bat`, new `.gitattributes` and `.gitignore`, `tests_demo/`, `README.md`, `docs/dashboard-data.md`, new
+`docs/live-safety.md` (+ this `CHANGELOG.md`). **Not touched:** `turtle.py`, `strategy.py`, `indicator.py`,
+`requirements.txt`. **Baseline:** v3.9.2-demo.8 (`660932b` on `demo_hedging_btcusd6`); each branch's design block
+is the one of the pinned demo commit of its design: gold V3-lite `b3a11f9` (`demo_hedging_xauusd6`), gold Top 2
+`9270618` (`demo_hedging_xauusd7`), gold Top 1 `4581685` (`demo_hedging_xauusd8`), BTC Top 2 `da85e9a`
+(`demo_hedging_btcusd8`), BTC Turtle System 2 `660932b` (`demo_hedging_btcusd6`).
 
-**Files:** constants.py (LADDER_FLAT, FORCE_CLOSE_SCORE_WEIGHTS), strategy.py (`_get_next_fibo_volume`).
+**Why.** The six demo branches ran well, and on 21 Nov 2026 the owner asked for the same strategies on real money:
+10 MetaTrader 5 accounts at Exness, a gold bot and a BTC bot on each, starting with accounts 1 and 2 at $1,500. He
+asked for a safety that blocks the account when it has lost too much, with a button to unblock it; for half of
+the balance per bot; for real-money figures on the dashboard; for a week of logs and more data for later study;
+and for the branches to start the way the old `hedging_` branches do. A live branch is the demo code he tested
+plus the layer below. Nothing else changes.
+
+### What does not change
+- **The strategy.** With the safety OFF, or ON and never blocked, a live bot sends the order requests the demo
+  bot of the same design sends on the same ticks at the same unit count: signals, votes, targets, stops,
+  cooldowns, the ladder, the Turtle's rules, the requests and their timing are the demo's. The exceptions act only
+  in a fault or a block: no new entry while the balance is unknown; opens are held while the safety checks a
+  balance change that would meet a limit; a slower retry after 240 s of refused opens; no opens while an old bot
+  shares the terminal; a Turtle trade that missed an add during a block by more than one add step takes no more
+  adds. `tests_demo/test_live_equivalence_demo.py` replays each of the five designs against its pinned demo commit
+  (demo, safety OFF, safety ON at its real limits, a restart in a trade, 3 units, the half share) and compares every
+  request of every poll.
+- **Exits.** No new code path delays, skips or blocks a close, a stop, a target, a force-close, a Turtle exit,
+  the broker-side backstop stop, or the re-adoption of positions after a restart. The safety blocks opening
+  orders only.
+
+### Changed: one deployment block per branch (`constants.py`)
+- A block between the lines `# ─── Deployment: this branch ...` and `# ─── End of deployment ───` holds every
+  per-branch value, each assigned once: `BRANCH`, `PARTNER_BRANCH`, `ACCOUNT_SLOT`, `ACCOUNT_FOLDER`, `MAGIC`,
+  `ORDER_COMMENT`, `OUTPUT_DIR`, `DASHBOARD_HOST`, `DASHBOARD_PORT`, `ACCOUNT_SHARE` (0.5), `SAFETY_DEFAULT_ON`,
+  `SAFETY_DROP_PCT`, `SAFETY_DAY_PCT`, `SAFETY_STREAK_N`, `LOG_KEEP_DAYS` (7), `OLD_LOGINS_SHA256`.
+- `VERSION = '3.9.2-live.1'`. `DEMO_BRANCH`, `VIRTUAL_START_BALANCE` and `VIRTUAL_START_DATE` are gone.
+
+### Changed: the start, the account and the exit codes (`app.py`)
+- **Mode.** `app.py live --symbol <SYMBOL>` only; any other word prints how to start the branch and ends with 78.
+  There is no demo mode. **One process per branch:** an exclusive system lock on `state/<SYMBOL>.lock`, asked 3
+  times 1 s apart; a second window says so and ends with 78. A lock that cannot be asked at all is a warning.
+- **Exit codes.** `EXIT_OK` 0 only after Ctrl+C; `EXIT_NEEDS_OWNER` 78 = something only the owner can fix (the
+  launcher does not start the bot again); `EXIT_RETRY` 1 for everything else, also a trading loop that ends by
+  itself (the launcher starts it again after 30 s). "Needs the owner" is decided on the start path only: the mode,
+  a second process, a design or deployment block that cannot run (`design_problems`, `deployment_problems`: also
+  `MAGIC`, `ACCOUNT_SHARE`, `LOG_KEEP_DAYS`, `OLD_LOGINS_SHA256`, `ACCOUNT_FOLDER`, `SAFETY_DEFAULT_ON` and the
+  three limits); and, when all 3 start attempts (5 s apart) end on the same answer: `symbols.json`, the credentials
+  file (missing, not valid JSON (the line and column, never the content), not UTF-8, no usable `live` block, a
+  `terminal_path` that is no file, still the old account), the right login on another server (`SERVER_MISMATCH`),
+  an account that is not real / not hedging / not in USD (both only when the terminal is connected and a second
+  read 2 s later agrees), the account claim. A reconnect never ends the process.
+- **Credentials.** One normalisation at load (`login_id` a whole number or a string of digits, `server` stripped,
+  `terminal_path` not empty). The **old-account check** runs first, on the raw `live` block, before the rest of it
+  is judged and before any terminal call: a branch is pushed with the details of the old account of its number,
+  and the bot refuses them (`OLD_LOGINS_SHA256`) until the owner has put the new account in, unless the block holds
+  `"keep_old_account": true`.
+- **The account the bot trades** is the login and the server of the credentials (`_same_account`), on a real,
+  hedging, USD account: checked at the attach, after a login, on every poll, after the positions read and before
+  every order (closes too). There is no path that adopts whatever account the terminal holds.
+- **Attaching and logging in.** At the start, an old bot alive on the same MetaTrader 5 (its files in the parent
+  folder of `OUTPUT_DIR` changed less than 120 s ago) means no attach and exit 1 (`OLD_BOT_SAME_TERMINAL`).
+  `mt5.initialize(path=...)` without credentials; a terminal that shows no account is read again for 60 s; one
+  that holds the bot's account is used as it is; one that holds another account is left alone
+  (`TERMINAL_IN_USE`, exit 1, never a login). The bot logs in itself only on a terminal that shows no account for
+  60 s, with a password in the file, when the terminal belongs to no other account (`terminal_claims/`, written
+  whenever a bot passes the account checks on it) and the login budget allows it (`login_attempt.json`, written
+  before the login: after a refused login 15 min, 30 min, 1 h, 2 h, then 6 h; at once again after this branch's
+  credentials file changed; deleted by a start that passes). Otherwise `LOGIN_WAIT` with the reason; a refused
+  login is `LOGIN_REFUSED` and exit 1 (the reconnect path: `RECONNECT_FAILED`), never "needs the owner". These
+  start refusals are logged the first time and then at most every 15 minutes, also across the launcher's restarts.
+- **Warnings that are not refusals:** `TRADING_NOT_ALLOWED` (Algo Trading off, the Python API disabled, the account
+  or its experts not allowed to trade) and `TRADING_ALLOWED` when it ends; at the start, an old bot on another
+  MetaTrader 5 is a note in the window.
+- **One account per account folder** (`account_claim.json`, made by the first bot that passes the account checks):
+  another account's claim, or another account folder on this server that names this bot's account, is 78. State
+  files know their account (`login_sha`, `login_tail`, `branch`): a file of another account is put aside
+  (`.other-account-<yyyymmdd_hhmmss>`), never used (`STATE_OTHER_ACCOUNT`; red on the dashboard when it held an open
+  trade). Loading a state file never raises.
+- **`state/live_start.json`**: when this bot first traded this account (the earliest of its first good poll, its
+  oldest open position and its first deal in the history). The reporting reads (the trades list, the history
+  summary) start a day before it; the reads the bot decides on keep their demo windows.
+
+### Changed: size (`app.py`)
+- Each bot counts `ACCOUNT_SHARE` (half) of the real account balance: units = 1 + whole steps of
+  `step_up_balance` in that half, at most `unit_max_limit`, derived only where the demo code derives it. The poll
+  local `_sizing` records how (also kept with the open basket and in `state/<SYMBOL>_turtle_side.json`). No
+  balance, or none above 0: no new entry on that poll. All virtual-balance code is removed.
+
+### Added: the safety (`safety.py`, `app.py`, `mt5_helper.py`; the files and formats: `docs/live-safety.md`)
+- **Three rules.** Two for the account, blocking both of its bots: the balance is `SAFETY_DROP_PCT` % or more
+  below its high since the counting last started; the balance is `SAFETY_DAY_PCT` % or more below the balance at
+  00:00 UTC. One for the bot: `SAFETY_STREAK_N` trades in a row closed with a net loss. Only closed trades count
+  (the booked balance). Deposits and withdrawals do not move the percentages (the account's balance operations are
+  read from the history; a fall that cannot be checked within 60 s counts as a loss).
+- **Blocked** = no entry, no ladder add, no Turtle pyramid. Open trades keep their management. A block never ends
+  by itself. A hold (`CHECKING`) while a change that would meet a limit is checked, or while a closed trade's result
+  could complete the losing-trades limit.
+- **Unblock / OFF / ON** from the dashboard (`safety.press`, PIN for Unblock and OFF, 5 wrong PINs lock them for
+  10 minutes and longer each time up to 24 hours; ON is never locked) or from the server (`safety.bat`, no PIN).
+- `safety.py` is standard library only: the pure rules (`Limits`, `decide`, `count_trade`, `note_other`,
+  `build_view`), the files in the account folder (switch, restart id, block, status, PIN, audit, lock-out),
+  `Tracker`, `press`, `read_controls`, `read_statuses`, the command line.
+- `app.py`: one `Tracker` per bot; `poll` before the decision block (memory only); the gate is the last test
+  before an opening order (basket entry, ladder add, Turtle entry, Turtle pyramid) and never touches a close;
+  `mt5_helper.buy()` / `sell()` refuse behind it (`open_guard`). No usable Tracker: no opens while the safety is
+  ON. Losing trades are counted from the deal history through a queue of closed trades
+  (`state/safety_closes.json`; a result missing for 10 minutes counts with the P/L seen at the close, else as a
+  loss: `CLOSE_RESULT_UNKNOWN`). After the order section: the cash read (`mt5_helper.get_cash_deals`), the queue,
+  `flush`, the journal lines, the events (`SAFETY_ERROR`, `SAFETY_BLOCKED`, `SAFETY_UNBLOCKED`, `SAFETY_SKIP`).
+- A Turtle add the block suppressed is taken afterwards only within one add step of its level; farther away the
+  trade takes no more adds (`TURTLE_ADDS_STOPPED`).
+
+### Added: other activity on the account (`app.py`, `mt5_helper.py`)
+- Positions on the bot's symbol that are not its own (`FOREIGN_POSITIONS`, from the bot's own positions read:
+  `last_foreign`); an old bot alive on the server: on the bot's own MetaTrader 5 the bot does not start, or opens
+  nothing while it runs (whatever the safety switch says), and says so when the account is switched under it; on
+  another MetaTrader 5 a note (`OLD_BOT_RUNNING`). Another program that closes the bot's trades (a closing deal of
+  reason EXPERT with another magic) or holds the old bot's kind of trades blocks the bot through the safety
+  (`OTHER_PROGRAM`).
+
+### Changed: refused orders (`app.py`)
+- `BUY_EXECUTED` and its siblings are logged only for an order that was done; a refused open logs
+  `BUY_REFUSED` / `SELL_REFUSED` / `BUY_MORE_REFUSED` / `SELL_MORE_REFUSED` with the retcode and the broker's
+  comment (the first 3 of a streak one by one, then one line per 30 s; on the Turtle they replace its refusal
+  note). After 240 s of refused opens one attempt per 30 s, after 15 minutes one per 60 s (`open_hold.why`
+  'refused_backoff', with the time of the first refusal); never for a close. An order MetaTrader 5 did not answer is
+  logged as refused with a note, and does not slow the retries.
+
+### Changed: logs, the journal, samples (`tracelog.py`)
+- **Kept:** today and the `LOG_KEEP_DAYS` UTC days before it, by the date in the file name. The events file is a
+  day file now (`<SYMBOL>_<day>_events.jsonl`), and there is a samples file (`<SYMBOL>_<day>_samples.jsonl`, one
+  line a minute). Day caps (50 MB: WARN and ERROR only; 100 MB: one line a minute), a size guard of 500 MB per bot,
+  under 2 GB free no DEBUG / INFO lines and no samples (`DISK_LOW`; orders, fills, closes, warnings, errors and the
+  journal go on), a sweep of old temp files, the newest 400 files of `daily_trade/`.
+- **The permanent journal** `journal/<SYMBOL>_<YYYY>.jsonl`: `start`, `order` (with the quote at the send and the
+  slippage), `trade` (once per closed trade, with its entry context and extremes), `safety`, `skip`, `day`,
+  `issue` (a problem when it starts, changes and ends). `state/<SYMBOL>_journal_state.json` keeps what it needs
+  across restarts.
+- **The trace** gets `branch`, `mode`, `version`, `sizing`, `safety`, `open_hold`, `foreign`; `account` and
+  `health` name the real account by its last 4 digits and say what stops every order (`trading_not_allowed`) and
+  whether the disk is low; every `virtual_*` field is gone (`docs/dashboard-data.md`). A held order is `BLOCKED` or
+  a failing add gate.
+- The trades view shows real numbers: this bot's closed trades since its live start, in dollars.
+- A line or a file that would hold the full account number is written with its last 4 digits.
+
+### Changed: the dashboard (`dashboard.py`)
+- **The safety bar** on every tab: the state, three meters, the PIN field, Unblock / OFF / ON with a confirm
+  dialog each, the other bot's line, the PIN file's path.
+- **Real money:** the badge `LIVE · REAL MONEY`, the account chip with the last 4 digits, the seven tiles on the
+  real account's figures, the branch's own name and magic number (a red chip when the trace is another bot's).
+- **Banners** from the trace's current state (and, for 24 hours, from the issues list and the trades file) for the
+  new warnings; the issue kinds and their advice for every new event, pointing to the README's new sections; the
+  settings from the journal's `start` line; the events day files. The full account number is on no page.
+
+### Changed: the launchers
+- `start_job.bat live`: the only launcher with logic. `setlocal`; its own folder; the branch from
+  `branch_env.bat`; only the word `live`; Python from `find_python.bat`; the packages looked for at every start
+  and installed only when one is missing (no flag file, no unpinned upgrade); the real-money warning and 5 s;
+  then the loop: exit code 78 or 2 stops for good, 0 stops, anything else starts the bot again after 30 s.
+- `start_<symbol>.bat`: three lines that hand over to `start_job.bat`.
+- `start_dashboard.bat`: as before (its own Python environment in `%OUT_DIR%\dash_env`, dash 2.18.2, plotly
+  5.24.1), without a mode and without bracket blocks.
+- New: `branch_env.bat` (`BRANCH`, `SYMBOL`, `OUT_DIR`; the one launcher file that differs between branches),
+  `find_python.bat` (`ALCADEIAS_PYTHON`, then the Administrator's, admin's and the user's Python 3.11),
+  `safety.bat status|unblock|on|off|new-account`, `collect_logs.bat`.
+- Rules for every `.bat`, because none can be run before the server: plain ASCII; no bracket block; `if
+  errorlevel` only on the line after python or pip; exit codes compared as text; no `timeout`; every pause can be
+  switched off with `ALCADEIAS_NO_PAUSE`. `.gitattributes` (`*.bat text eol=crlf`) gives every server CR LF line
+  ends; `.gitignore` keeps `__pycache__/`, `*.pyc` and `dash_env/` out of git.
+
+### Added: the log export (`collect_logs.py`)
+- One zip in `C:\Alcadeias\exports\<BRANCH>_<yyyymmdd_hhmmss>.zip` with `logs/`, `journal/`, `state/`,
+  `daily_trade/`, the top-level `*.json` files of the bot folder and the files of the account folder. Never
+  `mt5_credentials.json`, `safety_pin.txt`, `safety_lockout.json`, `login_attempt.json`, `.git` or `dash_env`,
+  also with the repository cloned inside the bot folder. What a running bot holds open is skipped and listed in
+  `SKIPPED.txt` inside the zip. Refused when less than 2 GB would stay free; the newest 5 zips per branch are kept.
+
+### Changed after the independent review (before release)
+- **A click in a window no longer freezes a bot** (`safety.quick_edit_off`, called first by `app.py` and by
+  `dashboard.py` when it starts as a program; Windows only, never raises): QuickEdit is switched off in the
+  console window. With it on (the default of Windows Server), one click started a selection, and the bot's next
+  print, and with it its whole loop, its stops and its closes, waited until Esc. The window says whether it worked.
+- **No own login while an old bot uses the same MetaTrader 5** (`app.py`, `_login_refusal`): the old-bot rule is
+  now the first rule of every login, at the start and on a reconnect alike (a MetaTrader 5 that restarted and
+  shows no account). Before, a reconnect could log the old bots' MetaTrader 5 into the real account while an old
+  bot ran on it, and the old bot would then trade that account. The window line and the event are those of the
+  start's rule (`OLD_BOT_SAME_TERMINAL`).
+- **The log export holds nothing that gives the account number back** (`collect_logs.py`): in the zip every
+  fingerprint of the account (`login_sha`) is replaced by a random token, the same token for the same value
+  within one zip. Before, the fingerprint and the last 4 digits together gave the whole number back at once.
+- **`safety.bat unblock` repairs a damaged file of the safety** (`safety.py`, `press`): a `safety_restart.json`
+  that is there but cannot be read or parsed is written anew by the command line's `unblock` and `on` (a fresh
+  start of the whole account under a new id), and the answer says so; every other press refuses and tells the
+  owner to run `safety.bat unblock` on the server. Before, every press, the command line included, answered "try
+  again" for good.
+- `README.md`:
+  - "First start" in a new order: MetaTrader 5 is installed (a second installation for a second account on the
+    server) and its `terminal64.exe` noted before the credentials (step 4, before step 5); the port is opened to
+    the owner's own IP before the dashboards start (step 7, before step 8), with "choose Cancel" when Windows asks
+    whether python.exe may accept connections, and a check that Windows Defender Firewall is On. The steps are now
+    4 MetaTrader 5, 5 the credentials, 7 the firewall, 8 the start, 9 the PIN, 10 the page (were 5, 4, 10, 7, 8, 9).
+  - "Rules for every day": never click inside a bot's window (a title that starts with `Select` means the bot is
+    frozen: press Esc; the same in the row "The bot is not running"); never sign out of the server, close the
+    Remote Desktop window instead; after a restart, start the four windows of every account again; Windows Update
+    set to notify only, or at least active hours; one Task Scheduler task per bot and per dashboard ("At log on",
+    "Run only when user is logged on", started in the branch folder with `ALCADEIAS_NO_PAUSE=1`, "Stop the task
+    if it runs longer than" unticked: its default of 3 days would end the restart loop).
+  - What the review changed in the bot: no login beside an old bot, the zip's random tokens, the repair by
+    `safety.bat unblock`, the window line when QuickEdit could not be switched off.
+- `docs/dashboard-data.md`: the README step numbers of the advice texts; `OLD_BOT_SAME_TERMINAL` also means no own
+  login.
+- `tests_demo/test_launchers.py`: every pointer to a step of "First start", in the advice texts of the code and in
+  the README itself, must stand in a sentence about that step (a step that moved and a pointer left behind fail);
+  the new order of "First start"; the daily rules for sign-out, restarts, Windows Update and Task Scheduler; the
+  never-click rule; the README's lines on the review's changes.
+
+### Files
+- `constants.py`: the deployment block, `VERSION`; the demo deployment names removed.
+- `app.py`: `EXIT_OK` / `EXIT_RETRY` / `EXIT_NEEDS_OWNER` and `exit_code`, the mode and the process lock, the
+  credentials and the old-account check, `_same_account`, the attach and login rules (the terminal claims, the
+  login budget), the account claim, state files with their account, `state/live_start.json`, `_sizing_balance` and
+  `sizing_record`, the safety's integration and its gate (`_open_held`, `_opens_check`, `_open_guard`), the close
+  queue, the Turtle after a block (`missed_add`, `adds_stopped` in the side file), foreign positions and the old
+  bot, the `*_REFUSED` events and the slower retry, the poll locals `_sizing` / `_safety` / `_open_hold` /
+  `_foreign`; every demo and virtual wording rewritten.
+- `mt5_helper.py`: `get_cash_deals`, `open_guard` on `buy()` / `sell()`, `last_foreign` and `old_bot_mark`, the
+  quote of an order handed to the observer (no new key in the request).
+- `safety.py` (new): `account_dir`, `mask_login`, `login_sha`; `Limits`, `Tracker`; `read_controls`,
+  `read_statuses`, `pin_path`, `ensure_pin`, `press`, `main`.
+- `tracelog.py`: retention and caps, the journal and its state file, samples, the order and trade lines, the live
+  start for the reporting reads, the trace's new sections, the events of the live layer, the account-number net;
+  every demo and virtual wording rewritten.
+- `dashboard.py`: the safety bar and its callbacks, the real-money tiles, badge and identity line, the banners, the
+  issue kinds, no full account number.
+- `start_job.bat`, `start_<symbol>.bat`, `start_dashboard.bat`, `branch_env.bat`, `find_python.bat`,
+  `safety.bat`, `collect_logs.bat`, `.gitattributes`, `.gitignore`: above.
+- `collect_logs.py` (new): the export.
+- `README.md`: rewritten for the owner (the branch's own table, the first start, the safety, size, logs, every
+  warning). `docs/live-safety.md` (new): the safety's files. `docs/dashboard-data.md`: the real-account fields, the
+  state files, the journal and the samples, the banners.
+- `tests_demo/`: `fake_mt5.py` and `conftest.py` give every test bot a real hedging USD account, its credentials,
+  a private output folder and an `mt5_lock` that raises on a second acquire by the same thread (`StrictLock`); the
+  demo-only tests are replaced by tests of the same property for a real account; new files for the safety
+  (`test_safety_*.py`), the start, guard, claims, login, sizing, refused orders, the safety in the loop and the
+  lock rule (`test_live_*.py`), the equivalence with the demo trees (`test_live_equivalence_demo.py`,
+  `demo_equiv.py`), the trace, the journal and the retention (`test_trace_live.py`, `test_journal.py`,
+  `test_retention.py`), the safety bar (`test_dashboard_safety.py`), the launchers (`test_launchers.py`) and the
+  export (`test_collect_logs.py`). The whole suite takes about 40 minutes in one process.
+
+### Verification
+- **Whole suite** on this code (`tests_demo`, slow tests and the demo proof included, `ALCADEIAS_PROOF=1`, in 5
+  parallel shards): **1,582 passed, 0 failed, 0 skipped** (15 minutes).
+- **The same orders as the tested demo bots** (`test_live_equivalence_demo.py`): for each of the five designs (Gold
+  V3-lite, Gold Top 2, Gold Top 1, BTC Top 2, BTC Turtle System 2) the live bot with the safety OFF, and with the
+  safety ON at its real limits, sends exactly the order requests of the tested demo commit (b3a11f9, 9270618,
+  4581685, da85e9a, 660932b) in every poll, makes the same deals and ends with the same balance; also across a
+  restart inside an open trade, at 3 units, and with half the balance against the demo at twice the step.
+- **End to end** (`test_live_end_to_end.py`): a real replay trips the safety (a block of one bot, and a block of the
+  account); the dashboard shows it from the bot's own files; Unblock, OFF and ON through the dashboard's buttons, with
+  the PIN read from the real PIN file; the bot trades again.
+- **The safety against its calibration:** during the build the rules gave the same blocks as the calibration replay
+  (`backtesting/research/live_safety.py` on `backtest_hedging`) on random accounts, 0 differences in about 20,000
+  blocks; `test_safety_replay.py` repeats a smaller check in every run.
+- **Independent review** of the code by four reviewers: 14 findings, none critical. The 4 important and 7 of the
+  minor ones are fixed in this entry, each with a test. Known limits below.
+- **Each of the 20 branches, at the cut**, checked by the branch generator and by a separately written checker (249
+  checks, all passed): its parent is its `hedging_<symbol><n>` and it tracks nothing; every file but the stamped ones
+  is the code line's; the design block is the tested demo commit's; the deployment block equals the table;
+  `mt5_credentials.json` is the old branch's file, unchanged, and a start with it is refused (exit 78, no call to
+  MetaTrader 5) because it names an old account; each branch's own tests (deployment, launchers, design, export):
+  215 passed.
+- **Not verified:** nothing has run on Windows or against a real MetaTrader 5: the launchers, the one-process lock,
+  the console setting, the files on a Windows disk. Do the first start of each account while you watch (README,
+  section 2).
+- **Known limits** (rare; left for a later version):
+  - A loss followed within a few seconds by a deposit can be counted smaller than it was by the drop and day rules.
+  - A losing trade can be missed by the losing-trades count if the safety's file cannot be saved and the bot stops
+    before the next save.
+  - Wrong PINs typed on both dashboards of an account in the same moment are counted separately: the lock can need
+    up to about 10 wrong PINs instead of 5.
+  - `terminal_claims\*.json` keeps the MetaTrader 5 path as written; it is never put in a zip or on a page.
+
+### Rollback
+- **To trade without the safety:** the OFF button of the dashboard, or `safety.bat off` on the server. The bots
+  then trade exactly as the strategy says. Nothing has to be changed in the code.
+- **To stop a bot:** close its window. Its open trades stay open with their broker-side stop only; close them by
+  hand if the bot is not to come back.
+- **To take this version off a server:** stop the bots and the dashboards of the account, then delete the clone
+  folders. The bot's files are in `C:\Alcadeias\live<n>_<code>` (logs, journal, state, `dash_env`), the
+  account's in `C:\Alcadeias\live<n>_account`, the exports in `C:\Alcadeias\exports`, the terminal claims in
+  `C:\Alcadeias\terminal_claims`: delete them by hand when they are no longer wanted. Nothing else on the server
+  is changed (the shared Python gets the packages of `requirements.txt` only when one was missing).
+- **A faulty later version** is reverted with `git revert` on top of `origin/live<n>_<code>` (never a reset, never
+  a force-push; see "Updating a live branch"). The demo branches and the old real-money branches were never
+  touched: they run as before.
+
+---
+
+## [v3.9.2-demo.8] — 2026-11-17 — Demo branches: the live bots' MetaTrader 5 is used while it holds this bot's demo account [demo only]
+
+**Why:** on the owner's demo server the MetaTrader 5 at `C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe` (the path
+the live branches use) is logged into the slot's demo account by hand, and no live bot runs there. demo.5 refused that
+path before attaching, so the bot never started ("Refused before attaching to any terminal: LIVE_TERMINAL_PATH ...").
+
+**What changed:**
+- On that path the bot now attaches, and never logs in. It trades only while the terminal already holds this bot's own
+  demo account (the login and server of the credentials).
+- Another account there: `TERMINAL_IN_USE`, as on any terminal (no login; the terminal is left as it is).
+- No account there for the whole 15 s grace: `LIVE_TERMINAL_PATH`, no login; the bot detaches and tries again (the
+  launcher every 30 s; the strategy log at most every 15 minutes). The line says what to do: log that MetaTrader 5 into
+  the slot's demo account by hand, or give the slot its own MetaTrader 5.
+- An empty `terminal_path` is still refused before the bot attaches to any terminal.
+- What stays safe: the bot never calls `login()` on the live bots' MetaTrader 5, so it can never switch that terminal's
+  account; every order is still checked against this branch's demo account first.
+
+**Files:** `app.py` (`initialize_mt5`, `_terminal_path_problem`, `_never_login_here`,
+`_no_account_on_live_terminal_problem`); `tracelog.py` and `dashboard.py` (the wording of `LIVE_TERMINAL_PATH`);
+`tests_demo/test_live_terminal.py` (rewritten for the new rule); `test_tracelog.py` and `test_dashboard.py` (their refused
+start now uses an empty `terminal_path`); `README.md`.
+
+---
+
+## [v3.9.2-demo.7] — unreleased — Demo branches: the new dashboard (what the bot does and why, the chart, the log) [demo only]
+
+**Branches:** the six demo branches (`demo_hedging_xauusd6/7/8`, `demo_hedging_btcusd6/7/8`; written on
+`wip_dash_turtle`, which carries the trace of both strategies; ported onto `demo_hedging_btcusd6` v3.9.2-demo.4 as
+`wip_port_btcusd6`, then merged onto v3.9.2-demo.5, the third fix round, as `wip_merge_btcusd6`). One `dashboard.py` for the basket and the Turtle.
+**NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** `dashboard.py` (rewritten),
+`assets/dark-dropdown.css` (removed), `start_dashboard.bat` (the pinned install, no wrong address), new
+`tests_demo/test_dashboard.py`, `tests_demo/test_design.py` and
+`tests_demo/test_turtle_bot.py` (their tests of the old slope panel removed), `README.md` (the dashboard),
+`docs/dashboard-data.md` (§6) (+ this `CHANGELOG.md`). `app.py`, `tracelog.py`, `turtle.py`, `strategy.py`,
+`indicator.py`, `mt5_helper.py`, `constants.py` untouched: nothing the bot does changes. **Baseline:** v3.9.2-demo.6.
+Not released yet: later fixes are folded into this entry (the review's fixes: below).
+
+### Added with the merge onto v3.9.2-demo.5 (the third fix round)
+- **A refused start shows on every tab.** When the newest ERROR START line of the events file is newer than the trace
+  and than the last 'trading loop started' line, the bot is not running. The status bar then has a red chip 'Not
+  started: LIVE_TERMINAL_PATH (09:10)' and a red box: what the bot wrote, what it means and what to do. Before, a bot
+  refused on LIVE_TERMINAL_PATH showed only 'No trace file: the bot has not written yet', or its last, stale poll. For
+  LIVE_TERMINAL_PATH the box says: 'Install a separate MetaTrader 5 for slot 6 in its own folder (for example
+  C:\MT5\slot6) and set terminal_path in mt5_credentials.json to its terminal64.exe. Then open it and log it into the
+  slot's demo account once by hand, with "Save password" ticked (README, How to run, steps 1 and 2).' A job that
+  ended with an error says 'Stopped'.
+- **Changes & issues.** LIVE_TERMINAL_PATH and TERMINAL_IN_USE say what the third fix round does and what to do.
+  (Before: 'Give this demo slot its own MT5 terminal folder', and 'log that terminal into the demo account', which on
+  a shared terminal would switch another program's account.) New kinds: `ACCOUNT_NOT_KNOWN`, `BOT_LOGIN`,
+  `START_FAILED`, `CLOSE_NOTHING`; `CLOSE_INCOMPLETE` also covers an add not listed yet. The attempt lines of a refused
+  start and its last line name the problem, so they count with it: 5 lines (the refusal, three attempts, the end).
+- **A leg not listed yet** (`basket.open.unlisted`, the basket branches): the position card has the chip 'N leg(s)
+  not listed yet', a line with each one (kind, lots, price, age) and that the P/L, the stop and the target use the
+  listed legs until the terminal lists it; the legs table has its row, 'not listed yet'.
+- Tests: `test_dashboard.py` +3 (a start refused on the live terminal, from the bot's own files: the chip, the box,
+  what to do, LIVE_TERMINAL_PATH first in Changes & issues, and no box once the loop has started; an old refusal and
+  the new kinds; a leg not listed yet on the position card).
+
+### Added before release: the owner's requests of 16 Nov 2026
+The owner saw the old dashboard still running on the server and asked again for: an OHLC chart with the opening and
+closing points and the past trades; the open position with its target, its stop loss and every handy detail; a warning
+when the target or the stop is close; a detailed change log with the issues. The page had most of the chart; these are
+added or made clearer:
+- **How close is it** (Live, at the top). For an open basket: a meter to the target and a meter to the stop loss. Each
+  says the percent of the way (the P/L against the target or the stop in $), the distance in price and in $. It turns
+  **amber from 70 %** and **red from 90 %**. A third meter shows the way to the next add (neutral). For a Turtle trade:
+  the stop (the meter fills over the 2N stop distance) and the next add; it has no target, and the page says so. For a
+  flat bot: which entry conditions pass and which one is missing ('Waiting for: M15 vote — now 0; needs +1'); on the
+  Turtle branches also a meter to today's BUY and SELL level (it fills over the last 2 N; 'reached' at the level).
+- **Handy figures** under the meters: P/L in $ and in price, time in the trade, legs and lot, the virtual balance, the
+  spread with the bid and ask, the last tick and its age.
+- **The alert banner** on every tab: amber or red with the words of the meter that is close ('BUY basket 95% of the way
+  to its target ($0.10 to go)'). In the tab bar, **sound** (a short beep, two for amber, three for red) and **browser
+  notification** can be ticked; the browser remembers them. They fire when an alert starts or gets worse, once each. A
+  stale trace gives no alert.
+- **The chart.** Green and red candles (they were grey). The open position is shaded: green from its average price to the
+  target, red to the stop. Every level's tag has its distance from the price it is compared with ('TARGET 1,806.853 ·
+  +2.704'). The chart opens on the newest 160 bars and the whole open position; drag or zoom out for the rest.
+  The live part of the page is now in this order: what the bot does and how close it is, the chart, the checks and the
+  strategy, the open position, the latest events.
+- **Changes & issues** (a new tab). *Issues from the log*: every WARN and ERROR line of the events file, grouped by kind
+  (`TERMINAL_IN_USE`, `LIVE_TERMINAL_PATH`, `ACCOUNT_REFUSED`, `RECONNECT_FAILED`, `TERMINAL_ERROR`, `POLL_FAILED`,
+  `TRACE_FAILED`, `WRITE_FAILED`, `CLOSE_INCOMPLETE`, `CLOSED_OUTSIDE`, `D1_LATE`, `ORDER_REFUSED`, `MT5_INIT_FAILED`; since the merge also
+  `ACCOUNT_NOT_KNOWN`, `BOT_LOGIN`, `START_FAILED`, `CLOSE_NOTHING`; any other by its
+  category and the shape of its message), errors first: how many, how many in the last 24 h, the first and the last time,
+  'in the last hour', what it means and what to do, the last line. *Changes*: this branch's `CHANGELOG.md`, one row per
+  version (version, date, title), the newest open; click a row to read it.
+
+### Fixed before release: the final reviews of the dashboard
+- **The page shows no folder of the PC.** The bot's ERROR lines carry tracebacks with full paths, so the event rows, the
+  raw text and the issue list named the bot folder (where `mt5_credentials.json` is) and the Windows user. Now every line
+  the page shows from the logs goes through `_scrub`: 'File "app.py", line 12', 'the bot folder', 'OUTPUT_DIR', '~' for
+  the user's folder. The settings (OUTPUT_DIR as the bot logged it), the raw files and the old strategy log go through it
+  too; it also knows a Windows folder written inside JSON (`C:\\Alcadeias\\...`). The footer says 'reads the bot's
+  output folder (OUTPUT_DIR)'. Only the Log tab's copy box keeps the full path of the day's file (that is the file to
+  send).
+- **The dashboard holds a file only to read it.** `read_json` parsed inside `with open(...)`: a full trades.json stayed
+  open 10 to 43 ms, longer than the bot's retry, so on Windows the bot's write could fail. Now it reads the bytes,
+  closes the file, then parses (about 1 ms open).
+- **A day named in capitals is listed and downloaded** (`log_files` matches without case; see v3.9.2-demo.6).
+- **A short Turtle trade's NEXT ADD hover** said 'next leg at bid ≥ this (the last fill + 0.5N)'. Now 'next leg when the
+  bid ≤ this (the last fill - 0.5N)'; a long's says 'ask ≥ ... + 0.5N'.
+- **A request path with `..` or a backslash gets a plain 404.** Dash's `/_dash-component-suites/` route answered such a
+  path with a 500 and a stack trace in the console.
+- **`start_dashboard.bat`** goes to its own folder first (`cd /d "%~dp0"`: it works from Task Scheduler or a shortcut)
+  and writes its 'installed' flag only when pip succeeded (a failed install was never tried again).
+- Found in the final screenshots and browser checks, and changed: the Changes & issues tab opens its first row (the
+  newest error), so 'What it means' and 'What to do' show at once; a flat basket bot (no meter) shows no 'amber from
+  70 %' hint; a basket whose price has passed the add gap says 'reached (0.398 beyond it)' (it said '100% of the way
+  ... 0.398 away'); the CHANGELOG is drawn once and again only when the file changes (redrawn every minute, the
+  browser's code highlighter went over its own output again: a console warning each time); the alert's beep closes
+  its audio context after 1.5 s (a page open for weeks kept one per alert).
+- Tests: `test_dashboard.py` +9 (the basket's meters, the banner and the stale case; the Turtle's meters; a flat
+  Turtle's entry meters; a real short trade's hovers and meters, from the bot's own trace; the Changes & issues tab;
+  no folder of the PC on the page, the settings and the raw files included; a day named in capitals; a file held only
+  to read it; the 404). The HTTP test skips the alert's two browser-only callbacks. On a basket branch the file has
+  25 passed and 5 skipped (the Turtle's); on a Turtle branch 30 passed.
+- Re-tested on 16 Nov 2026 on the port branches (`wip_port_*`, before the merge onto v3.9.2-demo.5). The whole
+  `tests_demo`: 184 passed and 5 skipped on each basket branch
+  (the Turtle tests of `test_dashboard.py` skip), 258 passed on each Turtle branch. After the last dashboard changes,
+  `test_dashboard.py` again on all six, and with the pinned Dash 2.18.2 / plotly 5.24.1. `demo_parity` on the four
+  windows: the same polls, fills and balance as before (V3-lite 133,228 / 4 / $1,853.57; Top 2 on gold 93,359 / 4 /
+  $2,045.29; Top 1 53,960 / 6 / $2,017.85; Top 2 on BTC 111,568 / 4 / $1,977.91), 0 mismatches, every other field the
+  same as on the demo head. The Turtle's eight-year replay: System 1 88 trades, $6,977.48; System 2 60 trades,
+  $7,814.72; 0 votes differ. Headless Chrome: 12 views (an open basket, near the target, near the stop, flat and
+  blocked, stale, `python dashboard.py`; the Turtle open, near the stop, armed, blocked by the vote, orders used) with
+  Dash 2.14.2 and 2.18.2: 24 of 24 without an error or a console message. The exposure check: 4 runs of 1,907
+  requests, no fake secret and no folder came back.
+
+### Fixed before release: the review of the dashboard
+- **No request can read a file outside the output folder.** The dashboard listens on `0.0.0.0` (as the live bots) and
+  has no login, and Dash does not check a value against its options: a client could send a symbol such as
+  `..\..\<folder>\mt5_credentials` and the raw view showed that file (the review read a fake password that way),
+  and the download sent any `*.log` it could reach. Now every callback takes the symbol only when `symbols()` lists it
+  (the trace files of `OUTPUT_DIR`, else `symbols.json`; plain names only) and a day only when it reads `YYYY-MM-DD`
+  and that day's file exists; the raw views and the download use a fixed list of file names; `_path()` refuses any
+  path that leaves `OUTPUT_DIR` (`..`, an absolute path, another drive). Error cards show file names, not folders;
+  the raw views and the problem lines name files by their place in the output folder (`logs/BTCUSDm_events.jsonl`).
+  The paths to copy on the Log tab stay full (that is the file to send). `DASHBOARD_HOST` is still `0.0.0.0`:
+  the README says who can see the page and how to close the port.
+- **A trace the bot stopped writing is shown as its last poll, not as now.** Before, only the first chip was red:
+  'Demo account', 'Terminal connected', 'Market open · last tick <1 s ago' (the age stored at the poll) and 'No errors
+  in the last hour' stayed green. Now, when the trace is older than 60 s: every chip but the age is neutral and says
+  'as of HH:MM'; the market chip counts the last tick's age now; the errors are counted from the events file (it keeps
+  getting ERROR lines when the loop fails before its trace hook); a red banner above the headline says the bot has
+  not written since HH:MM and that everything below is its last poll; the strategy, the checks, the position card and
+  the uptime tile say so too. A skipped poll (fresh) shows 'Market: unknown (terminal not read)' (it said 'Market
+  closed (OPEN)') and 'votes kept from the last poll'.
+- **A missing trades.json is said, an old one has its time.** Before: 'No trade yet' / 'No closed trade yet' when
+  the file was missing. Now the Trades tab, the balance chart, the position card and the chart note say
+  `<SYMBOL>_trades.json is missing` (or unreadable): the closed trades are not known. The Trades tab shows when the
+  file was written; older than 3 minutes (the bot rewrites it at least every minute) it warns that the trades are
+  as of then.
+- **A close is shown with the side of its position**: 'CLOSE SELL position 100001 (BUY order, 0.01 lot)' (it said
+  'CLOSE BUY 0.01 lot (position 100001)' for the close of a SELL). A trace written before the fix is read the same way.
+- **Levels judged on the ask.** The candles are bid prices. A level the bot compares with the ask (a sell basket's
+  stop, target and broker stops; a buy basket's next add; today's BUY LEVEL; a short's stop and broker stops; a long's
+  next add) has '(ask)' in its tag and hover, and an ASK line is drawn next to the BID line.
+- **The Turtle's BUY / SELL LEVEL is an entry trigger only while the day's orders are armed and no trade is open.**
+  Used, or with a trade open, the two lines are drawn faint and dotted, with a second line in the tag: 'used, new
+  orders at 00:00' or 'no entry while in a trade' (on M1 to H1, and the day's step on D1). The right margin grows
+  to the widest tag.
+- The Log tab's search box says 'then press Enter' (it applies on Enter, one request, not one per key).
+- `start_dashboard.bat`: `pip install dash==2.18.2 plotly==5.24.1`, the versions `requirements.txt` pins (it ran an
+  unpinned `pip install dash plotly`, which could install Dash 3 or plotly 6); the flag file now names the versions,
+  so a PC with the old flag installs them once. It no longer prints `http://localhost:8050` (the wrong port):
+  `dashboard.py` prints its own address (port 8071 here).
+- The shared-account tile says 'the slot's 2 bots' (it said 'all 6 bots'; each slot's gold and BTC bot share one
+  account).
+- Found in the browser check of these fixes, and fixed with them: the Turtle's orders panel said 'BUY level reached
+  ...; needs the M15 vote +1' while the orders were used or a trade was open (now 'BUY level passed ...: no entry, a
+  trade is open' / '... today's orders are used'); a missing trades.json still showed a summary of zeros (now only the
+  note); an order's retcode read '10,009' (now 10009); a PC whose clock is behind the bot's showed a negative tick age
+  as 'hours ago' (now the bot's own tick age).
+- Checked with the pinned versions: `test_dashboard.py` in a venv with Dash 2.18.2 / plotly 5.24.1 (and with the
+  local Dash 2.14.2 / plotly 5.18), and every tab in headless Chrome on both. Nothing differed.
+
+**Why.** The owner: the old dashboard was built for the old live logic; he wants to see every detail of what is
+triggered and how, in a clean layout, an OHLC chart with the opening and closing points and the targets, and a
+detailed text log he can send when something goes wrong. The bot already writes all of it (v3.9.2-demo.6,
+`docs/dashboard-data.md`); this is the page that shows it.
+
+### Changed: `dashboard.py` (Dash, reads OUTPUT_DIR only; no terminal call, no MetaTrader5 import)
+- **Status bar** on every tab: symbol, design, branch, magic, strategy; chips (a shape as well as a colour): the
+  trace's age (fresh < 15 s, slow < 60 s, stale after: red), the demo-account check (`health.account_ok`, demo,
+  hedging), the terminal, the market and the last tick, errors in the last hour, a poll that could not read the
+  terminal; tiles: virtual balance (start, date), unit and lot (next unit at), this bot's open / closed P/L and
+  equity, the shared demo account, the bot's uptime, poll, loop and trace ms.
+- **Live**: *What the bot is doing now* (the action, the trace's headline, reason / side / the deciding gate / the
+  strategy's signals, this poll's orders with retcode, prices, sl, ms; a banner when the poll is stale); **the bot's
+  checks** in its order, grouped (conditions: the first not met decides; exits: any one fires; adds: all must hold),
+  ✓ / ✗ / ⚡ / ○ / –, value against the rule, the note, "decides" and "not reached this poll" marks; **the strategy**:
+  basket: open and agreement scores on meters against ±ENTRY_S / ±ENTRY_AGREE_S (force-close named only when
+  `force_close_enabled`; the old force-close gauge is gone), the votes per timeframe (roles, RSI / MACD vote, now,
+  pivot side / value / bars ago, slope, the contributions to the scores) with a small chart of each (the series,
+  the pivot, the slope to now), the trend tile, the volatility-unit tile, the pause countdown, what a new basket
+  would get (BUY / SELL entry, target, stop, backstop), the RSI of every fetched timeframe; Turtle: today's entry
+  orders (armed / used / none, a gauge from the sell to the buy level with the price, distances in price and N, a
+  level reached and the vote it needs, the last exit), N / 2N / 0.5N / the exit channel, the M15 vote of the last
+  closed bar (its RSI and MACD parts, rule, the two small charts with the signal line), the D1 channels (10 / 20 /
+  55-day highs and lows and their days, the last D1 bar, bars used, the next D1 close, a late D1 bar), System 1's
+  filter and its hypothetical trades, what a new trade would get. **Price chart** (plotly candles of the bid, M1 / M5 /
+  M15 / H1 / D1, the forming bar moved with the trace's bid, weekend gaps left out): entries ▲ / ▼ per leg, exits ✕
+  green / red with reason and P/L, a dotted line from every leg to its exit coloured by the result, the open legs and
+  a dashed line from each to the price now; the open basket's TARGET, STOP, AVG, BACKSTOP (per leg), NEXT ADD and the
+  Turtle's stop as a step line through every move, NEXT ADD, BACKSTOP, AVG, today's BUY / SELL LEVEL and the exit
+  channel of the open side (on D1 the buy / sell / exit levels of the last 200 days as steps), the BID; every level
+  labelled by a price tag at the right edge (spread so none covers another; a level far off the candles gets a tag
+  with ▲ / ▼ at the edge instead of squeezing them); hover for every detail; zoom and pan kept across refreshes.
+  **Open position**: the basket's P/L on a meter between its stop and its target, the ladder (next add on which
+  timeframe and trigger, armed, at which price), the levels, the legs (ticket, time, price, lots, P/L, swap, broker
+  sl, listed); the Turtle trade's price on a meter between its stop and its next add, the levels (entry level, N at
+  the entry, the stop and its origin, 2N, the channel, the backstops), the legs, every stop move and why; when flat,
+  the last trade. **Latest events**: the newest orders, fills, closes, warnings, errors and changes of action, and
+  the path of today's text log with a copy button.
+- **Trades**: summary tiles (closed, wins / losses, win rate, net, gross won / lost, largest loss, best, max drawdown of
+  the virtual balance with its time, virtual balance and return, profit factor, average hold, exits by reason), the
+  virtual balance after every close (dots green / red per trade, the drawdown below the running peak shaded, a dotted
+  line to the equity now with the open P/L), every trade newest first with the open one on top: click a row for its
+  legs, its P/L parts, the reason the bot recorded and, for a Turtle trade, its journal (N at the entry, entry level
+  and D1 bar, vote, unit, every leg's add level and backstop, every stop move, the exit).
+- **Log**: the path of today's text log and of the events file (copy buttons), the days with their sizes and a
+  download button; the events newest first with level chips (ERROR / WARN / ORDER / FILL / CLOSE / INFO / DEBUG),
+  a search (message, category, values), heartbeats and start-up settings on request, 200 / 500 / 2000 lines, live or
+  paused (an opened line stays open), a day separator; click a line for its key=value pairs, its data and its
+  traceback; or the raw text of a day's file (the same filters).
+- **History & settings**: the old daily-trade view (per server day, the deal P/L bars and the cumulative line, day
+  chips instead of the dropdown), the lifetime summary, the old strategy log; the settings the bot logged at its
+  start (the design and its levers, this deployment, every other setting, the start-up notes), each marked "design"
+  when the branch's design block sets it and "constants.py now: …" when the file has changed since (`constants.py`
+  itself when the start-up lines cannot be found); the raw files (trace, trades, old status, account, state files,
+  bars without the columns).
+- Kept: the imports from `constants` by name (the same 15 names), `DASHBOARD_REFRESH_INTERVAL`, host and port, the
+  mascot. Dropped: the old slope panel and its gauges (the force-close gauge with it), the SHA panel, the raw JSON of
+  `<SYMBOL>.json` as the main view, the dropdown styles. `app.run(debug=False)` (the old one ran with `debug=True`:
+  Flask's debugger on 0.0.0.0); it prints its URL at the start. The browser tab's title is the branch.
+- Robust: every file is read when it changed (cached by size and time), the events file from its newest 3 MB, the
+  text log from its newest 512 KB; a file missing, cut or with nulls anywhere shows an empty state; a view that
+  still fails shows its error and traceback in its own card, the rest of the page stays. Times on the charts are UTC
+  wall-clock text (plotly shows numbers in the browser's time zone, which shifted every mark by the PC's UTC offset
+  in the first draft).
+- Colours: the brand's gold as the one accent; green / red only for profit / loss and pass / fail; candles in two
+  greys so the bot's marks stand out; the chart's identity colours (gold, blue, green, red) checked for colour-blind
+  separation (OKLab ΔE ≥ 8 for every pair) and contrast on the dark surface.
+
+### Removed
+- `assets/dark-dropdown.css`: no dropdown is left, and its unscoped selectors (`div[class*="group"]`,
+  `div[class*="-menu"]` ...) restyled any element whose class held those words. The new styles are in
+  `dashboard.py` itself, so it needs no file from `assets/` but the mascot.
+
+### Tests
+- `tests_demo/test_dashboard.py` (13): a basket replay (the scaled design, seed 4) and the Turtle's long trip run with
+  the real writers; their folders in an open position and at the end feed every view of every tab: no error card,
+  the headline, every gate, the scores / votes / tiles (basket), the orders / N / vote / channels (Turtle), the open
+  basket's and the Turtle trade's levels as price tags on the chart (never overlapping), the stop's steps, the
+  entries and exits counted, the candles on UTC time, the trades and the summary, the log's level filter, search,
+  heartbeats, raw text and download, the settings the bot started with; an empty folder, files cut in the middle,
+  every field null, a stale trace with a refused account and errors; the force-close text follows the design; the
+  dashboard imports no terminal package and keeps its 15 imports from `constants`.
+- The review's fixes, 8 more tests (21 in all; each fails on the code before its fix): a fake secret one and two
+  folders above `OUTPUT_DIR` and symbol / day values that climb out (`../`, Windows backslashes, absolute paths, an
+  empty string, `None`), sent to every callback function and as HTTP POSTs to a running server's
+  `/_dash-update-component` (every answer 200 / 204, none holds the secret, the download decoded); a trace two hours
+  old (no green chip, 'as of', the tick's age now, the errors from the log, the banner); a skipped poll (market
+  unknown, votes kept); a missing and an old `trades.json`; a close's side; the '(ask)' tags and the ASK line; the
+  Turtle's muted levels (made-up trace, so it runs on every branch); the launcher's pins; the search box's hint.
+- `test_design.py::test_dashboard_still_imports_and_draws_the_new_analysis` and
+  `test_turtle_bot.py::test_the_dashboard_draws_the_turtle` removed: they drew the old slope panel.
+- The whole `tests_demo` on `wip_dash_turtle`: 200 passed (test_turtle_replay.py against the backtester included),
+  25 min.
+- On this port (`wip_port_btcusd6`: v3.9.2-demo.6 and .7 on the code of v3.9.2-demo.4), the whole `tests_demo`:
+  228 passed (test_turtle_replay.py against the backtester included: System 1 48 trades and System 2 33, the same
+  trades and account as the backtest, 0 votes different), 26 min.
+  The dashboard also draws the trace of every path of v3.9.2-demo.4 without an error card (a scratch check of
+  every view, not in `tests_demo`).
+- With the review's fixes (2026-11-16, on a PC busy with other jobs): `test_dashboard.py` 21 passed with Dash
+  2.14.2 / plotly 5.18 and 21 passed with the pinned Dash 2.18.2 / plotly 5.24.1 (a venv), `test_design.py` 21,
+  `test_tracelog.py` 30, `test_live_equivalence.py` 2, `test_turtle_trace.py` 23, `test_turtle_bot.py` 18 passed.
+  The rest of `tests_demo` was not run again end to end on the final code.
+- Seen in a browser: headless Chrome screenshots of every tab on a basket replay (the scaled design, an open basket
+  with its add armed after 11 closed ones) and on a two-day Turtle replay (a failed breakout stopped out, then a
+  breakout holding three legs; a flat, BLOCKED state by the vote), from the bot's own writers on the fake terminal.
+- On `wip_merge_btcusd6` (this entry and v3.9.2-demo.6 merged onto v3.9.2-demo.5): 14 test files (test_tracelog,
+  test_dashboard, test_design, test_live_equivalence, test_terminal_in_use, test_reconnect, test_partial_close,
+  test_demo_account, test_live_terminal, test_pending_fill, test_no_writes_outside_tmp, test_turtle_trace,
+  test_turtle_bot, test_turtle_safety) 237 passed, 13 min; test_dashboard.py again after its last change: 33 passed.
+  Seen in headless Chrome on the merged branch: the Live tab and Changes & issues of a basket bot refused an hour
+  after its last poll, of a Turtle bot that never started, and of both bots trading (screenshots; not in
+  `tests_demo`).
+
+### Notes for the other demo branches
+- Take `dashboard.py`, `tests_demo/test_dashboard.py`, the two test removals and the `assets/dark-dropdown.css`
+  removal together (the old tests import `dashboard.build_slope_panel`, which is gone). On a branch without
+  `turtle.py` the Turtle tests of `test_dashboard.py` skip. The page needs the trace of v3.9.2-demo.6; without it,
+  it says so.
+
+### Rollback
+`git revert` this commit (the old dashboard comes back; the bot's files are the same either way).
+
+---
+
+## [v3.9.2-demo.6] — unreleased — Demo branches: the bot writes the dashboard's data and a detailed text log [demo only]
+
+**Branches:** the `demo_hedging_*` branches (written on `wip_dash_basket`, a copy of an older
+`demo_hedging_xauusd6`, and carried to `wip_dash_turtle`; ported onto `demo_hedging_btcusd6` v3.9.2-demo.4 as
+`wip_port_btcusd6`, then merged onto v3.9.2-demo.5, the third fix round, as `wip_merge_btcusd6`). **NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** new
+`tracelog.py`, new `docs/dashboard-data.md`, `app.py` (the basket loop and the Turtle's `_process_turtle`,
+`_load_turtle_state`, `_save_turtle_state`: trace hooks only; the wording of the Turtle's D1 note), `mt5_helper.py`,
+`tests_demo/` (new `test_tracelog.py`,
+`test_turtle_trace.py`; + this `CHANGELOG.md`, `README.md`). `turtle.py`, `strategy.py`, `indicator.py`,
+`constants.py`, `dashboard.py` untouched. **Baseline:** v3.9.2-demo.5. Not released yet: later fixes are folded
+into this entry (the review's fixes: below).
+
+### Added with the merge onto v3.9.2-demo.5: the third fix round's paths in the trace and the log
+The third fix round came after this entry was written. Its code stays exactly as it is; the trace was hooked into its
+new paths, after a check of what the trace already reported. In `app.py` only read-only lines (`_boot`, and a check in
+`_boot_flush` that only decides whether to write); the rest is in `tracelog.py`.
+- **LIVE_TERMINAL_PATH** (terminal_path names the live bots' MetaTrader 5, or is empty): one ERROR START line with
+  the problem once and what to do: 'LIVE_TERMINAL_PATH: terminal_path ... is the MetaTrader 5 of the live bots (...):
+  install a separate MetaTrader 5 for slot 6 and set terminal_path in mt5_credentials.json to its terminal64.exe. The
+  bot attached to no terminal and does not trade ...'. Without this, it would have been a generic EVENT line that
+  named LIVE_TERMINAL_PATH twice. The job's last line names the problem: 'all 3 start attempts failed
+  (LIVE_TERMINAL_PATH: ...)'.
+- **Once per the limit, in the text log too.** The strategy log has the refusal at most every 15 minutes, also across
+  the launcher's restarts. The text log now follows it: a start whose refusal the limit holds back writes no line at
+  all (before: 7 lines at every restart, every 40 s or so, about 630 an hour). The first start after the 15 minutes
+  writes the whole block again. The same holds for a start refused on TERMINAL_IN_USE. A start whose other attempt
+  failed another way is written whole (the final step's fix, below).
+- **The wait for the terminal's account** (the 15 s of fix B): 'the terminal shows no account yet (account_info()
+  answered None, last_error ...): the bot reads it again every second for up to 15 s before any login' (INFO
+  ACCOUNT); an IPC error: 'no login: account not known: ...; the bot detached and tries again later' (WARN ACCOUNT);
+  no account for 15 s: 'the terminal showed no account for 15 s: the bot logs in itself (login N on SERVER). Log this
+  MetaTrader 5 into the slot's demo account once by hand, with Save password (README, How to run, step 2) ...' (WARN
+  ACCOUNT). No password is ever written.
+- **The limits per problem** (fix D): the RECONNECT_FAILED line says the limit is per reason and counts the attempts
+  with that reason since its last line ('3 more failed attempt(s) with this reason since its last RECONNECT_FAILED').
+  The trace's hook in `_try_reconnect` reads the per-reason table (`_reconnect_logged.get(why) == (now, 0)`): the old
+  test, a tuple compared with the new dict, was always false and would have added a WARN line to every logged
+  attempt. TERMINAL_IN_USE: 'once for each account the terminal holds'.
+- **A fill is a leg from the order's answer** (fix E, `_record_fill`; the basket branches): the BASKET line of an entry
+  or an add says 'position N is a leg of the basket from its fill (its id from the order's answer; the terminal lists
+  it within 10 s)', with `recorded=N`; the poll that lists it has a DEBUG line. `basket.open.unlisted` lists the legs
+  not listed yet (price, lots, age). An entry gone before the terminal ever listed it has its own CLOSE line. A close
+  that could not reach an add not listed yet says 'is incomplete: ... not listed by the terminal yet ...: the basket
+  stays open' (before: 'BUY basket closed', while the bot kept the basket).
+- **A close that closed nothing** (close_by_type found none of this bot's positions): WARN CLOSE '... closed nothing
+  ...; nothing is booked, and the close is decided again next poll', and the headline says it (before: 'is incomplete:
+  0 closed, 0 failed'). Here, on the Turtle (fix C): 'the trade stays booked, and the close is decided again next
+  poll' (before: '... the rest is closed next poll, whatever the price'); the next close says 'on the next try (the
+  close at the stop ... of HH:MM had closed nothing)'; if the legs are gone by then: 'the trade ended: its N leg(s) are
+  gone, and the bot's close of HH:MM had closed nothing, so they were closed outside the bot first ...'.
+- Tests: `test_tracelog.py` +4 (the refused start and its limit over 12 launcher starts; the wait, the IPC
+  error and the bot's own login; the recorded fills in the replay; a close that closed nothing and one that waits for
+  an add not listed yet).
+  Here also `test_turtle_trace.py` +2 (a close that closed nothing, then closed on the next try; the legs gone
+  before it). `conftest.py` keeps the third fix round's redirect and write check as they are;
+  this entry's session fixture now sets only the trace folder of a bot without one (`F.TRACE_ROOT`, a pytest temp
+  folder). It no longer points `DEFAULTS['OUTPUT_DIR']` at one shared folder, so every bot keeps its own folder in the
+  test's tmp_path.
+
+### Fixed before release: the review of the merge (the final step)
+- **An entry gone before the terminal listed it** (the basket branches; fix E's case: its broker backstop closed it
+  while the bot or the terminal was down). The merge's CLOSE line for it raised `UnboundLocalError` (its second half
+  was never set). It failed on that poll and on every poll after it until the bot's next close. The log got an ERROR
+  TRACE line, the status bar a red count (1,204 errors in an hour in the review's replay), no CLOSE and no PAUSE
+  line, and a basket after it 'replaced the BUY one' on every poll. The trading was not affected. Now there is one
+  CLOSE line: 'the BUY entry [N] is gone before the terminal listed it (its broker backstop while the bot or the
+  terminal was down?): booked as closed outside the bot, with the pause after a loss if it lost: realised -$11.54,
+  its closing deal at ... (deal history)'. The PAUSE line follows it.
+- **A line of the transitions that fails is not tried again on every poll** (basket and Turtle). When the transitions
+  step of a poll raises, the poll hook (`_transitions_step`) still keeps that poll's book for the next poll. The error
+  is written once (before: again on every poll until the book changed, hours in a pause after a loss).
+- **A refused start is held back only when all 3 attempts were held back.** The 15-minute limit skips the text log of
+  a start only when each of its 3 attempts was refused on a problem the limit held back (LIVE_TERMINAL_PATH,
+  TERMINAL_IN_USE). Before, the check read only the problem of the last attempt, or one left from an earlier attempt.
+  So a start with another failure wrote nothing: a login by the bot that failed, or `mt5.initialize()` raising ('the
+  job failed: RuntimeError: ...' was lost, and the dashboard kept showing the old refusal instead of 'Stopped'). Now
+  such a start is written whole. `execute_job` clears `_init_problem` before each attempt.
+- Tests: `test_tracelog.py` +3 (the gone entry over 11 polls; a transitions line that fails; a held-back
+  TERMINAL_IN_USE start, then one whose second attempt is a failed login, then one whose second attempt raises).
+  `test_pending_fill.py`: its crash and outage replays right after the entry also check the text log (one CLOSE line,
+  the PAUSE line, no ERROR TRACE line). On the Turtle branches `test_turtle_trace.py` +1 (a Turtle transitions line
+  that fails is tried once, not on all 2,995 polls). Each test fails on the code before the fix.
+
+### Fixed before release: the final reviews (security and correctness of the port)
+- **A credentials file that is not UTF-8 is never written into the log.** Notepad on Windows Server can save
+  `mt5_credentials.json` as ANSI, and PowerShell 5.1 writes UTF-16. The bot then failed with a `UnicodeDecodeError`, and
+  the job's last line logged `repr(e)`: that text holds every byte of the file, so the demo and live passwords went into
+  `logs/<SYMBOL>_<day>.log` and the events file, again at every restart (every 30 s), and the dashboard showed them.
+  Now `load_credentials` reads the file as UTF-8 (a BOM is allowed) and says `mt5_credentials.json is not UTF-8 text:
+  save it as UTF-8` (a fixed text). Every log line made from an error gives its type and message only
+  (`UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe4 in position 60: ...`), never its repr: `app.py`
+  (`_err_text`: the job, the poll, the start-up, the state files) and `tracelog.py` (`err_text`).
+- **A day begun by a failed start keeps the bot's file name.** A start that ended before `symbols.json` was read logged
+  under `--symbol` in capitals (`XAUUSDM_<day>.log`). Windows keeps that name for the whole day, and the dashboard and
+  the 30-day clean-up looked only for `XAUUSDm_`. Now the job uses the spelling of `symbols.json`, and the clean-up and
+  the dashboard match the name without case.
+- **A file the dashboard is reading is written again a moment later.** Windows refuses to replace a file that another
+  program has open. The JSON writer tried 3 times in 10 ms; now `replace_retry` tries for about 0.24 s (6 waits). The
+  events rotation and the bot's state files (`_save_state`, `_save_turtle_state` on the Turtle branches) use the same
+  retry; before, a refused state save was an ERROR and was not tried again until the basket changed.
+- **A restart in the middle of a trade keeps the virtual balance.** The bot works out its balance only while flat. After
+  a restart during a basket or a Turtle trade, the trace had no virtual balance, closed P/L or equity until the trade
+  ended (the review saw 1,354 polls of '—'). Now the trace takes the balance of its last deal-history read and says so:
+  `account.virtual_balance_source` is `'deal history'` (else `'bot'`).
+- **The Turtle branches: the retry of a 'stop passed outside' close keeps that reason.** When one leg of that close was
+  refused, the next poll's retry was logged and journaled as a normal stop close (`turtle_stop`, at a price 1,100 above
+  the stop). Now the retry ends the same exit: the CLOSE line says 'the close that followed the stop ... passed outside
+  the bot had left them open', and the journal, the RESULT line and trades.json all say `stop_passed_outside`.
+- **The Turtle branches: a late D1 bar is not counted as still to come.** Flat with today's orders used, a D1 bar the
+  terminal gives late made the headline count the past 00:00 close up ('in 2.0 min', 'in 3.0 min' ...). Now it says
+  'the D1 bar that closed at ... 00:00:00 UTC is not there yet (2.0 min late): new orders as soon as the terminal gives
+  it', and the 'Today's orders' gate says the same.
+- Tests: `test_tracelog.py` +5 tests, 6 cases (a cp1252 and a UTF-16 credentials file leave none of their bytes in the logs; a failed
+  job logs the type and message; the replace retry; the clean-up of a day named in capitals; the balance after a
+  restart; the basket's stop and target prices against the bot's own closes: at every close the judged quote is through
+  that price, and on the poll before it was not). On the Turtle branches `test_turtle_trace.py` +3 and one more check
+  (the refused leg of a 'stop passed outside' close; a late D1 bar while flat; a real short trade checked against the
+  bot's book on every poll; the virtual balance after the restart test's restart). Each new test fails on the code
+  before the fix, except the short trade and the price check, which guard what was already right.
+
+### Fixed before release: the review of the trace
+- **No file is written while the bot holds `mt5_lock`.** The order hook ran inside `MT5PositionHelper._send`, inside
+  the lock, and wrote the log to disk before `order_send`'s result reached the bot: on a disk that takes 250 ms a
+  write (an antivirus scan, a saturated VPS disk) the 4th leg of a close went out about 0.75 s late (the review
+  measured 1.04 s for 4 close requests). Now `order()` only makes its record and lines; every other entry point writes
+  only when the lock is free (`_flush` waits while `mt5_lock.locked()`): an event, a state save or a start-up line
+  made inside the lock waits too. They are written at the end of the poll (or by `poll_skipped`, the exception hook,
+  the job's last lines), with their own times and in their order. Measured with that slow disk, 4 close requests and
+  an event inside the lock: 1,279 ms with the trace before the fix, 0.1 ms after it, the same as without the trace
+  (0.1 ms on the fake terminal). The price: a process killed between an order and the end of its poll (a fraction of a
+  second) loses that order's lines (the deal history still has the order).
+- **One failing step of the poll hook no longer skips the rest.** `_poll` / `_poll_turtle` run every step on its own
+  (`_step`): a step that raises is an ERROR line ('the trace hook poll() failed in its step _bars: ...', at most every
+  10 min) and the trace file, the bars, the trades, the heartbeat and the bookkeeping still run. When the decision
+  cannot be worked out (its section or the decision itself fails), the trace says so: the action `TRACE_ERROR` with a
+  headline (new in `docs/dashboard-data.md`). The deal history is read again at most every 5 s after a failed read
+  and every 60 s after a failed build (before: on every poll, under `mt5_lock`, when the build raised after the read).
+- **A close names the side of its position.** `close_by_type` closes a SELL position with a BUY order; the ORDER line
+  said `side=BUY`. Now: 'close position 100001 (SELL 0.01 lot, with a BUY order) ... | kind=close side=SELL
+  order_side=BUY', and the trace's `decision.orders` has `side` (the position's) and `order_side`.
+- **A skipped poll marks what it kept**: the last good poll's `market` with `status` 'UNKNOWN' and a message that the
+  terminal was not read, the `basket` with `fresh` false (the dashboard showed 'Market closed (OPEN)' and 'votes fresh
+  this poll').
+- **The first poll after a restart**: a ladder add there was labelled 'open' in its ORDER / FILL lines (the trace had
+  not seen a poll yet). Now the kind comes from the loop's own state (the basket loop's `state`, the Turtle's book;
+  read only), so it is 'add' from the first poll.
+- **The Turtle's D1 note** (`app.py`, the Turtle branches; wording only, no decision changes): when the D1 read fails
+  after midnight, the note said 'not trading' while the bot goes on with the levels and the stop of the day before.
+  It now says so ('... needed: the bot goes on with the levels and the stop of the D1 bar before and asks again every
+  poll'); with no levels yet (a start) it still says 'not trading'.
+- Tests (each fails on the code before its fix): `test_tracelog.py` +4 (30): the slow disk (no write while the lock is
+  held, 12 close lines written after it, the time with and without the trace), two steps failing on every poll (the
+  heartbeat and the trace go on, one ERROR line each, the history read once a minute), a close's side in the log and
+  the trace, an add on the first poll after a start; and a skipped poll's market and votes, a step that fails
+  (TRACE_ERROR, the heartbeat, the bars and trades) in two tests changed. `test_turtle_trace.py`: the D1 note, the
+  close's side, a failing step (in three tests changed).
+
+**Why.** The dashboard was built for the old live logic: it cannot show what the ported design checks, why the bot
+waits, where a basket's stop, target and backstop are, or what went wrong. The bot now writes what it sees, decides
+and does, for a new dashboard and for a person (or Claude) reading the log after an issue. Nothing the bot decides
+reads any of it: with the trace on or off the replays take the same polls, send the same requests and get the same
+fills (`tests_demo/test_tracelog.py`, and `test_live_equivalence.py` now runs with the trace on).
+
+The Turtle runs its own loop (`_process_turtle`), so it has its own part: the daily levels, the channels, the vote
+of the closed M15 bar, the day's orders, the one stop and where it comes from, the adds. With the trace on or off
+the Turtle cycle takes the same polls, sends the same requests and gets the same fills (`test_turtle_trace.py`).
+
+### Added: the dashboard's data (`tracelog.py`; every field in `docs/dashboard-data.md`)
+- `<SYMBOL>_trace.json` after every poll: health (terminal, account, market, loop and trace time, reconnects,
+  errors in the last hour), account (virtual balance, unit, lot, own closed / open P/L, the shared account), market
+  (bid / ask / spread / tick age), the decision (an action, a one-sentence headline, every gate in the order the bot
+  checks it with its value and threshold, this poll's orders), the basket strategy (the votes per timeframe with
+  their pivots and slopes, open and agreement scores, the H1 trend of the closed bar, the volatility unit raw /
+  capped / bars used, the stop / target / backstop a new basket would get, the pause, and the open basket: legs,
+  P/L, stop and target in USD and as prices, backstops, the ladder's next add price), `turtle: null`.
+- `<SYMBOL>_bars.json`: bid OHLC, M1 360 / M5 300 / M15 300 / H1 300 / D1 200 bars, at most every 30 s (M1-H1 from
+  the bars the poll already fetched; D1 is one terminal call).
+- `<SYMBOL>_trades.json`: this bot's baskets from the deal history since `VIRTUAL_START_DATE` (legs, open / close,
+  lots, P/L, the exit reason the bot recorded: target / stop / backstop / closed outside / force-close ...), the
+  open basket with its live levels, the virtual-balance curve, a summary; read after every fill and close and
+  every 60 s. `state/<SYMBOL>_exit_reasons.json` keeps the recorded reason per position.
+- `logs/<SYMBOL>_<YYYY-MM-DD>.log` (UTC days, kept 30 days, 50 MB a day): `time UTC | LEVEL | CATEGORY | message |
+  key=value ...`, levels DEBUG (every decision change, with the gates) / INFO / ORDER / FILL / CLOSE / WARN / ERROR
+  (with the traceback): the start (branch, design, every effective constant, symbols.json, the account checks, the
+  state found), every order request and result, fills, closes with reason and P/L, pause start / end, state saves,
+  reconnects, read errors, every exception, and a HEARTBEAT line every minute (a gap = the bot was not running).
+  `logs/<SYMBOL>_events.jsonl`: the same lines as JSON (10 MB, 5 older files).
+- The cost: about 1 ms a poll on the fake terminal (median 0.7-1.0 ms, p95 1-3 ms, worst 3-10 ms on the polls that
+  also write the bars or trades; the trace file's atomic write is most of it). Terminal calls: the deal history after a fill / close and every 60 s, the D1 bars at most every
+  30 s, the digits once.
+
+### Changed: a write that fails never reaches the trading
+- `_save_account_data` (written before the poll decides: a full disk stopped the trading), `_save_symbol_data`,
+  `_log_event`: an error is a WARN in the log (and a console line at most once a minute), not an exception in the
+  loop. The daily-trade / history-summary save errors, swallowed before, are a WARN with the traceback.
+
+### Added: the Turtle's part (`tracelog.py`; every field in `docs/dashboard-data.md` §5)
+- `<SYMBOL>_trace.json` `turtle` block (`basket` null): N, the D1 bars used, the levels of the last closed D1 bar (buy
+  / sell stop-entry levels, 2N, 0.5N, the exit channels), the channels (entry 55 / exit 20 days for System 2; 20 or 55
+  / 10 for System 1; the 10 / 20 / 55-day highs and lows with the day of each), System 1's filter (`use20` and the
+  filter's own hypothetical trade: state, entry, stop, its last five trades -- the same loop as `turtle.s1_use20`),
+  the M15 vote of the last closed bar (value, fresh, the bar, the next read, RSI and MACD pivot / side / bars ago /
+  slope, the RSI, MACD line, signal line and histogram of the last 40 closed bars for the chart), the day's orders
+  (armed / used, by which entry, the distance of each level from the quote in price and in N), what a new trade would
+  get (entry, stop and where it comes from, next add, backstop, P/L at the stop), and the open trade (legs with their
+  fills and backstops, N at the entry, the entry level, the one stop with `stop_origin` 2N / channel / kept and its
+  2N and channel values, the distance to it, the P/L at it, the next add and its distance, the backstops), a copy of
+  the book.
+- The decision for the Turtle: actions `WAIT` (no breakout / orders used / exit bar), `BLOCKED` (vote / vote unknown /
+  brake), `OPEN_*`, `WAIT_FILL`, `HOLD`, `ADD_*`, `CLOSE_*` (stop / close_retry), `NO_DATA` (quote / d1 bars),
+  `MARKET_CLOSED`, `BOTH_SIDES`, `UNMANAGED` (new: positions that predate the D1 history); the gates in the loop's
+  order: terminal, account, positions, quote, d1_levels, (one_side, trade_known), market_live, then flat: armed,
+  exit_bar, breakout, vote_known, vote, brake, or in a trade: (close_retry), stop, fill_listed, legs, add_bar,
+  add_price; a one-sentence headline (e.g. "The ask 60,830.10 is through the buy level 60,804.32, but the M15 vote of
+  the bar closed at 08:00 UTC is 0 (RSI 0, MACD 0): no buy until it is +1; the next vote is read at 08:15:02 UTC.");
+  a WARN when the gates' reading differs from the bot's signals (a trace bug, not a trading one).
+- `<SYMBOL>_bars.json`: the five timeframes from the terminal (the Turtle's poll fetches no M1 / M5 / H1 bars), at
+  most every 30 s while ticks come, plus `overlay.turtle`: the levels of the last 200 D1 bars (buy, sell, exit long /
+  short, N, use20) to draw the channels as steps.
+- `<SYMBOL>_trades.json`: the Turtle trades from the deal history with `exit_reason` `turtle_stop` (`exit_detail` 2N /
+  channel / kept, `exit_stop`, e.g. "turtle stop (the 20-day low)"), `backstop` (the broker closed the legs at their
+  sl), `closed_outside`; each with `turtle` = its journal (`state/<SYMBOL>_turtle_trades.json`, new): N at the entry,
+  the entry level and D1 bar, the vote, the unit, every leg with the add level it was taken at, every stop move and
+  why, the exit. The open trade is listed with its live levels.
+- The text log: the start (the Turtle as it runs, every constant, the symbol's facts from `symbol_info`: digits,
+  contract size, volumes, stops / freeze levels, swaps; the book restored or rebuilt), LEVELS (every new D1 bar's
+  levels with the channels they come from, N, 2N, 0.5N, the filter, the orders' state; "the bot was not running at
+  their closes" when several closed at once), VOTE (changes INFO with the pivots and slopes, every new closed bar
+  DEBUG, WARN when unknown), TRADE (entry with fill / level / vote / unit / N / stop / next add / backstop, every add,
+  a takeover after a start without the state file, legs closed outside), STOP (every move and why: 2N from a new leg,
+  the exit channel of a new D1 bar, kept after a leg closed outside; WARN if it ever loosened), CLOSE (at the stop with
+  its origin and the P/L at the decision; closed outside the bot; WARN: an incomplete close), RESULT (the realised P/L
+  from the deal history, the exit, the virtual balance after it; at a start also for a trade the journal knows that
+  closed while the bot was down, never twice), DATA (no daily levels; WARN when the D1 bar that closed at 00:00 UTC is
+  still missing a minute later -- the bot goes on with the levels and the stop of the bar before -- and INFO when it
+  is there; `turtle.d1.stale` in the trace), TURTLE (the bot's own notes: too few bars, a refused order, the brake),
+  DEBUG STATE (every book save), the DECISION lines and the HEARTBEAT every minute with the Turtle's key numbers.
+- The cost on the fake terminal: median 0.7-0.8 ms a poll, p95 about 3 ms (the polls that also write the bars or the
+  trades), worst about 10-60 ms (the first poll). Terminal calls: `symbol_info` once, the five timeframes' bars at most
+  every 30 s, the deal history after fills / closes and every 60 s. The M15 RSI / MACD lines are computed again from
+  the poll's closed bars once per M15 bar.
+
+### The shared code for the Turtle (the basket's files are as before)
+- `_exit_of`: the exit reason of the legs that closed last (a Turtle leg closed outside the bot earlier does not name
+  the trade's exit); `_record_exits` keeps extra fields (the Turtle's stop and its origin).
+- `order()`: an order of the Turtle is an entry or an add by its book (the poll's own dict, read only).
+- `poll_skipped` keeps the last `turtle` block (stale); `_health` / `_bars` take the Turtle's quote, liveness, change
+  signature and overlay; `_heartbeat` / `_write_trace` read the Turtle's trade; `event()` maps the Turtle's events
+  (the trace's own lines cover TURTLE_LEVELS / REBUILT / CLOSED_OUTSIDE / LEG_CLOSED_OUTSIDE; TURTLE_NOTE is a TURTLE
+  line).
+- `app.py`: in `_process_turtle` the same hooks as the basket loop (`loop_start`, `poll_skipped` at its two skips,
+  `poll(locals())` at the end of every poll, `exception` in its `except`, a WARN instead of a silent `pass` when the
+  daily-trade / history files fail); `_load_turtle_state` / `_save_turtle_state` tell the trace (WARN / ERROR notes,
+  DEBUG book saves). Every hook goes through `_trace`, which swallows whatever the trace raises.
+
+### Added: the paths of v3.9.2-demo.4 in the trace and the log
+The second fix round's new code paths, as the port found them: what was already logged stays, the rest is added.
+In `app.py` only read-only hooks, each through `_trace` / `_boot` (they cannot raise into the loop).
+- **TERMINAL_IN_USE** (the terminal holds another account): an ERROR ACCOUNT line with the whole problem (the
+  terminal's path, the account it holds, the bot's own login) and "no login: the terminal and its account are left
+  as they are", when the strategy log has the event (once, then at most every 15 min; since v3.9.2-demo.5 once for each
+  account). Before: a generic EVENT line
+  that named TERMINAL_IN_USE twice. Every start-up attempt is also a WARN START line with the problem, and every
+  reconnect attempt a TERMINAL line (below). On a terminal that already holds this bot's account the log says "no
+  login" (before: "logged in").
+- **ACCOUNT_REFUSED by the account read again right after the positions**: that poll's trace is SKIPPED, `reason`
+  'account_recheck', with the gate `account_recheck` that refused and a headline. Before: the trace kept the last
+  poll's decision. The ERROR ACCOUNT line is as before.
+- **The reconnect throttle and RECONNECT_FAILED**: the strategy log has RECONNECT_FAILED once, then when the reason
+  changes or after 15 min (since v3.9.2-demo.5 once for each reason, then every 15 min for that reason). The text log has its ERROR line (with the next attempt) and a WARN TERMINAL line for every
+  other failed attempt, so each attempt is there. The TERMINAL_RECONNECTED line says after how long and after how
+  many failed attempts. The trace's `health`: `reconnect_failed_attempts`, `next_reconnect_t` / `_utc`, `outage_s`,
+  `connect_problem` (why the last start-up or reconnect failed), `terminal_in_use`; a skipped poll's headline names
+  the last failure.
+- **design_problems at start-up**: already in the log (ERROR START "the design in constants.py is refused: ..."),
+  the new check (a stop and a ladder need an add gap) with it; `test_tracelog.py` now checks that one.
+- **A basket that a backstop closed only partly**: LEG_CLOSED_OUTSIDE is a WARN BASKET line (which legs; the rest is
+  closed at once). The poll's decision has the exit gate `legs_outside` (its value: the legs) and its own headline.
+  Before: the gate of a close retry and "Closing the BUY basket (leg_closed_outside)". `basket.open.outside_ids`. The
+  close of the rest and the booking of the whole basket are two CLOSE lines that say what happened. In
+  `<SYMBOL>_trades.json` the trade has both legs and `exit_reason` `leg_closed_outside` ("a leg closed outside the
+  bot, the rest closed by the bot").
+- **The Turtle: the account read again right after its positions read**: as above (`account_recheck`); the trade of
+  the last good poll stays in the trace, and no leg is taken as closed outside the bot.
+- **The Turtle: a leg closed beyond the stop ends the trade (`stop_passed_outside`)**: the leg is a WARN TRADE line,
+  written when the bot finds it (before the orders that close the others), with `beyond_stop` from the deal history:
+  true (its broker backstop) or null (not in the history yet): the stop was passed, the other legs are closed at
+  once; false (by hand, inside the stop): the trade goes on. Before: no line at all when the bot closed the rest in
+  the same poll. The decision has the exit gate `stop_passed` and the reason
+  `stop_passed_outside`; before, the trace read the stop as not hit and warned that its gates differed from the
+  bot's signals. The CLOSE line says the trade ended because the stop was passed; `<SYMBOL>_trades.json` and the
+  journal have the exit reason `stop_passed_outside` (the journal's exit also `legs_outside`).
+- The trace takes the symbol's terminal name again when the loop starts (a TERMINAL_IN_USE event can make the trace
+  before the login has the symbol map).
+
+### Files
+- `tracelog.py` (new; the same file on all six demo branches): `TraceLog` (entry points `boot`, `loop_start`,
+  `poll`, `poll_skipped`, `order`, `event`, `state_saved`, `state_note`, `exception`, `write_failed`,
+  `reconnect_failed`, `log`; each catches and logs its own errors; `_transitions_step`: when a poll's transitions
+  step raises, the poll's book is still kept for the next poll), `LogWriter` (day files, retention, size cap,
+  events rotation; never raises), `write_json_atomic`.
+- `app.py`: guarded `import tracelog`; `MT5TradingBot.trace_dir` / `trace_enabled` / `_tracer` / `_trace` / `_boot` /
+  `_boot_flush` / `_order_observed` / `_write_failed`; hooks: `loop_start` and `poll(locals())` in `process_symbol`,
+  `poll_skipped` at its two skips, `exception` in its `except`, `_frames` / `_signals` (the poll's bars and forming
+  signal lines, read only), `_last_account` (`_account_problem`), `_guard_why` (`_poll_guard`), `_reconnects_done`,
+  start-up lines in `load_credentials` / `load_symbols` / `initialize_mt5` / `_init_cycle` / `execute_job`, state lines
+  in `_load_state` / `_save_state`, the event mirror in `_log_event`; the writers above. For the paths of
+  v3.9.2-demo.4: the no-login line in `initialize_mt5`, `reconnect_failed` in `_try_reconnect`,
+  `poll_skipped('account_recheck')` after the account read again right after the positions (in `process_symbol` and
+  `_process_turtle`). For the paths of v3.9.2-demo.5: the account lines in `_account_held` and
+  `initialize_mt5`, the problem in the job's last line, `_start_held_back` after each start attempt in
+  `execute_job` (its result in `_boot_flush(held_back=)`); the hook in
+  `_try_reconnect` reads `_reconnect_logged` per reason.
+- `mt5_helper.py`: `MT5PositionHelper.order_observer` and `_observe` (called after every request with its result and
+  its time; anything it raises is swallowed).
+- `tests_demo/`: `test_tracelog.py` (43 test cases on the merged branches; its account
+  test covers login and no login; its job test uses the new design check, so the file is the same on every branch),
+  `test_turtle_trace.py`
+  (23: 3 for the Turtle's paths of v3.9.2-demo.4); `fake_mt5.py` loads `tracelog`, gives every bot a temp trace
+  folder, `make_bot(trace_dir=, keep_writers=)`; `conftest.py` puts the trace of a bot without its own folder in a pytest temp folder
+  (`F.TRACE_ROOT`); since the merge, each bot's `OUTPUT_DIR` is the test's tmp_path (the third fix
+  round's redirect).
+- `docs/dashboard-data.md` (new): the files, their fields, the actions and gates, the log format; §5 the Turtle.
+
+### Tests
+- `tests_demo/test_turtle_trace.py` (20, and 3 for the paths of v3.9.2-demo.4): the Turtle cycle with the real writers
+  (the trace changes no poll, request or fill; about a millisecond a poll; every snapshot's turtle block is the bot's
+  book, the test's own levels and the old JSON; the actions and their gates in order; the bars and the overlay; the
+  trade with its journal; the text log line by line, the events file), a vote that blocks a breakout, a D1 close
+  inside the trade (the stop raised to the new 20-day low, the exit at it: "turtle stop (the 20-day low)"), a D1 bar
+  that comes six minutes late, a refused close retried, the result of a trade closed while the bot was down (logged
+  once), System 1's filter (and its replica against `turtle.s1_use20`), a takeover after a restart without the state
+  file, a gap through the backstops (`backstop`), a skipped poll, no daily levels, a trace that raises.
+  The 3 for the paths of v3.9.2-demo.4: a leg closed beyond the stop while the terminal is down (the gate
+  `stop_passed`, the WARN line before the closes, the exit reason), a leg closed by hand inside the stop (the trade
+  goes on), an account switch just before the Turtle's positions read (`account_recheck`, the trade kept).
+- The whole `tests_demo` on `wip_dash_turtle`: 189 passed (test_turtle_replay.py against the backtester included), 16 min.
+- The whole `tests_demo` on this port (`wip_port_btcusd6`, with the dashboard of v3.9.2-demo.7): 228 passed
+  (test_turtle_replay.py against the backtester included), 26 min.
+- With the review's fixes (2026-11-16, on a PC busy with other jobs): `test_dashboard.py` 21 passed with Dash
+  2.14.2 / plotly 5.18 and 21 passed with the pinned Dash 2.18.2 / plotly 5.24.1 (a venv), `test_design.py` 21,
+  `test_tracelog.py` 30, `test_live_equivalence.py` 2, `test_turtle_trace.py` 23, `test_turtle_bot.py` 18 passed.
+  The rest of `tests_demo` was not run again end to end on the final code.
+- On `wip_merge_btcusd6` (this entry and v3.9.2-demo.7 merged onto v3.9.2-demo.5), from an empty folder with `python3
+  -B -m pytest <files> -q -p no:cacheprovider`: 14 test files (test_tracelog, test_dashboard, test_design,
+  test_live_equivalence, test_terminal_in_use, test_reconnect, test_partial_close, test_demo_account,
+  test_live_terminal, test_pending_fill, test_no_writes_outside_tmp, test_turtle_trace, test_turtle_bot,
+  test_turtle_safety) 237 passed, 13 min; test_dashboard.py again after its last change: 33 passed. The whole
+  `tests_demo`, the demo-parity replays and the eight-year Turtle replay come next, on the merged code.
+
+### Open
+- The Turtle's loop has never written `account.json` (only the basket loop does): the old dashboard's account panel
+  stays empty on the Turtle branches; the same numbers are in `<SYMBOL>.json` and in the trace's `account`.
+  (v3.9.2-demo.7: the new dashboard takes them from the trace.)
+
+### Rollback
+`git revert` the two `demo(dash)` commits of this version (newest first); delete `OUTPUT_DIR/<SYMBOL>_trace.json`,
+`_bars.json`, `_trades.json`, `OUTPUT_DIR/logs/<SYMBOL>_*.log`, `_events*.jsonl`, `OUTPUT_DIR/state/<SYMBOL>_exit_reasons.json`
+and `OUTPUT_DIR/state/<SYMBOL>_turtle_trades.json` if wanted. To keep the code and switch the trace off:
+`bot.trace_enabled = False` (nothing is written then).
+
+---
+
+## [v3.9.2-demo.5] — 2026-11-16 — Demo branches: the third fix round [demo only]
+
+**Branches:** the `demo_hedging_*` branches (written on `demo_hedging_xauusd6`; the Turtle's own fix C on the BTC
+Turtle branches). **NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** `app.py`,
+`tests_demo/` (+ this `CHANGELOG.md`, `README.md`); here also the Turtle's loop (`turtle.py` itself is untouched).
+**Baseline:** v3.9.2-demo.4.
+
+**Why.** The two reviews of the second fix round found that a test run could write a running demo bot's own files,
+that the bot could still log in over another account after a first "no account" answer, and three smaller gaps, one
+of them in the Turtle (fix C: it could book its trade as exited while its legs were still open). A new guard keeps
+every demo bot off the live bots' MetaTrader 5. The final review of these fixes found six more small gaps; they are
+fixed here as well (marked "final review" under A, B, D and E below, and in the README). Normal trading is unchanged.
+The Turtle has no fast-engine counterpart: `turtle.py`, `indicator.py` and `constants.py` are untouched, and its
+replay against the backtest (`tests_demo/test_turtle_replay.py`, 2018-11-13 to 2026-11-13) takes the same trades as
+before: System 2, 60 trades, $7,814.72, 0 of 434 votes different. The basket code this branch shares with the gold
+branches passes their demo parity replays as before (`demo_hedging_xauusd6`, V3-lite, 2026-06-30 00:00 to 2026-07-01
+14:00 UTC: 133,228 polls, 4 fills, $1,853.57; `demo_hedging_xauusd8`, Top 1, the design with an add, 2026-11-02 22:00
+to 2026-11-03 14:00: 53,960 polls, 6 fills, $2,017.85).
+
+**demo.4 said too much.** Its headline for finding 1, "never a login on a terminal that holds another account", was
+true only when the terminal answers with that account. If `account_info()` answered None or login 0 for a moment (an
+IPC timeout, or a terminal still starting), the bot read "no account" and logged in over the other account. Fix B
+below closes this within a 15 s grace period. What is guaranteed now is written under B.
+
+### Added: never on the live bots' MetaTrader 5 (fix F, new guard)
+- All six demo branches' `mt5_credentials.json` still name `C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe` as
+  `terminal_path`. That is the MetaTrader 5 of the live bots: every live branch uses it. One login there switches the
+  account of every live bot on it.
+- The bot now refuses to start while `terminal_path` is that installation: its `terminal64.exe`, its folder or a file
+  in it. Upper or lower case, `/` or `\`, doubled separators and `.` do not matter; on the server another spelling of
+  the same file (a short 8.3 name, a link) is caught too. An empty `terminal_path` is refused as well (then
+  `initialize()` picks a terminal by itself).
+- It refuses **before** `mt5.initialize()`, so it never attaches. One ERROR line `LIVE_TERMINAL_PATH` goes into the
+  strategy log: "... install a separate MetaTrader 5 for slot 6 and set terminal_path in mt5_credentials.json to its
+  terminal64.exe". It is repeated at most every 15 minutes, also when the launcher restarts app.py (every 30 s).
+- Each restart reads the credentials, is refused 3 times (5 s apart) without any terminal call, and exits. Nothing
+  else happens. **So this bot does not run until slot 6 has its own MetaTrader 5.**
+
+### Fixed: no login on a first "no account" answer (fix B, medium)
+- `initialize_mt5` read `account_info()` once, right after `mt5.initialize()`, and took None or login 0 as "no
+  account". That answer can be momentary: an IPC timeout on a busy terminal, or a terminal that has just started or
+  restarted (an update, a crash, a reboot) and is still logging into its saved account. This happened at start-up,
+  at a launcher restart and at a reconnect.
+- Now an IPC error (`last_error` -10000 to -10005) means the account is not known: no login, the bot detaches and
+  tries again (start-up: 3 attempts 5 s apart, then the launcher; reconnect: 5, 10, 30, then every 60 s).
+- Otherwise the bot reads `account_info()` again about once a second for 15 s (login 0 counts as no account). An
+  account that shows is used (this bot's) or refused (`TERMINAL_IN_USE`). It logs in only if there is still no
+  account after 15 s, and not when the terminal says it is connected to a trade server (then it holds some account).
+- **Guaranteed now:** no login on a terminal that answers with another account, or that is still starting within the
+  15 s. **Not covered:** a terminal that needs more than 15 s to log into its saved account reads as holding none,
+  and the bot logs in. **Final review:** so does a terminal on which another program starts a login just before the
+  15 s end: that login is still being authorised, no account shows, and the last login wins. Only a separate
+  MetaTrader 5 per slot closes these. Log it into the slot's demo account once by hand, with the password saved
+  (README, "How to run", step 2): then the terminal holds that account when the bot starts, the bot never needs to
+  log in, and a login it makes anyway is into the same account.
+- The review's probe (a live account held by the terminal): an IPC timeout, a terminal still logging in for 3 s, a
+  login-0 answer, a reconnect onto a terminal still logging in: 0 logins each (before: 1 each, the live account
+  switched to demo).
+
+### Fixed: the tests write nothing outside their tmp folders (fix A, medium)
+- `tests_demo/test_partial_close.py` built bots without a state folder, and the live baseline of
+  `test_live_equivalence.py` had none. Their files went to `OUTPUT_DIR`, `C:\Alcadeias\demo_hedging_btcusd6`. On the
+  server a test run there would write into the running BTC bot's own folder (`state\XAUUSDm_state.json`, next to its
+  Turtle book; on the gold branches it is the gold bot's own state file, a fake loss that blocks its entries for 4 to
+  12 hours). On macOS it left a folder named `C:\Alcadeias\demo_hedging_btcusd6` in the working folder.
+- Now every bot the tests build writes in the test's own tmp folder. Any write into the real output folder is refused
+  (it never happens) and fails the run, and so does a `C:\Alcadeias...` folder left in the working folder.
+- **Final review:** that check saw only `open()`, `os.makedirs`, `os.mkdir`, `os.replace` and `os.rename`. A test
+  that wrote with `pathlib`, `io.open` or `os.open` would have written the real folder unrefused (the review's probe
+  did, and the run passed). The check is now an audit hook, which Python calls inside every file operation: opening a
+  file for writing (`open`, `io.open`, `os.open`, `pathlib`), making, renaming and removing files and folders, and
+  `shutil`. A test tries 28 ways to write there: each is refused.
+- **Final review:** run the tests with `python3 -B -m pytest tests_demo -q -p no:cacheprovider`. Without `-B`, pytest
+  wrote its bytecode of `conftest.py` into `tests_demo/__pycache__` (also before demo.5). Such a run now fails at its
+  end and says why.
+
+### The Turtle (this branch: `STRATEGY = 'turtle'`)
+- Fixes A, B, D and F hold for its loop as they are (the same tests, `initialize_mt5` and `_try_reconnect`). Fix E is
+  basket code: the Turtle loop already records each leg's ticket from its order and keeps a leg 10 s until the
+  terminal lists it.
+- **Fix C (low): the exit is booked only when the close closed something.** On the poll that decides the stop,
+  another program could log the terminal into another account after the poll's account check, just before
+  `close_by_type` read the positions again. It then found none of this bot's legs (0 closed, 0 failed), and the bot
+  saved its book flat (`CLOSE_BUY` with 0 positions closed) while all four legs were still open. When the demo account
+  was back the trade was rebuilt (`TURTLE_REBUILT`): a kept stop was lost and the exit time was wrong (the review's
+  test: saved flat at 2227.9 s with 4 legs open, rebuilt and closed at 2287.9 s).
+- Now the book is closed only when the close closed something and nothing failed. A close that closed nothing keeps
+  the book and its stop, and the close is decided again on the next poll (the same test: the 4 legs are closed at
+  2287.9 s, when the demo account is back, with no rebuild). If the legs are really gone, the next poll ends the
+  trade, not as closed outside the bot. In normal operation every close closes every leg: nothing changes.
+- The basket's close path was checked with the same case: it is safe (a close that closes nothing books nothing). A
+  test pins it.
+
+### Fixed: RECONNECT_FAILED limited per reason (fix D, low)
+- The 15-minute limit remembered only the last reason. A terminal that keeps restarting fails with two reasons in
+  turn ("initialize failed", then `TERMINAL_IN_USE`), so every attempt was logged: 240 `RECONNECT_FAILED` in 4 hours
+  (down 60 s, then up 60 s on another account, and so on), enough to overwrite the 200-entry log in 3.3 hours.
+- Now each reason is logged when it is first seen, then at most every 15 minutes, with `not_logged_since` (the
+  failures in between). The same 4 hours: 30 `RECONNECT_FAILED`, 46 events in all. The back-off is unchanged.
+- **Final review:** `TERMINAL_IN_USE` (and `LIVE_TERMINAL_PATH`) had the same flaw: their limit also remembered only
+  the last problem. A terminal held in turn by two other accounts (a live 99, then another slot's 7) logged every
+  reconnect attempt: 240 `TERMINAL_IN_USE` in 4 hours. Now each problem is limited on its own: each account when it
+  is first seen, then at most every 15 minutes (the same 4 hours: 30 `TERMINAL_IN_USE` and 62 events in all, before
+  240 and 272). A new start of app.py by the launcher reads all the lines that refused starts left at the top of the
+  strategy log, so 6 starts with the two accounts in turn give 2 lines (before: 6).
+- Not changed: `ACCOUNT_REFUSED` and `ACCOUNT_OK` stay one line for each switch of the account, because each one
+  starts or ends a pause in trading. Only a terminal shared with another program switches it.
+
+### Fixed: the add and the entry are legs of the basket from their fill (fix E, low; basket code, not used by the Turtle)
+- **The add** (XAU Top 1, the only design with an add). The basket learnt an add's position id only from the next
+  positions read, about 2 s after the add. If the terminal went down, or the bot stopped, in those 2 s, and the
+  entry's backstop closed the entry meanwhile, the bot took the add over as a new basket, and its ladder added again
+  (470 s later in the review's test).
+- Now the add's position id is recorded at once from the order's answer (its ticket: on a hedging account the
+  position's id), kept 10 s while the terminal has not listed it (as for the entry's fill), and saved in the state
+  file. The case above is then a leg closed outside the bot: `LEG_CLOSED_OUTSIDE`, the add closed at once (12 s after
+  it, the first poll after the outage; after a restart, its first poll), the whole basket booked. While the add is
+  not listed yet (at most 10 s), the basket is still open: a close waits for the add, a read that lists no position
+  books nothing, and no new entry is sent.
+- **The entry (final review; this gap is older than demo.5).** The basket learnt its entry's position id the same
+  way, about 1 s after the fill. If the bot stopped or the terminal went down in that second, and the entry's
+  backstop closed the entry meanwhile, the bot dropped the basket as a fill that "never showed up": nothing was
+  booked, the pause after the loss did not start, and it entered again at once (the review's test: 0.6 s after a
+  restart, 1.1 s after a reconnect, instead of 240 s after the loss). Now the entry's id is recorded from the order's
+  answer at once, as for an add: such an entry is booked as closed outside the bot, with its loss and time from the
+  deal history, and the pause after a loss follows.
+- **A close that closed the add (final review).** When the close itself reached an add the poll had not listed yet,
+  the bot still waited for that add: nothing was booked for 9 s, then the basket was booked as "closed outside the
+  bot" (the P/L and the pause were right, the label and the moment were not). Now such a close is booked at once,
+  with both legs, its own reason and their realised P/L.
+- In normal operation the terminal lists every fill within a second or two: nothing changes there.
+
+### Files
+- `app.py`: `initialize_mt5` (the terminal-path check first, then `_account_held`); `_account_held`, `_ipc_error`,
+  `_ACCOUNT_GRACE_S` = 15 s; `_terminal_path_problem`, `_live_terminal`, `_LIVE_TERMINAL_PATHS`, `_slot_name`;
+  `_log_limited` (`TERMINAL_IN_USE` and `LIVE_TERMINAL_PATH`, per problem; replaces `_in_use_logged`), `_logged_at`,
+  `_log_entries` (replaces `_newest_log_entry`); `_try_reconnect` (the limit per reason); `_record_fill`,
+  `_unlisted_fills`, `fill_pending`, `_sync_basket`, `_finish_outside_close`, `_after_close`, the entry and add
+  branches of `process_symbol`.
+- `app.py` (the Turtle): `_process_turtle`, the close branch (`T.on_exit` only when the close closed something).
+- `tests_demo/`: `conftest.py` (every bot writes in tmp_path; the write check, an audit hook; the bytecode check),
+  `fake_mt5.py` (a terminal still logging into its saved account, single `account_info()` answers, not connected
+  without an account); new `test_no_writes_outside_tmp.py` and `test_live_terminal.py`; `test_terminal_in_use.py`,
+  `test_partial_close.py`, `test_pending_fill.py`, `test_reconnect.py`, `test_demo_account.py`,
+  `test_live_equivalence.py` extended. The Turtle: `test_turtle_safety.py` (the switch inside the close decision;
+  legs gone before the close).
+
+### Rollback
+`git revert` this version's `demo(...)` commits (newest first). Nothing to clean up: the older code ignores a
+basket's `unlisted` entry in the state file, and a Turtle book left `closing` is closed by its close retry.
+
+---
+
+## [v3.9.2-demo.4] — 2026-11-16 — Demo branches: the re-review's fixes [demo only]
+
+**Branches:** the `demo_hedging_*` branches (written on `demo_hedging_xauusd6`; the Turtle's own parts on the BTC
+Turtle branches). **NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** `app.py`,
+`tests_demo/` (+ this `CHANGELOG.md`, `README.md`); here also the Turtle's loop (`turtle.py` itself is untouched).
+**Baseline:** v3.9.2-demo.3 + the slot's own demo account (`demo: slot N's own demo account ...`).
+
+**Why.** Each slot now has its own demo account, so three logins share the server. The independent re-review of
+the six branches found that the bot logged in on any terminal it was pointed at, and four smaller gaps. Every fix
+leaves the decisions of normal operation alone: the demo parity replay (the branch's app.py against the fast engine
+running its design) passes unchanged, and with the levers at their live defaults the bot still takes the live
+decisions and sends the live requests (`tests_demo/test_live_equivalence.py`). The Turtle has no fast-engine
+counterpart; its rules are untouched and its tests take the same trades.
+
+### The Turtle (this branch: `STRATEGY = 'turtle'`)
+- Findings 1 and 4 hold for its loop as they are (the same `initialize_mt5`, `_poll_failed`, `_try_reconnect`).
+- Finding 2: `_process_turtle` reads the account again right after its positions read, in the same `mt5_lock`
+  block; on a problem the poll decides nothing (before: a switch in between made the legs look closed outside the
+  bot, `TURTLE_LEG_CLOSED_OUTSIDE`).
+- Finding 3, checked: a leg's backstop lies beyond the trade's stop, so when a gap closes the newest leg and the
+  price stays there, the bot's own stop closes the other legs on its next poll. It did not hold when the price was
+  back inside the stop by the time the bot saw the leg gone (the terminal down during a spike): the other legs were
+  kept. Now a leg gone outside the bot is looked up in the deal history: closed at or beyond the trade's stop (its
+  backstop), or not in the history -> the other legs are closed at once (exit reason `stop_passed_outside`;
+  `TURTLE_LEG_CLOSED_OUTSIDE` carries `beyond_stop`); closed by hand inside the stop -> the trade goes on, its stop
+  kept, as before.
+
+### Fixed: never a login on a terminal that holds another account (re-review finding 1, high)
+`initialize_mt5` logged in with the bot's own login at every start, reconnect and launcher restart. A login
+switches the account of every program attached to the terminal: the bots of another slot were locked out, and a
+live bot on the same terminal would have been pulled off the real account, its positions unmanaged.
+- `initialize_mt5` reads `account_info()` right after `mt5.initialize()`: no account -> it logs in; this bot's
+  account (the login and the server of the credentials) -> no login; any other account -> no login,
+  `mt5.shutdown()` (the terminal is left as it is), an ERROR event `TERMINAL_IN_USE` ("the terminal at <path> is
+  logged into another account <login> (<mode>, <server>) ...; give this slot its own MT5 installation"), and the
+  start-up (3 attempts, then the launcher) or the reconnect back-off tries again. `TERMINAL_IN_USE` is logged when
+  it starts or changes, then at most every 15 minutes, also across the launcher's restarts (a start reads the
+  newest entry of the strategy log). The demo-account checks after it are unchanged.
+
+### Fixed: the account read again right after the positions (finding 2, medium)
+- The poll checked the account before it read the positions; a switch in between handed it another account's
+  positions and the open basket was booked as closed outside the bot (then rebuilt). The account is read again
+  right after the positions, in the same `mt5_lock` block; on a problem the poll decides nothing (`ACCOUNT_REFUSED`),
+  exactly as at its start.
+
+### Fixed: a basket a backstop closed only partly (finding 3, low; XAU Top 1, the only design with an add)
+- The entry's backstop lies nearer than the add's: a move through it while the bot is down closes the entry and
+  leaves the add. That was not booked; the gone leg stayed in the basket, its stop was judged on the add alone and
+  the ladder could add again. Now a leg gone without a close of this bot (no `close_pending`) marks the basket
+  (`LEG_CLOSED_OUTSIDE`): the other legs are closed at once on that poll (exit reason `leg_closed_outside`) and the
+  whole basket is booked as closed outside the bot -- the realised P/L of every leg from the deal history (until
+  the history has the legs closed outside, the result counts as a loss), then the pause after a loss, as after any
+  close. The bot's own partial close is not mistaken for one.
+
+### Fixed: a long outage does not fill the strategy log (finding 4, low)
+- `RECONNECT_FAILED` was logged on every retry (4 hours down: 243 events in the 200-entry log). Now on the first
+  failure, when its reason changes (the terminal's `last_error` aside) and at most every 15 minutes otherwise (4
+  hours: 16 events); every attempt is still printed and the back-off is unchanged. `TERMINAL_RECONNECTED` reports
+  `attempt`, `failed_attempts` and `outage_s`; `TERMINAL_ERROR` likewise ignores a change of `last_error` alone.
+
+### Fixed: a stop with a ladder needs an add gap (finding 5, low)
+- `design_problems()` accepted a design with a stop and a ladder that can add in favour (`LADDER_GAP_VOL` = 0),
+  whose add could carry a backstop inside the basket's stop. Refused now (stop + ladder needs `LADDER_GAP_VOL` > 0,
+  or `MAX_ADDS` = 0). The six shipped designs pass unchanged.
+
+### Documented: one MT5 installation per slot (finding 6, low)
+- `README.md`'s safety section: one MT5 installation per slot, never shared with a live bot; the bot now refuses to
+  log in on a terminal that holds another account. Only separate installations close the last gaps: a switch in
+  the microseconds between the order guard's account read and `order_send`, and a terminal still logging into its
+  saved account when the bot attaches.
+
+### Files
+- `app.py`: `initialize_mt5` (the account before the login), `_is_own_account`, `_terminal_in_use_problem`,
+  `_terminal_in_use`, `_log_path`, `_newest_log_entry`; the account re-read after the poll's positions read;
+  `_sync_basket` (`outside_ids`, `LEG_CLOSED_OUTSIDE`), `_after_close` (the booking), the close to finish
+  (`leg_closed_outside`); `_why_key`, `_poll_failed`, `_outage_s`, `_try_reconnect`, `_poll_succeeded`
+  (`_LOG_REPEAT_S` = 900 s); `design_problems` (stop + ladder needs a gap); docstrings.
+- `app.py` (the Turtle): the account re-read in `_process_turtle`; `_turtle_sync` and `_turtle_closed_beyond_stop`
+  (a leg closed beyond the stop: `closing`), the exit reason `stop_passed_outside`.
+- `tests_demo/`: `fake_mt5.py` (a terminal without an account, `login()` switches it for every process attached,
+  `on_call()`, `close_by_broker()`); new `test_terminal_in_use.py`, `test_partial_close.py`; `test_demo_account.py`,
+  `test_reconnect.py`, `test_design.py` extended. The Turtle: `test_turtle_safety.py` (the switch before the
+  positions read, a gap through the newest leg's backstop, a backstop close while the terminal is down, the
+  history lookup, one `RECONNECT_FAILED` of a restart's three failures).
+
+### Rollback
+`git revert` the `demo(safety)` / `demo(fix)` / `demo(turtle)` / `demo(docs)` commits of this version (newest
+first); nothing to clean up (no new state file; a basket marked `outside_ids` in the state file is simply closed by
+the reverted code's close retry, a Turtle book left `closing` by its close retry).
+
+---
+
+## [v3.9.2-demo.3] — 2026-11-15 — Demo branches: the demo review's safety fixes [demo only]
+
+**Branches:** the `demo_hedging_*` branches (written on `demo_hedging_xauusd6`; `v3.9.2-demo.2` is the Turtle, on
+the BTC Turtle branches only). **NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:**
+`app.py`, `mt5_helper.py`, `strategy.py`, `constants.py`, `start_job.bat`, `start_<symbol>.bat`, `tests_demo/`
+(+ this `CHANGELOG.md`, `README.md`); here also the Turtle's loop and orders (`turtle.py` itself is untouched).
+**Baseline:** v3.9.2-demo.2 (the Turtle) + the branch's design block.
+
+**Why.** The review of the demo branches before the forward test found seven ways the bot could trade where it
+should not, trade twice, trade unprotected, or decide on data it did not have. Every fix leaves the decisions of
+normal operation alone: the demo parity replays (the branch's app.py against the fast engine running its design)
+pass unchanged, and with the levers at their live defaults the bot still takes the live decisions and sends the live
+requests (`tests_demo/test_live_equivalence.py`, which now also compares every request's sl / tp). The Turtle has no
+fast-engine counterpart; its rules are untouched and its tests take the same trades.
+
+### The Turtle (this branch: `STRATEGY = 'turtle'`)
+- Its own poll loop (`_process_turtle`) starts with the same checks as the basket's: the terminal answers and holds
+  this bot's demo account (findings 1, 4: nothing synced or sent otherwise, the reconnect with its back-off); every
+  Turtle order goes through the order guard; a failed positions read skips the poll (finding 5) instead of ending the
+  open trade as closed outside the bot.
+- Every leg (entry, add) carries a broker-side backstop (finding 3): request `sl` = the trade's stop at its fill
+  (turtle.py's rule: the tighter of 2N from the newest fill and the exit channel) -/+ `TURTLE_BACKSTOP_N` (1.0,
+  `constants.py`) x N_entry, `tp` 0, never modified. The bot's stop only tightens and closes every leg at market, so
+  it is always met first. A leg the backstop closes: `TURTLE_LEG_CLOSED_OUTSIDE` (the stop kept) or, all legs gone,
+  `TURTLE_CLOSED_OUTSIDE`.
+- Already in the Turtle: legs just filled wait 10 s for the terminal to list them (finding 2), no entry without a
+  fresh M15 vote of closed bars (finding 6), no trading on fewer than `TURTLE_MIN_D1_BARS` daily bars (finding 7).
+
+### Fixed: trades on the demo account only (review finding 1, high)
+All demo bots attach to one terminal; a live bot logging it into the real account would have received their orders.
+- `initialize_mt5`: right after the login, refuse to start unless `account_info()` is a demo account
+  (`trade_mode` `ACCOUNT_TRADE_MODE_DEMO`), a hedging account (`margin_mode` `ACCOUNT_MARGIN_MODE_RETAIL_HEDGING`)
+  and the login of the credentials; remember the login.
+- Mode `live` is refused outright on a demo branch: by the command line and by `load_credentials` (before the file
+  is opened).
+- Every poll and every `order_send` (opens, adds, closes: `MT5PositionHelper._send` behind `order_guard`) read
+  `account_info()` first: another login or not a demo account -> the poll syncs, decides and sends nothing, a
+  WARNING and an ERROR event `ACCOUNT_REFUSED`, until the demo account is back (`ACCOUNT_OK`).
+
+### Fixed: a just-opened basket is not dropped while the terminal has not listed it (finding 2)
+- A basket without positions is kept `_PENDING_FILL_S` = 10 s after it opened (as the Turtle keeps its legs); while
+  it is pending its side counts as in a basket (no entry, the basket's unit). It was dropped at once, and the next
+  poll opened a second basket (a 1.5 s listing delay: 13 duplicate entries in 30 minutes of the scaled design).
+
+### Added: a broker-side backstop (finding 3)
+- A design with a stop (`STOP_VOL > 0`, or a $ stop) sends every fill (entry, add) with a request `sl` =
+  its fill -/+ `BACKSTOP_FACTOR` (2.0, `constants.py`) x the basket's stop distance (STOP_VOL x unit, capped; an add
+  uses the basket's), rounded to the symbol's digits, and no `tp`; never moved. The bot's own stop closes the basket
+  before the price is one stop distance beyond any leg's fill, so it always closes first and the backtest is
+  unchanged; the backstop acts only while the bot or the terminal is down. A position it closes is booked by the
+  existing "closed outside the bot" path (the realised loss and the closing time from the deal history, then the
+  loss pause). A design without a stop (the live levers) keeps the live request.
+
+### Fixed: reconnect after a terminal restart (finding 4)
+- Every poll checks `terminal_info()`: no answer, or not connected to the trade server -> the poll decides and sends
+  nothing (ERROR event `TERMINAL_ERROR` with `last_error()`). After 5 polls in a row without the terminal:
+  `mt5.shutdown()` and `initialize_mt5()` again (with the checks of finding 1), retried after 5, 10, 30, then every
+  60 s (`RECONNECT_FAILED`, `TERMINAL_RECONNECTED`, `TERMINAL_OK`). A broker disconnect only waits (the terminal
+  reconnects by itself; logging the shared terminal in again could undo another process's login).
+- `start_job.bat`, `start_<symbol>.bat`: on demo, app.py is started again 30 s after it exits.
+
+### Fixed: a failed positions read is not "flat" (finding 5)
+- `positions_get()` answering None raises `TerminalReadError` (`mt5_helper`); the poll is skipped (no sync, no
+  bookkeeping, no decision) instead of booking the open basket as closed outside the bot; a close that cannot see the
+  positions closes nothing and reports a failure.
+
+### Fixed: no entry on missing votes or a short history (findings 6, 7)
+- `'votes unknown'`: no fresh entry while any timeframe of `OPEN_SCORE_WEIGHTS`, `FORCE_CLOSE_SCORE_WEIGHTS`,
+  `TREND_TF` or `VOL_TF` returned no bars this poll (a failed M15 fetch passed the ENTRY_AGREE_S = 0 gate); exits and
+  stops keep working; a ladder tier without data neither adds nor arms.
+- `'volatility unknown'` also while `VOL_TF` / `TREND_TF` have fewer than 300 closed bars (the EWMA unit was off by
+  up to 12% on BTC with 100 H1 bars); the same for the unit of a basket rebuilt after a restart.
+
+### Files
+- `app.py`: `_account_problem` / `_login_problem` / `_account_ok` / `_order_guard` / `_poll_guard`;
+  `_terminal_problem` / `_poll_failed` / `_try_reconnect` / `_reconnect` / `_poll_succeeded`; `fill_pending`;
+  `design_has_stop` / `backstop_distance` / `_open_leg` / `_price_digits`; `entry_timeframes` and
+  `entry_block_reason(no_data, short_history)`; `_vol_unit_at` needs 300 closed bars; design checks
+  (`BACKSTOP_FACTOR` > 1, `RSI_CANDLE_COUNT`); `main()` refuses live; the analysis keys `fill_pending`, `no_data`,
+  `short_history`; the events above and `backstop_sl` in the order events; the poll's `terminal_info()` /
+  `account_info()` reads under `mt5_lock`, like every other MT5 call.
+- `mt5_helper.py`: `TerminalReadError`; `order_guard` / `_send`; `auto_sltp` on `buy` / `sell` / `_build_request`
+  (the same code as on the Turtle branches).
+- `strategy.py`: `Strategy.section_timeframes()`. `constants.py`: `BACKSTOP_FACTOR`, `TURTLE_BACKSTOP_N`.
+- `app.py` (the Turtle): `_process_turtle` starts with `_poll_guard` and skips a poll whose positions read fails;
+  `_turtle_backstop`; the design check of `TURTLE_BACKSTOP_N`; `backstop_sl` in the Turtle's order events.
+- `start_job.bat`, `start_<symbol>.bat`: the demo restart loop.
+- `tests_demo/`: `test_demo_account.py`, `test_read_errors.py`, `test_reconnect.py`, `test_pending_fill.py`,
+  `test_backstop.py`, `test_entry_data.py`; `fake_mt5.py` models the account (login / trade_mode / margin_mode),
+  `terminal_info()` and a terminal that goes down, `positions_get` / rates errors, a delayed listing, the broker's
+  sl / tp; shared helpers in `conftest.py`. The Turtle: `test_turtle_safety.py` (the loop's checks mid-trade, a gap
+  through every backstop); `test_turtle_bot.py` (every leg's backstop, the design check).
+
+### Rollback
+`git revert` the `demo(safety)` / `demo(fix)` / `demo(turtle)` / `demo(docs)` commits of this version (newest first);
+nothing to clean up (no new state file; the backstop of a position already open stays on it until it closes).
+
+---
+
+## [v3.9.2-demo.2] — 2026-11-15 — Demo: the Turtle with the bot's votes (`STRATEGY = 'turtle'`) [demo only]
+
+**Branches:** `demo_hedging_btcusd6` (BTC slots 6 / 7 run it: System 2 / System 1). **NOT** the live-money
+`netting_`/`hedging_` deployment branches. **Files touched:** new `turtle.py`, `app.py`, `constants.py`,
+`mt5_helper.py`, `dashboard.py`, `tests_demo/` (+ this `CHANGELOG.md`). **Baseline:** v3.9.2-demo.1.
+
+**Why.** On BTC the final ten's best rows on the bot's unit sizing are two Turtles, "Turtle System 2 + bot votes"
+(8 years: $2,000 -> $7,815, max DD 32.5%, 60 trades) and "Turtle + bot votes" (System 1: $6,977, 46.0%, 88), not
+the bot's basket logic. They exist only in the backtester's M1-bar simulator (`backtesting/research/external.py`:
+`turtle()`, `_turtle_s1_use20()`, `filtered()`, `_path_kernel()`); this is their port, rule for rule.
+
+### Added: the Turtle (`turtle.py`, pure functions; `app.py` executes)
+- Levels from the closed UTC D1 bars (the last `TURTLE_D1_BARS` = 1000): N = Wilder RMA(20) of the true range
+  seeded with the simple mean; channels that include the day just closed; buy at the high + 0.01, sell at the low
+  - 0.01. System 2: 55-day entry, 20-day exit channel. System 1: 20-day entry, the 55-day failsafe on days the
+  skip-after-winner filter skips it (`_turtle_s1_use20` replayed verbatim), 10-day exit channel.
+- Entry: flat, the D1 bar's orders armed (an entry fill consumes both until the next D1 bar closes), the ask at or
+  above the buy level with the M15 vote +1 (the bid at or below the sell level with -1), the vote = the bot's RSI and
+  MACD pivot-slope votes on the last **closed** M15 bar, both the same way; a vote that turns while the price is past
+  the level enters at the market at once (the backtest's vote-delayed fills); not in the M1 bar of an exit.
+- Unit: the bot's rule on the virtual balance at the first fill, fixed for the trade; every leg = unit x 0.01 lot.
+- Adds: every 0.5 N (N frozen at the entry) beyond the previous actual fill, up to 4 legs, not in the entry's M1
+  bar, not gated by the votes.
+- Stop: one for all legs, the tighter of 2N from the newest fill and the exit channel, raised to the channel at
+  each D1 close (every D1 bar missed while the bot was down is applied in turn), never loosened (also not when a leg
+  is closed outside the bot); held by the bot (checked every poll on the bid / the ask, every leg closed at market);
+  the only exit. No broker SL / TP on the Turtle's orders.
+- No trading window and no re-entry cooldown beyond the next M1 bar (the backtest has neither); `symbols.json`
+  `brake` still stops new entries. The terminal's clock (the last tick) decides when a bar is closed; a new D1 / M15
+  bar is read 2 s after its end.
+- The book (N at the entry, unit, legs, stop, the exit channel ratchet, the armed orders, the last exit) is kept in
+  `OUTPUT_DIR/state/<symbol>_turtle.json`; without it a trade is rebuilt from the positions (magic, open times,
+  prices; N and the channels of the D1 bar before the first leg, every D1 close since) and a flat book takes the
+  day's used orders and the last exit from the deal history.
+
+### Files
+- `turtle.py` (new): the levels, the S1 filter, the closed-bar vote, the unit rule, the book and its transitions,
+  the rebuild.
+- `app.py`: `STRATEGY = 'turtle'` runs `MT5TradingBot._process_turtle` (the basket loop is unchanged and still the
+  default); `turtle_design_problems` / `design_summary`; the book's file; closed-bar reads; the deal-history check.
+- `constants.py`: `TURTLE_SYSTEM` (2), `TURTLE_N_LEN` (20), `TURTLE_STOP_N` (2.0), `TURTLE_ADD_N` (0.5),
+  `TURTLE_MAX_LEGS` (4), `TURTLE_TICK` (0.01), `TURTLE_VOTE_TF` ('M15'), `TURTLE_VOTE_BARS` (1000), `TURTLE_D1_BARS`
+  (1000), `TURTLE_MIN_D1_BARS` (300); example blocks "BTC Turtle System 2 + bot votes" / "System 1". The defaults
+  stay the live bot (`STRATEGY = 'basket'`).
+- `mt5_helper.py`: `buy` / `sell` / `_build_request` take `auto_sltp=False` (sl / tp as given, 0 = none; the
+  default keeps the live auto SL / TP, whose 2 x price TP would close a BTC long leg that doubles).
+- `dashboard.py`: a Turtle line in the status (levels or legs / stop / next add, N, the M15 vote).
+- `tests_demo/`: `test_turtle_rules.py`, `test_turtle_bot.py` (the loop on the fake terminal: trade cycle, orders,
+  closed-bar reads, virtual-balance unit, brake, restarts with and without the state file, closes outside the bot,
+  designs, dashboard) and `test_turtle_replay.py`: turtle.py replayed on the stored BTCUSDm M1 bars in the backtest's
+  order takes the backtest's trades exactly -- 2023-01-01 .. 2026-11-13: System 1 48 trades, System 2 33; the eight
+  years 2018-11-13 .. 2026-11-13: 88 and 60, accounts $6,977.48 and $7,814.72 to the cent -- same entry and exit M1
+  bars, sides, legs and prices; its daily levels are the backtest's plan rows and its vote the backtest's m15_agree.
+  `test_design.py`: a bad Turtle design is the refused one now.
+
+### Known differences from the backtest
+- Orders are market deals at the poll that sees the trigger, at that bid / ask (the backtest fills at the level, or
+  at the M1 open beyond it); slippage, spread widening, swap and commission are real on the demo account.
+- The bars are the terminal's (the backtest's come from the Exness tick archive, which has holes); a UTC day of
+  < 360 M1 bars is not merged into the next (never happened on BTC 2018-2026).
+- After a gap through the stop at an M1 open the backtest may enter in that same bar; here never in an exit's bar
+  (no gap exit happened on BTC 2018-2026).
+
+### Rollback
+`git revert` this commit (self-contained); delete `OUTPUT_DIR/state/<symbol>_turtle.json` afterwards.
+
+---
+
+## [v3.9.2-demo.1] — 2026-11-15 — Demo branches: the backtester's design levers, demo isolation, restart recovery [demo only]
+
+**Branches:** `demo_hedging_xauusd6` (the port; the other `demo_hedging_*` branches take the same code).
+**NOT** the live-money `netting_`/`hedging_` deployment branches. **Files touched:** `app.py`, `strategy.py`,
+`indicator.py`, `mt5_helper.py`, `constants.py`, `dashboard.py`, new `tests_demo/` (+ this `CHANGELOG.md`).
+**Baseline:** the branch's `demo: ...` commit (live v3.9.2 + the demo plumbing).
+
+**Why.** The demo forward test runs the designs the backtester ranked best (XAU V3-lite / Top 1 / Top 2,
+BTC Top 2) on demo accounts. Each design is a set of constants; every new constant defaults to the live
+bot, so with the defaults the bot takes the live decisions poll for poll (tests_demo/test_live_equivalence.py
+replays the code before and after on the same market). Semantics are the backtester's
+(`backtesting/engine/kernels.py`).
+
+### Added: design levers (constants.py, read at call time like the existing names)
+- `FORCE_CLOSE_ENABLED` (True): False = the M15 force-close never fires; the M15 votes still feed `ENTRY_AGREE_S`.
+- `TREND_TF` (None): `'H1'` = a fresh entry only if the sign of the H1 MACD **signal line of the last closed
+  bar** (row -2, not the forming bar) is the side; 0 / NaN blocks both. Applied after the brake.
+- `VOL_TF` / `VOL_LEN` (None / 24): the volatility unit = EWMA(1/VOL_LEN) of |delta close| of the **closed**
+  bars, measured on the poll that sends the entry; no entry while it is unknown.
+- `TARGET_USD_PER_UNIT` ('live' = `STRATEGY_HEDGE` $/unit), `STOP_LOSS_USD_PER_UNIT` (None), `TARGET_VOL`,
+  `STOP_VOL`, `VOL_CAP_USD_PER_UNIT` (0): per-unit USD = multiple x unit x contract_size x mtqty, the unit
+  capped at cap / (contract_size x mtqty); fixed at the open for the basket's life. In a basket the **stop is
+  checked first** (profit <= -stop), then the target (profit > target), then the force-close, then the ladder.
+- `LOSS_COOLDOWN_S` (0): after a basket whose **realised** P/L (deal history, by MAGIC) is below zero the next
+  entry waits this long instead of `REENTRY_COOLDOWN_SECONDS`, from the close decision.
+- `MAX_ADDS` (99), `LADDER_TRIGGER` ('rsi_level' | 'macd_turn'), `LADDER_TFS` (M1..H4), `LADDER_GAP_VOL` (0),
+  `LADDER_MULTIPLIERS` (None = Fibonacci): ladder adds = min(len(LADDER_TFS), MAX_ADDS); 'macd_turn' arms on any
+  poll whose tier MACD vote is not with the basket and fires on a later poll with it, gated by the OPEN score
+  and the gap (price units, fixed at the open); the arming persists.
+- `DESIGN_NAME`, `STRATEGY` ('basket'; 'turtle' is refused: the Turtle module is not in this code),
+  `CONTRACT_SIZE_FALLBACK`, `STATE_SUBDIR`. Commented example blocks for the four designs at the end of the file.
+
+### Added: demo isolation
+- Every order (open, add, close) carries `MAGIC` and `ORDER_COMMENT` (None -> `DEMO_BRANCH`[:31]); position reads,
+  counts, profit and closes keep only this MAGIC; the dashboard's deal history shows this bot's deals.
+- Units from the virtual balance `VIRTUAL_START_BALANCE` + this bot's closed P/L since `VIRTUAL_START_DATE`
+  (None = the account balance, as live), with the live unit rule, re-derived only while flat.
+
+### Added: restart recovery
+- `OUTPUT_DIR/state/<symbol>_state.json` keeps the open basket (unit, volatility unit, target / stop / gap,
+  ladder arming) and the last close (time, lost). Without the file: the unit from the oldest position's volume,
+  the volatility unit from the bars at its open time, the pause from the deal history. An open basket keeps its
+  unit after a restart (live restarted at 1).
+
+### Files
+- `constants.py`: the levers, demo isolation constants, examples; `STRATEGY_HEDGE` comment.
+- `strategy.py`: stop before target; `FORCE_CLOSE_ENABLED`; `_ladder_add` (tiers, triggers, arming, gap);
+  `next_add_volume`; `ladder_tiers` / `slope_timeframes` / `rsi_timeframes`; `design_problems`.
+- `indicator.py`: `Indicator.vol_unit`.
+- `mt5_helper.py`: `order_comment`, `is_own`, magic + comment on every request, `_own_positions`,
+  `get_bot_deals`; `get_*_positions` also return the position objects.
+- `app.py`: design checks at start; basket state sync / persistence; virtual balance; trend and volatility
+  read; levels fixed at the fill; entry gates after the brake; arming and close bookkeeping.
+- `dashboard.py`: status line shows design, trend, the basket's stop / target, the pause and the virtual
+  balance; the FORCE-CLOSE meter is labelled when switched off.
+- `tests_demo/`: a fake MetaTrader5 and 69 tests (`python3 -m pytest tests_demo -q -p no:cacheprovider`).
+
+### Rollback
+`git revert` this commit (it is self-contained); delete `OUTPUT_DIR/state/` afterwards.
 
 ---
 
