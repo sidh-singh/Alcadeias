@@ -1,0 +1,5 @@
+# What a running bot or dashboard leaves in this folder. Ignored, so that "git status" stays clean and
+# "git pull" never stops on it.
+__pycache__/
+*.pyc
+dash_env/
