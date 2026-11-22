@@ -17,6 +17,118 @@ Written on 16 Nov 2026, about 03:00 IST, in the Alcadeias repo (`/Users/sidharth
 
 ---
 
+## Update of 22 Nov 2026: read this first
+
+The body below was written on 16 Nov 2026. This section lists what has changed since then. Where it and the body
+differ, this section is right.
+
+### U.1 The repository now
+
+- **On GitHub (49 branches):** `dev` (the default), the 20 old live deployment branches `hedging_{xauusd,btcusd}{1..10}`,
+  the 20 new real-money branches `live<n>_<x|b><code>` (U.3), the 6 demo branches `demo_hedging_{xauusd,btcusd}{6,7,8}`,
+  `backtest_hedging` (this file) and `backtest_netting`.
+- **Deleted on 22 Nov at the owner's request:** on GitHub the 20 `netting_*`, the 20 `dev_*_v2` and 4 `rsimacd_*`
+  branches; on the Mac 26 local `dev_*` branches. So the body's statements about `netting_*` and `dev_*_v2` as live
+  branches (§1.2, §5.7) are history now. Everything deleted is in `.git/branch_backup_2026-11-22/branches.bundle` (list
+  in `branches.txt`) and kept as `refs/archive/remote/<name>` / `refs/archive/local/<name>` in the local clone.
+  Restore one with `git push origin refs/archive/remote/<name>:refs/heads/<name>`.
+
+### U.2 Research done after 16 Nov (all pre-registered where it says so; results on `backtest_hedging`)
+
+| Study | Answer | Where |
+|---|---|---|
+| How low can the step-up balance go (the six demo designs) | Lowest step-up with a worst fall of at most 50%: gold Top 2 $750 (at most 35%: $1,250), V3-lite and Top 1 $1,750, Turtle System 2 $2,000 | `backtest_results/sizing/SIZING.md`, `backtesting/research/sizing.py` |
+| More symbols: silver and the 7 forex majors (pre-registered) | Add none: only 2 of 42 pairs passed the first half, and together they lost money in the second | `backtest_results/multisymbol/MULTISYMBOL.md` |
+| Silver deep research (144 pre-registered variants) | No strategy works on silver after costs; the hold-out was never spent | `backtest_results/silver/SILVER.md` |
+| Is there a DCA ladder that works (pre-registered search) | No. Gold ladders earn but fall 60-90%; BTC ladders survive but do not earn. The old live v3.9.2 wiped 170 of 170 fresh $2,000 gold accounts (12 months each, a new one every month since Nov 2018) and 169 of 170 BTC accounts | `backtest_results/ladder/LADDER.md` |
+| Safety limits for the real-money accounts | Replay of the recorded trades on fresh $1,500 accounts shared by two bots. The first rule was too tight at this year's trade sizes and was widened. On this history the breaker costs a few dollars and saves nothing: it is there for a bot that stops working | `backtest_results/live_safety/FINAL_LIMITS.md`, `SAFETY_CALIBRATION.md`, `backtesting/research/live_safety.py` |
+
+**For Ballom this matters most:** the old ladder logic fails in every window tested, on every symbol. A Ballom bot that
+runs the same logic should be measured before anything else (§6).
+
+### U.3 The real-money branches (pushed 22 Nov 2026)
+
+- **20 branches, two bots per account.** The owner starts accounts 1 and 2 at $1,500 each. Each bot sizes from half the
+  real account balance.
+
+| Account | Gold bot | BTC bot | Safety: drop / day / losing trades in a row (gold, BTC) |
+|---|---|---|---|
+| 1 | `live1_xt2` Top 2 | `live1_bt2` Top 2 | 20% / 10% / 10, 9 |
+| 2, 3 | `live2_xt2`, `live3_xt2` Top 2 | `live2_bs2`, `live3_bs2` Turtle System 2 | 20% / 12.5% / 10, 5 |
+| 4 | `live4_xv3` V3-lite | `live4_bt2` Top 2 | 30% / 12.5% / 6, 9 |
+| 5-7 | `live5_xv3` ... `live7_xv3` V3-lite | `live5_bs2` ... `live7_bs2` Turtle | 25% / 15% / 6, 5 |
+| 8-10 | `live8_xt1` ... `live10_xt1` Top 1 | `live8_bt2` ... `live10_bt2` Top 2 | 35% / 20% / 9, 9 |
+
+- **How they were built:** one code line for all 20 (final commit `a7ac0fb`, kept as `refs/archive/local/wip_live_turtle`).
+  Each branch is one commit on its `hedging_<sym><n>` with the code line's tree plus stamped files (constants.py
+  deployment and design block, symbols.json, branch_env.bat, launcher name, the README's first section) and the old
+  `mt5_credentials.json` unchanged. The bot refuses to start while that file names any old account.
+- **Changing a live branch later:** commits on top of `origin/live<n>_<code>`. Never re-cut or force-push it: the owner's
+  credentials commits live there.
+- **Build tools and papers** (local only, inside `.git`): `.git/alcadeias_live_build/live/SPEC.md` (the binding spec of the
+  live layer), `live/critique/` (the six-reviewer design review), `live/reports/` (every engineer's report and the review
+  findings), `gen/gen_live_branches.py` (the branch generator), `gen/verify_live_branch.py` (an independently written
+  checker of the 20 branches), `gen/run_suite.py` (the test suite in parallel shards).
+- **Verified:** the whole suite (1,582 tests) passed; for each of the five designs the live bot sends exactly the order
+  requests of the tested demo bot in every poll (safety off, and on at its real limits); an end-to-end test runs a bot
+  into a block, shows it on the dashboard from the bot's own files, unblocks through the dashboard and trades again;
+  four independent reviewers, 14 findings, the important ones fixed; every branch passed both checkers (249 checks).
+  **Not verified:** nothing ran on Windows or against a real MetaTrader 5.
+
+### U.4 What carries over to a Ballom real-money layer
+
+Every point below cost real effort to find and applies to any live bot, whatever the broker:
+
+1. **Prove the live code sends the tested code's orders.** Compare every order request, poll by poll, on the same
+   simulated market (`tests_demo/test_live_equivalence_demo.py`, `demo_equiv.py` on the live branches). Assert that the
+   market really produced entries, stops, targets and a restart; a quiet market proves nothing.
+2. **Trade only the intended account.** Check the account at the start, on every poll, after the positions read and
+   before every order, closes included. Never log in over an account the terminal already holds. Refuse to start with
+   credentials that still name an old account (compare a hash of the account number, not of the whole file).
+3. **Exit codes the launcher understands.** One code means "needs the owner" (here 78: not 3, which Windows uses for
+   an abort). Everything else restarts after 30 s. A refused login is never a stop: it waits on a growing back-off.
+4. **A safety breaker** that blocks new trades only and never an exit; drop from the high, loss in a day, losing trades in
+   a row; deposits and withdrawals do not count. Calibrate it on fresh accounts at today's trade sizes, not on the
+   whole history. Unblock only by the owner. Fail closed while ON.
+5. **Files shared by several processes on Windows:** atomic writes with unique temp names, exclusive creation for a
+   block, a missing or half-written file never flips a state, no file I/O while holding the terminal lock.
+6. **One process per bot** (an OS file lock), and an old bot left running on the same account is detected and blocks
+   new trades.
+7. **Windows consoles:** a click in a console window (QuickEdit) freezes a program that prints, including its stops; the
+   bots switch QuickEdit off at start. Signing out of the server ends every bot; close the Remote Desktop window instead.
+8. **cmd.exe launchers:** no bracket blocks, one-line `if`, exit codes compared as text, `.gitattributes` with
+   `*.bat text eol=crlf`. Nobody can run them on a Mac, so they are checked by static tests and a line-by-line walk.
+9. **Logs:** detailed logs kept 7 days by the date in the file name, a permanent bounded journal (orders with slippage
+   against the side's own price, closed trades written once across restarts, per-minute samples), and a log export
+   that never includes credentials.
+10. **Dashboard buttons on an open port:** the server checks a PIN, counts wrong PINs, refuses a press when the page was
+    stale, and never writes anything for a request that is not a real press. The account number appears only as its
+    last 4 digits.
+
+### U.5 How the work was run (lessons about the process)
+
+- Spec first, then an adversarial design review by six reviewers with different lenses, then parallel engineers with
+  strict file ownership, then integration, then an independent review on a frozen copy, then fixes, then a generator
+  and an independent checker for the branches.
+- Commit a checkpoint after every stage: a usage limit cut four engineers off mid-work once, and their partial work
+  survived only because it could be committed and resumed.
+- The full test suite takes about 40 minutes in one process. A failing assertion on a huge structure once made pytest
+  spend hours building a diff: assert on short lists of offenders, and run the suite in shards with a time limit
+  (`run_suite.py`).
+- In zsh, pass git a list as an array (`"${arr[@]}"`), never as one unquoted string.
+
+### U.6 Starting in Ballom
+
+1. Open the Ballom repo (`/Users/sidharthsingh/Desktop/Ballom`) and give the session read access to this repo:
+   `/add-dir /Users/sidharthsingh/Desktop/Alcadeias/Alcadeias` (the local checkout is on `backtest_hedging`).
+2. First prompt: "Read /Users/sidharthsingh/Desktop/Alcadeias/Alcadeias/HANDOFF.md (the Update of 22 Nov first, then
+   §0, §3, §6). Then map this repo read-only and tell me which branches trade real money." §6.7 below has the questions
+   to ask the owner first and §6.8 ready-made prompts for each phase.
+3. Rules that carry over: never push to a branch that trades real money; never print a credentials file; commit and push
+   only when asked; pre-register a test before running it.
+
+---
+
 ## 0. How to use this file
 
 ### 0.1 Reading order
