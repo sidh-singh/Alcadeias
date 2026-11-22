@@ -3,6 +3,107 @@ import pandas as pd
 import time
 from datetime import datetime, timedelta, timezone
 from constants import RISK_REWARD_RATIO, ALLOW_SYNTHETIC_TICK_BAR
+# This bot's own mark on its orders (constants.py, the deployment block): two bots share the account, and each
+# must find only its own trades. Read at call time, so a replay can set them on this module.
+from constants import MAGIC, ORDER_COMMENT, BRANCH
+
+
+def order_comment():
+    """The comment every order of this bot carries: ORDER_COMMENT, or BRANCH when it is None, cut to
+    the 31 characters MT5 accepts ('' = no comment)."""
+    c = ORDER_COMMENT if ORDER_COMMENT is not None else BRANCH
+    return str(c)[:31] if c else ''
+
+
+def is_own(item):
+    """True for a position / deal of this bot: it carries MAGIC (MAGIC None = no isolation, everything is
+    this bot's, as live). An object with no `magic` attribute at all (a terminal that does not report it)
+    counts as this bot's."""
+    if MAGIC is None:
+        return True
+    return getattr(item, 'magic', MAGIC) == MAGIC
+
+
+def _num(x):
+    """A finite number as float, else None."""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return None
+    return v if v == v and abs(v) != float('inf') else None
+
+
+def old_bot_mark(pos):
+    """True for a position the old ladder bot (a hedging_* branch, the code before the magic number) opened: no
+    magic, no comment, and its automatic stops -- a BUY with no sl and a tp at about twice its open price, a SELL
+    with no tp and an sl at about twice its open price (the old request: sl / tp = price -/+ 100% of the price).
+    Within 1% of twice the open price, because the old request takes the ask for both sides. Only reads `pos`."""
+    try:
+        if int(getattr(pos, 'magic', 0) or 0) != 0 or str(getattr(pos, 'comment', '') or '').strip():
+            return False
+        price = _num(getattr(pos, 'price_open', None))
+        sl, tp = _num(getattr(pos, 'sl', 0.0)) or 0.0, _num(getattr(pos, 'tp', 0.0)) or 0.0
+        if price is None or price <= 0:
+            return False
+        twice = 2.0 * price
+        if getattr(pos, 'type', None) == 0:
+            return sl == 0.0 and tp > 0 and abs(tp - twice) <= 0.01 * twice
+        if getattr(pos, 'type', None) == 1:
+            return tp == 0.0 and sl > 0 and abs(sl - twice) <= 0.01 * twice
+    except Exception:
+        pass
+    return False
+
+
+def _foreign_note(positions):
+    """What a positions read shows that is not this bot's: {'count', 'examples' (the first three: the ticket's
+    last 4 digits, magic, comment, volume, side, sl, tp, open price), 'old_bot' (how many carry the old ladder
+    bot's mark: old_bot_mark)}. Only reads the positions; never raises (None when it cannot tell)."""
+    try:
+        foreign = [p for p in positions if not is_own(p)]
+        examples = []
+        for p in foreign[:3]:
+            ticket = getattr(p, 'ticket', None)
+            examples.append({
+                'ticket': None if ticket is None else '...' + str(ticket)[-4:],
+                'magic': getattr(p, 'magic', None), 'comment': getattr(p, 'comment', None),
+                'volume': _num(getattr(p, 'volume', None)),
+                'side': {0: 'BUY', 1: 'SELL'}.get(getattr(p, 'type', None)),
+                'sl': _num(getattr(p, 'sl', None)), 'tp': _num(getattr(p, 'tp', None)),
+                'price_open': _num(getattr(p, 'price_open', None))})
+        return {'count': len(foreign), 'examples': examples, 'old_bot': sum(1 for p in foreign if old_bot_mark(p))}
+    except Exception:
+        return None
+
+
+def _tick_quote(tick):
+    """The quote of a tick the helper has just read, for the order observer: {'bid', 'ask', 't_msc'} (None
+    without a tick). Only reads the tick."""
+    if tick is None:
+        return None
+    try:
+        msc = getattr(tick, 'time_msc', None) or None
+        if msc is None and getattr(tick, 'time', None):
+            msc = int(tick.time) * 1000
+        return {'bid': getattr(tick, 'bid', None), 'ask': getattr(tick, 'ask', None), 't_msc': msc}
+    except Exception:
+        return None
+
+
+class TerminalReadError(RuntimeError):
+    """The terminal answered None to a read the bot decides on: positions_get() failed. That is an error, not "no
+    positions" -- read as flat it would book this bot's open basket as closed outside the bot, start a pause and
+    rebuild the basket. app.py skips the poll that meets it (no sync, no bookkeeping, no decision)."""
+
+
+def _tag(request):
+    """Add this bot's magic number and comment to an order request."""
+    if MAGIC is not None:
+        request['magic'] = int(MAGIC)
+    comment = order_comment()
+    if comment:
+        request['comment'] = comment
+    return request
 
 
 
@@ -22,18 +123,73 @@ class MT5PositionHelper:
         """
         self.mt5 = mt5_instance
         self.risk_reward_ratio = RISK_REWARD_RATIO
-        
+        # Called with the request before every order_send (opens, adds, closes, SL/TP changes); False = the
+        # request is not sent (order_send's "no answer", None). app.py puts its account check here.
+        self.order_guard = None
+        # Called with the request of every OPENING order (buy() / sell(): an entry or an add; never a close) before
+        # it goes to order_guard and order_send; False = it is not sent (answered None, observed as refused
+        # 'safety'). app.py puts the flag of its poll here: the safety, an old bot on this MetaTrader 5, the slower
+        # retry after refused orders -- the last line of defence behind the tests of the poll itself.
+        self.open_guard = None
+        # Called after every request with (request, result, refused, ms, quote) -- app.py's trace (the text log's
+        # ORDER and FILL lines, the journal's order line). quote: the tick this helper read to build the request
+        # ({'bid', 'ask', 't_msc'}), beside the request and never in it. It only reads; whatever it raises is
+        # swallowed here, so it can never change an order.
+        self.order_observer = None
+        # What the last positions read showed that is not this bot's (_own_positions): {'count', 'examples',
+        # 'old_bot'}, None before the first read. app.py's warnings read it; nothing here decides on it.
+        self.last_foreign = None
+        self._quote = None                  # the quote of the request built last (_build_request)
+
         # Store MT5 constants for building per-call request dicts
         self._order_time_gtc = self.mt5.ORDER_TIME_GTC
         self._order_filling_ioc = self.mt5.ORDER_FILLING_IOC
         self._trade_action_deal = self.mt5.TRADE_ACTION_DEAL
-    
+
+    def _send(self, request: dict, quote=None):
+        """order_send of every request of this bot, behind order_guard: a request the guard refuses is not sent
+        and answered None, as order_send answers a request it could not deliver. order_observer sees each one,
+        with `quote` (the tick the request was built from) beside it."""
+        guard = self.order_guard
+        if guard is not None and not guard(request):
+            self._observe(request, None, True, None, quote)
+            return None
+        t0 = time.perf_counter()
+        result = self.mt5.order_send(request)
+        self._observe(request, result, False, (time.perf_counter() - t0) * 1000.0, quote)
+        return result
+
+    def _open(self, request: dict, quote=None):
+        """An opening order (buy() / sell()): behind open_guard, then as every request (_send). A request
+        open_guard refuses is not sent and answered None; the observer sees it refused 'safety'. True when it
+        went to _send."""
+        guard = self.open_guard
+        if guard is not None:
+            try:
+                allowed = bool(guard(request))
+            except Exception:
+                allowed = False             # (a guard that cannot answer sends nothing: the next poll decides again)
+            if not allowed:
+                self._observe(request, None, 'safety', None, quote)
+                return False, None
+        return True, self._send(request, quote)
+
+    def _observe(self, request, result, refused, ms, quote=None):
+        """Tell order_observer about a request and its result; nothing it does can reach the order."""
+        observer = self.order_observer
+        if observer is None:
+            return
+        try:
+            observer(dict(request), result, refused, ms, None if quote is None else dict(quote))
+        except Exception:
+            pass
+
     def get_buy_positions(self, symbol: str) -> Optional[Dict]:
         """
-        Get detailed position information for BUY positions
+        Get detailed position information for this bot's BUY positions (MAGIC only)
         
         Args:
-            symbol: Trading symbol (e.g., 'XAUUSD', 'XAUUSD')
+            symbol: Trading symbol (e.g., 'BTCUSD', 'XAUUSD')
         
         Returns:
             Dict with keys:
@@ -46,8 +202,9 @@ class MT5PositionHelper:
                 - last_profit: Profit of last BUY position
                 - last_volume: Volume of last BUY position
             Returns None if no positions found
+        Raises TerminalReadError when the terminal does not answer (positions_get() returned None).
         """
-        positions = self.mt5.positions_get(symbol=symbol)
+        positions = self._own_positions(symbol)
         
         if positions is None or len(positions) == 0:
             return None
@@ -74,15 +231,16 @@ class MT5PositionHelper:
             'first_profit': round(first_pos.profit, 2),
             'first_volume': round(first_pos.volume, 2),
             'last_profit': round(last_pos.profit, 2),
-            'last_volume': round(last_pos.volume, 2)
+            'last_volume': round(last_pos.volume, 2),
+            'positions': buy_positions,   # the position objects (tickets, open times, prices)
         }
     
     def get_sell_positions(self, symbol: str) -> Optional[Dict]:
         """
-        Get detailed position information for SELL positions
+        Get detailed position information for this bot's SELL positions (MAGIC only)
         
         Args:
-            symbol: Trading symbol (e.g., 'XAUUSD', 'XAUUSD')
+            symbol: Trading symbol (e.g., 'BTCUSD', 'XAUUSD')
         
         Returns:
             Dict with keys:
@@ -95,8 +253,9 @@ class MT5PositionHelper:
                 - last_profit: Profit of last SELL position
                 - last_volume: Volume of last SELL position
             Returns None if no positions found
+        Raises TerminalReadError when the terminal does not answer (positions_get() returned None).
         """
-        positions = self.mt5.positions_get(symbol=symbol)
+        positions = self._own_positions(symbol)
         
         if positions is None or len(positions) == 0:
             return None
@@ -123,8 +282,23 @@ class MT5PositionHelper:
             'first_profit': round(first_pos.profit, 2),
             'first_volume': round(first_pos.volume, 2),
             'last_profit': round(last_pos.profit, 2),
-            'last_volume': round(last_pos.volume, 2)
+            'last_volume': round(last_pos.volume, 2),
+            'positions': sell_positions,  # the position objects (tickets, open times, prices)
         }
+
+    def _own_positions(self, symbol: str):
+        """This bot's open positions on `symbol` (those carrying MAGIC), in the terminal's order ([] = none).
+        Raises TerminalReadError when the terminal answers None (an error: the positions are not known)."""
+        positions = self.mt5.positions_get(symbol=symbol)
+        if positions is None:
+            try:
+                err = self.mt5.last_error()
+            except Exception as e:
+                err = repr(e)
+            raise TerminalReadError(f'positions_get({symbol}) returned None (last_error {err})')
+        # (the same read: what is not this bot's, for app.py's warnings -- memory only, it cannot raise)
+        self.last_foreign = _foreign_note(positions)
+        return [pos for pos in positions if is_own(pos)]
     
     def get_account_info(self) -> Optional[Dict]:
         """
@@ -252,7 +426,7 @@ class MT5PositionHelper:
         Fetch historical rates/candles for a symbol
 
         Args:
-            symbol: Trading symbol (e.g., 'XAUUSD', 'XAUUSD')
+            symbol: Trading symbol (e.g., 'BTCUSD', 'XAUUSD')
             timeframe: MT5 timeframe constant (e.g., mt5.TIMEFRAME_M1, mt5.TIMEFRAME_H1)
             count: Number of candles to fetch
             simple: When True, do a single fast fetch and skip feed-warming, the
@@ -375,7 +549,7 @@ class MT5PositionHelper:
         Compares the latest candle time against current time using a lookback window.
         
         Args:
-            symbol: Trading symbol (e.g., 'XAUUSD', 'XAUUSD')
+            symbol: Trading symbol (e.g., 'BTCUSD', 'XAUUSD')
             timeframe: MT5 timeframe constant used for fetching rates
             lookback_minutes: Max minutes since last candle to consider market open (default 15)
         
@@ -451,7 +625,7 @@ class MT5PositionHelper:
                 'message': f'Error checking market status: {str(e)}',
             }
     
-    def _build_request(self, symbol: str, qty: float, order_type, sl: float, tp: float) -> dict:
+    def _build_request(self, symbol: str, qty: float, order_type, sl: float, tp: float, auto_sltp: bool = True) -> dict:
         """
         Build a fresh, thread-safe request dict for an order.
         
@@ -461,13 +635,30 @@ class MT5PositionHelper:
             order_type: MT5 order type constant (ORDER_TYPE_BUY / ORDER_TYPE_SELL)
             sl: Stop loss (0 for auto-calculation)
             tp: Take profit (0 for auto-calculation)
+            auto_sltp: False = sl / tp exactly as given (0 = none): the orders of the Turtle and of a basket
+                       design with a stop (app.py: their broker-side backstop), neither has a broker target
         
         Returns:
             dict: Ready-to-send request dictionary
         """
-        ask = self.mt5.symbol_info_tick(symbol).ask
+        tick = self.mt5.symbol_info_tick(symbol)
+        ask = tick.ask
+        self._quote = _tick_quote(tick)     # (kept beside the request for the observer; never a key of it)
         is_buy = (order_type == self.mt5.ORDER_TYPE_BUY)
         
+        if not auto_sltp:
+            return _tag({
+                "action": self._trade_action_deal,
+                "symbol": symbol,
+                "volume": qty,
+                "type": order_type,
+                "price": ask,
+                "type_time": self._order_time_gtc,
+                "type_filling": self._order_filling_ioc,
+                "sl": float(sl or 0.0),
+                "tp": float(tp or 0.0),
+            })
+
         if sl == 0:
             computed_sl = ask - (ask * self.risk_reward_ratio[0]) if is_buy \
                           else ask + (ask * self.risk_reward_ratio[0])
@@ -480,7 +671,7 @@ class MT5PositionHelper:
         else:
             computed_tp = tp
         
-        return {
+        return _tag({
             "action": self._trade_action_deal,
             "symbol": symbol,
             "volume": qty,
@@ -490,9 +681,9 @@ class MT5PositionHelper:
             "type_filling": self._order_filling_ioc,
             "sl": computed_sl,
             "tp": computed_tp,
-        }
+        })
 
-    def buy(self, symbol: str, qty: float, sl: float = 0, tp: float = 0):
+    def buy(self, symbol: str, qty: float, sl: float = 0, tp: float = 0, auto_sltp: bool = True):
         """
         Place a BUY order (thread-safe — builds a local request dict)
         
@@ -501,16 +692,19 @@ class MT5PositionHelper:
             qty: Order volume/quantity
             sl: Stop loss (0 for auto-calculation based on risk_reward_ratio)
             tp: Take profit (0 for auto-calculation based on risk_reward_ratio)
+            auto_sltp: False = no auto-calculation: sl / tp as given, 0 = none
         
         Returns:
-            Order result from MT5
+            Order result from MT5 (None when it was not sent: open_guard or order_guard refused it)
         """
-        request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_BUY, sl, tp)
-        order_status = self.mt5.order_send(request)
-        time.sleep(0.1)
+        self._quote = None
+        request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_BUY, sl, tp, auto_sltp)
+        sent, order_status = self._open(request, self._quote)
+        if sent:
+            time.sleep(0.1)
         return order_status
     
-    def sell(self, symbol: str, qty: float, sl: float = 0, tp: float = 0):
+    def sell(self, symbol: str, qty: float, sl: float = 0, tp: float = 0, auto_sltp: bool = True):
         """
         Place a SELL order (thread-safe — builds a local request dict)
         
@@ -519,18 +713,21 @@ class MT5PositionHelper:
             qty: Order volume/quantity
             sl: Stop loss (0 for auto-calculation based on risk_reward_ratio)
             tp: Take profit (0 for auto-calculation based on risk_reward_ratio)
+            auto_sltp: False = no auto-calculation: sl / tp as given, 0 = none
         
         Returns:
-            Order result from MT5
+            Order result from MT5 (None when it was not sent: open_guard or order_guard refused it)
         """
-        request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_SELL, sl, tp)
-        order_status = self.mt5.order_send(request)
-        time.sleep(0.1)
+        self._quote = None
+        request = self._build_request(symbol, qty, self.mt5.ORDER_TYPE_SELL, sl, tp, auto_sltp)
+        sent, order_status = self._open(request, self._quote)
+        if sent:
+            time.sleep(0.1)
         return order_status
     
     def close_by_type(self, symbol: str, pos_type: int):
         """
-        Close all positions of a specific type (BUY or SELL)
+        Close all of this bot's positions (MAGIC) of a specific type (BUY or SELL)
         
         Args:
             symbol: Trading symbol
@@ -558,10 +755,13 @@ class MT5PositionHelper:
             'errors': [],
         }
         
-        positions = self.mt5.positions_get(symbol=symbol)
-        if positions is None:
-            result['message'] = f"No positions found for {symbol}"
-            result['success'] = True  # No positions is not an error
+        try:
+            positions = self._own_positions(symbol)   # this bot's positions only (MAGIC)
+        except TerminalReadError as e:
+            # the positions are not known: nothing is closed, and it is a failure (the caller closes again)
+            result['message'] = str(e)
+            result['errors'].append(str(e))
+            result['failed_count'] = 1
             return result
         
         result['total_positions'] = len(positions)
@@ -588,7 +788,7 @@ class MT5PositionHelper:
             # Price: close BUY at bid, close SELL at ask
             price = tick.bid if pos.type == 0 else tick.ask
             
-            request = {
+            request = _tag({
                 "action": self.mt5.TRADE_ACTION_DEAL,
                 "position": pos.ticket,
                 "symbol": pos.symbol,
@@ -598,10 +798,10 @@ class MT5PositionHelper:
                 "deviation": 20,
                 "type_time": self.mt5.ORDER_TIME_GTC,
                 "type_filling": self.mt5.ORDER_FILLING_IOC,
-            }
-            
-            order_result = self.mt5.order_send(request)
-            
+            })
+
+            order_result = self._send(request, _tick_quote(tick))
+
             if order_result is None:
                 result['errors'].append(f"order_send failed for position {pos.ticket}, no response")
                 result['failed_count'] += 1
@@ -623,7 +823,8 @@ class MT5PositionHelper:
     def get_deal_history(self, from_date: datetime, to_date: datetime, symbol: str = None) -> List[Dict]:
         """
         Get closed deal history from MT5 for a date range.
-        Only returns deals with entry type DEAL_ENTRY_OUT (closed trades with realized P/L).
+        Only returns deals with entry type DEAL_ENTRY_OUT (closed trades with realized P/L) of this
+        bot (MAGIC).
         
         Args:
             from_date: Start datetime
@@ -658,6 +859,10 @@ class MT5PositionHelper:
             
             # Apply symbol filter if provided
             if symbol and deal.symbol != symbol:
+                continue
+
+            # This bot's closing deals only (its close requests carry MAGIC)
+            if not is_own(deal):
                 continue
             
             net = round(deal.profit + deal.commission + deal.swap + deal.fee, 2)
@@ -717,7 +922,7 @@ class MT5PositionHelper:
                 base = symbol.rstrip('mM')
                 if base and base != symbol:
                     candidates.append(base)
-            candidates.extend(['EURUSDm', 'EURUSD', 'XAUUSDm', 'XAUUSDm', 'XAGUSDm'])
+            candidates.extend(['EURUSDm', 'EURUSD', 'BTCUSDm', 'XAUUSDm', 'XAGUSDm'])
 
             # Deduplicate while keeping order
             seen = set()
@@ -739,6 +944,52 @@ class MT5PositionHelper:
         except Exception:
             pass
         return datetime.now(tz=timezone.utc)
+
+    def get_bot_deals(self, from_date: datetime, to_date: datetime):
+        """
+        This bot's deals in [from_date, to_date], as the terminal's deal objects: every deal carrying
+        MAGIC, plus any other deal on a position one of them opened (a close from the terminal or by the
+        broker carries no magic). None when the terminal returns no history at all (an error), so the
+        caller can tell "no deals" from "unknown".
+        """
+        deals = self.mt5.history_deals_get(from_date, to_date)
+        if deals is None:
+            return None
+        own = [d for d in deals if is_own(d)]
+        ids = {getattr(d, 'position_id', None) for d in own} - {None, 0}
+        if not ids:
+            return own
+        return [d for d in deals if is_own(d) or getattr(d, 'position_id', None) in ids]
+
+    def get_cash_deals(self, since, until):
+        """
+        The account's balance operations -- deposits (amount above 0) and withdrawals (below 0), booked by the
+        broker as deals of type DEAL_TYPE_BALANCE (no symbol, no magic) -- between `since` and `until` (epoch
+        seconds): [{'ticket', 'amount' (the deal's profit), 'time' (seconds, time_msc when the terminal has it, on
+        the scale of the other deal times)}], oldest first. None when the history could not be read: an error, not
+        "none" (the safety then waits for a read that works before it judges a change of the balance).
+        One terminal read; the caller holds mt5_lock. Never raises.
+        """
+        try:
+            deals = self.mt5.history_deals_get(datetime.fromtimestamp(float(since), tz=timezone.utc),
+                                               datetime.fromtimestamp(float(until), tz=timezone.utc))
+        except Exception:
+            return None
+        if deals is None:
+            return None
+        balance = getattr(self.mt5, 'DEAL_TYPE_BALANCE', 2)
+        out = []
+        for deal in deals:
+            try:
+                if getattr(deal, 'type', None) != balance:
+                    continue
+                msc = getattr(deal, 'time_msc', None)
+                out.append({'ticket': int(deal.ticket), 'amount': float(deal.profit),
+                            'time': msc / 1000.0 if msc else float(deal.time)})
+            except (TypeError, ValueError, AttributeError):
+                continue                    # (a deal the terminal described only in part: not a cash line)
+        out.sort(key=lambda c: (c['time'], c['ticket']))
+        return out
 
     def get_deals_since(self, days: int, symbol: str = None) -> List[Dict]:
         """

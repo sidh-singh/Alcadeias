@@ -1,0 +1,4 @@
+# The launchers run in cmd.exe, which needs Windows line endings (CR LF): in a file with LF only a "goto" can
+# miss its label. This line makes git write every .bat with CR LF on every machine, whatever its own settings.
+# tests_demo/test_launchers.py checks that the line is here.
+*.bat text eol=crlf
