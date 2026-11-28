@@ -1,0 +1,10 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+line,bot_filters:btc_turtle|SGATE200-D1,Turtle System 2 + bot votes + daily shorts only below MA200,featured,finalist,Turtle,dotted,2824.13,2824.13,17.5364,10.8582,M1,1.615037,,2020-12-31,2824.13,end printed
+line,bot_filters:btc_turtle|SGATE200-D1&LARSI-H1,Turtle System 2 + bot votes + daily shorts only below MA200 and 1H Laguerre RSI side,featured,finalist,Turtle,dashed,2824.13,2824.13,17.5364,10.8582,M1,1.615037,,2020-12-31,2824.13,
+line,bot_filters:btc_top2|QQE-H4,Top 2 + 4H QQE MOD colour,featured,finalist,Top 1-3 (optimiser v4),solid,2075.33,2075.33,1.7464,2.2459,second,0.777595,,2020-12-31,2075.33,end printed
+line,bot_filters:btc_top2|BASE,"Top 2 (base, no added filter)",base,base,Top 1-3 (optimiser v4),dash-dot,2081.20,2081.20,1.8811,2.2522,second,0.835228,,2020-12-31,2081.20,
+line,bot_filters:btc_turtle|BASE,"Turtle System 2 + bot votes (base, no added filter)",base,base,Turtle,long dash,2857.89,2857.89,18.1922,9.4474,M1,1.925630,,2020-12-31,2857.89,
+line,final10:BTCUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),solid,2081.20,2081.20,1.8811,2.2520,second,0.835302,,2020-12-31,2081.20,
+line,final10:BTCUSDm|Turtle [alt] + bot votes,Turtle System 2 + bot votes,design,design,Turtle,dashed,2857.89,2857.89,18.1922,9.4474,M1,1.925630,,2020-12-31,2857.89,
+line,benchmarks:BTCUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,solid,9085.18,9085.18,103.1398,71.7289,M1,1.437911,,2020-12-31,9085.18,end printed
+line,benchmarks:BTCUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,dotted,2225.80,2225.80,5.1366,4.7713,M1,1.076562,,2020-12-31,2225.80,end printed

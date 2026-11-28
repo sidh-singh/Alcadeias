@@ -1971,9 +1971,8 @@ PAGE_HTML = r'''<!DOCTYPE html>
 <ul>
 <li><b>What is compared:</b> the designs the bots run and FINAL10's final ten (with its references); study 1, TradeIQ
 video 1 (750 RSI-rule variants); study 2, TradeIQ video 2 (about 1,460 variants of nine indicators) and study 3 (59
-entry filters on the five bots' designs, about 300 variants; its finalists and bases are shown), each as soon as its
-files arrive; René Balke's strategies on the bot's unit rule; the DCA-ladder study's unit-rule accounts; and
-buy-and-hold.</li>
+entry filters on the five bots' designs, about 300 variants; its finalists and bases are shown); René Balke's
+strategies on the bot's unit rule; the DCA-ladder study's unit-rule accounts; and buy-and-hold.</li>
 <li><b>The account:</b> one fresh $2,000 account per row and window, nothing withdrawn, with FINAL10's sizing: units =
 floor(balance / 2,500) + 1, at most 10, times 0.01 lot. The exceptions say so: the risk-sized FINAL10 rows (a
 "risk-sized" badge, kept out of the Top 10) and the two buy-and-hold lines. "Per 0.01 lot" switches the scatter and the
@@ -1983,11 +1982,11 @@ table to the studies' unit results: always 0.01 lot, no account.</li>
 FINAL10. Each study's own windows are under "Study windows", named after the study that owns them, with their real dates
 in the table.</li>
 <li><b>Costs:</b> x1.0 is the broker's own spread from the tick data. x1.5 makes every spread one and a half times as
-wide, as a stress test; only study 1 has it, per 0.01 lot, on its own windows. No swap and no commission anywhere.</li>
+wide, as a stress test; only studies 1 and 2 have it, on their own windows. No swap and no commission anywhere.</li>
 <li><b>In or out of sample</b> (the Sample column): out-of-sample means no choice of that row read the window:
-FINAL10's new window, study 1's hold-out (and 1y, which lies inside it), and the exams of studies 2 and 3 when they
-arrive. The bots' designs are in-sample on every window from 2021 on, whichever study ran them. Read in-sample numbers as
-a description, not a forecast.</li>
+FINAL10's new window, study 1's hold-out (and 1y, which lies inside it), study 2's hold-out, Early window and 1y, and
+study 3's new window (its sealed T1). The bots' designs are in-sample on every window from 2021 on, whichever study ran
+them. Read in-sample numbers as a description, not a forecast.</li>
 </ul>
 </section>
 
@@ -2171,9 +2170,11 @@ function fixView() {             // keep the basis and the costs on a combinatio
   }
   return "";
 }
-// the default selection: the bots' designs, buy-and-hold, and at most three finalists per study (FINAL10's by its rank,
-// unit-rule rows first)
-function rankKey(i) { return (S.siz[i] !== "unit rule" ? 1000 : 0) + (S.rank[i] == null ? 99 : S.rank[i]); }
+// the default selection: the bots' designs, buy-and-hold, and at most two finalists per study (FINAL10's by its rank,
+// unit-rule rows first, then those that passed their study's sealed exam; "Finalists" shows every one)
+function rankKey(i) {
+  return (S.siz[i] !== "unit rule" ? 1000 : 0) + (S.exam[i] === "fail" ? 500 : 0) + (S.rank[i] == null ? 99 : S.rank[i]);
+}
 function defaults(sym) {
   var s = new Set(), cand = [], per = {};
   for (var i = 0; i < NS; i++) {
@@ -2182,7 +2183,7 @@ function defaults(sym) {
     else if (S.fin[i]) cand.push(i);
   }
   cand.sort(function (a, b) { return (rankKey(a) - rankKey(b)) || cmpStr(S.label[a], S.label[b]); });
-  cand.forEach(function (i) { var g = S.grp[i]; if ((per[g] || 0) < 3) { s.add(i); per[g] = (per[g] || 0) + 1; } });
+  cand.forEach(function (i) { var g = S.grp[i]; if ((per[g] || 0) < 2) { s.add(i); per[g] = (per[g] || 0) + 1; } });
   return s;
 }
 st.sel.XAUUSDm = defaults("XAUUSDm");

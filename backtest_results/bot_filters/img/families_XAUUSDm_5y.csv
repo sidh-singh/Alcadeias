@@ -1,0 +1,7 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+bar,bot_filters:xau_top2|MSD-D1,Top 2 + daily Market Structure Dashboard,best,finalist,Top 1-3 (optimiser v4),,7585.61,,30.5593,12.2109,second,2.502625,,2.502625,,"best of the family, in hindsight"
+bar,bot_filters:xau_v3lite|BASE,"V3-lite (base, no added filter)",best,base,V3-lite,,10747.58,,39.9833,30.5807,second,1.307468,,1.307468,,"best of the family, in hindsight"
+reference,final10:XAUUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),,8879.85,8879.85,34.7389,15.3000,second,2.270516,,2.270516,,
+reference,bot_filters:xau_top2|BASE,"Top 2 (base, no added filter)",base,base,Top 1-3 (optimiser v4),,8879.85,,34.7389,15.3021,second,2.270205,,2.270205,,
+reference,benchmarks:XAUUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,,4157.11,4157.11,15.7607,31.1242,M1,0.506381,,0.506381,,
+reference,benchmarks:XAUUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,,4013.67,4013.67,14.9504,30.4013,M1,0.491768,,0.491768,,

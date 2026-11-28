@@ -1,0 +1,7 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+bar,bot_filters:btc_turtle|SGATE200-D1&LARSI-H1,Turtle System 2 + bot votes + daily shorts only below MA200 and 1H Laguerre RSI side,best,finalist,Turtle,,9072.40,,20.8054,27.2742,M1,0.762823,,0.762823,,"best of the family, in hindsight"
+bar,bot_filters:btc_top2|BASE,"Top 2 (base, no added filter)",best,base,Top 1-3 (optimiser v4),,4148.66,,9.5493,16.6315,second,0.574169,,0.574169,,"best of the family, in hindsight"
+reference,final10:BTCUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),,4148.66,4148.66,9.5493,16.6300,second,0.574221,,0.574221,,
+reference,bot_filters:btc_top2|BASE,"Top 2 (base, no added filter)",base,base,Top 1-3 (optimiser v4),,4148.66,4148.66,9.5493,16.6315,second,0.574169,,0.574169,,
+reference,benchmarks:BTCUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,,22391.85,22391.85,35.2485,77.5533,M1,0.454507,,0.454507,,
+reference,benchmarks:BTCUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,,2649.87,2649.87,3.5796,21.4121,M1,0.167177,,0.167177,,

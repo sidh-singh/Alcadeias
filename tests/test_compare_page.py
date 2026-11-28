@@ -561,10 +561,15 @@ def test_palette_slots_follow_the_groups_present_and_pass_the_colour_checks():
 
 @need_data
 def test_the_committed_page_uses_the_present_groups_slots():
+    """The groups with curves take the first palette slots in legend order (group_slots), whatever sources the
+    committed page was built with; buy-and-hold has none (the ink colour)."""
     blob = _blob(PAGE.read_text(encoding="utf-8"))
     slots = {g["key"]: g["slot"] for g in blob["groups"]}
-    assert slots["bots"] == 0 and slots["final10"] == 1 and slots["tradeiq_rsi"] == 2 and slots["balke"] == 3
-    assert slots["tradeiq_2027"] is None and slots["bot_filters"] is None and slots["benchmarks"] is None
+    with_curves = {blob["S"]["grp"][int(i)] for cw in blob["C"].values() for i in cw}
+    in_build = set(blob["S"]["grp"])                      # a group with no series on the page has no slot
+    want = C.group_slots({k: k in with_curves for k in slots if k in in_build})
+    assert {k: want.get(k) for k in slots} == slots
+    assert slots["bots"] == 0 and slots["final10"] == 1 and slots["tradeiq_rsi"] == 2 and slots["benchmarks"] is None
 
 
 @need_data
@@ -719,7 +724,10 @@ def test_the_page_in_a_browser(tmp_path):
             return page.evaluate("() => (document.getElementById('chart').data || []).filter(t => t.yaxis === 'y')"
                                  ".map(t => [t.name, t.line.color, t.line.dash, (t.marker || {}).symbol || ''])")
         d = drawn()
-        assert 6 <= len(d) <= 12
+        # the bots' designs (3), buy-and-hold (2) and at most two finalists per study with finalists on gold 5y
+        n_studies = len({blob["S"]["grp"][i] for i in range(len(blob["S"]["id"])) if blob["S"]["fin"][i]
+                         and blob["S"]["sym"][i] == "XAUUSDm" and blob["S"]["role"][i] != "design"})
+        assert 6 <= len(d) <= 5 + 2 * n_studies
         assert len({tuple(x[1:]) for x in d}) == len(d)            # colour, dash and marker never repeat
         assert page.evaluate("location.hash") == "#sym=gold&w=5y"
         page.click("#q-fin")

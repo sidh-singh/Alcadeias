@@ -221,8 +221,8 @@ How the series are classified:
   a log-scale toggle, a crosshair with one tooltip for every line, and a legend grouped by study (under the plot on
   narrow screens). A drawdown chart (% below the running peak of the drawn line, at daily closes) sits under it on the
   same x axis, with its own tooltip.
-  - The default selection is the bots' designs, buy-and-hold, and at most three finalists per study (FINAL10's by its
-    rank, unit-rule rows first).
+  - The default selection is the bots' designs, buy-and-hold, and at most two finalists per study (FINAL10's by its
+    rank, unit-rule rows first, then those that passed their study's sealed exam); "Finalists" draws every one.
   - Quick buttons: Bots, Finalists, Top 10 accounts by growth ÷ DD (the unit-rule $2,000 accounts of the window at x1.0
     with a curve; the risk-sized rows, buy-and-hold, the basis, cost and filters are left out), Clear. Each keeps the
     buy-and-hold lines.

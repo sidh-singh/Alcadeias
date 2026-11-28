@@ -1,0 +1,10 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+line,bot_filters:xau_top2|MSD-D1,Top 2 + daily Market Structure Dashboard,featured,finalist,Top 1-3 (optimiser v4),solid,8208.65,8208.65,19.3041,10.9770,second,1.758595,,2026-11-12,8208.65,end printed
+line,bot_filters:xau_top1|LGATE200-H1,Top 1 + 1H longs only above MA200,featured,finalist,Top 1-3 (optimiser v4),dashed,21124.02,21124.02,34.2667,29.6173,second,1.156983,,2026-11-12,21124.02,end printed
+line,bot_filters:xau_top1|LGATE200-H1&QQE-H4,Top 1 + 1H longs only above MA200 and 4H QQE MOD colour,featured,finalist,Top 1-3 (optimiser v4),dotted,18516.54,18516.54,32.0737,29.0663,second,1.103467,,2026-11-12,18516.54,
+line,bot_filters:xau_top2|SLOPE100-D1,Top 2 + daily MA100 slope,featured,finalist,Top 1-3 (optimiser v4),dash-dot,8314.18,8314.18,19.4947,21.1043,second,0.923731,,2026-11-12,8314.18,
+line,final10:XAUUSDm|Top 1,Top 1,design,design,Top 1-3 (optimiser v4),solid,15167.68,15167.68,28.8208,32.4800,second,0.887340,,2026-11-12,15167.68,end printed
+line,final10:XAUUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),dashed,8544.75,8544.75,19.9040,17.1100,second,1.163296,,2026-11-12,8544.75,
+line,final10:XAUUSDm|V3-lite,V3-lite,design,design,V3-lite,dotted,11957.34,11957.34,25.0477,33.0000,second,0.759021,,2026-11-12,11957.34,
+line,benchmarks:XAUUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,solid,6454.23,6454.23,15.7715,31.1242,M1,0.506728,,2026-11-12,6454.23,end printed
+line,benchmarks:XAUUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,dotted,4678.15,4678.15,11.2066,27.2402,M1,0.411399,,2026-11-12,4678.15,
