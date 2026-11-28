@@ -1,0 +1,53 @@
+by,symbol,kind,study1_filter,n,dev_wins_net,dev_wins_pdd,dev_n_pdd,val_wins_net,val_wins_pdd,val_n_pdd,verdict,tf
+kind+study1_filter,XAUUSDm,MSD-F4,F0,60,25,30,60,9,8,60,does not help,
+kind+study1_filter,XAUUSDm,MSD-F4,F1,60,47,49,60,1,1,60,mixed,
+kind+study1_filter,XAUUSDm,MSD-F4,F2-4H,20,13,14,20,0,1,20,mixed,
+kind+study1_filter,XAUUSDm,MSD-F4,F2-1D,40,39,40,40,0,2,40,mixed,
+kind+study1_filter,XAUUSDm,MSD-F6,F0,60,19,18,60,32,30,60,mixed,
+kind+study1_filter,XAUUSDm,MSD-F6,F1,60,38,33,60,22,14,60,mixed,
+kind+study1_filter,XAUUSDm,MSD-F6,F2-4H,20,5,4,20,6,5,20,does not help,
+kind+study1_filter,XAUUSDm,MSD-F6,F2-1D,40,28,24,40,24,21,40,helps,
+kind+study1_filter,BTCUSDm,MSD-F4,F0,60,19,23,60,21,26,60,does not help,
+kind+study1_filter,BTCUSDm,MSD-F4,F1,60,10,16,60,12,12,60,does not help,
+kind+study1_filter,BTCUSDm,MSD-F4,F2-4H,20,0,0,20,0,0,20,does not help,
+kind+study1_filter,BTCUSDm,MSD-F4,F2-1D,40,10,8,40,0,3,40,does not help,
+kind+study1_filter,BTCUSDm,MSD-F6,F0,60,49,44,60,25,25,60,mixed,
+kind+study1_filter,BTCUSDm,MSD-F6,F1,60,19,21,60,12,9,60,does not help,
+kind+study1_filter,BTCUSDm,MSD-F6,F2-4H,20,0,0,20,0,0,20,does not help,
+kind+study1_filter,BTCUSDm,MSD-F6,F2-1D,40,14,14,40,20,20,40,does not help,
+kind+study1_filter+tf,XAUUSDm,MSD-F4,F0,20,15,17,20,8,8,20,mixed,1H
+kind+study1_filter+tf,XAUUSDm,MSD-F4,F1,20,17,18,20,1,1,20,mixed,1H
+kind+study1_filter+tf,XAUUSDm,MSD-F4,F2-4H,20,13,14,20,0,1,20,mixed,1H
+kind+study1_filter+tf,XAUUSDm,MSD-F4,F2-1D,20,19,20,20,0,2,20,mixed,1H
+kind+study1_filter+tf,XAUUSDm,MSD-F4,F0,20,6,9,20,0,0,20,does not help,4H
+kind+study1_filter+tf,XAUUSDm,MSD-F4,F1,20,14,14,20,0,0,20,mixed,4H
+kind+study1_filter+tf,XAUUSDm,MSD-F4,F2-1D,20,20,20,20,0,0,20,mixed,4H
+kind+study1_filter+tf,XAUUSDm,MSD-F4,F0,20,4,4,20,1,0,20,does not help,1D
+kind+study1_filter+tf,XAUUSDm,MSD-F4,F1,20,16,17,20,0,0,20,mixed,1D
+kind+study1_filter+tf,XAUUSDm,MSD-F6,F0,20,1,1,20,16,16,20,mixed,1H
+kind+study1_filter+tf,XAUUSDm,MSD-F6,F1,20,7,3,20,4,3,20,does not help,1H
+kind+study1_filter+tf,XAUUSDm,MSD-F6,F2-4H,20,5,4,20,6,5,20,does not help,1H
+kind+study1_filter+tf,XAUUSDm,MSD-F6,F2-1D,20,10,8,20,10,10,20,does not help,1H
+kind+study1_filter+tf,XAUUSDm,MSD-F6,F0,20,0,0,20,10,10,20,does not help,4H
+kind+study1_filter+tf,XAUUSDm,MSD-F6,F1,20,11,10,20,18,11,20,mixed,4H
+kind+study1_filter+tf,XAUUSDm,MSD-F6,F2-1D,20,18,16,20,14,11,20,helps,4H
+kind+study1_filter+tf,XAUUSDm,MSD-F6,F0,20,18,17,20,6,4,20,mixed,1D
+kind+study1_filter+tf,XAUUSDm,MSD-F6,F1,20,20,20,20,0,0,20,mixed,1D
+kind+study1_filter+tf,BTCUSDm,MSD-F4,F0,20,15,14,20,10,10,20,mixed,1H
+kind+study1_filter+tf,BTCUSDm,MSD-F4,F1,20,5,6,20,10,8,20,does not help,1H
+kind+study1_filter+tf,BTCUSDm,MSD-F4,F2-4H,20,0,0,20,0,0,20,does not help,1H
+kind+study1_filter+tf,BTCUSDm,MSD-F4,F2-1D,20,8,4,20,0,0,20,does not help,1H
+kind+study1_filter+tf,BTCUSDm,MSD-F4,F0,20,3,5,20,8,8,20,does not help,4H
+kind+study1_filter+tf,BTCUSDm,MSD-F4,F1,20,0,0,20,2,4,20,does not help,4H
+kind+study1_filter+tf,BTCUSDm,MSD-F4,F2-1D,20,2,4,20,0,3,20,does not help,4H
+kind+study1_filter+tf,BTCUSDm,MSD-F4,F0,20,1,4,20,3,8,20,does not help,1D
+kind+study1_filter+tf,BTCUSDm,MSD-F4,F1,20,5,10,20,0,0,20,does not help,1D
+kind+study1_filter+tf,BTCUSDm,MSD-F6,F0,20,16,11,20,10,10,20,mixed,1H
+kind+study1_filter+tf,BTCUSDm,MSD-F6,F1,20,0,3,20,0,0,20,does not help,1H
+kind+study1_filter+tf,BTCUSDm,MSD-F6,F2-4H,20,0,0,20,0,0,20,does not help,1H
+kind+study1_filter+tf,BTCUSDm,MSD-F6,F2-1D,20,2,2,20,10,10,20,does not help,1H
+kind+study1_filter+tf,BTCUSDm,MSD-F6,F0,20,17,16,20,13,11,20,helps,4H
+kind+study1_filter+tf,BTCUSDm,MSD-F6,F1,20,1,1,20,10,7,20,does not help,4H
+kind+study1_filter+tf,BTCUSDm,MSD-F6,F2-1D,20,12,12,20,10,10,20,mixed,4H
+kind+study1_filter+tf,BTCUSDm,MSD-F6,F0,20,16,17,20,2,4,20,mixed,1D
+kind+study1_filter+tf,BTCUSDm,MSD-F6,F1,20,18,17,20,2,2,20,mixed,1D

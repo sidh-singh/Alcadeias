@@ -1025,6 +1025,23 @@ def test_claim_functions_count_only_inside_the_evidence_windows(sealed):
         D.claims_table(ev2, numbers=[6], partial=True)
 
 
+def test_evidence_trades_without_ids_gives_every_variant_of_the_window(sealed):
+    """``Evidence.trades(window)`` (no ids) is every variant's trades of that window at the cost, as a claim extra
+    calls it (``tradeiq2_rules_wyckoff.claim16`` picks its own rows); with ids, only theirs."""
+    selected(sealed)
+    ev = D.Evidence(sealed, D.read_results(sealed).query("window != 'devval'"), D.read_grid(sealed),
+                    pd.read_csv(sealed / "qualification.csv"), STUB.MODULES, loader=STUB.LOADER)
+    allt = pd.read_csv(sealed / "trades_dev_val.csv.gz", float_precision="round_trip")
+    for w in ("dev", "val"):
+        want = allt[(allt.window == w) & (allt.cost == 1.0)].reset_index(drop=True)
+        got = ev.trades(w)
+        assert len(want) > 0 and got.reset_index(drop=True).equals(want), w
+        some = sorted(set(want.vid))[:2]
+        assert set(ev.trades(w, some).vid) == set(some)
+        x15 = ev.trades(w, cost=1.5)
+        assert len(x15) and (x15.cost == 1.5).all() and set(x15.vid) <= set(allt.vid)
+
+
 def test_the_filters_and_our_combinations_pair_by_the_prereg_names():
     G = "XAUUSDm|"
     specs = [{"vid": G + "1H|SP|W1|F0", "family": "SP"}, {"vid": G + "1H|SP|W1|FD", "family": "SP"},

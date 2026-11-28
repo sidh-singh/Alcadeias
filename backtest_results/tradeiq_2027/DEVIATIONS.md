@@ -807,3 +807,15 @@ The harness's item keeps the label the code cites, "harness reading 15", althoug
   `tradeiq2_rules_msd.py` in place and restored it byte-identical (sha256 checked against its kept copy). Other test
   runs in that window could have imported a mutant, so every affected test file was run again on the final files
   before this section's commit. Later mutation checks ran in memory only.
+
+## After the freeze, 28 Nov 2026 (IST)
+
+- **FIX-2 (20:43 IST, after the exam and the accounts, before any claim was computed). The driver's
+  `Evidence.trades`.** The first `claims` run stopped at claim 16: `tradeiq2_rules_wyckoff.claim16` calls
+  `ev.trades(window)` and picks its own rows (WY-STD / WY-AGG x S-W x X-S x F0, x1.0). The driver's `trades` required
+  a list of ids. The module's test had passed a stand-in with that one-argument call, so the two had never met. The
+  driver now reads `vids=None` as every variant's trades of the window at the cost (`tests/test_tradeiq2.py::
+  test_evidence_trades_without_ids_gives_every_variant_of_the_window`). The driver is an information file of
+  FINALISTS.md (its blob is recorded, not required), and no rule module, port or harness file changed. So no
+  variant's result, no exam row and no account moves; the change only lets claim 16 be computed. `claims` then ran
+  to the end: 178 parts, none 'not computed'.

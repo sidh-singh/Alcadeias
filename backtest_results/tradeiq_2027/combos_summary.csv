@@ -1,0 +1,8 @@
+by,symbol,combination,n,dev_wins_net,dev_wins_pdd,dev_n_pdd,val_wins_net,val_wins_pdd,val_n_pdd,verdict
+combination,XAUUSDm,"STK against RIB alone (same side and timeframe, X0, F0)",18,5,7,18,3,7,18,does not help
+combination,XAUUSDm,WY-CL / WY-SP against WY-STD x X-S (same filter and timeframe),18,3,3,9,7,5,12,does not help
+combination,XAUUSDm,ORB-CX (the COMEX-open range) against the New York range,8,0,1,8,5,5,8,mixed
+combination,XAUUSDm,TIGHT against the same ORB rule without it,4,3,3,4,0,0,4,mixed
+combination,BTCUSDm,"STK against RIB alone (same side and timeframe, X0, F0)",18,12,10,18,5,8,18,mixed
+combination,BTCUSDm,WY-CL / WY-SP against WY-STD x X-S (same filter and timeframe),18,5,6,12,12,6,9,mixed
+combination,BTCUSDm,TIGHT against the same ORB rule without it,4,4,4,4,0,1,4,mixed

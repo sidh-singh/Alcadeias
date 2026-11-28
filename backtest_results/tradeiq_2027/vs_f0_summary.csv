@@ -1,0 +1,90 @@
+by,symbol,filter,n,dev_wins_net,dev_wins_pdd,dev_n_pdd,val_wins_net,val_wins_pdd,val_n_pdd,verdict,family
+filter,XAUUSDm,F1,46,14,10,37,16,18,37,does not help,
+filter,XAUUSDm,F2-4H,54,36,31,50,35,36,54,helps,
+filter,XAUUSDm,F2-1D,58,25,27,56,25,27,58,does not help,
+filter,XAUUSDm,FR,29,13,13,29,10,13,26,does not help,
+filter,XAUUSDm,F3,34,26,27,34,16,17,34,mixed,
+filter,XAUUSDm,FS,24,7,13,24,0,0,24,mixed,
+filter,XAUUSDm,FD,6,1,0,6,1,0,6,does not help,
+filter,XAUUSDm,LO,16,12,12,16,10,10,16,helps,
+filter,XAUUSDm,HV,10,9,9,10,2,2,10,mixed,
+filter,XAUUSDm,HV+F2-4H,10,8,8,10,4,6,10,mixed,
+filter,BTCUSDm,F1,46,37,37,40,16,21,40,mixed,
+filter,BTCUSDm,F2-4H,50,37,36,50,34,35,50,helps,
+filter,BTCUSDm,F2-1D,58,42,44,58,26,27,54,mixed,
+filter,BTCUSDm,FR,29,24,24,29,16,14,29,mixed,
+filter,BTCUSDm,F3,34,31,31,34,14,16,34,mixed,
+filter,BTCUSDm,FS,24,16,16,24,6,8,24,mixed,
+filter,BTCUSDm,FD,6,4,4,6,4,2,5,mixed,
+filter,BTCUSDm,LO,6,4,3,6,5,3,6,mixed,
+filter,BTCUSDm,HV,10,10,10,10,0,0,10,mixed,
+filter,BTCUSDm,HV+F2-4H,10,10,10,10,4,6,10,mixed,
+family+filter,XAUUSDm,F1,24,9,9,24,13,15,24,mixed,RIB
+family+filter,XAUUSDm,F2-4H,8,4,4,8,3,4,8,does not help,RIB
+family+filter,XAUUSDm,F2-1D,16,3,6,16,8,10,16,mixed,RIB
+family+filter,XAUUSDm,FR,16,6,7,16,6,10,16,mixed,RIB
+family+filter,XAUUSDm,F3,24,20,22,24,12,13,24,mixed,RIB
+family+filter,XAUUSDm,FS,24,7,13,24,0,0,24,mixed,RIB
+family+filter,XAUUSDm,F1,6,0,0,6,0,0,6,does not help,BOS
+family+filter,XAUUSDm,F2-4H,6,4,0,2,6,6,6,mixed,WY
+family+filter,XAUUSDm,F2-4H,3,2,2,3,0,0,3,mixed,WY-DERIVED
+family+filter,XAUUSDm,F2-1D,6,0,0,4,0,0,6,does not help,WY
+family+filter,XAUUSDm,F2-1D,3,2,1,3,1,1,3,mixed,WY-DERIVED
+family+filter,XAUUSDm,F1,6,0,0,0,0,0,0,does not help,WY
+family+filter,XAUUSDm,F1,3,1,0,0,1,0,0,does not help,WY-DERIVED
+family+filter,XAUUSDm,FD,6,1,0,6,1,0,6,does not help,SP
+family+filter,XAUUSDm,F2-4H,3,1,1,3,2,2,3,mixed,SP
+family+filter,XAUUSDm,LO,6,5,5,6,4,4,6,helps,SP
+family+filter,XAUUSDm,F2-1D,3,2,2,3,2,2,3,helps,SP
+family+filter,XAUUSDm,HV,10,9,9,10,2,2,10,mixed,ORB
+family+filter,XAUUSDm,F2-4H,14,10,10,14,9,10,14,helps,ORB
+family+filter,XAUUSDm,F2-1D,10,7,4,10,6,7,10,mixed,ORB
+family+filter,XAUUSDm,HV+F2-4H,10,8,8,10,4,6,10,mixed,ORB
+family+filter,XAUUSDm,LO,10,7,7,10,6,6,10,helps,ORB
+family+filter,XAUUSDm,F2-4H,10,7,6,10,6,6,10,helps,SH
+family+filter,XAUUSDm,F2-1D,10,8,8,10,4,5,10,mixed,SH
+family+filter,XAUUSDm,F3,10,6,5,10,4,4,10,mixed,SH
+family+filter,XAUUSDm,F2-4H,3,3,3,3,2,2,3,helps,HP-HARMONIC
+family+filter,XAUUSDm,FR,9,6,6,9,4,3,6,mixed,HP-HARMONIC
+family+filter,XAUUSDm,F2-1D,3,3,3,3,3,0,3,mixed,HP-HARMONIC
+family+filter,XAUUSDm,F1,3,3,0,3,0,1,3,mixed,HP-HARMONIC
+family+filter,XAUUSDm,F2-4H,3,1,1,3,3,3,3,mixed,HP-CHART
+family+filter,XAUUSDm,FR,4,1,0,4,0,0,4,does not help,HP-CHART
+family+filter,XAUUSDm,F2-1D,3,0,2,3,0,0,3,mixed,HP-CHART
+family+filter,XAUUSDm,F2-4H,4,4,4,4,4,3,4,helps,HA-ENTRY
+family+filter,XAUUSDm,F2-1D,4,0,1,4,1,2,4,does not help,HA-ENTRY
+family+filter,XAUUSDm,F1,4,1,1,4,2,2,4,does not help,HA-ENTRY
+family+filter,BTCUSDm,F1,24,24,24,24,8,13,24,mixed,RIB
+family+filter,BTCUSDm,F2-4H,8,8,8,8,6,7,8,helps,RIB
+family+filter,BTCUSDm,F2-1D,16,16,16,16,7,8,16,mixed,RIB
+family+filter,BTCUSDm,FR,16,12,13,16,8,9,16,mixed,RIB
+family+filter,BTCUSDm,F3,24,24,24,24,11,11,24,mixed,RIB
+family+filter,BTCUSDm,FS,24,16,16,24,6,8,24,mixed,RIB
+family+filter,BTCUSDm,F1,6,5,5,6,3,3,6,mixed,BOS
+family+filter,BTCUSDm,F2-4H,6,0,0,6,3,2,6,does not help,WY
+family+filter,BTCUSDm,F2-4H,3,1,1,3,3,2,3,mixed,WY-DERIVED
+family+filter,BTCUSDm,F2-1D,6,6,6,6,0,0,2,mixed,WY
+family+filter,BTCUSDm,F2-1D,3,0,0,3,2,2,3,mixed,WY-DERIVED
+family+filter,BTCUSDm,F1,6,0,0,0,0,0,0,does not help,WY
+family+filter,BTCUSDm,F1,3,1,1,3,1,0,3,does not help,WY-DERIVED
+family+filter,BTCUSDm,FD,6,4,4,6,4,2,5,mixed,SP
+family+filter,BTCUSDm,F2-4H,3,2,2,3,2,2,3,helps,SP
+family+filter,BTCUSDm,LO,6,4,3,6,5,3,6,mixed,SP
+family+filter,BTCUSDm,F2-1D,3,3,3,3,2,2,3,helps,SP
+family+filter,BTCUSDm,HV,10,10,10,10,0,0,10,mixed,ORB
+family+filter,BTCUSDm,F2-4H,10,9,9,10,5,7,10,mixed,ORB
+family+filter,BTCUSDm,F2-1D,10,8,8,10,4,5,10,mixed,ORB
+family+filter,BTCUSDm,HV+F2-4H,10,10,10,10,4,6,10,mixed,ORB
+family+filter,BTCUSDm,F2-4H,10,7,6,10,5,5,10,mixed,SH
+family+filter,BTCUSDm,F2-1D,10,3,5,10,3,3,10,does not help,SH
+family+filter,BTCUSDm,F3,10,7,7,10,3,5,10,mixed,SH
+family+filter,BTCUSDm,F2-4H,3,3,3,3,3,3,3,helps,HP-HARMONIC
+family+filter,BTCUSDm,FR,9,9,9,9,5,3,9,mixed,HP-HARMONIC
+family+filter,BTCUSDm,F2-1D,3,3,3,3,3,2,3,helps,HP-HARMONIC
+family+filter,BTCUSDm,F1,3,3,3,3,3,3,3,helps,HP-HARMONIC
+family+filter,BTCUSDm,F2-4H,3,3,3,3,3,3,3,helps,HP-CHART
+family+filter,BTCUSDm,FR,4,3,2,4,3,2,4,mixed,HP-CHART
+family+filter,BTCUSDm,F2-1D,3,0,0,3,3,3,3,mixed,HP-CHART
+family+filter,BTCUSDm,F2-4H,4,4,4,4,4,4,4,helps,HA-ENTRY
+family+filter,BTCUSDm,F2-1D,4,3,3,4,2,2,4,mixed,HA-ENTRY
+family+filter,BTCUSDm,F1,4,4,4,4,1,2,4,mixed,HA-ENTRY

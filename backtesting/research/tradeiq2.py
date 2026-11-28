@@ -3545,14 +3545,16 @@ class Evidence:
             self._s1_trades = t[t.cost == 1.0]
         return self._s1_trades
 
-    def trades(self, window: str, vids: Iterable[str], cost: float = 1.0) -> pd.DataFrame:
-        """The trades of ``vids`` in one real window of this study at one cost, read in chunks (the file is large)."""
-        vids = set(vids)
-        key = (window, cost, frozenset(vids))
+    def trades(self, window: str, vids: Optional[Iterable[str]] = None, cost: float = 1.0) -> pd.DataFrame:
+        """The trades of ``vids`` (None: every variant's) in one real window of this study at one cost, read in
+        chunks (the file is large). A rule module's claim extra may call ``trades(window)`` and pick its own rows
+        (``tradeiq2_rules_wyckoff.claim16``)."""
+        vids = None if vids is None else set(vids)
+        key = (window, cost, None if vids is None else frozenset(vids))
         if key not in self._trades:
             name = {"dev": "trades_dev_val.csv.gz", "val": "trades_dev_val.csv.gz", "holdout": "trades_holdout.csv.gz",
                     "early": "trades_early.csv.gz"}[window]
-            parts = [c[(c.window == window) & (c.cost == cost) & c.vid.isin(vids)] for c in
+            parts = [c[(c.window == window) & (c.cost == cost) & (True if vids is None else c.vid.isin(vids))] for c in
                      pd.read_csv(self.study_dir / name, float_precision="round_trip", chunksize=500_000)]
             self._trades[key] = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=TRADE_COLS)
         return self._trades[key]
