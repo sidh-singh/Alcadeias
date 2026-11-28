@@ -1,0 +1,20 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+bar,tradeiq_2027:XAUUSDm|1H|RIB|LO|X0|F2-4H,1H RIB LO X0 F2-4H,pick,finalist,RIB,,9364.89,,21.5779,17.3356,M1,1.244716,,1.244716,,pre-registered pick
+bar,tradeiq_2027:XAUUSDm|1H|STK|STK-RA|LO|S1,1H STK STK-RA LO S1,pick,finalist,STK,,8197.23,,19.5460,27.7291,M1,0.704891,,0.704891,,pre-registered pick
+bar,tradeiq_2027:XAUUSDm|1H|MSD-FILTER|MSD-F6|QQE|R2|S0,1H MSD-FILTER MSD-F6 QQE R2 S0,pick,champion,MSD-FILTER,,5835.29,,14.5128,28.3013,M1,0.512796,,0.512796,,pre-registered pick
+bar,tradeiq_2027:XAUUSDm|1H|MSD-ALONE|MSD-A2|S0,1H MSD-ALONE MSD-A2 S0,pick,champion,MSD-ALONE,,7128.90,,17.4518,37.6932,M1,0.462996,,0.462996,,pre-registered pick
+bar,tradeiq_2027:XAUUSDm|1H|COIL|COIL-RIB|X-3R|VOL,1H COIL COIL-RIB X-3R VOL,pick,finalist,COIL,,3491.04,,7.3045,26.6262,M1,0.274335,,0.274335,,pre-registered pick
+bar,tradeiq_2027:XAUUSDm|4H|HA-MANAGED|M2|RSI-R2-F1-S0,4H HA-MANAGED M2 RSI-R2-F1-S0,pick,champion,HA-MANAGED,,3991.89,,9.1406,36.8888,M1,0.247788,,0.247788,,pre-registered pick
+bar,tradeiq_2027:XAUUSDm|4H|ALMA-X|LO|X0|F0,4H ALMA-X LO X0 F0,pick,champion,ALMA-X,,4719.16,,11.4771,49.7644,M1,0.230629,,0.230629,,pre-registered pick
+bar,tradeiq_2027:XAUUSDm|1D|HA-ENTRY|HA-H2|LO|F0,1D HA-ENTRY HA-H2 LO F0,pick,champion,HA-ENTRY,,4227.08,,9.9343,55.8139,M1,0.177990,,0.177990,,pre-registered pick
+bar,tradeiq_2027:XAUUSDm|4H|SP|W2|POC|LO,4H SP W2 POC LO,pick,champion,SP,,2426.12,,2.4745,17.5022,M1,0.141382,,0.141382,,pre-registered pick
+bar,tradeiq_2027:XAUUSDm|M5|ORB|O3|HV+F2-4H,M5 ORB O3 HV+F2-4H,pick,champion,ORB,,2118.52,,0.7313,11.7536,M1,0.062219,,0.062219,,pre-registered pick
+bar,tradeiq_2027:XAUUSDm|1H|WY-DERIVED|WY-CL|S-CL|X-2R50|F0,1H WY-DERIVED WY-CL S-CL X-2R50 F0,pick,champion,WY-DERIVED,,2166.43,,1.0168,24.3610,M1,0.041739,,0.041739,,pre-registered pick
+tick,tradeiq_2027:XAUUSDm|1D|BOS|BOS-trend|LO|F0|S1,1D BOS BOS-trend LO F0 S1,best,variant,BOS,,6797.59,,16.7466,28.5941,M1,0.585666,,0.585666,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:XAUUSDm|1D|HP-HARMONIC|HP-HF|50/50|FR,1D HP-HARMONIC HP-HF 50/50 FR,best,variant,HP-HARMONIC,,2352.51,,2.0758,5.8501,M1,0.354832,,0.354832,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:XAUUSDm|4H|WY|WY-AGG|S-W|X-S3|F0,4H WY WY-AGG S-W X-S3 F0,best,variant,WY,,2117.12,,0.7228,2.5243,M1,0.286337,,0.286337,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:XAUUSDm|4H|HP-CHART|HP-CF|TP2|F0,4H HP-CHART HP-CF TP2 F0,best,variant,HP-CHART,,2383.07,,2.2426,20.6051,M1,0.108837,,0.108837,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:XAUUSDm|M15|SH|OR|K2|E1|F2-4H,M15 SH OR K2 E1 F2-4H,best,variant,SH,,2232.20,,1.3999,14.1881,M1,0.098667,,0.098667,,"the family's best row on this window, picked in hindsight"
+reference,final10:XAUUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),,8538.88,8538.88,20.2653,16.5000,day,1.228200,,1.228200,,
+reference,benchmarks:XAUUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,,5581.75,5581.75,13.8708,38.7390,M1,0.358058,,0.358058,,
+reference,benchmarks:XAUUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,,4294.92,4294.92,10.1560,34.3288,M1,0.295845,,0.295845,,

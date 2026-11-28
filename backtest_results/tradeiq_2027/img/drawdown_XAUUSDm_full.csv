@@ -1,0 +1,12 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+panel,tradeiq_2027:XAUUSDm|1H|RIB|LO|X0|F2-4H,1H RIB LO X0 F2-4H,featured,finalist,RIB,,9364.89,9364.89,21.5779,17.3356,M1,1.244716,-16.0052,2026-05-13,-16.0052,
+panel,tradeiq_2027:XAUUSDm|1H|STK|STK-RA|LO|S1,1H STK STK-RA LO S1,featured,finalist,STK,,8197.23,8197.23,19.5460,27.7291,M1,0.704891,-26.4725,2026-08-04,-26.4725,
+panel,tradeiq_2027:XAUUSDm|1H|COIL|COIL-RIB|X-3R|VOL,1H COIL COIL-RIB X-3R VOL,featured,finalist,COIL,,3491.04,3491.04,7.3045,26.6262,M1,0.274335,-25.6395,2026-06-05,-25.6395,
+panel,tradeiq_2027:XAUUSDm|1H|MSD-FILTER|MSD-F6|QQE|R2|S0,1H MSD-FILTER MSD-F6 QQE R2 S0,featured,champion,MSD-FILTER,,5835.29,5835.29,14.5128,28.3013,M1,0.512796,-26.4654,2026-06-23,-26.4654,
+panel,tradeiq_2027:XAUUSDm|1H|MSD-ALONE|MSD-A2|S0,1H MSD-ALONE MSD-A2 S0,featured,champion,MSD-ALONE,,7128.90,7128.90,17.4518,37.6932,M1,0.462996,-26.2770,2026-02-05,-26.2770,
+panel,tradeiq_2027:XAUUSDm|4H|HA-MANAGED|M2|RSI-R2-F1-S0,4H HA-MANAGED M2 RSI-R2-F1-S0,featured,champion,HA-MANAGED,,3991.89,3991.89,9.1406,36.8888,M1,0.247788,-36.1491,2026-08-04,-36.1491,
+panel,final10:XAUUSDm|Top 1,Top 1,design,design,Top 1-3 (optimiser v4),,15166.61,15166.61,29.3773,31.2713,day,0.939433,-31.2713,2023-05-11,-31.2713,
+panel,final10:XAUUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),,8538.88,8538.88,20.2653,16.5000,day,1.228200,-16.5000,2023-09-26,-16.5000,
+panel,final10:XAUUSDm|V3-lite,V3-lite,design,design,V3-lite,,11976.63,11976.63,25.5510,23.4322,day,1.090423,-23.4322,2026-02-05,-23.4322,
+panel,benchmarks:XAUUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,,5581.75,5581.75,13.8708,38.7390,M1,0.358058,-35.7865,2026-11-20,-35.7865,
+panel,benchmarks:XAUUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,,4294.92,4294.92,10.1560,34.3288,M1,0.295845,-31.6600,2026-11-20,-31.6600,

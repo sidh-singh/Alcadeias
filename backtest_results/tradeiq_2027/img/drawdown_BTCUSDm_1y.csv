@@ -1,0 +1,11 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+panel,tradeiq_2027:BTCUSDm|1D|MSD-FILTER|MSD-F6|LaRSI|R1|S1,1D MSD-FILTER MSD-F6 LaRSI R1 S1,featured,finalist,MSD-FILTER,,2209.45,2209.45,10.4801,10.8778,M1,0.963439,-9.5100,2026-04-19,-9.5100,
+panel,tradeiq_2027:BTCUSDm|1D|HA-MANAGED|HA-AND|LaRSI-R2-F3-S1,1D HA-MANAGED HA-AND LaRSI-R2-F3-S1,featured,finalist,HA-MANAGED,,2013.39,2013.39,0.6700,7.6283,M1,0.087831,-6.9726,2026-04-19,-6.9726,
+panel,tradeiq_2027:BTCUSDm|1D|COIL|COIL-RIB|X-3R|none,1D COIL COIL-RIB X-3R none,featured,finalist,COIL,,2007.88,2007.88,0.3945,14.9238,M1,0.026434,-13.1646,2026-04-12,-13.1646,
+panel,tradeiq_2027:BTCUSDm|4H|SP|W2|POC|F2-1D,4H SP W2 POC F2-1D,featured,champion,SP,,2105.17,2105.17,5.2620,3.7514,M1,1.402676,-3.2018,2026-10-23,-3.2018,
+panel,tradeiq_2027:BTCUSDm|4H|BOS|BOS-trend|LO|F1|S1,4H BOS BOS-trend LO F1 S1,featured,champion,BOS,,2008.25,2008.25,0.4127,5.1515,M1,0.080113,-4.5858,2026-10-22,-4.5858,
+panel,tradeiq_2027:BTCUSDm|4H|RIB|LS|XBE|F1,4H RIB LS XBE F1,featured,champion,RIB,,1969.23,1969.23,-1.5393,11.2762,M1,-0.136509,-9.6858,2026-11-04,-9.6858,
+panel,final10:BTCUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),,2118.91,2125.41,5.9497,13.1000,tick,0.454176,-13.3379,2026-11-08,-13.3379,max DD and curve from different runs (8-timing median)
+panel,final10:BTCUSDm|Turtle [alt] + bot votes,Turtle System 2 + bot votes,design,design,Turtle,,3039.45,3039.45,52.0161,22.4026,M1,2.321878,-18.5448,2026-11-09,-18.5448,
+panel,benchmarks:BTCUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,,1404.03,1404.03,-29.8157,44.5019,M1,-0.669987,-42.4130,2026-06-30,-42.4130,
+panel,benchmarks:BTCUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,,1697.09,1697.09,-15.1551,22.8697,M1,-0.662672,-21.5570,2026-06-30,-21.5570,

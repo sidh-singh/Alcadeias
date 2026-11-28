@@ -1,0 +1,11 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+panel,tradeiq_2027:BTCUSDm|1D|MSD-FILTER|MSD-F6|LaRSI|R1|S1,1D MSD-FILTER MSD-F6 LaRSI R1 S1,featured,finalist,MSD-FILTER,,3870.01,3870.01,8.7100,27.5886,M1,0.315710,-26.4949,2024-10-10,-26.4949,
+panel,tradeiq_2027:BTCUSDm|1D|HA-MANAGED|HA-AND|LaRSI-R2-F3-S1,1D HA-MANAGED HA-AND LaRSI-R2-F3-S1,featured,finalist,HA-MANAGED,,3055.44,3055.44,5.5077,22.0769,M1,0.249478,-20.3738,2026-04-19,-20.3738,
+panel,tradeiq_2027:BTCUSDm|1D|COIL|COIL-RIB|X-3R|none,1D COIL COIL-RIB X-3R none,featured,finalist,COIL,,2590.71,2590.71,3.3282,21.1510,M1,0.157354,-19.8628,2025-03-02,-19.8628,
+panel,tradeiq_2027:BTCUSDm|4H|BOS|BOS-trend|LO|F1|S1,4H BOS BOS-trend LO F1 S1,featured,champion,BOS,,3342.24,3342.24,6.7121,14.0648,M1,0.477227,-12.9705,2025-04-16,-12.9705,
+panel,tradeiq_2027:BTCUSDm|4H|RIB|LS|XBE|F1,4H RIB LS XBE F1,featured,champion,RIB,,3332.09,3332.09,6.6711,15.3277,M1,0.435232,-13.6093,2025-04-04,-13.6093,
+panel,tradeiq_2027:BTCUSDm|4H|SP|W2|POC|F2-1D,4H SP W2 POC F2-1D,featured,champion,SP,,2176.48,2176.48,1.0756,10.9910,M1,0.097862,-10.2141,2025-12-03,-10.2141,
+panel,final10:BTCUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),,4148.96,4148.96,9.7209,16.0081,day,0.607249,-16.0081,2022-03-13,-16.0081,
+panel,final10:BTCUSDm|Turtle [alt] + bot votes,Turtle System 2 + bot votes,design,design,Turtle,,7787.40,7787.40,18.8650,30.8043,day,0.612415,-30.8043,2025-11-13,-30.8043,
+panel,benchmarks:BTCUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,,32197.99,32197.99,42.1277,77.5533,M1,0.543210,-76.6567,2022-11-21,-76.6567,
+panel,benchmarks:BTCUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,,2567.33,2567.33,3.2098,22.0581,M1,0.145516,-20.6181,2026-06-30,-20.6181,

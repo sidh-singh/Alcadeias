@@ -1,0 +1,26 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+bar,tradeiq_2027:BTCUSDm|4H|SP|W2|POC|F2-1D,4H SP W2 POC F2-1D,pick,champion,SP,,2105.17,,5.2620,3.7514,M1,1.402676,,1.402676,,pre-registered pick
+tick,tradeiq_2027:BTCUSDm|4H|SP|W1|L50|F0,4H SP W1 L50 F0,best,variant,SP,,2247.47,,12.3826,2.2223,M1,5.571975,,5.571975,,"the family's best row on this window, picked in hindsight"
+bar,tradeiq_2027:BTCUSDm|1D|MSD-FILTER|MSD-F6|LaRSI|R1|S1,1D MSD-FILTER MSD-F6 LaRSI R1 S1,pick,finalist,MSD-FILTER,,2209.45,,10.4801,10.8778,M1,0.963439,,0.963439,,pre-registered pick
+tick,tradeiq_2027:BTCUSDm|1D|MSD-FILTER|MSD-F6|TSI|R1|S0,1D MSD-FILTER MSD-F6 TSI R1 S0,best,variant,MSD-FILTER,,2304.70,,15.2463,11.3693,M1,1.341006,,1.341006,,"the family's best row on this window, picked in hindsight"
+bar,tradeiq_2027:BTCUSDm|1D|HA-MANAGED|HA-AND|LaRSI-R2-F3-S1,1D HA-MANAGED HA-AND LaRSI-R2-F3-S1,pick,finalist,HA-MANAGED,,2013.39,,0.6700,7.6283,M1,0.087831,,0.087831,,pre-registered pick
+tick,tradeiq_2027:BTCUSDm|4H|HA-MANAGED|M2|TSI-R2-F1-S0,4H HA-MANAGED M2 TSI-R2-F1-S0,best,variant,HA-MANAGED,,2161.94,,8.1026,3.7077,M1,2.185344,,2.185344,,"the family's best row on this window, picked in hindsight"
+bar,tradeiq_2027:BTCUSDm|4H|BOS|BOS-trend|LO|F1|S1,4H BOS BOS-trend LO F1 S1,pick,champion,BOS,,2008.25,,0.4127,5.1515,M1,0.080113,,0.080113,,pre-registered pick
+tick,tradeiq_2027:BTCUSDm|1D|BOS|BOS-trend|LS|F1|S1,1D BOS BOS-trend LS F1 S1,best,variant,BOS,,2353.17,,17.6715,6.3853,M1,2.767529,,2.767529,,"the family's best row on this window, picked in hindsight"
+bar,tradeiq_2027:BTCUSDm|1D|COIL|COIL-RIB|X-3R|none,1D COIL COIL-RIB X-3R none,pick,finalist,COIL,,2007.88,,0.3945,14.9238,M1,0.026434,,0.026434,,pre-registered pick
+tick,tradeiq_2027:BTCUSDm|1D|COIL|COIL-MA|X-TR|none,1D COIL COIL-MA X-TR none,best,variant,COIL,,2113.59,,5.6837,6.6369,M1,0.856379,,0.856379,,"the family's best row on this window, picked in hindsight"
+bar,tradeiq_2027:BTCUSDm|4H|RIB|LS|XBE|F1,4H RIB LS XBE F1,pick,champion,RIB,,1969.23,,-1.5393,11.2762,M1,-0.136509,,-0.136509,,pre-registered pick
+tick,tradeiq_2027:BTCUSDm|1D|RIB|LO|XT2|F1,1D RIB LO XT2 F1,best,variant,RIB,,2097.49,,4.8778,0.6484,M1,7.522825,,7.522825,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|M5|SH|OR|K2|E1|F2-4H,M5 SH OR K2 E1 F2-4H,best,variant,SH,,2154.31,,7.7211,2.9870,M1,2.584901,,2.584901,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|1D|STK|STK-RA|LS|S1,1D STK STK-RA LS S1,best,variant,STK,,2399.52,,19.9911,8.1958,M1,2.439188,,2.439188,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|4H|HP-CHART|HP-CF|TP2|FR,4H HP-CHART HP-CF TP2 FR,best,variant,HP-CHART,,2055.28,,2.7659,1.1498,M1,2.405549,,2.405549,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|M5|ORB|O3|LV,M5 ORB O3 LV,best,variant,ORB,,2095.67,,4.7871,2.3176,M1,2.065542,,2.065542,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|1D|WY-DERIVED|WY-SP|S-SP|X-S3|F0,1D WY-DERIVED WY-SP S-SP X-S3 F0,best,variant,WY-DERIVED,,2076.09,,3.8070,2.2466,M1,1.694561,,1.694561,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|4H|HP-HARMONIC|HP-HF|TP1|FR,4H HP-HARMONIC HP-HF TP1 FR,best,variant,HP-HARMONIC,,2089.57,,4.4815,3.1747,M1,1.411629,,1.411629,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|1D|ALMA-X|LS|X0|F0,1D ALMA-X LS X0 F0,best,variant,ALMA-X,,2172.08,,8.6101,9.8683,M1,0.872501,,0.872501,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|1H|MSD-ALONE|MSD-A2|S1,1H MSD-ALONE MSD-A2 S1,best,variant,MSD-ALONE,,2040.04,,2.0033,4.2115,M1,0.475674,,0.475674,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|1H|HA-ENTRY|HA-H2|LS|F2-4H,1H HA-ENTRY HA-H2 LS F2-4H,best,variant,HA-ENTRY,,2075.02,,3.7538,13.5730,M1,0.276564,,0.276564,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|1H|WY|WY-STD|S-W|X-S|F0|VOL-TICK,1H WY WY-STD S-W X-S F0 VOL-TICK,best,variant,WY,,2003.52,,0.1762,1.0221,M1,0.172390,,0.172390,,"the family's best row on this window, picked in hindsight"
+reference,final10:BTCUSDm|Turtle [alt] + bot votes,Turtle System 2 + bot votes,design,design,Turtle,,3039.45,3039.45,52.0161,22.4026,M1,2.321878,,2.321878,,
+reference,benchmarks:BTCUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,,1697.09,1697.09,-15.1551,22.8697,M1,-0.662672,,-0.662672,,
+reference,benchmarks:BTCUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,,1404.03,1404.03,-29.8157,44.5019,M1,-0.669987,,-0.669987,,

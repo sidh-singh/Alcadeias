@@ -1,0 +1,5 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+line,tradeiq_2027:XAUUSDm|1H|STK|STK-RA|LO|S1,1H STK STK-RA LO S1,featured,finalist,STK,dashed,2012.69,2012.69,0.3170,4.4622,M1,0.071041,,2018-12-31,2012.69,end printed
+line,tradeiq_2027:XAUUSDm|1H|RIB|LO|X0|F2-4H,1H RIB LO X0 F2-4H,featured,finalist,RIB,solid,2007.32,2007.32,0.1830,4.8637,M1,0.037626,,2018-12-31,2007.32,end printed
+line,tradeiq_2027:XAUUSDm|1H|COIL|COIL-RIB|X-3R|VOL,1H COIL COIL-RIB X-3R VOL,featured,finalist,COIL,dotted,1963.57,1963.57,-0.9157,3.9416,M1,-0.232317,,2018-12-31,1963.57,end printed
+line,tradeiq_2027:XAUUSDm|4H|HA-MANAGED|M2|RSI-R2-F1-S0,4H HA-MANAGED M2 RSI-R2-F1-S0,featured,champion,HA-MANAGED,long dash-dot,2075.20,2075.20,1.8641,3.0869,M1,0.603874,,2018-12-31,2075.20,end printed

@@ -1,0 +1,9 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+line,tradeiq_2027:BTCUSDm|1D|MSD-FILTER|MSD-F6|LaRSI|R1|S1,1D MSD-FILTER MSD-F6 LaRSI R1 S1,featured,finalist,MSD-FILTER,solid,2366.79,2366.79,7.2476,16.4610,M1,0.440289,,2026-11-26,2366.79,end printed
+line,tradeiq_2027:BTCUSDm|1D|COIL|COIL-RIB|X-3R|none,1D COIL COIL-RIB X-3R none,featured,finalist,COIL,dashed,2165.95,2165.95,3.3678,14.7791,M1,0.227876,,2026-11-26,2165.95,end printed
+line,tradeiq_2027:BTCUSDm|1D|HA-MANAGED|HA-AND|LaRSI-R2-F3-S1,1D HA-MANAGED HA-AND LaRSI-R2-F3-S1,featured,finalist,HA-MANAGED,dotted,2113.53,2113.53,2.3208,16.6477,M1,0.139407,,2026-11-26,2113.53,
+line,tradeiq_2027:BTCUSDm|4H|RIB|LS|XBE|F1,4H RIB LS XBE F1,featured,champion,RIB,dash-dot,2433.93,2433.93,8.5014,10.3229,M1,0.823548,,2026-11-26,2433.93,
+line,final10:BTCUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),solid,2929.43,2929.43,17.4870,15.5986,day,1.121062,,2026-11-12,2929.43,
+line,final10:BTCUSDm|Turtle [alt] + bot votes,Turtle System 2 + bot votes,design,design,Turtle,dashed,3166.94,3166.94,21.4189,34.8359,day,0.614851,,2026-11-12,3166.94,end printed
+line,benchmarks:BTCUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,solid,1927.96,1927.96,-1.5128,56.3639,M1,-0.026840,,2026-11-26,1927.96,end printed
+line,benchmarks:BTCUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,dotted,1977.40,1977.40,-0.4712,26.9978,M1,-0.017453,,2026-11-26,1977.40,

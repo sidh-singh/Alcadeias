@@ -1,0 +1,10 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+line,tradeiq_2027:XAUUSDm|1H|RIB|LO|X0|F2-4H,1H RIB LO X0 F2-4H,featured,finalist,RIB,solid,5943.71,5943.71,57.3188,22.8818,M1,2.504995,,2026-11-25,5943.71,end printed
+line,tradeiq_2027:XAUUSDm|1H|STK|STK-RA|LO|S1,1H STK STK-RA LO S1,featured,finalist,STK,dashed,5549.65,5549.65,52.8928,30.2312,M1,1.749610,,2026-11-25,5549.65,end printed
+line,tradeiq_2027:XAUUSDm|1H|COIL|COIL-RIB|X-3R|VOL,1H COIL COIL-RIB X-3R VOL,featured,finalist,COIL,dotted,2301.55,2301.55,6.0162,27.7623,M1,0.216704,,2026-11-25,2301.55,
+line,tradeiq_2027:XAUUSDm|1H|MSD-ALONE|MSD-A2|S0,1H MSD-ALONE MSD-A2 S0,featured,champion,MSD-ALONE,long dash,5446.45,5446.45,51.7035,33.8881,M1,1.525713,,2026-11-25,5446.45,
+line,final10:XAUUSDm|Top 1,Top 1,design,design,Top 1-3 (optimiser v4),solid,12423.44,12423.44,116.2405,22.9168,day,5.072283,,2026-11-12,12423.44,end printed
+line,final10:XAUUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),dashed,8369.82,8369.82,83.0247,14.0431,day,5.912135,,2026-11-12,8369.82,
+line,final10:XAUUSDm|V3-lite,V3-lite,design,design,V3-lite,dotted,7485.99,7485.99,74.6001,26.4186,day,2.823772,,2026-11-12,7485.99,
+line,benchmarks:XAUUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,solid,3076.25,3076.25,19.6158,38.7390,M1,0.506358,,2026-11-25,3076.25,end printed
+line,benchmarks:XAUUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,dotted,3251.22,3251.22,22.4005,41.1301,M1,0.544625,,2026-11-25,3251.22,

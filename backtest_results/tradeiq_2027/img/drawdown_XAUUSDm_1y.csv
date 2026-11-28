@@ -1,0 +1,12 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+panel,tradeiq_2027:XAUUSDm|1H|RIB|LO|X0|F2-4H,1H RIB LO X0 F2-4H,featured,finalist,RIB,,3771.97,3771.97,88.6804,28.1073,M1,3.155066,-19.5835,2026-05-13,-19.5835,
+panel,tradeiq_2027:XAUUSDm|1H|STK|STK-RA|LO|S1,1H STK STK-RA LO S1,featured,finalist,STK,,3371.89,3371.89,68.6547,33.9725,M1,2.020890,-32.4342,2026-08-04,-32.4342,
+panel,tradeiq_2027:XAUUSDm|1H|COIL|COIL-RIB|X-3R|VOL,1H COIL COIL-RIB X-3R VOL,featured,finalist,COIL,,2149.30,2149.30,7.4702,22.2787,M1,0.335307,-21.4272,2026-06-05,-21.4272,
+panel,tradeiq_2027:XAUUSDm|4H|SP|W2|POC|LO,4H SP W2 POC LO,featured,champion,SP,,2265.88,2265.88,13.3039,11.9959,M1,1.109037,-10.6699,2026-06-19,-10.6699,
+panel,tradeiq_2027:XAUUSDm|1H|WY-DERIVED|WY-CL|S-CL|X-2R50|F0,1H WY-DERIVED WY-CL S-CL X-2R50 F0,featured,champion,WY-DERIVED,,2282.02,2282.02,14.1113,14.3741,M1,0.981717,-12.3803,2026-01-12,-12.3803,
+panel,tradeiq_2027:XAUUSDm|1H|MSD-ALONE|MSD-A2|S0,1H MSD-ALONE MSD-A2 S0,featured,champion,MSD-ALONE,,2432.03,2432.03,21.6178,35.6963,M1,0.605603,-34.2649,2026-10-28,-34.2649,
+panel,final10:XAUUSDm|Top 1,Top 1,design,design,Top 1-3 (optimiser v4),,4165.07,4179.18,108.3582,41.8900,tick,2.586732,-37.4833,2026-02-13,-37.4833,
+panel,final10:XAUUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),,4017.87,4026.27,100.9895,17.3300,tick,5.827438,-15.3404,2026-04-27,-15.3404,
+panel,final10:XAUUSDm|V3-lite,V3-lite,design,design,V3-lite,,3655.80,3664.11,82.8655,45.2900,tick,1.829664,-36.6972,2026-02-05,-36.6972,
+panel,benchmarks:XAUUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,,1851.81,1851.81,-7.4143,31.1242,M1,-0.238217,-29.7014,2026-10-30,-29.7014,
+panel,benchmarks:XAUUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,,1689.45,1689.46,-15.5370,51.1718,M1,-0.303624,-49.2940,2026-10-30,-49.2940,

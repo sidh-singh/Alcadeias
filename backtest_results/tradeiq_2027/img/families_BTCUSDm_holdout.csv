@@ -1,0 +1,20 @@
+item,series_id,label,group,role,family,key,final_usd,curve_last_usd,cagr_pct,max_dd_pct,dd_marks,growth_dd,daily_close_dd_pct,x,y,notes
+bar,tradeiq_2027:BTCUSDm|4H|RIB|LS|XBE|F1,4H RIB LS XBE F1,pick,champion,RIB,,2433.93,,8.5014,10.3229,M1,0.823548,,0.823548,,pre-registered pick
+bar,tradeiq_2027:BTCUSDm|4H|BOS|BOS-trend|LO|F1|S1,4H BOS BOS-trend LO F1 S1,pick,champion,BOS,,2372.49,,7.3548,9.8551,M1,0.746294,,0.746294,,pre-registered pick
+bar,tradeiq_2027:BTCUSDm|1D|MSD-FILTER|MSD-F6|LaRSI|R1|S1,1D MSD-FILTER MSD-F6 LaRSI R1 S1,pick,finalist,MSD-FILTER,,2366.79,,7.2476,16.4610,M1,0.440289,,0.440289,,pre-registered pick
+bar,tradeiq_2027:BTCUSDm|1D|COIL|COIL-RIB|X-3R|none,1D COIL COIL-RIB X-3R none,pick,finalist,COIL,,2165.95,,3.3678,14.7791,M1,0.227876,,0.227876,,pre-registered pick
+bar,tradeiq_2027:BTCUSDm|1D|HA-MANAGED|HA-AND|LaRSI-R2-F3-S1,1D HA-MANAGED HA-AND LaRSI-R2-F3-S1,pick,finalist,HA-MANAGED,,2113.53,,2.3208,16.6477,M1,0.139407,,0.139407,,pre-registered pick
+bar,tradeiq_2027:BTCUSDm|4H|SP|W2|POC|F2-1D,4H SP W2 POC F2-1D,pick,champion,SP,,1943.00,,-1.1943,10.7387,M1,-0.111215,,-0.111215,,pre-registered pick
+tick,tradeiq_2027:BTCUSDm|1D|ALMA-X|LO|X0|F0,1D ALMA-X LO X0 F0,best,variant,ALMA-X,,2343.31,,6.8042,13.2522,M1,0.513439,,0.513439,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|4H|STK|STK-RA|LO|S1,4H STK STK-RA LO S1,best,variant,STK,,2175.81,,3.5631,14.3256,M1,0.248723,,0.248723,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|M15|ORB|O1|HV+F2-4H,M15 ORB O1 HV+F2-4H,best,variant,ORB,,2074.70,,1.5354,10.7708,M1,0.142552,,0.142552,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|4H|HP-HARMONIC|HP-HF|TP1|FR,4H HP-HARMONIC HP-HF TP1 FR,best,variant,HP-HARMONIC,,2015.71,,0.3257,6.3558,M1,0.051245,,0.051245,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|4H|WY-DERIVED|WY-SP|S-SP|X-S|F0,4H WY-DERIVED WY-SP S-SP X-S F0,best,variant,WY-DERIVED,,2009.32,,0.1933,5.3361,M1,0.036225,,0.036225,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|1D|HA-ENTRY|HA-H1|LO|F1,1D HA-ENTRY HA-H1 LO F1,best,variant,HA-ENTRY,,2007.53,,0.1562,14.1091,M1,0.011071,,0.011071,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|4H|HP-CHART|HP-CF|TP1|FR,4H HP-CHART HP-CF TP1 FR,best,variant,HP-CHART,,1995.73,,-0.0889,5.0204,M1,-0.017708,,-0.017708,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|1H|WY|WY-AGG|S-W|X-S|F0,1H WY WY-AGG S-W X-S F0,best,variant,WY,,1990.51,,-0.1975,2.9336,M1,-0.067323,,-0.067323,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|4H|MSD-ALONE|MSD-A2|S1,4H MSD-ALONE MSD-A2 S1,best,variant,MSD-ALONE,,1600.03,,-8.8547,30.7894,M1,-0.287589,,-0.287589,,"the family's best row on this window, picked in hindsight"
+tick,tradeiq_2027:BTCUSDm|M15|SH|AB|K2|E1|F2-1D,M15 SH AB K2 E1 F2-1D,best,variant,SH,,1781.24,,-4.6994,14.9100,M1,-0.315184,,-0.315184,,"the family's best row on this window, picked in hindsight"
+reference,final10:BTCUSDm|Top 2,Top 2,design,design,Top 1-3 (optimiser v4),,2929.43,2929.43,17.4870,15.5986,day,1.121062,,1.121062,,
+reference,benchmarks:BTCUSDm|bh-0.01lot,Buy and hold 0.01 lot,bh,benchmark,buy-and-hold,,1977.40,1977.40,-0.4712,26.9978,M1,-0.017453,,-0.017453,,
+reference,benchmarks:BTCUSDm|bh-2000,"Buy and hold, $2,000 fully invested",bh,benchmark,buy-and-hold,,1927.96,1927.96,-1.5128,56.3639,M1,-0.026840,,-0.026840,,
