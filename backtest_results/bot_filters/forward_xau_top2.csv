@@ -1,0 +1,4 @@
+design,symbol,vid,kind,stage,window,period,start,end,mode,seed,final_equity,net,return_pct,max_dd_pct,trades,wiped,wiped_at,blocked_regime,blocked_trend,skipped_trades,run_s,history_from
+xau_top2,XAUUSDm,SLOPE100-D1,single,forward,forward,forward,2026-11-13,2026-11-26 00:00:00,sec,0,2249.87,249.87,12.4935,3.509927,5,False,,202144,0,0,0.19,2016-01-03 23:00:00+00:00
+xau_top2,XAUUSDm,MSD-D1,single,forward,forward,forward,2026-11-13,2026-11-26 00:00:00,sec,0,2249.87,249.87,12.4935,3.509927,5,False,,202144,0,0,0.2,2016-01-03 23:00:00+00:00
+xau_top2,XAUUSDm,BASE,base,forward,forward,forward,2026-11-13,2026-11-26 00:00:00,sec,0,2249.87,249.87,12.4935,3.509927,5,False,,0,202144,0,0.2,2016-01-03 23:00:00+00:00

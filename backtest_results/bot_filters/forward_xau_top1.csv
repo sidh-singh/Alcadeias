@@ -1,0 +1,4 @@
+design,symbol,vid,kind,stage,window,period,start,end,mode,seed,final_equity,net,return_pct,max_dd_pct,trades,wiped,wiped_at,blocked_regime,blocked_trend,skipped_trades,run_s,history_from
+xau_top1,XAUUSDm,LGATE200-H1&QQE-H4,pair,forward,forward,forward,2026-11-13,2026-11-26 00:00:00,sec,0,2078.37,78.37,3.9185,12.006181,5,False,,155564,0,0,0.3,2016-01-03 23:00:00+00:00
+xau_top1,XAUUSDm,BASE,base,forward,forward,forward,2026-11-13,2026-11-26 00:00:00,sec,0,2078.37,78.37,3.9185,12.006181,5,False,,0,155564,0,0.3,2016-01-03 23:00:00+00:00
+xau_top1,XAUUSDm,LGATE200-H1,single,forward,forward,forward,2026-11-13,2026-11-26 00:00:00,sec,0,2078.37,78.37,3.9185,12.006181,5,False,,155564,0,0,0.3,2016-01-03 23:00:00+00:00

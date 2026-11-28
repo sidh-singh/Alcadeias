@@ -1,0 +1,4 @@
+design,symbol,vid,kind,stage,window,period,start,end,mode,seed,final_equity,net,return_pct,max_dd_pct,trades,wiped,wiped_at,blocked_regime,blocked_trend,skipped_trades,run_s,history_from
+btc_turtle,BTCUSDm,BASE,base,forward,forward,forward,2026-11-13,2026-11-27 00:00:00,bars,0,2346.371782,346.371782,17.318589,14.433994,1,False,,,,0,0.002,2018-01-01 00:00:00+00:00
+btc_turtle,BTCUSDm,SGATE200-D1&LARSI-H1,pair,forward,forward,forward,2026-11-13,2026-11-27 00:00:00,bars,0,2346.371782,346.371782,17.318589,14.433994,1,False,,,,0,0.608,2018-01-01 00:00:00+00:00
+btc_turtle,BTCUSDm,SGATE200-D1,single,forward,forward,forward,2026-11-13,2026-11-27 00:00:00,bars,0,2346.371782,346.371782,17.318589,14.433994,1,False,,,,0,0.234,2018-01-01 00:00:00+00:00
