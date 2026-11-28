@@ -2105,7 +2105,8 @@ var NARROW = 1150;               // below this chart width the legend goes under
 var root = document.documentElement;
 var CFG = { displaylogo: false, responsive: true,
             modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toggleSpikelines",
-                                     "hoverClosestCartesian", "hoverCompareCartesian"] };
+                                     "hoverClosestCartesian", "hoverCompareCartesian",
+                                     "toImage"] };    // the artifact viewer grants no downloads; the PNGs are in img/
 
 function $(id) { return document.getElementById(id); }
 function el(tag, attrs, text) {
