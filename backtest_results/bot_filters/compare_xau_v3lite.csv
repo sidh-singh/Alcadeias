@@ -1,0 +1,12 @@
+design,symbol,vid,kind,stage,window,period,start,end,mode,seed,final_equity,net,return_pct,max_dd_pct,trades,wiped,wiped_at,blocked_regime,blocked_trend,skipped_trades,run_s,history_from
+xau_v3lite,XAUUSDm,BASE,base,compare,8y,8y,2018-11-13,2026-11-13,sec,0,11957.34,9957.34,497.867,32.996646,809,False,,0,18212843,0,40.43,
+xau_v3lite,XAUUSDm,BASE,base,compare,5y,5y,2021-11-13,2026-11-13,sec,0,10747.58,8747.58,437.379,30.580722,517,False,,0,11869073,0,25.81,
+xau_v3lite,XAUUSDm,BASE,base,compare,new,new,2018-11-13,2021-01-01,sec,0,2339.78,339.78,16.989,8.542349,201,False,,0,4641038,0,10.62,
+xau_v3lite,XAUUSDm,BASE,base,compare,1y,1y,2025-11-13,2026-11-13,ticks,1,3647.49,1647.49,82.3745,45.141561,99,False,,0,2088859,0,5.24,
+xau_v3lite,XAUUSDm,BASE,base,compare,1y,1y,2025-11-13,2026-11-13,ticks,3,3634.47,1634.47,81.7235,45.38383,100,False,,0,2100658,0,5.24,
+xau_v3lite,XAUUSDm,BASE,base,compare,1y,1y,2025-11-13,2026-11-13,ticks,2,3789.29,1789.29,89.4645,45.285225,100,False,,0,2099149,0,5.24,
+xau_v3lite,XAUUSDm,BASE,base,compare,1y,1y,2025-11-13,2026-11-13,ticks,6,3793.98,1793.98,89.699,45.322562,100,False,,0,2104054,0,5.13,
+xau_v3lite,XAUUSDm,BASE,base,compare,1y,1y,2025-11-13,2026-11-13,ticks,5,3664.11,1664.11,83.2055,45.248401,99,False,,0,2094755,0,5.15,
+xau_v3lite,XAUUSDm,BASE,base,compare,1y,1y,2025-11-13,2026-11-13,ticks,4,3787.08,1787.08,89.354,45.234415,100,False,,0,2104873,0,5.15,
+xau_v3lite,XAUUSDm,BASE,base,compare,1y,1y,2025-11-13,2026-11-13,ticks,8,3508.47,1508.47,75.4235,45.297041,99,False,,0,2091301,0,4.9,
+xau_v3lite,XAUUSDm,BASE,base,compare,1y,1y,2025-11-13,2026-11-13,ticks,7,3522.49,1522.49,76.1245,45.38887,99,False,,0,2088029,0,4.92,
