@@ -10,6 +10,8 @@ Entry filters on the bots' own designs (study 3): the filters, the regime compos
     python -B -m backtesting.research.bot_filters freeze           # FINALISTS.md + sha256 (opens the guard)
     python -B -m backtesting.research.bot_filters mt               # multiple_testing.csv (PREREG 7)
     python -B -m backtesting.research.bot_filters exam --design xau_v3lite --vids ... [--workers 4]
+    python -B -m backtesting.research.bot_filters compare --design xau_v3lite [--vids ...] [--workers 4] [--out DIR]
+    python -B -m backtesting.research.bot_filters export [--out DIR] [--compare-dir DIR]
 
 ``dev`` runs the base and the always-allow filter first and refuses to run any variant unless the identity filter's
 24 accounts equal the base's (PREREG 2). One symbol at a time: a gold per-second prepare of 2021-2026 holds about
@@ -127,6 +129,17 @@ timings, the median per quarter (FINAL10 round 4); ``finalists``: up to two conf
 against the base with ``tradeiq.bootstrap_pvalues``, which reproduces ``silver.spa_test``; the deflated Sharpe with
 ``silver.expected_max_sr`` / ``silver.dsr``).
 
+The comparison page (PREREG 6, after the exam)
+---------------------------------------------
+``compare`` (``run_compare``) runs the owner's comparison accounts of a design: its base and, by default, its frozen
+finalists (FINALISTS.md, ``read_finalists``) on 8y, 5y and new per second (cut from one 8-year prepare) and on 1y on
+raw ticks under the eight timings; the Turtle on the M1-bar model. ``compare_gate`` refuses it before the freeze, before
+study 2's exam file ``backtest_results/tradeiq_2027/EXAM.md`` exists (8y and new start 2018-11-13, inside study 2's
+sealed gold Early window; compare_page keeps the same rule for its own pre-2019 P/L, both symbols), and before the
+design's exam is complete (``exam_missing``). ``export`` (``export_compare``) turns every ``compare_<key>.csv`` /
+``daily_compare_<key>.csv`` present into the comparison page's files for source ``bot_filters`` (compare_page's
+contract v2; checked with ``compare_page.validate`` before they replace the old ones).
+
 What is known when (no look-ahead)
 ----------------------------------
 Every allow value of a bar filter is a function of that bar and the bars before it (Pine semantics, element i uses
@@ -144,6 +157,9 @@ import hashlib
 import importlib
 import json
 import multiprocessing as mp
+import os
+import re
+import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -1856,14 +1872,146 @@ def identity_turtle(work: Path, store_dir: Path = store.DEFAULT_STORE_DIR, cache
     return df
 
 
-def run_compare(key: str, vids: Sequence[str], out: Path = STUDY_DIR, workers: int = 4,
+# ───────────────────────────── the comparison page (PREREG 6, after the exam) ─────────────────────────────
+
+SID = "bot_filters"                    # the comparison page's source id (compare_page.SOURCES)
+COMPARE_DATA = REPO_ROOT / "backtest_results" / "compare" / "data"
+# study 2's exam file. The comparison windows 8y and new start 2018-11-13, inside study 2's sealed gold Early window
+# (2017-2018): the workflow computes no P/L on bars before 2019-01-01 until this file exists (compare_page's rule for
+# its own 8y / new rows, ``--allow-pre-2019``; both symbols)
+STUDY2_EXAM = REPO_ROOT / "backtest_results" / "tradeiq_2027" / "EXAM.md"
+COMPARE_WINDOWS: Tuple[Window, ...] = COMPARE_SEC + (COMPARE_1Y,)
+
+
+class CompareRefused(PermissionError):
+    """The comparison accounts may not run, or be exported, yet: study 2's exam file, the design's exam or the frozen
+    FINALISTS.md is missing."""
+
+
+def _cell(s) -> str:
+    """A markdown table cell for matching: without code or emphasis marks, single spaces, lower case."""
+    return " ".join(str(s).strip().strip("`*_").split()).lower()
+
+
+def read_finalists(study_dir: Optional[Path] = None) -> Dict[str, List[str]]:
+    """
+    The frozen finalists per design, in their order, from FINALISTS.md's table (``freeze``: | Design | Finalist |
+    Rule | ...). The columns are found by their names, not their places. A design is its name (``Design.name``) or its
+    key, in any case and spacing; a finalist cell is a variant id with or without backticks, or "none", "-" or empty
+    (no finalist). Every id is checked (``check_vids``) and must be a filter variant (single, pair or Turtle exit).
+    Raises ``ValueError`` on an unknown design, a bad id or a file without the table; a design the table does not list
+    is not in the result. The sha256 is ``finalists_frozen``'s business, not this function's.
+    """
+    d = Path(STUDY_DIR if study_dir is None else study_dir)
+    text = (d / "FINALISTS.md").read_text(encoding="utf-8")
+    names: Dict[str, str] = {}
+    for k, des in DESIGNS.items():
+        names[_cell(des.name)] = k
+        names[_cell(k)] = k
+    out: Dict[str, List[str]] = {}
+    cols: Optional[Tuple[int, int]] = None
+    tables = 0
+    for line in text.splitlines():
+        s = line.strip()
+        if not s.startswith("|"):
+            cols = None                                  # a table ends at the first line that is not a row
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if cols is None:
+            low = [_cell(c) for c in cells]
+            if "design" in low and "finalist" in low:
+                cols = (low.index("design"), low.index("finalist"))
+                tables += 1
+            continue
+        if all(re.fullmatch(r":?-+:?", c) for c in cells if c):          # the header's separator row
+            continue
+        if len(cells) <= max(cols):
+            raise ValueError(f"FINALISTS.md: a row without a design or finalist cell: {line!r}")
+        name, cell = cells[cols[0]], cells[cols[1]]
+        key = names.get(_cell(name))
+        if key is None:
+            raise ValueError(f"FINALISTS.md: unknown design {name!r} (one of {[x.name for x in DESIGNS.values()]})")
+        fins = out.setdefault(key, [])
+        vid = cell.strip().strip("`").strip()
+        if _cell(vid) in ("", "none", "-", "—", "n/a"):
+            continue
+        check_vids([vid])
+        if Variant(vid).kind not in ("single", "pair", "exit"):
+            raise ValueError(f"FINALISTS.md: {key}'s finalist {vid!r} is not a filter variant")
+        if vid not in fins:
+            fins.append(vid)
+    if not tables:
+        raise ValueError(f"{d / 'FINALISTS.md'}: no table with a Design and a Finalist column")
+    return out
+
+
+def exam_missing(key: str, vids: Sequence[str], out: Optional[Path] = None) -> List[str]:
+    """
+    What ``run_exam`` has not written yet for the base and ``vids`` in ``out`` (empty: the exam is complete): every
+    quarter of every sealed window of the symbol (T1; gold also T2) on raw ticks under the eight timings
+    (``exam_<key>.csv``) and per second with the continuous account (``exam_sec_<key>.csv``) for the tick designs;
+    the quarters and the continuous account on the M1-bar model for the Turtle. The forward window (information only)
+    is not required.
+    """
+    d = DESIGNS[key]
+    out = Path(STUDY_DIR if out is None else out)
+    vids = [BASE] + [v for v in vids if v != BASE]
+    miss: List[str] = []
+    rows = read_rows(out / f"exam_{key}.csv")
+    sec = read_rows(out / f"exam_sec_{key}.csv") if d.engine == "ticks" else None
+    for name, (qs, cont) in exam_windows(d.symbol).items():
+        if d.engine == "bars":
+            done = _done(rows, qs + (cont,), "bars")
+            miss += [f"{v} {name.upper()} (M1-bar model)" for v in vids if v not in done]
+        else:
+            done_t = _done(rows, qs, "ticks", SEEDS)
+            done_s = _done(sec, qs + (cont,), "sec")
+            miss += [f"{v} {name.upper()} (raw ticks, {len(SEEDS)} timings)" for v in vids if v not in done_t]
+            miss += [f"{v} {name.upper()} (per second)" for v in vids if v not in done_s]
+    return miss
+
+
+def compare_gate(key: str, out: Optional[Path] = None) -> List[str]:
+    """
+    What ``run_compare`` checks before anything is read; returns the design's frozen finalists (FINALISTS.md).
+    Refuses (1) before the freeze: ``SealedWindowError`` (8y and new read T1; PREREG 6 runs these accounts after the
+    exam); (2) while study 2's exam file does not exist: ``CompareRefused`` (8y and new start 2018-11-13, inside study
+    2's sealed gold Early window; no P/L is computed on bars before 2019-01-01 until then, on either symbol, as
+    compare_page does); (3) while the design's exam is not complete in ``out``: ``CompareRefused`` (``exam_missing``
+    for the base and every finalist). A design without a finalist has no exam, so (3) does not apply to it.
+    """
+    if key not in DESIGNS:
+        raise ValueError(f"unknown design {key!r}")
+    if not finalists_frozen():
+        raise SealedWindowError(f"compare {key}: {Path(STUDY_DIR) / 'FINALISTS.md'} with a matching sha256 does not "
+                                "exist: the comparison accounts read T1 and come after the freeze and the exam "
+                                "(PREREG 4, 6)")
+    if not Path(STUDY2_EXAM).exists():
+        raise CompareRefused(f"compare {key}: study 2's exam file {STUDY2_EXAM} does not exist: 8y and new start "
+                             "2018-11-13, inside study 2's sealed Early window (gold 2017-2018), and no P/L is "
+                             "computed on bars before 2019-01-01 until it exists (compare_page's rule)")
+    fins = read_finalists().get(key, [])
+    miss = exam_missing(key, fins, out) if fins else []
+    if miss:
+        raise CompareRefused(f"compare {key}: the exam is not complete ({len(miss)} missing, e.g. "
+                             f"{'; '.join(miss[:3])}): run `exam --design {key} --vids {' '.join(fins)}` first")
+    return fins
+
+
+def run_compare(key: str, vids: Optional[Sequence[str]] = None, out: Path = STUDY_DIR, workers: int = 4,
                 store_dir: Path = store.DEFAULT_STORE_DIR, cache_dir: Optional[Path] = None, log=print) -> pd.DataFrame:
     """
-    The accounts of the owner's comparison page, after the exam (PREREG 6; the guard refuses them before the freeze):
-    8 years, 5 years and the new window per second (cut from one 8-year prepare) and the last year on raw ticks under
-    the eight timings; the Turtle on the M1-bar model. They mix in-sample and test data and say so where shown.
+    The accounts of the owner's comparison page, after the exam (PREREG 6): 8 years, 5 years and the new window per
+    second (cut from one 8-year prepare) and the last year on raw ticks under the eight timings; the Turtle on the
+    M1-bar model. They mix in-sample and test data and say so where shown (``export_compare``). ``vids``: None = the
+    design's frozen finalists (FINALISTS.md); the base always runs. ``compare_gate`` refuses before anything is read
+    (the freeze, study 2's exam file, this design's exam); the guard still checks every window.
     """
+    fins = compare_gate(key, out)
+    vids = list(fins) if vids is None else list(vids)
+    check_vids(vids)
     vids = [BASE] + [v for v in vids if v != BASE]
+    log(f"{key}: comparison accounts of {', '.join(vids)} (FINALISTS.md: {', '.join(fins) or 'no finalist'})")
     out = Path(out)
     if DESIGNS[key].engine == "bars":
         return run_bar_stage(key, vids, COMPARE_SEC + (COMPARE_1Y,), out / f"compare_{key}.csv",
@@ -1872,6 +2020,344 @@ def run_compare(key: str, vids: Sequence[str], out: Path = STUDY_DIR, workers: i
                       None, store_dir, log)
     b = run_tick_stage(key, vids, (COMPARE_1Y,), out / f"compare_{key}.csv", workers, SEEDS, store_dir, log)
     return pd.concat([a, b], ignore_index=True)
+
+
+# the designs as the page names them: FINAL10's names and families (compare_page.final10_series_and_metrics)
+DESIGN_SHORT = {"xau_v3lite": "V3-lite", "xau_top1": "Top 1", "xau_top2": "Top 2", "btc_top2": "Top 2",
+                "btc_turtle": "Turtle System 2 + bot votes"}
+DESIGN_FAMILY = {"xau_v3lite": "V3-lite", "xau_top1": "Top 1-3 (optimiser v4)", "xau_top2": "Top 1-3 (optimiser v4)",
+                 "btc_top2": "Top 1-3 (optimiser v4)", "btc_turtle": "Turtle"}
+TF_WORDS = {"H1": "1H", "H4": "4H", "D1": "daily"}
+FAMILY_WORDS = {"SIDE": "MA{n} side", "SLOPE": "MA{n} slope", "TREND": "MA{n} side and slope",
+                "CROSS": "MA50 / MA200 cross", "LGATE200": "longs only above MA200",
+                "SGATE200": "shorts only below MA200", "TSI": "TSI side", "LARSI": "Laguerre RSI side",
+                "QQE": "QQE MOD colour", "VWRSI": "volume-weighted RSI side", "RIB": "Trend Target Ribbon",
+                "MSD": "Market Structure Dashboard", "HA": "Heikin Ashi colour"}
+SESSION_WORDS = {"SESS-KZ": "New York kill zones (02-05, 07-11)", "SESS-LN": "New York 02:00-11:00 only"}
+EXIT_WORDS = {"M1": "exit on a {tf} Heikin Ashi flip", "M4": "exit at the {tf} Heikin Ashi streak's rare age"}
+# PREREG 4: design-filter pairs that earlier work ran on T1; their T1 (the new window) is "not a clean test"
+T1_NOT_CLEAN = {"xau_v3lite": ("SIDE200-D1",), "xau_top1": ("SIDE200-D1", "SIDE50-H4"),
+                "btc_turtle": ("SIDE200-D1", "LGATE200-D1")}
+# ``sample`` (compare_page's v2 column): the finalists were chosen on Development (2021-01-01 to 2026-11-13) and the
+# designs tuned on 2021-2026 data (FINAL10 §3, §5); 5y and 1y lie inside it, new is T1 (the exam's sealed window) and
+# 8y holds both (PREREG 6: these accounts are labelled as mixing in-sample and test data)
+COMPARE_SAMPLE = {"8y": "mixed", "5y": "in", "new": "out", "1y": "in"}
+SAMPLE_NOTE = {"8y": "mixes in-sample data (2021-2026: Development, where the finalists were chosen) with the sealed "
+                     "test window T1 (13 Nov 2018 - 1 Jan 2021)",
+               "5y": "in-sample: inside Development (2021-01-01 to 2026-11-13), where the finalists were chosen",
+               "new": "out of sample: T1, the exam's sealed test window",
+               "1y": "in-sample: inside Development, where the finalists were chosen"}
+ENGINE_NOTE = {"ticks": "tick engine: 8y, 5y and new per second with one loop timing (cut from one 8-year prepare), "
+                        "1y on raw ticks under 8 loop timings",
+               "bars": "the M1-bar model (external.py as FINAL10 runs it), its market from 2018-01-01"}
+DEV_FORMAT = {"ticks": "per second, one loop timing", "bars": "on the M1-bar model"}
+MARKS = {"sec": "second", "ticks": "tick", "bars": "M1"}         # the marks of each run mode's max DD
+
+
+def filter_words(fid: str) -> str:
+    """A single filter in plain words, its timeframe first: "SIDE200-H4" is "4H MA200 side"."""
+    f = filter_of(fid)
+    if f.clock:
+        return SESSION_WORDS[fid]
+    return f"{TF_WORDS[f.tf]} {FAMILY_WORDS[f.family].format(n=f.n)}"
+
+
+def variant_words(vid: str) -> str:
+    """A variant's filter in plain words (a pair: both, joined by "and"), or the Turtle's exit; "" for the base."""
+    v = Variant(vid)
+    if v.kind == "base":
+        return ""
+    if v.kind == "identity":
+        return "always-allow filter (identity check)"
+    if v.kind == "exit":
+        _, method, tf = v.exit.split("-")
+        return EXIT_WORDS[method].format(tf=TF_WORDS[tf])
+    return " and ".join(filter_words(f) for f in v.fids)
+
+
+def variant_label(key: str, vid: str) -> str:
+    """The page's label: "V3-lite + 4H MA200 side", "V3-lite (base, no added filter)"."""
+    short = DESIGN_SHORT[key]
+    v = Variant(vid)
+    if v.kind == "base":
+        return f"{short} (base, no added filter)"
+    return f"{short}, {variant_words(vid)}" if v.kind == "exit" else f"{short} + {variant_words(vid)}"
+
+
+def variant_tf(vid: str) -> str:
+    """The timeframe of a variant's filter or exit in the page's names (1H, 4H, 1D; a pair on two of them: "1H+4H");
+    "" for the base and the session filters."""
+    v = Variant(vid)
+    if v.kind == "exit":
+        return TM_TF[v.exit.split("-")[2]]
+    tfs = {filter_of(f).tf for f in v.fids if not filter_of(f).clock}
+    return "+".join(TM_TF[t] for t in FILTER_TFS if t in tfs)
+
+
+def variant_filter(key: str, vid: str) -> str:
+    """The ``filter`` column: the variant's filter in words. The Turtle's design already filters its entries by the
+    bot's votes (FINAL10's "bot votes"), which comes first; an exit follows a ';'."""
+    words = variant_words(vid)
+    if DESIGNS[key].engine != "bars":
+        return words
+    if Variant(vid).kind == "exit":
+        return f"bot votes; {words}"
+    return "bot votes" + (f" + {words}" if words else "")
+
+
+def _truthy(x) -> bool:
+    return str(x).strip().lower() in ("true", "1", "1.0")
+
+
+def compare_accounts(key: str, rows: pd.DataFrame) -> Tuple[Dict[Tuple[str, str], dict], List[str]]:
+    """
+    The comparison accounts of one design from ``compare_<key>.csv`` (``run_compare``'s rows, ``read_rows``):
+    ((vid, window) -> account, what is missing). Per second (8y, 5y, new) and on the M1-bar model (the Turtle, every
+    window) an account is its one run. On raw ticks (the tick designs' 1y) it is the eight loop timings in FINAL10's 1y
+    convention (``final10.run_ticks``): the final equity and the max DD are their medians; trades and wiped are the
+    middle (upper-median) timing run's, the runs sorted by final equity (ties by seed); the range of the finals and
+    the number of wiped timings are kept. A window counts only with every run it needs, over its own dates.
+    """
+    d = DESIGNS[key]
+    r = rows[rows["design"].astype(str) == key]
+    r = r.assign(vid=r["vid"].astype(str), window=r["window"].astype(str), mode=r["mode"].astype(str))
+    out: Dict[Tuple[str, str], dict] = {}
+    vids = list(dict.fromkeys(r["vid"]))
+    missing = [] if BASE in vids else [f"{BASE}: the base runs with every comparison"]
+    for vid in vids:
+        for w in COMPARE_WINDOWS:
+            mode = "bars" if d.engine == "bars" else ("ticks" if w.name == COMPARE_1Y.name else "sec")
+            seeds = SEEDS if mode == "ticks" else (0,)
+            g = r[(r["vid"] == vid) & (r["window"] == w.name) & (r["mode"] == mode) & r["seed"].isin(seeds)]
+            if set(g["seed"].astype(int)) != set(seeds):
+                missing.append(f"{vid} {w.name}: {g['seed'].nunique()} of {len(seeds)} {mode} runs")
+                continue
+            if not ((g["start"].astype(str).str[:10] == w.start).all() and (g["end"].astype(str).str[:10] == w.end)
+                    .all()):
+                missing.append(f"{vid} {w.name}: its rows are not over {w.start} .. {w.end}")
+                continue
+            g = g.sort_values("seed", kind="stable").sort_values("final_equity", kind="stable")
+            mid = g.iloc[len(g) // 2]
+            fe = g["final_equity"].to_numpy(np.float64)
+            wiped = _truthy(mid["wiped"])
+            out[(vid, w.name)] = dict(
+                mode=mode, start=w.start, end=w.end, runs=int(len(g)), seed=int(mid["seed"]),
+                final=float(np.median(fe)), dd=float(np.median(g["max_dd_pct"].to_numpy(np.float64))),
+                trades=int(mid["trades"]), wiped=wiped,
+                wiped_at=str(mid["wiped_at"]) if wiped and not pd.isna(mid["wiped_at"]) else "",
+                final_min=float(fe.min()), final_max=float(fe.max()),
+                wiped_runs=int(sum(_truthy(x) for x in g["wiped"])))
+    return out, missing
+
+
+def compare_curve(daily: pd.DataFrame, final: float, start: str, end: str, wiped_at: str = "") -> pd.DataFrame:
+    """
+    The contract's curve (date, equity_usd) of one account from its daily rows (``final10._tick_daily`` /
+    ``final10._bar_account``: the equity at the start of each UTC day with a mark, the window's first day holding the
+    $2,000): compare_page's ``eod_from_sod``, the convention of FINAL10's curves of the same designs on the page. The
+    opening row is dated the day before the window starts and holds the $2,000; day D ends at the next marked day's
+    opening mark (gold's Friday carries Sunday evening's); the last day ends at the account's final equity. A wiped
+    account's curve stops on the day it was wiped (``wiped_at``): the tick engine's samples stop there, the M1-bar model
+    marks the empty account on to the window's end.
+    """
+    from . import compare_page as CP
+    days = pd.to_datetime(daily["date"]).dt.strftime("%Y-%m-%d")
+    d = daily.assign(day=days).sort_values("day", kind="stable")
+    d = d[(d["day"] >= start) & (d["day"] < end)]
+    if wiped_at:
+        t = pd.Timestamp(wiped_at)
+        d = d[d["day"] <= (t.tz_convert("UTC") if t.tzinfo is not None else t).strftime("%Y-%m-%d")]
+    return CP.eod_from_sod(d["day"].tolist(), d["equity"].to_numpy(np.float64), float(final), start)
+
+
+def _dev_scores(key: str, folder: Path, log=print) -> Dict[str, dict]:
+    """vid -> the Development yardstick (``score_dev``: score, periods up, FINAL10's eligibility) from the study
+    folder's ``dev_<key>.csv``; {} without the file or without a complete base."""
+    if not dev_paths(key, folder)[0].exists():
+        return {}
+    try:
+        Y = score_dev(key, folder)
+    except (KeyError, ValueError) as e:
+        log(f"  {key}: no Development scores ({e})")
+        return {}
+    if Y.empty or "score" not in Y:
+        return {}
+    return {str(r["vid"]): dict(score=float(r["score"]), periods_up=int(r["periods_up"]), eligible=bool(r["eligible"]))
+            for r in Y.to_dict("records")}
+
+
+def exam_results(key: str, fins: Sequence[str], folder: Optional[Path] = None) -> Dict[str, dict]:
+    """vid -> {"exam": "pass" | "fail", "windows": "T1 pass, T2 fail"} of the design's finalists from
+    ``exam_<key>.csv`` (PREREG 6: gold must pass T1 and T2, BTC T1); {} while the exam is not complete."""
+    folder = Path(STUDY_DIR if folder is None else folder)
+    if not fins or exam_missing(key, fins, folder):
+        return {}
+    ex = exam_verdict(key, read_rows(folder / f"exam_{key}.csv"), list(fins))
+    names = list(exam_windows(DESIGNS[key].symbol))
+    return {str(r["vid"]): {"exam": "pass" if r["passes"] else "fail",
+                            "windows": ", ".join(f"{n.upper()} {'pass' if r[f'{n}_pass'] else 'fail'}" for n in names)}
+            for r in ex.to_dict("records")}
+
+
+def _compare_series(key: str, vid: str, fins: Sequence[str], dev: Dict[str, dict], exam: Dict[str, dict],
+                    study: str) -> dict:
+    d = DESIGNS[key]
+    v = Variant(vid)
+    role = "base" if v.kind == "base" else ("finalist" if vid in fins else "variant")
+    sc, ex = dev.get(vid), exam.get(vid, {})
+    notes = ["study 3: entry filters on the bots' designs (backtest_results/bot_filters)",
+             "the design as published (FINAL10's): the base its filters are measured against" if v.kind == "base"
+             else (rule_text(key, vid) or variant_words(vid)), ENGINE_NOTE[d.engine]]
+    if role == "finalist":
+        notes.append(f"finalist {list(fins).index(vid) + 1} of {len(fins)} (FINALISTS.md)")
+    elif role == "variant":
+        notes.append("not a finalist (FINALISTS.md)")
+    if sc:
+        notes.append(f"Development score {sc['score']:.3f} with {sc['periods_up']} of 5 periods up, "
+                     f"{'' if sc['eligible'] else 'not '}eligible by FINAL10's rule (FINAL10's yardstick on its 23 "
+                     f"quarters, {DEV_FORMAT[d.engine]})")
+    if ex:
+        notes.append(f"exam (PREREG 6): {ex['windows']}, so {ex['exam']}")
+    dirty = [f for f in v.fids if f in T1_NOT_CLEAN.get(key, ())]
+    tags = []
+    if dirty:
+        notes.append(f"T1 (the new window) is not a clean test of {', '.join(dirty)} on this design (PREREG 4)")
+        tags.append("T1 not a clean test (PREREG 4)")
+    kind = "rule" if d.engine == "bars" else ("bot" if v.kind == "base" else "bot+filter")
+    return dict(series_id=f"{SID}:{key}|{vid}", source=SID, study=study, symbol=d.symbol, label=variant_label(key, vid),
+                kind=kind, family=DESIGN_FAMILY[key], tf=variant_tf(vid), filter=variant_filter(key, vid), role=role,
+                eligible=int(bool(sc and sc["eligible"])), exam=ex.get("exam", ""), notes="; ".join(notes),
+                sizing="unit rule", tags=";".join(tags))
+
+
+def _compare_metrics(series_id: str, w: Window, a: dict, source_file: str, score: Optional[float]) -> dict:
+    final = float(a["final"])
+    net = final - ACCOUNT
+    years = (TM.s_of(a["end"]) - TM.s_of(a["start"])) / (365.25 * 86400.0)
+    cagr = ((final / ACCOUNT) ** (1.0 / years) - 1.0) * 100.0 if final > 0 else -100.0
+    if a["mode"] == "ticks":
+        notes = [f"raw ticks under the {a['runs']} loop timings (seeds {SEEDS[0]}-{SEEDS[-1]}): final equity and max "
+                 f"DD are their median (finals ${a['final_min']:,.2f} to ${a['final_max']:,.2f}); trades and wiped are "
+                 "the middle (upper-median) timing run's, FINAL10's 1y convention; no daily curve (the raw-tick runs "
+                 "keep none)"]
+        if a["wiped_runs"]:
+            notes.append(f"{a['wiped_runs']} of {a['runs']} timings wiped")
+    elif a["mode"] == "sec":
+        notes = ["per second with one loop timing (FINAL10's 8y / 5y mode), cut from one 8-year prepare; max DD on the "
+                 "per-second marks"]
+    else:
+        notes = ["the M1-bar model; max DD on the marks of every M1 bar"]
+    if a["wiped"] and a["wiped_at"]:
+        notes.append(f"wiped at {a['wiped_at']}")
+    notes.append(SAMPLE_NOTE[w.name])
+    return dict(series_id=series_id, window=w.name, start=a["start"], end=a["end"], cost=1.0, basis="account",
+                start_usd=ACCOUNT, final_usd=final, net_usd=net, return_pct=net / ACCOUNT * 100.0, cagr_pct=cagr,
+                max_dd_usd="", max_dd_pct=float(a["dd"]), p_dd="", trades=int(a["trades"]), win_rate_pct="",
+                profit_factor="", sharpe_w="", pos_quarters_pct="", worst_quarter_usd="", wiped=int(bool(a["wiped"])),
+                dd_marks=MARKS[a["mode"]], score_final10="" if score is None else float(score),
+                source_file=source_file, sample=COMPARE_SAMPLE[w.name], derived="", row_notes="; ".join(notes))
+
+
+def export_compare(data: Optional[Path] = None, compare_dir: Optional[Path] = None, log=print) -> Dict[str, object]:
+    """
+    The comparison page's files of source ``bot_filters`` (compare_page's contract v2) from every
+    ``compare_<key>.csv`` / ``daily_compare_<key>.csv`` in ``compare_dir`` (the study folder; its frozen FINALISTS.md
+    gives the roles, ``exam_<key>.csv`` the exam and ``dev_<key>.csv`` the Development score and FINAL10's
+    eligibility), into ``data`` (backtest_results/compare/data):
+      ``bot_filters__series.csv``  per design its base (role base) and every variant compared: the finalists (role
+                                   finalist, FINALISTS.md's order) and any other (variant); FINAL10's unit rule
+                                   (``sizing`` "unit rule": units = floor(balance / 2,500) + 1, at most 10, x 0.01 lot);
+      ``bot_filters__metrics.csv`` per series 8y, 5y, new and 1y at x1.0, account basis (``compare_accounts``): the max
+                                   DD % on the run's own marks (second, tick, M1); no max DD in $ and so no P/DD (the
+                                   runs keep none on those marks, and a daily curve is coarser); CAGR from the final
+                                   equity (compare_page's definition); Sharpe and the quarters from the daily curve
+                                   (``compare_page.fill_from_curve``, listed in ``derived``); ``sample`` per window;
+      ``bot_filters__curves_<window>.csv.gz``  the daily curves (``compare_curve``) of the accounts that have one: every
+                                   per-second and M1-bar account; the tick designs' 1y (eight raw-tick timings) has
+                                   none.
+    The files are written into a temporary folder and checked there with ``compare_page.validate``; only then are this
+    source's old files replaced, so the data folder never holds half an export. An incomplete comparison (a frozen
+    finalist not compared, a window without every run it needs, a curve without its daily rows) raises ``ValueError``
+    and writes nothing.
+    """
+    from . import compare_page as CP
+    data = Path(COMPARE_DATA if data is None else data)
+    cdir = Path(STUDY_DIR if compare_dir is None else compare_dir)
+    keys = [k for k in DESIGNS if (cdir / f"compare_{k}.csv").exists()]
+    if not keys:
+        raise FileNotFoundError(f"no compare_<design>.csv in {cdir}: run `compare` first")
+    if not finalists_frozen(cdir):
+        raise CompareRefused(f"export: {cdir / 'FINALISTS.md'} with a matching sha256 does not exist (the roles and "
+                             "the exam come from it)")
+    frozen = read_finalists(cdir)
+    study = CP.SOURCES[SID]["study"]
+    series: List[dict] = []
+    metrics: List[dict] = []
+    curves: Dict[str, List[pd.DataFrame]] = {}
+    problems: List[str] = []
+    for key in keys:
+        path = cdir / f"compare_{key}.csv"
+        rows = read_rows(path)
+        acc, miss = compare_accounts(key, rows)
+        problems += [f"{key}: {m}" for m in miss]
+        daily = read_daily(cdir / f"daily_compare_{key}.csv")
+        daily = daily.assign(vid=daily["vid"].astype(str), window=daily["window"].astype(str))
+        fins = frozen.get(key, [])
+        vids = list(dict.fromkeys(rows.loc[rows["design"].astype(str) == key, "vid"].astype(str)))
+        check_vids(vids)
+        # PREREG 6: every finalist and its base (a `compare --vids` of some of them is not the design's comparison)
+        problems += [f"{key}: {f}: a finalist in FINALISTS.md without comparison runs (`compare --design {key}`)"
+                     for f in fins if f not in vids]
+        order = [v for v in [BASE] + list(fins) if v in vids] + [v for v in vids if v != BASE and v not in fins]
+        dev = _dev_scores(key, cdir, log)
+        exam = exam_results(key, fins, cdir)
+        src = CP._rel(path)
+        for vid in order:
+            s = _compare_series(key, vid, fins, dev, exam, study)
+            series.append(s)
+            score = dev[vid]["score"] if vid in dev else None
+            for w in COMPARE_WINDOWS:
+                a = acc.get((vid, w.name))
+                if a is None:
+                    continue                                   # listed in ``problems``
+                row = _compare_metrics(s["series_id"], w, a, src, score)
+                curve = None
+                if a["mode"] != "ticks":
+                    g = daily[(daily["vid"] == vid) & (daily["window"] == w.name)]
+                    try:
+                        curve = compare_curve(g, a["final"], a["start"], a["end"], a["wiped_at"] if a["wiped"] else "")
+                    except ValueError as e:
+                        problems.append(f"{key}: {vid} {w.name}: no daily curve in daily_compare_{key}.csv ({e})")
+                        continue
+                    curve.insert(0, "series_id", s["series_id"])
+                    curves.setdefault(w.name, []).append(curve)
+                metrics.append(CP.fill_from_curve(row, curve))
+        log(f"  {key}: {len(order)} series ({', '.join(order)})")
+    if problems:
+        raise ValueError("export: the comparison runs are not complete, nothing was written (`compare` resumes):\n  "
+                         + "\n  ".join(problems[:30]))
+    se = CP._finish_series(series)
+    me = CP._finish_metrics(metrics)
+    cv = {w: pd.concat(v, ignore_index=True) for w, v in curves.items()}
+    data.mkdir(parents=True, exist_ok=True)
+    tmp = data / f".{SID}.tmp{os.getpid()}"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    try:
+        CP.write_source(SID, se, me, cv, data=tmp, replace=True)
+        rep = CP.validate(tmp)
+        if rep["errors"]:
+            raise ValueError("export: the files break the comparison page's contract (nothing replaced):\n  "
+                             + "\n  ".join(rep["errors"][:30]))
+        for old in data.glob(f"{SID}__*"):
+            old.unlink()
+        for new in sorted(tmp.iterdir()):
+            os.replace(new, data / new.name)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    log(f"{SID}: {len(se)} series, {len(me)} metrics rows, curves {', '.join(sorted(cv)) or '-'} -> {data}"
+        + (f"; {len(rep['warnings'])} warnings" if rep["warnings"] else ""))
+    return dict(series=se, metrics=me, curves=cv, warnings=rep["warnings"])
 
 
 # ───────────────────────────── the command line ─────────────────────────────
@@ -1976,6 +2462,19 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--out", default=str(STUDY_DIR))
     p.add_argument("--vids", nargs="+", required=True)
+    p = sub.add_parser("compare", help="the comparison page's accounts of a design (8y, 5y, new per second; 1y on raw "
+                                       "ticks; the Turtle on the M1-bar model), after the freeze, study 2's exam file "
+                                       "and the design's exam")
+    p.add_argument("--design", required=True, choices=list(DESIGNS))
+    p.add_argument("--vids", nargs="+", default=None,
+                   help="default: the design's finalists in FINALISTS.md (the base always runs)")
+    p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--out", default=str(STUDY_DIR))
+    p.add_argument("--cache", default=None)
+    p = sub.add_parser("export", help="the comparison page's files of source bot_filters from every compare_<key>.csv")
+    p.add_argument("--out", default=str(COMPARE_DATA), help="the comparison page's data folder")
+    p.add_argument("--compare-dir", default=str(STUDY_DIR),
+                   help="the folder of compare_<key>.csv, daily_compare_<key>.csv, FINALISTS.md and the exam")
     a = ap.parse_args(argv)
     if a.cmd == "identity":
         identity_ticks(a.symbol, Path(a.work), full=not a.no_full, workers=a.workers)
@@ -2012,6 +2511,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         print(run_multiple_testing(Path(a.out)).to_string())
     elif a.cmd == "exam":
         run_exam(a.design, a.vids, Path(a.out), a.workers)
+    elif a.cmd == "compare":
+        try:
+            run_compare(a.design, a.vids, Path(a.out), a.workers, cache_dir=Path(a.cache) if a.cache else None)
+        except (SealedWindowError, CompareRefused) as e:
+            raise SystemExit(f"compare refused: {e}")
+    elif a.cmd == "export":
+        try:
+            export_compare(Path(a.out), Path(a.compare_dir))
+        except (CompareRefused, FileNotFoundError) as e:
+            raise SystemExit(f"export refused: {e}")
 
 
 if __name__ == "__main__":
