@@ -1,0 +1,34 @@
+symbol,window,rows,n,pass,share
+XAUUSDm,holdout,all rows,775,488,0.6296774193548387
+XAUUSDm,holdout,all eligible rows,738,477,0.6463414634146342
+XAUUSDm,holdout,qualifiers,65,60,0.9230769230769231
+XAUUSDm,holdout,champions,11,9,0.8181818181818182
+XAUUSDm,holdout,finalists,3,3,1.0
+XAUUSDm,holdout,not-eligible and information rows,37,11,0.2972972972972973
+XAUUSDm,holdout,buy-and-hold,1,1,1.0
+XAUUSDm,early,all rows,775,103,0.1329032258064516
+XAUUSDm,early,all eligible rows,738,91,0.12330623306233063
+XAUUSDm,early,qualifiers,65,13,0.2
+XAUUSDm,early,champions,11,1,0.09090909090909091
+XAUUSDm,early,finalists,3,0,0.0
+XAUUSDm,early,not-eligible and information rows,37,12,0.32432432432432434
+XAUUSDm,early,buy-and-hold,1,1,1.0
+XAUUSDm,both,all rows,775,59,0.07612903225806451
+XAUUSDm,both,all eligible rows,738,53,0.07181571815718157
+XAUUSDm,both,qualifiers,65,12,0.18461538461538463
+XAUUSDm,both,champions,11,1,0.09090909090909091
+XAUUSDm,both,finalists,3,0,0.0
+XAUUSDm,both,not-eligible and information rows,37,6,0.16216216216216217
+BTCUSDm,holdout,all rows,762,170,0.2230971128608924
+BTCUSDm,holdout,all eligible rows,720,158,0.21944444444444444
+BTCUSDm,holdout,qualifiers,36,10,0.2777777777777778
+BTCUSDm,holdout,champions,6,4,0.6666666666666666
+BTCUSDm,holdout,finalists,3,2,0.6666666666666666
+BTCUSDm,holdout,not-eligible and information rows,42,12,0.2857142857142857
+BTCUSDm,holdout,buy-and-hold,1,0,0.0
+USTECm,holdout,claim-check rows (information),4,4,1.0
+USTECm,holdout,buy-and-hold,1,1,1.0
+EURUSDm,holdout,claim-check rows (information),1,1,1.0
+EURUSDm,holdout,buy-and-hold,1,0,0.0
+GBPUSDm,holdout,claim-check rows (information),1,0,0.0
+GBPUSDm,holdout,buy-and-hold,1,0,0.0
