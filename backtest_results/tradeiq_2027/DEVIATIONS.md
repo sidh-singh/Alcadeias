@@ -819,3 +819,11 @@ The harness's item keeps the label the code cites, "harness reading 15", althoug
   FINALISTS.md (its blob is recorded, not required), and no rule module, port or harness file changed. So no
   variant's result, no exam row and no account moves; the change only lets claim 16 be computed. `claims` then ran
   to the end: 178 parts, none 'not computed'.
+- **FIX-3 (21:47 IST, after the exam). The comparison page's files say which rows are out of sample.** The driver
+  wrote the page's contract v1, which has no `sample` column, so the page could not tell the reader that study 2's
+  hold-out rows are out of sample (study 1's are flagged). The driver (an information file of FINALISTS.md) now
+  writes contract v2. Its optional columns are the series' `sizing` and `tags` (empty, as study 1's) and the metrics'
+  `sample` (Development and Validation 'in'; the hold-out, gold's Early window and the last year 'out'; full, 5y, 8y
+  and new 'mixed', as study 1 flags the same windows), `derived` and `row_notes` (empty). `accounts` was rerun; every
+  account part was already complete for this code, so nothing was recomputed. Every v1 column and every curve's
+  content is unchanged (checked against the committed files).

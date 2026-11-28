@@ -133,12 +133,14 @@ The comparison page (PREREG 6, after the exam)
 ---------------------------------------------
 ``compare`` (``run_compare``) runs the owner's comparison accounts of a design: its base and, by default, its frozen
 finalists (FINALISTS.md, ``read_finalists``) on 8y, 5y and new per second (cut from one 8-year prepare) and on 1y on
-raw ticks under the eight timings; the Turtle on the M1-bar model. ``compare_gate`` refuses it before the freeze, before
-study 2's exam file ``backtest_results/tradeiq_2027/EXAM.md`` exists (8y and new start 2018-11-13, inside study 2's
-sealed gold Early window; compare_page keeps the same rule for its own pre-2019 P/L, both symbols), and before the
-design's exam is complete (``exam_missing``). ``export`` (``export_compare``) turns every ``compare_<key>.csv`` /
-``daily_compare_<key>.csv`` present into the comparison page's files for source ``bot_filters`` (compare_page's
-contract v2; checked with ``compare_page.validate`` before they replace the old ones).
+raw ticks under the eight timings, each timing's daily equity kept (``daily_compare_ticks_<key>.csv``); the Turtle on
+the M1-bar model. ``compare_gate`` refuses it before the freeze, before study 2's exam file
+``backtest_results/tradeiq_2027/EXAM.md`` exists (8y and new start 2018-11-13, inside study 2's sealed gold Early
+window; compare_page keeps the same rule for its own pre-2019 P/L, both symbols), and before the design's exam is
+complete (``exam_missing``). ``export`` (``export_compare``) turns every ``compare_<key>.csv`` /
+``daily_compare_<key>.csv`` / ``daily_compare_ticks_<key>.csv`` present into the comparison page's files for source
+``bot_filters`` (compare_page's contract v2; checked with ``compare_page.validate`` before they replace the old ones);
+a tick design's 1y curve is its middle (upper-median) timing run's, FINAL10's convention.
 
 What is known when (no look-ahead)
 ----------------------------------
@@ -1036,6 +1038,8 @@ _G: dict = {}                    # what forked workers inherit: the prepare, the
 COLUMNS = ["design", "symbol", "vid", "kind", "stage", "window", "period", "start", "end", "mode", "seed",
            "final_equity", "net", "return_pct", "max_dd_pct", "trades", "wiped", "wiped_at", "blocked_regime",
            "blocked_trend", "skipped_trades", "run_s", "history_from"]
+# the daily equity of a continuous window on raw ticks (``run_tick_stage``, the comparison's 1y): one curve per timing
+TICK_DAILY_COLUMNS = ["design", "vid", "window", "seed", "date", "equity"]
 
 
 def _append(path: Path, rows: List[dict], columns: Sequence[str] = COLUMNS) -> None:
@@ -1063,6 +1067,16 @@ def read_daily(path: Path) -> pd.DataFrame:
         return pd.DataFrame(columns=["design", "vid", "window", "date", "equity"])
     d = pd.read_csv(path, parse_dates=["date"])
     return d.drop_duplicates(["vid", "window", "date"], keep="last").reset_index(drop=True)
+
+
+def read_tick_daily(path: Path) -> pd.DataFrame:
+    """A raw-tick daily file (``TICK_DAILY_COLUMNS``: a curve per loop timing), the last row of each (vid, window, seed,
+    date) kept (a resumed run may repeat one)."""
+    if not Path(path).exists():
+        return pd.DataFrame(columns=TICK_DAILY_COLUMNS)
+    d = pd.read_csv(path, parse_dates=["date"], dtype={"vid": str, "window": str})
+    d["seed"] = d["seed"].astype(int)
+    return d.drop_duplicates(["vid", "window", "seed", "date"], keep="last").reset_index(drop=True)
 
 
 def _done(rows: pd.DataFrame, windows: Sequence[Window], mode: str, seeds: Sequence[int] = (0,)) -> set:
@@ -1129,15 +1143,24 @@ def _sec_task(task: tuple) -> dict:
 
 
 def _tick_task(task: tuple) -> dict:
-    """One variant under one loop timing on the raw-tick prepare of one window in ``_G``."""
+    """One variant under one loop timing on the raw-tick prepare of one window in ``_G``. A quarter keeps no equity
+    (``light``). A continuous window (the comparison's 1y) keeps the run's daily equity in FINAL10's convention
+    (``final10._tick_daily``, as ``_sec_task``): the first hourly mark of each UTC day with a mark, open positions
+    marked, the window's first day at the $2,000 (the end of day D is the next marked day's mark, the last day's the
+    final equity: ``compare_curve``). The kernel's recorder only writes the samples: the run's row is the same."""
     from ..analysis.robustness import live_timing
     from ..engine import fast
     key, vid, w, seed = task
     t0 = time.time()
     reg = _regime_of(key, vid)
-    res = fast.run(design_cfg(key, w.start, w.end, extra=live_timing(int(seed))), _G["prep"], light=True, regime=reg)
-    return dict(vid=vid, rows=[_tick_row(key, vid, w, res, "ticks", seed, time.time() - t0)], daily=[],
-                seconds=time.time() - t0)
+    res = fast.run(design_cfg(key, w.start, w.end, extra=live_timing(int(seed))), _G["prep"], light=not w.continuous,
+                   regime=reg)
+    rows = [_tick_row(key, vid, w, res, "ticks", seed, time.time() - t0)]
+    daily = []
+    if w.continuous:
+        daily = [dict(design=key, vid=vid, window=w.name, seed=int(seed), date=str(t.date()), equity=round(float(e), 6))
+                 for t, e in F._tick_daily(res).items()]
+    return dict(vid=vid, rows=rows, daily=daily, seconds=time.time() - t0)
 
 
 def _map(fn: Callable, tasks: List[tuple], workers: int):
@@ -1213,18 +1236,24 @@ def run_sec_stage(key: str, vids: Sequence[str], windows: Sequence[Window], sink
 
 
 def run_tick_stage(key: str, vids: Sequence[str], windows: Sequence[Window], sink: Path, workers: int = 4,
-                   seeds: Sequence[int] = SEEDS, store_dir: Path = store.DEFAULT_STORE_DIR, log=print) -> pd.DataFrame:
+                   seeds: Sequence[int] = SEEDS, store_dir: Path = store.DEFAULT_STORE_DIR, log=print,
+                   daily_sink: Optional[Path] = None) -> pd.DataFrame:
     """
     Tick designs on raw ticks under the eight loop timings (FINAL10 round 4): ONE raw-tick prepare per window with its
     own warm-up, never cut from a longer jittered prepare (the first poll would take an extra jitter draw:
     ``ladder/BUILD.md``). The regime is composed on that prepare's own rows and its own trend. Resume-safe per
-    (variant, window, seed).
+    (variant, window, seed). A quarter (the confirmation, the exam) keeps no equity (``light``). A continuous window
+    (the comparison's 1y) needs ``daily_sink``: each run's daily equity goes there (``TICK_DAILY_COLUMNS``, a curve per
+    timing seed, ``_tick_task``) before its row goes to ``sink``, and such a run is complete only with both (a row
+    without its daily rows, e.g. from before they were kept, runs again; ``read_rows`` keeps the last row).
     """
     from ..engine import fast
     d = DESIGNS[key]
     check_vids(vids)
     for w in windows:
         guard(w.start, w.end, f"{key} {w.name}")
+    if daily_sink is None and any(w.continuous for w in windows):
+        raise ValueError(f"{key}: a continuous window on raw ticks keeps each timing's daily equity: give daily_sink")
     book = None
     _G["history_from"] = ""
     fids = sorted({f for v in vids for f in Variant(v).fids})
@@ -1236,6 +1265,10 @@ def run_tick_stage(key: str, vids: Sequence[str], windows: Sequence[Window], sin
         have = read_rows(sink)
         have = have[(have["mode"] == "ticks") & (have["window"].astype(str) == w.name)]
         done = set(zip(have["vid"], have["seed"].astype(int)))
+        if w.continuous:
+            dd = read_tick_daily(daily_sink)
+            dd = dd[dd["window"].astype(str) == w.name]
+            done &= set(zip(dd["vid"].astype(str), dd["seed"].astype(int)))
         todo = [(v, int(s)) for v in vids for s in seeds if (v, int(s)) not in done]
         if not todo:
             continue
@@ -1245,8 +1278,11 @@ def run_tick_stage(key: str, vids: Sequence[str], windows: Sequence[Window], sin
         _G.update(prep=prep, trend={key: trend_series(prep, cfg)})
         _G["steps"] = {f: book.steps(f, prep.t_ms) for f in fids} if book else {}
         _warm_kernel(key, prep)
-        log(f"{key} {w.name}: {prep.n_rows:,} ticks ready ({time.time() - t0:.0f}s), {len(todo)} runs")
+        log(f"{key} {w.name}: {prep.n_rows:,} ticks ready ({time.time() - t0:.0f}s), {len(todo)} runs"
+            + (f", daily equity per timing -> {daily_sink}" if w.continuous else ""))
         for out in _map(_tick_task, [(key, v, w, s) for v, s in todo], workers):
+            if out["daily"]:
+                _append(daily_sink, out["daily"], TICK_DAILY_COLUMNS)      # first: a run with its row has its curve
             _append(sink, out["rows"])
         _G.pop("prep", None)
         del prep
@@ -2002,7 +2038,8 @@ def run_compare(key: str, vids: Optional[Sequence[str]] = None, out: Path = STUD
                 store_dir: Path = store.DEFAULT_STORE_DIR, cache_dir: Optional[Path] = None, log=print) -> pd.DataFrame:
     """
     The accounts of the owner's comparison page, after the exam (PREREG 6): 8 years, 5 years and the new window per
-    second (cut from one 8-year prepare) and the last year on raw ticks under the eight timings; the Turtle on the
+    second (cut from one 8-year prepare; daily equity in ``daily_compare_<key>.csv``) and the last year on raw ticks
+    under the eight timings (each timing's daily equity in ``daily_compare_ticks_<key>.csv``); the Turtle on the
     M1-bar model. They mix in-sample and test data and say so where shown (``export_compare``). ``vids``: None = the
     design's frozen finalists (FINALISTS.md); the base always runs. ``compare_gate`` refuses before anything is read
     (the freeze, study 2's exam file, this design's exam); the guard still checks every window.
@@ -2018,7 +2055,8 @@ def run_compare(key: str, vids: Optional[Sequence[str]] = None, out: Path = STUD
                              out / f"daily_compare_{key}.csv", store_dir=store_dir, cache_dir=cache_dir, log=log)
     a = run_sec_stage(key, vids, COMPARE_SEC, out / f"compare_{key}.csv", out / f"daily_compare_{key}.csv", workers,
                       None, store_dir, log)
-    b = run_tick_stage(key, vids, (COMPARE_1Y,), out / f"compare_{key}.csv", workers, SEEDS, store_dir, log)
+    b = run_tick_stage(key, vids, (COMPARE_1Y,), out / f"compare_{key}.csv", workers, SEEDS, store_dir, log,
+                       daily_sink=out / f"daily_compare_ticks_{key}.csv")
     return pd.concat([a, b], ignore_index=True)
 
 
@@ -2116,7 +2154,9 @@ def compare_accounts(key: str, rows: pd.DataFrame) -> Tuple[Dict[Tuple[str, str]
     window) an account is its one run. On raw ticks (the tick designs' 1y) it is the eight loop timings in FINAL10's 1y
     convention (``final10.run_ticks``): the final equity and the max DD are their medians; trades and wiped are the
     middle (upper-median) timing run's, the runs sorted by final equity (ties by seed); the range of the finals and
-    the number of wiped timings are kept. A window counts only with every run it needs, over its own dates.
+    the number of wiped timings are kept. ``seed`` and ``seed_final`` are that middle run's (its curve is the one
+    drawn, to its own final; for a one-run account they are the run's). A window counts only with every run it needs,
+    over its own dates.
     """
     d = DESIGNS[key]
     r = rows[rows["design"].astype(str) == key]
@@ -2142,6 +2182,7 @@ def compare_accounts(key: str, rows: pd.DataFrame) -> Tuple[Dict[Tuple[str, str]
             wiped = _truthy(mid["wiped"])
             out[(vid, w.name)] = dict(
                 mode=mode, start=w.start, end=w.end, runs=int(len(g)), seed=int(mid["seed"]),
+                seed_final=float(mid["final_equity"]),
                 final=float(np.median(fe)), dd=float(np.median(g["max_dd_pct"].to_numpy(np.float64))),
                 trades=int(mid["trades"]), wiped=wiped,
                 wiped_at=str(mid["wiped_at"]) if wiped and not pd.isna(mid["wiped_at"]) else "",
@@ -2237,9 +2278,9 @@ def _compare_metrics(series_id: str, w: Window, a: dict, source_file: str, score
     cagr = ((final / ACCOUNT) ** (1.0 / years) - 1.0) * 100.0 if final > 0 else -100.0
     if a["mode"] == "ticks":
         notes = [f"raw ticks under the {a['runs']} loop timings (seeds {SEEDS[0]}-{SEEDS[-1]}): final equity and max "
-                 f"DD are their median (finals ${a['final_min']:,.2f} to ${a['final_max']:,.2f}); trades and wiped are "
-                 "the middle (upper-median) timing run's, FINAL10's 1y convention; no daily curve (the raw-tick runs "
-                 "keep none)"]
+                 f"DD are their median (finals ${a['final_min']:,.2f} to ${a['final_max']:,.2f}); trades, wiped, the "
+                 "daily curve and the columns derived from it are the middle (upper-median) timing run's, seed "
+                 f"{a['seed']}, whose curve ends at its own final ${a['seed_final']:,.2f} (FINAL10's 1y convention)"]
         if a["wiped_runs"]:
             notes.append(f"{a['wiped_runs']} of {a['runs']} timings wiped")
     elif a["mode"] == "sec":
@@ -2261,9 +2302,9 @@ def _compare_metrics(series_id: str, w: Window, a: dict, source_file: str, score
 def export_compare(data: Optional[Path] = None, compare_dir: Optional[Path] = None, log=print) -> Dict[str, object]:
     """
     The comparison page's files of source ``bot_filters`` (compare_page's contract v2) from every
-    ``compare_<key>.csv`` / ``daily_compare_<key>.csv`` in ``compare_dir`` (the study folder; its frozen FINALISTS.md
-    gives the roles, ``exam_<key>.csv`` the exam and ``dev_<key>.csv`` the Development score and FINAL10's
-    eligibility), into ``data`` (backtest_results/compare/data):
+    ``compare_<key>.csv`` / ``daily_compare_<key>.csv`` / ``daily_compare_ticks_<key>.csv`` in ``compare_dir`` (the
+    study folder; its frozen FINALISTS.md gives the roles, ``exam_<key>.csv`` the exam and ``dev_<key>.csv`` the
+    Development score and FINAL10's eligibility), into ``data`` (backtest_results/compare/data):
       ``bot_filters__series.csv``  per design its base (role base) and every variant compared: the finalists (role
                                    finalist, FINALISTS.md's order) and any other (variant); FINAL10's unit rule
                                    (``sizing`` "unit rule": units = floor(balance / 2,500) + 1, at most 10, x 0.01 lot);
@@ -2272,13 +2313,17 @@ def export_compare(data: Optional[Path] = None, compare_dir: Optional[Path] = No
                                    runs keep none on those marks, and a daily curve is coarser); CAGR from the final
                                    equity (compare_page's definition); Sharpe and the quarters from the daily curve
                                    (``compare_page.fill_from_curve``, listed in ``derived``); ``sample`` per window;
-      ``bot_filters__curves_<window>.csv.gz``  the daily curves (``compare_curve``) of the accounts that have one: every
-                                   per-second and M1-bar account; the tick designs' 1y (eight raw-tick timings) has
-                                   none.
+      ``bot_filters__curves_<window>.csv.gz``  the daily curve (``compare_curve``) of every account: per second and on
+                                   the M1-bar model its run's; the tick designs' 1y (eight raw-tick timings) its
+                                   middle (upper-median) timing run's (``compare_accounts``' seed, from
+                                   ``daily_compare_ticks_<key>.csv``), to that run's own final, FINAL10's 1y
+                                   convention: the row keeps the median final and max DD, so ``compare_page.validate``
+                                   warns that the curve ends elsewhere, as on FINAL10's 1y rows; the row names the
+                                   seed.
     The files are written into a temporary folder and checked there with ``compare_page.validate``; only then are this
     source's old files replaced, so the data folder never holds half an export. An incomplete comparison (a frozen
-    finalist not compared, a window without every run it needs, a curve without its daily rows) raises ``ValueError``
-    and writes nothing.
+    finalist not compared, a window without every run it needs, a curve without its daily rows: a 1y without its
+    middle timing's) raises ``ValueError`` and writes nothing.
     """
     from . import compare_page as CP
     data = Path(COMPARE_DATA if data is None else data)
@@ -2302,6 +2347,8 @@ def export_compare(data: Optional[Path] = None, compare_dir: Optional[Path] = No
         problems += [f"{key}: {m}" for m in miss]
         daily = read_daily(cdir / f"daily_compare_{key}.csv")
         daily = daily.assign(vid=daily["vid"].astype(str), window=daily["window"].astype(str))
+        ticks = read_tick_daily(cdir / f"daily_compare_ticks_{key}.csv")
+        ticks = ticks.assign(vid=ticks["vid"].astype(str), window=ticks["window"].astype(str))
         fins = frozen.get(key, [])
         vids = list(dict.fromkeys(rows.loc[rows["design"].astype(str) == key, "vid"].astype(str)))
         check_vids(vids)
@@ -2321,16 +2368,19 @@ def export_compare(data: Optional[Path] = None, compare_dir: Optional[Path] = No
                 if a is None:
                     continue                                   # listed in ``problems``
                 row = _compare_metrics(s["series_id"], w, a, src, score)
-                curve = None
-                if a["mode"] != "ticks":
+                if a["mode"] == "ticks":           # the middle timing run's curve, to its own final (FINAL10's 1y)
+                    g = ticks[(ticks["vid"] == vid) & (ticks["window"] == w.name) & (ticks["seed"] == a["seed"])]
+                    final, where = a["seed_final"], f"daily_compare_ticks_{key}.csv (seed {a['seed']})"
+                else:
                     g = daily[(daily["vid"] == vid) & (daily["window"] == w.name)]
-                    try:
-                        curve = compare_curve(g, a["final"], a["start"], a["end"], a["wiped_at"] if a["wiped"] else "")
-                    except ValueError as e:
-                        problems.append(f"{key}: {vid} {w.name}: no daily curve in daily_compare_{key}.csv ({e})")
-                        continue
-                    curve.insert(0, "series_id", s["series_id"])
-                    curves.setdefault(w.name, []).append(curve)
+                    final, where = a["final"], f"daily_compare_{key}.csv"
+                try:
+                    curve = compare_curve(g, final, a["start"], a["end"], a["wiped_at"] if a["wiped"] else "")
+                except ValueError as e:
+                    problems.append(f"{key}: {vid} {w.name}: no daily curve in {where} ({e})")
+                    continue
+                curve.insert(0, "series_id", s["series_id"])
+                curves.setdefault(w.name, []).append(curve)
                 metrics.append(CP.fill_from_curve(row, curve))
         log(f"  {key}: {len(order)} series ({', '.join(order)})")
     if problems:
@@ -2474,7 +2524,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     p = sub.add_parser("export", help="the comparison page's files of source bot_filters from every compare_<key>.csv")
     p.add_argument("--out", default=str(COMPARE_DATA), help="the comparison page's data folder")
     p.add_argument("--compare-dir", default=str(STUDY_DIR),
-                   help="the folder of compare_<key>.csv, daily_compare_<key>.csv, FINALISTS.md and the exam")
+                   help="the folder of compare_<key>.csv, daily_compare_<key>.csv, daily_compare_ticks_<key>.csv, "
+                        "FINALISTS.md and the exam")
     a = ap.parse_args(argv)
     if a.cmd == "identity":
         identity_ticks(a.symbol, Path(a.work), full=not a.no_full, workers=a.workers)

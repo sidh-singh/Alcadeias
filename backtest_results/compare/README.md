@@ -96,8 +96,9 @@ score_final10, source_file` [`, sample, derived, row_notes`]
 - Buy-and-hold is computed over exactly every window that starts in 2019 or later.
 
 `check` validates all of this: the exact columns, the vocabularies, the ids, the units, the dates, the $ drawdown bound
-and every curve. It reports a warning when a curve does not end at its row's final equity. That happens only on
-FINAL10's 1y tick rows, whose row is the median of 8 loop timings while the curve is the middle timing run.
+and every curve. It reports a warning when a curve does not end at its row's final equity. That happens only on the
+1y tick rows of FINAL10 and of study 3's tick designs, whose row is the median of 8 loop timings while the curve is the
+middle timing run.
 
 ## The sources
 

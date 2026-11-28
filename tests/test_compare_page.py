@@ -72,11 +72,14 @@ def _metrics(sid: str) -> pd.DataFrame:
 def test_every_contract_file_validates():
     rep = C.validate(DATA)
     assert rep["errors"] == []
-    # the only warnings: FINAL10's 1y tick rows (median row, middle-run curve); no window key spans two dates
+    # the only warnings: the 1y tick rows (median row, middle-run curve) of FINAL10 and of study 3's tick designs
+    # (bot_filters.export_compare); no window key spans two dates
+    tick_1y = ("final10 curves 1y: final10:",) + tuple(
+        f"bot_filters curves 1y: bot_filters:{k}|" for k in ("xau_v3lite", "xau_top1", "xau_top2", "btc_top2"))
     for w in rep["warnings"]:
-        assert w.startswith("final10 curves 1y: final10:"), w
+        assert w.startswith(tick_1y), w
     sids = C.sources_in(DATA)
-    assert {"final10", "tradeiq_rsi", "benchmarks", "balke", "ladder"} <= set(sids)
+    assert {"final10", "tradeiq_rsi", "benchmarks", "balke", "ladder", "tradeiq_2027"} <= set(sids)
     ids = []
     for sid in sids:
         s, m, cv = C.read_source(sid, DATA, raw=True)
@@ -475,7 +478,11 @@ def test_in_and_out_of_sample_flags():
     S, M = blob["S"], blob["M"]
     w_ho = [w["key"] for w in blob["windows"]].index("holdout")
     srcs = {S["src"][M["s"][j]] for j in range(len(M["s"])) if M["w"][j] == w_ho}
-    assert srcs == {"tradeiq_rsi", "benchmarks"}
+    assert {"tradeiq_rsi", "benchmarks"} <= srcs <= {"tradeiq_rsi", "tradeiq_2027", "benchmarks"}
+    # study 2 flags its windows as study 1 does (tradeiq2.SAMPLE_OF): Development and Validation chose the rows
+    s2 = _metrics("tradeiq_2027").groupby("window")["sample"].agg(lambda x: set(x))
+    assert s2["holdout"] == {"out"} and s2["early"] == {"out"} and s2["1y"] == {"out"}
+    assert s2["5y"] == {"mixed"} and s2["8y"] == {"mixed"} and s2["new"] == {"mixed"} and s2["full"] == {"mixed"}
     assert {M["smp"][j] for j in range(len(M["s"])) if M["w"][j] == w_ho and S["src"][M["s"][j]] != "benchmarks"} \
         == {"out"}
 
@@ -566,10 +573,20 @@ def test_pending_text_is_for_readers_and_missing_windows_are_reported():
     blob = C.build_blob(DATA)
     for p in blob["pending"]:
         assert "python3" not in p["text"] and "--allow" not in p["text"] and "gold 2017" not in p["text"]
-    assert {(p["src"], p["w"]) for p in blob["pending"]} >= {("tradeiq_rsi", "8y"), ("benchmarks", "new")}
+    # a pending note is only for what the folder really lacks: a source without files, or a common window a present
+    # source has no rows of (study 1's and buy-and-hold's 8y / new arrived after study 2's exam, so the live folder
+    # no longer exercises that case; test_the_builder_with_some_sources_and_with_a_fake_study_2 does, on a copy)
+    present = set(C.sources_in(DATA))
+    for p in blob["pending"]:
+        if p["w"] == "":
+            assert p["src"] not in present, p
+        else:
+            assert p["src"] in present and not (_metrics(p["src"]).window == p["w"]).any(), p
     miss = {(x["src"], x["sym"]): x for x in blob["missing"]}
     assert miss[("ladder", "XAUUSDm")]["w"] == ["new"] and miss[("ladder", "XAUUSDm")]["later"] == []
-    assert miss[("tradeiq_rsi", "BTCUSDm")]["later"] == ["8y", "new"]
+    assert ("tradeiq_rsi", "BTCUSDm") not in miss or miss[("tradeiq_rsi", "BTCUSDm")]["later"] == []
+    # study 2 never scores BTC before 2019: its BTC rows have no 8y / new window
+    assert miss[("tradeiq_2027", "BTCUSDm")]["w"] == ["8y", "new"]
     assert C.windows_note(blob) == "the window every source on this page has"
 
 
@@ -614,7 +631,11 @@ def test_the_builder_with_some_sources_and_with_a_fake_study_2(tmp_path):
     data.mkdir()
     for p in DATA.iterdir():
         if p.name.startswith(("final10__", "benchmarks__", "balke__", "ladder__")):
+            if p.name.startswith(("benchmarks__curves_8y", "benchmarks__curves_new")):
+                continue                                         # keep buy-and-hold's 8y / new pending in the copy
             shutil.copy(p, data / p.name)
+    bm = pd.read_csv(data / "benchmarks__metrics.csv", dtype=str, keep_default_na=False)
+    bm[~bm.window.isin(["8y", "new"])].to_csv(data / "benchmarks__metrics.csv", index=False)
     out = tmp_path / "index.html"
     rep = C.build(data, out, log=lambda *a: None)
     text = out.read_text(encoding="utf-8")

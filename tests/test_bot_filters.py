@@ -14,17 +14,22 @@ Study 3, entry filters on the bots' designs (``backtesting/research/bot_filters.
   on the engine (fixture store, synthetic allow-steps only, so no filter variant is ever scored) the always-allow
   filter is the design fill for fill, one-sided steps are the engine's own allow_long / allow_short switches, and
   every basket opens in a direction both the trend and the steps allowed.
+* The raw-tick runner on a synthetic engine (``fast.prepare`` / ``fast.run`` stand-ins, nothing read from a store): a
+  quarter (the confirmation's and the exam's format) runs light and writes the very rows it wrote before and no daily
+  rows; a continuous window (the comparison's 1y) needs a daily file, keeps each timing's daily equity
+  (``final10._tick_daily``) beside rows equal to the light runs', and resumes (a run is complete with both).
 * The Turtle: the gates block first fills only; the exit overlay without flags or with flags it never meets is the
   base trade for trade; an H4 flip closes a long at the next M1 open and the Turtle stays out until its next decision.
 * The yardstick, "better", candidates, pairs, finalists, the exam rule, the freeze and the multiple-testing wrapper on
   hand-made tables.
 * The comparison page (hand-made files in ``run_compare``'s and ``run_exam``'s formats, the stage runners stubbed, so
   no market data is read): FINALISTS.md is read by its columns; ``compare`` refuses before the freeze, before study 2's
-  EXAM.md and before the design's exam, and runs the base and the frozen finalists after them; ``export`` writes files
-  that pass ``compare_page.validate`` (the contract's columns in order, the opening row the day before each window at
-  $2,000, the 1y raw-tick rows as the median of the eight timings, no max DD in $), a design without a finalist as its
-  base alone, the same bytes twice, and nothing at all from an incomplete comparison (a frozen finalist not compared
-  included).
+  EXAM.md and before the design's exam, and runs the base and the frozen finalists after them (the 1y raw-tick runs
+  with their daily file); ``export`` writes files that pass ``compare_page.validate`` (the contract's columns in
+  order, the opening row the day before each window at $2,000, the 1y raw-tick rows as the median of the eight timings
+  with the middle (upper-median) timing run's curve, which ends at that run's own final: validate's only warnings; no
+  max DD in $), a design without a finalist as its base alone, the same bytes twice, and nothing at all from an
+  incomplete comparison (a frozen finalist not compared, a 1y without its middle timing's daily rows included).
 * Slow (``-m slow``; real store, about 5 GB for gold): the published 5-year accounts reproduced by the identity
   filter, and the Turtle's.
 """
@@ -608,6 +613,185 @@ def test_the_raw_tick_runner_on_the_fixture_store(tmp_path, monkeypatch, fixture
     assert len(pd.read_csv(sink)) == 4                                # resumed
 
 
+class _FakePrep:
+    """What ``run_tick_stage`` reads of a prepare once the trend is stubbed: the rows' times, their number, the mode."""
+    mode = "ticks"
+
+    def __init__(self, a, z):
+        self.start_ms, self.end_ms = TM.s_of(a) * 1000, TM.s_of(z) * 1000
+        self.t_ms = np.arange(self.start_ms, self.end_ms, 60_000, dtype=np.int64)
+        self.n_rows = len(self.t_ms)
+
+
+def _fake_result(cfg, regime, light):
+    """A deterministic stand-in for ``fast.run``'s result: final, DD, trades and counters come from the loop timing
+    (seed) and the regime whatever ``light`` is (the kernel's recorder only writes the samples), and without ``light``
+    an hourly equity series over the window with open positions marked (none on Saturdays, like gold); with it the
+    engine's own empty equity frame (no sample)."""
+    seed = int(cfg.poll_jitter_seed)
+    tag = 0 if regime is None else int(len(regime[0]))
+    t = pd.date_range(cfg.start, cfg.end, freq="h", inclusive="left", tz="UTC")
+    t = t[t.dayofweek != 5]
+    k = np.arange(len(t), dtype=np.float64)
+    eq = 2000.0 + 4.0 * seed * np.sin(k / 17.0) + 0.03 * (seed + tag % 7) * k
+    equity = fast._equity_frame(np.zeros((0, 0))) if light else pd.DataFrame({"time": t, "equity": eq})
+    scal = dict(final_equity=float(eq[-1] + 0.5 * seed), stopped_out=0.0, max_drawdown_pct=1.5 * seed + 0.1 * (tag % 5),
+                last_poll_ms=float(t[-1].value // 10**6))
+    cnt = dict(polls_entry_blocked_regime=tag, polls_entry_blocked_trend=0 if regime is not None else 40 + seed)
+    return fast.Result(cfg=cfg, fills=pd.DataFrame(), baskets=pd.DataFrame({"pnl": np.zeros(10 + seed + tag % 3)}),
+                       equity=equity, counters=cnt, scalars=scal)
+
+
+@pytest.fixture
+def fake_engine(monkeypatch):
+    """``run_tick_stage`` on a synthetic engine (nothing is read from any store): ``fast.prepare`` / ``fast.run``
+    replaced by recorders returning ``_FakePrep`` / ``_fake_result``, the trend and the filter book synthetic, the
+    module's clock stopped (``run_s`` 0, so a file's bytes are reproducible). Returns the calls, trend and steps."""
+    import types
+    eng = types.SimpleNamespace(calls=[], trend=(np.asarray([B.ALWAYS_MS], np.int64), np.asarray([1], np.int64)),
+                                steps=B.Steps(np.asarray([B.ALWAYS_MS, TM.s_of("2026-01-08") * 1000], np.int64),
+                                              np.array([True, False]), np.array([True, True])))
+
+    class FakeBook:
+        history_from = "synthetic"
+
+        def __init__(self, *a, **k):
+            pass
+
+        def steps(self, fid, t_ms):
+            return eng.steps
+
+    def prepare(symbol, a, z, tfs, mode="sec", store_dir=None):
+        eng.calls.append(("prepare", symbol, str(a), str(z), mode))
+        return _FakePrep(a, z)
+
+    def run(cfg, prep=None, mode="sec", trace=False, light=False, regime=None, **kw):
+        eng.calls.append(("run", cfg.start, cfg.end, int(cfg.poll_jitter_seed), bool(light), regime is None))
+        return _fake_result(cfg, regime, light)
+
+    monkeypatch.setattr(fast, "prepare", prepare)
+    monkeypatch.setattr(fast, "run", run)
+    monkeypatch.setattr(B, "FilterBook", FakeBook)
+    monkeypatch.setattr(B, "trend_series", lambda prep, cfg: eng.trend)
+    monkeypatch.setattr(B, "time", types.SimpleNamespace(time=lambda: 1_000.0))
+    return eng
+
+
+def _want_rows(eng, key, vids, w, seeds, light):
+    """The rows the raw-tick runner wrote before it kept any daily equity: ``_tick_row`` of each (variant, timing)'s
+    run, ``run_s`` 0 (the clock is stopped)."""
+    from backtesting.analysis.robustness import live_timing
+    out = []
+    for v in vids:
+        for sd in seeds:
+            cfg = B.design_cfg(key, w.start, w.end, extra=live_timing(sd))
+            reg = None if v == B.BASE else B.compose(eng.trend, eng.steps)
+            out.append(B._tick_row(key, v, w, _fake_result(cfg, reg, light), "ticks", sd, 0.0))
+    return out
+
+
+def test_a_quarter_on_raw_ticks_runs_light_and_writes_the_rows_it_wrote_before(tmp_path, fake_engine):
+    """The confirmation's and the exam's format is unchanged: one raw-tick prepare per quarter, every (variant,
+    timing) run with ``light`` (no equity kept), the very rows of before (``_tick_row`` of the light run, the columns
+    ``COLUMNS``, the same bytes), no daily file whether or not one is named, and resume runs nothing."""
+    key, vids, seeds = "btc_top2", [B.BASE, "TSI-H1"], (1, 2)
+    q = B.Window("dev", "2026", "Q", "2026-01-05", "2026-01-19")
+    out, ref = tmp_path / "out", tmp_path / "ref"
+    out.mkdir()
+    ref.mkdir()
+    sink, dsink = out / "confirm.csv", out / "daily_ticks.csv"
+    rows = B.run_tick_stage(key, vids, [q], sink, workers=1, seeds=seeds, log=lambda *x: None, daily_sink=dsink)
+    calls = fake_engine.calls
+    assert [c for c in calls if c[0] == "prepare"] == [("prepare", "BTCUSDm", q.start, q.end, "ticks")]
+    assert [c for c in calls if c[0] == "run" and c[1] == q.start] == [
+        ("run", q.start, q.end, sd, True, v == B.BASE) for v in vids for sd in seeds]
+    assert {c[4] for c in calls if c[0] == "run"} == {True}             # the kernel's warm-up too
+    assert sorted(p.name for p in out.iterdir()) == ["confirm.csv"]    # no daily file for a quarter
+    want = _want_rows(fake_engine, key, vids, q, seeds, light=True)
+    B._append(ref / "confirm.csv", want)
+    assert sink.read_bytes() == (ref / "confirm.csv").read_bytes()
+    assert list(pd.read_csv(sink).columns) == B.COLUMNS and len(rows) == 4
+    r = rows.set_index(["vid", "seed"])
+    assert r.loc[(B.BASE, 1), "blocked_trend"] == 41 and r.loc[(B.BASE, 1), "blocked_regime"] == 0
+    assert r.loc[("TSI-H1", 2), "blocked_regime"] > 0 and set(rows["run_s"]) == {0.0}
+    # without a daily file named (run_confirm / run_exam): the same bytes; and resume runs nothing
+    n = len(calls)
+    B.run_tick_stage(key, vids, [q], out / "exam.csv", workers=1, seeds=seeds, log=lambda *x: None)
+    assert (out / "exam.csv").read_bytes() == sink.read_bytes()
+    n2 = len(calls)
+    assert n2 > n
+    B.run_tick_stage(key, vids, [q], sink, workers=1, seeds=seeds, log=lambda *x: None, daily_sink=dsink)
+    assert len(calls) == n2 and sink.read_bytes() == (ref / "confirm.csv").read_bytes() and not dsink.exists()
+
+
+@pytest.mark.parametrize("workers", [1, 2])
+def test_a_continuous_window_on_raw_ticks_keeps_each_timings_daily_equity(tmp_path, fake_engine, workers):
+    """The comparison's 1y (a continuous window): refused without a daily file before anything is prepared; every
+    (variant, timing) run without ``light``, its row the same as the light run's, and its daily equity
+    (``final10._tick_daily``: the first mark of each UTC day with a mark, the first day at $2,000) in
+    ``TICK_DAILY_COLUMNS``, one curve per seed. Resume: nothing runs again; a run whose row has no daily rows (written
+    before they were kept) and one whose daily rows have no row (stopped between the two writes) run again, and the
+    files read back as before."""
+    from backtesting.analysis.robustness import live_timing
+    key, vids, seeds, w = "btc_top2", [B.BASE, "TSI-H1"], (1, 2, 3), B.COMPARE_1Y
+    sink, dsink = tmp_path / "compare_btc_top2.csv", tmp_path / "daily_compare_ticks_btc_top2.csv"
+    quiet = dict(workers=workers, seeds=seeds, log=lambda *x: None)
+    with pytest.raises(ValueError, match="daily_sink"):
+        B.run_tick_stage(key, vids, [w], sink, **quiet)
+    assert fake_engine.calls == [] and not sink.exists()
+    rows = B.run_tick_stage(key, vids, [w], sink, daily_sink=dsink, **quiet)
+    if workers == 1:                                                   # the forked workers' calls are not seen here
+        assert [c for c in fake_engine.calls if c[0] == "run" and c[1] == w.start] == [
+            ("run", w.start, w.end, sd, False, v == B.BASE) for v in vids for sd in seeds]
+
+    def by_run(df, cols=("vid", "seed")):
+        return df.sort_values(list(cols)).reset_index(drop=True)
+
+    # the rows: what the light runs give (the samples change nothing the run computes), through the same writer
+    ref = tmp_path / "ref"
+    B._append(ref / "rows.csv", _want_rows(fake_engine, key, vids, w, seeds, light=True))
+    got = by_run(rows)[B.COLUMNS]
+    pd.testing.assert_frame_equal(got, by_run(B.read_rows(ref / "rows.csv"))[B.COLUMNS])
+    # the daily rows: one curve per (variant, timing), FINAL10's _tick_daily of the full run
+    raw = pd.read_csv(dsink)
+    assert list(raw.columns) == B.TICK_DAILY_COLUMNS and len(raw) == len(raw.drop_duplicates())
+    daily = B.read_tick_daily(dsink)
+    assert set(zip(daily.vid, daily.seed)) == {(v, sd) for v in vids for sd in seeds}
+    assert set(daily.design) == {key} and set(daily.window) == {"1y"}
+    n_days = daily["date"].nunique()
+    for v in vids:
+        for sd in seeds:
+            cfg = B.design_cfg(key, w.start, w.end, extra=live_timing(sd))
+            reg = None if v == B.BASE else B.compose(fake_engine.trend, fake_engine.steps)
+            d = F._tick_daily(_fake_result(cfg, reg, light=False))
+            g = daily[(daily.vid == v) & (daily.seed == sd)].sort_values("date")
+            assert len(g) == len(d) == n_days > 300
+            assert [str(t.date()) for t in d.index] == [str(t.date()) for t in g.date]
+            assert np.allclose(g.equity.to_numpy(), np.round(d.to_numpy(), 6), rtol=0, atol=1e-9)
+            assert g.equity.iloc[0] == 2000.0 and g.date.iloc[0] == pd.Timestamp(w.start)
+            assert not (g.date.dt.dayofweek == 5).any()                # a day without a mark has no row
+    curves = daily[daily.vid == "TSI-H1"].groupby("seed")["equity"].apply(tuple)
+    assert len(set(curves)) == len(seeds)                              # each timing its own curve
+    # resume: complete, nothing runs again
+    before = (sink.read_bytes(), dsink.read_bytes())
+    n = len(fake_engine.calls)
+    B.run_tick_stage(key, vids, [w], sink, daily_sink=dsink, **quiet)
+    assert len(fake_engine.calls) == n and (sink.read_bytes(), dsink.read_bytes()) == before
+    # a row without its daily rows (TSI-H1, seed 2) and daily rows without their row (the base, seed 3): those two
+    # run again; the files read back as before (``read_rows`` / ``read_tick_daily`` keep the last of a repeat)
+    raw[~((raw.vid == "TSI-H1") & (raw.seed == 2))].to_csv(dsink, index=False)
+    r0 = pd.read_csv(sink)
+    r0[~((r0.vid == B.BASE) & (r0.seed == 3))].to_csv(sink, index=False)
+    B.run_tick_stage(key, vids, [w], sink, daily_sink=dsink, **quiet)
+    if workers == 1:
+        assert [c for c in fake_engine.calls[n:] if c[0] == "run" and c[1] == w.start] == [
+            ("run", w.start, w.end, 3, False, True), ("run", w.start, w.end, 2, False, False)]
+    assert len(pd.read_csv(sink)) == len(r0) + 1 and len(pd.read_csv(dsink)) == len(raw) + n_days
+    cols = ("vid", "seed", "date")
+    pd.testing.assert_frame_equal(by_run(B.read_tick_daily(dsink), cols), by_run(daily, cols))
+    pd.testing.assert_frame_equal(by_run(B.read_rows(sink))[B.COLUMNS], got)
+
+
 def test_the_trend_series_needs_a_trend_timeframe(live_cfg, prepared):
     cfg = live_cfg("XAUUSDm", **QUICK)
     prep = prepared("XAUUSDm", mode="ticks", tfs=ALL_TFS)
@@ -1024,26 +1208,37 @@ def _run_row(key, vid, w, mode, seed, final, dd, trades, wiped=False, wiped_at="
 
 def _write_compare(folder, key, vids, seed=0, wiped=None):
     """
-    compare_<key>.csv and daily_compare_<key>.csv as ``run_compare`` writes them, through the module's own writer:
-    per second (8y, 5y, new) and on the M1-bar model one run per window with a daily row per UTC day with a mark (gold:
-    none on Saturdays), the window's first marked day at $2,000 (``final10._tick_daily`` / ``_bar_account``); the tick
-    designs' 1y on raw ticks under the eight timings (FIN_1Y, DD_1Y; trades 100 + seed) without daily rows
-    (``run_tick_stage`` keeps none). ``wiped``: (vid, window) of an account wiped on its 200th marked day: the tick
-    engine's samples stop there, the M1-bar kernel marks the empty account on to the window's end (``eqb``).
-    Returns {(vid, window): (final, the daily rows the curve carries)}.
+    compare_<key>.csv, daily_compare_<key>.csv and daily_compare_ticks_<key>.csv as ``run_compare`` writes them,
+    through the module's own writer: per second (8y, 5y, new) and on the M1-bar model one run per window with a daily
+    row per UTC day with a mark (gold: none on Saturdays), the window's first marked day at $2,000
+    (``final10._tick_daily`` / ``_bar_account``); the tick designs' 1y on raw ticks under the eight timings (FIN_1Y,
+    DD_1Y; trades 100 + seed), each timing with daily rows of its own on the same days (``run_tick_stage``: a curve per
+    seed). ``wiped``: (vid, window) of an account wiped on its 200th marked day: the tick engine's samples stop there,
+    the M1-bar kernel marks the empty account on to the window's end (``eqb``).
+    Returns {(vid, window): (final, the daily rows the curve carries)}; for the tick designs' 1y the middle
+    (upper-median) timing run's, seed 1, with its own final.
     """
     d = B.DESIGNS[key]
     rng = np.random.default_rng(seed)
-    rows, daily, got = [], [], {}
+    rt = np.random.default_rng(1000 + seed)          # the timings' paths: the other windows' draws are as they were
+    rows, daily, ticks, got = [], [], [], {}
     for j, vid in enumerate(vids):
         for w in B.COMPARE_WINDOWS:
             mode = "bars" if d.engine == "bars" else ("ticks" if w.name == "1y" else "sec")
-            if mode == "ticks":
-                rows += [_run_row(key, vid, w, mode, sd, FIN_1Y[sd] + 100.0 * j, DD_1Y[sd], 100 + sd) for sd in B.SEEDS]
-                continue
             days = pd.date_range(w.start, w.end, freq="D", inclusive="left")
             if d.symbol == "XAUUSDm":
                 days = days[days.dayofweek != 5]
+            if mode == "ticks":
+                rows += [_run_row(key, vid, w, mode, sd, FIN_1Y[sd] + 100.0 * j, DD_1Y[sd], 100 + sd) for sd in B.SEEDS]
+                for sd in B.SEEDS:
+                    eq = 2000.0 + np.cumsum(rt.normal(1.0, 15.0, len(days)))
+                    eq[0] = 2000.0
+                    t = pd.DataFrame({"design": key, "vid": vid, "window": w.name, "seed": sd,
+                                      "date": [str(x.date()) for x in days], "equity": np.round(eq, 6)})
+                    ticks.append(t)
+                    if sd == 1:
+                        got[(vid, w.name)] = (round(FIN_1Y[sd] + 100.0 * j, 6), t)
+                continue
             eq = 2000.0 + np.cumsum(rng.normal(1.0, 15.0, len(days)))
             eq[0] = 2000.0
             final, dd, wipe, at, keep = float(eq[-1] + rng.normal(0.0, 5.0)), float(rng.uniform(5, 40)), False, "", None
@@ -1062,6 +1257,9 @@ def _write_compare(folder, key, vids, seed=0, wiped=None):
             got[(vid, w.name)] = (round(final, 6), dd_rows.iloc[:keep])
     B._append(folder / f"compare_{key}.csv", rows)
     B._append(folder / f"daily_compare_{key}.csv", pd.concat(daily).to_dict("records"), DAILY_COLS)
+    if ticks:
+        B._append(folder / f"daily_compare_ticks_{key}.csv", pd.concat(ticks).to_dict("records"),
+                  B.TICK_DAILY_COLUMNS)
     return got
 
 
@@ -1186,7 +1384,13 @@ def test_the_export_writes_the_comparison_pages_contract(closed_guard, tmp_path)
     got = _export_fixture(closed_guard)
     data = tmp_path / "data"
     res = B.export_compare(data, closed_guard, log=lambda *a: None)
-    assert CP.validate(data) == {"errors": [], "warnings": []}
+    v0, v1, t0 = "bot_filters:xau_v3lite|BASE", "bot_filters:xau_v3lite|SIDE200-H4", "bot_filters:btc_turtle|BASE"
+    # no error; the only warnings: the tick designs' 1y curves end at their middle timing run's own final, the rows
+    # hold the median of the eight (FINAL10's 1y rows warn the same way)
+    rep = CP.validate(data)
+    assert rep["errors"] == [] and sorted(rep["warnings"]) == sorted(res["warnings"]) == [
+        f"bot_filters curves 1y: {v0}: the curve ends at 2600.00, the row's final is 2550.00",
+        f"bot_filters curves 1y: {v1}: the curve ends at 2700.00, the row's final is 2650.00"]
     files = [f"bot_filters__curves_{w}.csv.gz" for w in ("1y", "5y", "8y", "new")]
     assert sorted(p.name for p in data.iterdir()) == files + ["bot_filters__metrics.csv", "bot_filters__series.csv"]
     s = pd.read_csv(data / "bot_filters__series.csv", dtype=str, keep_default_na=False)
@@ -1194,7 +1398,6 @@ def test_the_export_writes_the_comparison_pages_contract(closed_guard, tmp_path)
     assert list(s.columns) == CP.SERIES_COLS + CP.SERIES_OPT and list(m.columns) == CP.METRICS_COLS + CP.METRICS_OPT
     assert len(res["series"]) == 3 and len(res["metrics"]) == 12
     s = s.set_index("series_id")
-    v0, v1, t0 = "bot_filters:xau_v3lite|BASE", "bot_filters:xau_v3lite|SIDE200-H4", "bot_filters:btc_turtle|BASE"
     assert list(s.index) == [v0, v1, t0]                               # the Turtle has no finalist: its base alone
     assert s.loc[v1, "label"] == "V3-lite + 4H MA200 side" and s.loc[v0, "label"] == "V3-lite (base, no added filter)"
     assert s.loc[t0, "label"] == "Turtle System 2 + bot votes (base, no added filter)"
@@ -1223,27 +1426,30 @@ def test_the_export_writes_the_comparison_pages_contract(closed_guard, tmp_path)
                                                                                        abs_tol=1e-3)
     assert [m.loc[(v0, w), "dd_marks"] for w in ("8y", "5y", "new", "1y")] == ["second"] * 3 + ["tick"]
     assert {m.loc[(t0, w), "dd_marks"] for w in ("8y", "5y", "new", "1y")} == {"M1"}
-    # the 1y raw-tick account: the median of the eight timings, trades from the middle (upper-median) run (seed 1)
+    # the 1y raw-tick account: the median of the eight timings, trades and the curve from the middle (upper-median)
+    # run (seed 1), which the row names
     r = m.loc[(v0, "1y")]
     assert float(r.final_usd) == 2550.0 and float(r.max_dd_pct) == 11.5 and r.trades == "101" and r.wiped == "0"
-    assert r.derived == "" and "median" in r.row_notes and "$2,100.00 to $3,800.00" in r.row_notes
+    assert "median" in r.row_notes and "$2,100.00 to $3,800.00" in r.row_notes
+    assert "seed 1, whose curve ends at its own final $2,600.00" in r.row_notes
     assert float(m.loc[(v1, "1y"), "final_usd"]) == 2650.0
-    # the per-second and M1-bar accounts are their run; Sharpe and the quarters come from the curve (derived)
+    # every account has its curve: Sharpe and the quarters come from it (derived); the per-second and M1-bar
+    # accounts are their run, the 1y raw-tick rows the median (above)
     for (sid, w), r in m.iterrows():
+        assert r.derived == "sharpe_w,pos_quarters_pct,worst_quarter_usd"
         if not (sid != t0 and w == "1y"):
             key = ("turtle" if sid == t0 else sid.split("|")[1], w)
             assert math.isclose(float(r.final_usd), got[key][0], abs_tol=1e-4)
-            assert r.derived == "sharpe_w,pos_quarters_pct,worst_quarter_usd"
     assert float(m.loc[(v0, "5y"), "score_final10"]) == 5.0 and float(m.loc[(v1, "8y"), "score_final10"]) == 7.5
     assert set(m.loc[t0, "score_final10"]) == {""}
     wiped = m.loc[(v0, "new")]
     assert wiped.wiped == "1" and float(wiped.final_usd) == 0.0 and float(wiped.cagr_pct) == -100.0
     # the curves: an opening row the day before each window at $2,000, day D ending at the next marked day's opening
-    # mark, the last day at the final equity; none for the tick designs' 1y (eight raw-tick timings)
+    # mark, the last day at the final equity; the tick designs' 1y: the middle timing run's (seed 1) to its own final
     for w in B.COMPARE_WINDOWS:
         cv = pd.read_csv(data / f"bot_filters__curves_{w.name}.csv.gz", dtype={"date": str})
         assert list(cv.columns) == CP.CURVE_COLS
-        assert set(cv.series_id) == ({t0} if w.name == "1y" else {v0, v1, t0})
+        assert set(cv.series_id) == {v0, v1, t0}
         for sid, g in cv.groupby("series_id"):
             day0 = (pd.Timestamp(w.start) - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
             assert (g.date.iloc[0], g.equity_usd.iloc[0]) == (day0, 2000.0)
@@ -1318,6 +1524,72 @@ def test_the_export_refuses_a_design_without_every_frozen_finalist(closed_guard,
     assert list(res["series"].series_id) == [f"bot_filters:xau_v3lite|{v}" for v in ("BASE", "SIDE200-H4", "TSI-H1")]
     assert list(res["series"].role) == ["base", "finalist", "finalist"]
     assert list(res["series"].exam) == ["", "pass", "pass"]
+
+
+def test_the_1y_raw_tick_curve_is_the_middle_timing_runs_own(closed_guard, tmp_path):
+    """FINAL10's 1y convention: the row holds the median final and max DD of the eight timings; the curve is the middle
+    (upper-median) timing run's, seed 1 of FIN_1Y (not seed 8, the lower median, nor seed 5, the fifth in seed order),
+    from its own daily rows to its own final, and Sharpe and the quarters come from that curve. Without that timing's
+    daily rows the export writes nothing; another timing's do not matter."""
+    _export_fixture(closed_guard)
+    data = tmp_path / "data"
+    B.export_compare(data, closed_guard, log=lambda *a: None)
+    cv = pd.read_csv(data / "bot_filters__curves_1y.csv.gz", dtype={"date": str})
+    m = pd.read_csv(data / "bot_filters__metrics.csv", dtype=str, keep_default_na=False).set_index(["series_id",
+                                                                                                      "window"])
+    p = closed_guard / "daily_compare_ticks_xau_v3lite.csv"
+    ticks, w = B.read_tick_daily(p), B.COMPARE_1Y
+    for j, vid in enumerate([B.BASE, "SIDE200-H4"]):
+        sid = f"bot_filters:xau_v3lite|{vid}"
+        g = cv[cv.series_id == sid].reset_index(drop=True)
+        curves = {sd: B.compare_curve(ticks[(ticks.vid == vid) & (ticks.seed == sd)], FIN_1Y[sd] + 100.0 * j,
+                                      w.start, w.end) for sd in B.SEEDS}
+        drawn = [sd for sd, c in curves.items() if c.date.tolist() == g.date.tolist()
+                 and np.allclose(c.equity_usd.round(2), g.equity_usd, rtol=0, atol=1e-6)]
+        assert drawn == [1]
+        assert (g.date.iloc[0], g.equity_usd.iloc[0], g.equity_usd.iloc[-1]) == ("2025-11-12", 2000.0, 2600.0 + 100 * j)
+        r = m.loc[(sid, "1y")]
+        assert float(r.final_usd) == 2550.0 + 100.0 * j and float(r.max_dd_pct) == 11.5 and r.trades == "101"
+        assert f"seed 1, whose curve ends at its own final ${2600.0 + 100.0 * j:,.2f}" in r.row_notes
+        st = CP.curve_stats(curves[1].date.to_numpy(), curves[1].equity_usd.to_numpy(np.float64), w.start, w.end)
+        for k in ("sharpe_w", "pos_quarters_pct", "worst_quarter_usd"):
+            assert math.isclose(float(r[k]), st[k], rel_tol=0, abs_tol=1e-4), k
+    raw = pd.read_csv(p)
+    raw[~((raw.vid == "SIDE200-H4") & (raw.seed == 8))].to_csv(p, index=False)       # a timing not drawn: the same
+    b = tmp_path / "b"
+    B.export_compare(b, closed_guard, log=lambda *a: None)
+    assert sorted(x.name for x in b.iterdir()) == sorted(x.name for x in data.iterdir())
+    assert all((b / x.name).read_bytes() == x.read_bytes() for x in data.iterdir())
+    raw[~((raw.vid == "SIDE200-H4") & (raw.seed == 1))].to_csv(p, index=False)       # the drawn one: refused
+    c = tmp_path / "c"
+    with pytest.raises(ValueError, match=r"SIDE200-H4 1y: no daily curve in daily_compare_ticks_xau_v3lite\.csv "
+                                         r"\(seed 1\)"):
+        B.export_compare(c, closed_guard, log=lambda *a: None)
+    assert not c.exists()
+
+
+def test_compare_gives_the_1y_runs_a_daily_file_beside_their_rows(closed_guard, tmp_path, monkeypatch):
+    """``run_compare``: the per-second stage keeps daily_compare_<key>.csv, the raw-tick stage (1y) its timings' daily
+    equity in daily_compare_ticks_<key>.csv, both beside compare_<key>.csv."""
+    exam_md = tmp_path / "tradeiq_2027" / "EXAM.md"
+    exam_md.parent.mkdir(parents=True)
+    exam_md.write_text("# study 2's exam\n")
+    monkeypatch.setattr(B, "STUDY2_EXAM", exam_md)
+    _freeze_all(closed_guard, {})
+    seen = []
+
+    def rec(stage):
+        def run(key, vids, windows, sink, *args, **kwargs):
+            seen.append((stage, list(vids), tuple(w.name for w in windows), sink,
+                         args[0] if stage == "sec" else kwargs.get("daily_sink")))
+            return pd.DataFrame(columns=B.COLUMNS)
+        return run
+    monkeypatch.setattr(B, "run_sec_stage", rec("sec"))
+    monkeypatch.setattr(B, "run_tick_stage", rec("tick"))
+    B.run_compare("xau_top2", None, closed_guard)
+    rows = closed_guard / "compare_xau_top2.csv"
+    assert seen == [("sec", [B.BASE], ("8y", "5y", "new"), rows, closed_guard / "daily_compare_xau_top2.csv"),
+                    ("tick", [B.BASE], ("1y",), rows, closed_guard / "daily_compare_ticks_xau_top2.csv")]
 
 
 def test_the_series_labels_are_plain_words():

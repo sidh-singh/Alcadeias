@@ -2741,12 +2741,20 @@ def exam_md(study_dir: Path) -> str:
 
 # ───────────────────────────── the accounts and the comparison page's files ─────────────────────────────
 
+# the comparison page's contract v2 (compare_page.SERIES_COLS + SERIES_OPT, METRICS_COLS + METRICS_OPT): the v1
+# columns, then the optional ones (sizing, tags; sample, derived, row_notes)
 SERIES_COLS = ("series_id", "source", "study", "symbol", "label", "kind", "family", "tf", "filter", "role", "eligible",
-               "exam", "notes")
+               "exam", "notes", "sizing", "tags")
 METRIC_COLS = ("series_id", "window", "start", "end", "cost", "basis", "start_usd", "final_usd", "net_usd",
                "return_pct", "cagr_pct", "max_dd_usd", "max_dd_pct", "p_dd", "trades", "win_rate_pct", "profit_factor",
                "sharpe_w", "pos_quarters_pct", "worst_quarter_usd", "wiped", "dd_marks", "score_final10",
-               "source_file")
+               "source_file", "sample", "derived", "row_notes")
+# in or out of the sample the selection saw, per window (the contract's 'sample'; study 1's flags for the same
+# windows): Development and Validation chose the rows; the hold-out, gold's Early window and the last year (inside the
+# hold-out) were sealed until the exam; the others span both
+SAMPLE_OF = {"dev": "in", "val": "in", "devval": "in", "holdout": "out", "early": "out", "1y": "out",
+             "full": "mixed", "5y": "mixed", "8y": "mixed", "new": "mixed"}
+SAMPLES = ("in", "out", "mixed", "")
 CURVE_COLS = ("series_id", "date", "equity_usd")
 ROLES = ("design", "base", "finalist", "champion", "qualified", "variant", "benchmark")
 KINDS = ("bot", "bot+filter", "rule", "benchmark")
@@ -3196,7 +3204,7 @@ def export_accounts(study_dir: Path, compare_dir: Path, pairs, modules, qual: pd
                            "label": label_of(v.id), "kind": "rule", "family": v.family, "tf": v.tf,
                            "filter": setting(v.id, v.params, FILTER_KEYS, FILTER_TOKENS), "role": roles[v.id],
                            "eligible": int(bool(q.loc[v.id, "qualifies"])), "exam": exam1.get(v.id, ""),
-                           "notes": "; ".join(notes)})
+                           "notes": "; ".join(notes), "sizing": "", "tags": ""})
         for m in body["metrics"]:
             for basis in ("account", "unit"):
                 x = m[basis]
@@ -3207,7 +3215,8 @@ def export_accounts(study_dir: Path, compare_dir: Path, pairs, modules, qual: pd
                                        ("start_usd", "final_usd", "net_usd", "return_pct", "cagr_pct", "max_dd_usd",
                                         "max_dd_pct", "p_dd", "trades", "win_rate_pct", "profit_factor", "sharpe_w",
                                         "pos_quarters_pct", "worst_quarter_usd", "wiped")},
-                                    "dd_marks": "M1", "score_final10": "", "source_file": SOURCE_FILE})
+                                    "dd_marks": "M1", "score_final10": "", "source_file": SOURCE_FILE,
+                                    "sample": SAMPLE_OF.get(str(m["window"]), ""), "derived": "", "row_notes": ""})
             if m["cost"] == 1.0 and m["window"] in focus_windows:
                 summary.append(_summary_row("this study", v.symbol, v.id, roles[v.id], m["window"], m["start"],
                                             m["end"], m["account"], m["unit"], ", ".join(best_of.get(v.id, [])),
@@ -3235,7 +3244,7 @@ def export_accounts(study_dir: Path, compare_dir: Path, pairs, modules, qual: pd
             write_csv(pd.concat(parts, ignore_index=True), tmp / f"{SID}__curves_{_curve_name(win)}.csv.gz")
         problems = check_export(tmp, SID)
         if problems:
-            raise AssertionError("the export breaks the COMPARE DATA CONTRACT v1 (nothing replaced):\n  "
+            raise AssertionError("the export breaks the COMPARE DATA CONTRACT v2 (nothing replaced):\n  "
                                  + "\n  ".join(problems[:20]))
         for old in compare_dir.glob(f"{SID}__*"):
             old.unlink()
@@ -3258,7 +3267,7 @@ def _curve_name(window: str) -> str:
 
 
 def check_export(compare_dir: Path, sid: str = SID) -> List[str]:
-    """COMPARE DATA CONTRACT v1 on one source's files (the rules of compare_page.validate, on this source alone): the
+    """COMPARE DATA CONTRACT v2 on one source's files (the rules of compare_page.validate, on this source alone): the
     columns in order, unique series ids '<sid>:<id>', the value sets, one metrics row per (series, window, cost,
     basis), ISO dates with start < end, final - start = net, '' where the contract says so, curves of known series
     with one increasing row per day, the opening row the day before the window starts at $2,000, no row after the
@@ -3292,7 +3301,7 @@ def check_export(compare_dir: Path, sid: str = SID) -> List[str]:
     if me.duplicated(["series_id", "window", "cost", "basis"]).any():
         p.append("two metrics rows for one (series_id, window, cost, basis)")
     for col, ok in (("cost", ("1.0", "1.5")), ("basis", ("account", "unit")), ("wiped", ("0", "1")),
-                    ("dd_marks", DD_MARKS)):
+                    ("dd_marks", DD_MARKS), ("sample", SAMPLES)):
         bad = sorted(set(me[col]) - set(ok))
         if bad:
             p.append(f"metrics.{col} holds {bad}")

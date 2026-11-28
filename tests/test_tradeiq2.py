@@ -889,7 +889,8 @@ def test_the_page_curve_opens_at_2000_and_stops_at_a_wipe_out(tmp_path):
     sid = "tradeiq_2027:XAUUSDm|1H|RIB|X"
     pd.DataFrame([{"series_id": sid, "source": D.SID, "study": D.STUDY_NAME, "symbol": "XAUUSDm", "label": "x",
                    "kind": "rule", "family": "RIB", "tf": "1H", "filter": "", "role": "variant", "eligible": 0,
-                   "exam": "", "notes": ""}]).to_csv(tmp_path / f"{D.SID}__series.csv", index=False)
+                   "exam": "", "notes": "", "sizing": "", "tags": ""}],
+                 columns=list(D.SERIES_COLS)).to_csv(tmp_path / f"{D.SID}__series.csv", index=False)
     row = {c: "" for c in D.METRIC_COLS}
     row.update(series_id=sid, window="dev", start="2020-09-07", end="2020-09-12", cost=1.0, basis="account",
                start_usd=2000.0, final_usd=0.0, net_usd=-2000.0, wiped=1, dd_marks="M1")
