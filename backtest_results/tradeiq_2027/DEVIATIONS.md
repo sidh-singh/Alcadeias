@@ -447,3 +447,61 @@ Rule module (`tradeiq2_rules_coil.py`):
 - COIL-R14. Ids and tags. Ids are symbol|tf|COIL|rule|exit|grade with the PREREG's names; COIL-MA and COIL-0 carry the grade token 'none'. Params hold rule, filter (ribbon / F1 / F0), exit, grade and stop. The tag is the coil's ordinal counted from the data start; a new coil starts at an armed bar whose previous bar is unarmed or holds another box.
 
 
+
+## Readings written on 28 Nov 2026 (IST) with the study driver (`tradeiq2.py`), before any rule result existed
+
+The driver reads the plan as follows where it is silent (its `READINGS`, quoted as written; each names what it can
+move). Reading D3's choice is made: WY-DERIVED's 18 rows are WYCKOFF-R1's (WY-SP with the X-S and X-S3 exits, WY-CL
+with X-2R50), and the wyckoff module emits them.
+
+- D1. Grid counts are checked per (module, symbol, family, eligible); RIB-LIT, the ORB controls, SP's placebo, the BTC Wyckoff control, HP-DRAWN, SH's Monday variant and the claim-market rows keep their script's family with eligible=False; rows the plan does not number are counted, not checked.
+- D2. ORB controls: LV x O1-O4 x 2 timeframes, the UTC-5 clock x O1 x 2, BTC 7 days x O1 x 2; TIGHT on both symbols, ORB-CX and LO gold only (738 - 720 = 18).
+- D3. WY-DERIVED = 18 rows as PREREG 6.3's size line says (its text gives 12): WY-CL's 6 plus WY-SP's 12, either as confirmed and provisional excursions or as the 3R and X-S exits; the lead picks one, the wyckoff module emits it, and the count check stops on a module that gives 12.
+- D4. Only the session module is asked for USTECm / EURUSDm / GBPUSDm (claim 10); every row there is eligible=False; their Development starts as PREREG 3 says.
+- D5. Ids: 'symbol|tf|...' without white space or backticks; the timeframe one of M5, M15, 1H, 4H, 1D; the family one of its module's PREREG 7 families.
+- D6. Qualification: the minimum trades are PREREG 5's, counted at x1.0; rule 3 is inclusive at P/DD 1.0 and 50% positive quarters; a P/DD that does not exist (no drawdown) fails, as in study 1; not-eligible rows get q1-q4 but never qualify.
+- D7. PREREG 6.3's 'insufficient events' (fewer than 15 Development trades on a WY / WY-DERIVED row) is a column and a verdict word; it changes no qualification.
+- D8. The finalists' script groups come from the family (PREREG 7's list), not from Variant.script; ties between champions as between qualifiers: D+V P/DD, then Development's, then the id; a missing P/DD sorts last.
+- D9. Multiple testing: as PREREG 7 says, N = every variant run on the symbol and SPA / the Reality Check over all of them (Development weekly P/L, x1.0, study 1's code); the same over the eligible variants only, for information (HP-DRAWN looks ahead and the controls are no trial of the selection); in select and again in exam.
+- D10. The exam: every champion takes it (PREREG 7 'A champion passes exam 1 when'), the finalists among them; FINALISTS.md lists every champion with its role.
+- D11. Run loads every market to 2024-07-01 even after the freeze, and refuses once FINALISTS.md exists, as select does.
+- D12. The look-ahead checks: freeze recomputes each would-be champion's Development row on a market cut at the Development end and requires results_dev_val.csv's text; the exam recomputes every champion's D, V and D+V, and (unless --no-recheck) every variant's, on the data to the data end and requires the same text; HP-DRAWN (it looks ahead by design) is left out; a champion that fails gets the verdict 'void (look-ahead)'. A check that cuts the data at a window's end cannot see a rule that peeks at most one bar ahead (the decision at the last bar fills after the window): such rules are the ports' and the rule modules' own tests' to catch.
+- D13. The code a result depends on: the harness, study 1's harness, config.py, store.py, the ports and the rule module (and Python, numpy, pandas and numba); freeze refuses when any of these or the data served differ from run_info.csv; exam and accounts refuse result code other than FINALISTS.md's unless --allow-code-change (then the files are recorded in exam_info.csv and EXAM.md) and refuse inputs whose sha256 FINALISTS.md does not record; the driver's, silver.py's and final10.py's blobs are recorded, not required.
+- D14. The exam of record: exam.csv is never overwritten by a run with other result code (exam_info.csv).
+- D15. The base rate: per symbol and window (gold also both), the share passing among all rows, the eligible rows, qualifiers, champions, finalists and the not-eligible rows, with buy-and-hold (every symbol) and the claim-check rows (information); results_full.csv is not written for every variant (PREREG 3 has no 'full' window; the champions' full rows are exam_full.csv).
+- D16. Buy-and-hold beside the exam: study 1's DEVIATIONS 28 (P/DD above buy-and-hold's) and its exposure-matched net (time in the market x buy-and-hold's net).
+- D17. Accounts: the champions and each family's best row (its champion, else its eligible row first in PREREG 7's order) over full, hold-out and (gold) Early at x1.0 and x1.5; every gold / BTC variant over 5y, 1y (both) and 8y, new (gold) at x1.0; next to them buy-and-hold of 0.01 lot and study 1's six finalists (study 1's code on this study's market) over full, hold-out and Early, and the bots' designs as study 1 rebuilt them from FINAL10's 8y trades on full and hold-out (the same spans; they cannot be rebuilt on 2017-2018: FINAL10's runs start 2018-11-13).
+- D18. The account: M.account_curve with FINAL10's unit rule; its USD drawdown on the M1 marks with the trades weighted by their units; trades, win rate and profit factor per position (legs combined, lanes separate); weekly Sharpe on the weekly $ P/L (weeks from Saturday 00:00 UTC, partial first and last included, the page's definition); positive quarters and the worst quarter on the equity at calendar-quarter starts.
+- D19. The page's curve: the opening row the day before the window at $2,000, then per UTC day with an M1 bar the equity at that day's last close mark; a wiped account's curve stops on the day it was wiped.
+- D20. The page's fields: kind 'rule'; role finalist / champion / qualified / variant; eligible = qualifies (study 1's meaning on the page); exam = exam 1's pass or fail; label = the id without the symbol; rows that look ahead (HP-DRAWN) and the claim markets are not exported.
+- D21. Partial exits (legs): 'live needs at least 0.02 lot per unit (PREREG 4)' wherever such a row is listed.
+- D22. Comparisons pair rows by the PREREG's names as '|'-separated id tokens or param values (XP -> X0, XBE -> X0, F1 / F2 / F2-4H / F2-1D / F3 / FR / FS / FD / HV / HV+F2-4H -> F0, LO -> F0 on SP and ORB only, E1 -> E2 / E3, HV -> LV, O4 -> O2 / O3, a grade -> no grade); a filtered row without an F0 row is paired with its id without the filter token (SH's F2 / F3 rows with their K2 x E1 row and the script's 1H EMA200).
+- D23. PREREG 6.11's combinations against the scripts alone: TIGHT -> the same ORB rule with F0, ORB-CX -> the New York range, STK -> RIB with the same side, X0, F0, WY-DERIVED -> WY-STD x X-S with the same filter; 'helps / does not help / mixed' is study 1's DEVIATIONS 30.
+- D24. Claims: 'most' = more than half, a win = strictly more net at x1.0 (study 1's DEVIATIONS 31); claim 1 'ignores the noise' = fewer trades than ALMA-X in every pair and more net in most; claim 10's 'nothing held up' = at most half of the SH rows with net above 0; claim 13's removed trades = the F0 base's trades whose (entry time, side) the filtered row does not take (a delayed re-entry counts as removed), with their number and net; claim 15 reports events per year with no verdict (the plan gives no number for 'rare'); claim 17 = the share of the script's WY rows with net above 0 on 4H and 1D against 1H, with the entries per timeframe; claim 18 also compares the drawn chart patterns with HP-CC / HP-CF.
+
+## The review of the rule modules, 28 Nov 2026 (IST), before any rule result existed
+
+Five reviewers checked the nine rule modules against PREREG, the harness and the items above, look-ahead first; a
+skeptic then tried to refute each serious finding. No look-ahead was found. Three findings were confirmed (ORB-2:
+early-close days; HA-1: the streak cap; ORB-1: two items describing O4's hit rates differently) and are fixed in the
+next section, with the notes that needed code (the claim functions 5, 11, 12 and 14 that the driver looks up were
+missing; HA-H1 and HA-H2 ran as state rules). The other notes correct the record:
+
+- REV-1 (COIL-R1). COIL-R1 is the rule author's preface, not a reading: COIL-R2 to COIL-R14 are the rule module's
+  readings (its docstring's readings 1-12). Its counts are Development decisions on the study's bars.
+- REV-2 (WYCKOFF-R2). Its '20 of 100' (gold 1H) and '40 of 158' (BTC 1H) provisional recoveries count from the data
+  start to 2024-06-30, not Development (where gold 1H has 50 provisional entries of 64 and BTC 1H 106 of 122). 'The
+  rest' also includes trades whose campaign is never armed and never gone: they end at their stop, target or the
+  window's end.
+- REV-3 (HA-R7), a disclosure. HA-R7's count of tightenings already crossed (42 of 53 M2 tightenings on BTC 1H
+  RIB-LS x M5 in 2019-H1) came from a Development execution of a scored row. A crossed break-even tightening says
+  that the bid was at or below the fill at that moment, so it is outcome-adjacent. No reading was chosen because of
+  it: HA-R7 applies section 4's absolute-level rule as written.
+- REV-4 (ORB-R7, O5 x HV). PREREG 5 says an event filter does not close an open trade, while O5 x HV closes a
+  stop-order fill at the close of its fill bar when that bar is LV. Kept: a stop order's breakout bar is the bar it
+  fills in, and its volume is known only at that bar's close. The other readings either look ahead (fill only on an HV
+  bar) or read another bar (the order's placement bar), which is not 6.5's 'breakout bar'.
+- REV-5 (ORB-P1, ORB-CX on M15). PREREG 6.5's 08:20-08:50 range is not on the 15-minute grid; M15 uses 08:30-09:00
+  (ORB-P1). Kept.
+- REV-6 (MSD-R4). Corrected with the code fixes below (what the test compares).
+
