@@ -1,0 +1,46 @@
+claim,part,symbol,rows,dev,val,dev_ok,val_ok,verdict,note,holdout,holdout_ok,holdout_note,holdout_word
+1,half of 8 alternatives could not beat the RSI,both,,,,,,cannot be tested,the other four alternatives of the video are not in the grid,,,the other four alternatives of the video are not in the grid,cannot be tested
+1,QQE beats the RSI in most of its pairs,XAUUSDm,QQE's RSI pairs (DEVIATIONS 25),31/48,17/48,True,False,mixed,,22/48,False,,does not hold
+1,QQE beats the RSI in most of its pairs,BTCUSDm,QQE's RSI pairs (DEVIATIONS 25),22/48,46/48,False,True,mixed,,19/48,False,,does not hold
+1,TSI beats the RSI in most of its pairs,XAUUSDm,TSI's RSI pairs (DEVIATIONS 25),40/54,51/54,True,True,holds,,47/54,True,,holds
+1,TSI beats the RSI in most of its pairs,BTCUSDm,TSI's RSI pairs (DEVIATIONS 25),40/54,47/54,True,True,holds,,23/54,False,,does not hold
+1,VWRSI beats the RSI in most of its pairs,XAUUSDm,VWRSI's RSI pairs (DEVIATIONS 25),38/54,30/54,True,True,holds,,47/54,True,,holds
+1,VWRSI beats the RSI in most of its pairs,BTCUSDm,VWRSI's RSI pairs (DEVIATIONS 25),29/54,16/54,True,False,mixed,,18/54,False,,does not hold
+1,LaRSI beats the RSI in most of its pairs,XAUUSDm,LaRSI's RSI pairs (DEVIATIONS 25),36/54,26/54,True,False,mixed,,38/54,True,,holds
+1,LaRSI beats the RSI in most of its pairs,BTCUSDm,LaRSI's RSI pairs (DEVIATIONS 25),37/54,31/54,True,True,holds,,25/54,False,,does not hold
+1,VWRSI-RV beats the RSI in most of its pairs,BTCUSDm,VWRSI-RV's RSI pairs (DEVIATIONS 25),44/54,15/54,True,False,mixed,,28/54,True,,holds
+2,QQE takes fewer trades than the RSI in every pair,XAUUSDm,QQE's RSI pairs,48/48,48/48,True,True,holds,,48/48,True,,holds
+2,QQE takes fewer trades than the RSI in every pair,BTCUSDm,QQE's RSI pairs,48/48,48/48,True,True,holds,,48/48,True,,holds
+2,QQE beats the RSI in most pairs,XAUUSDm,QQE's RSI pairs,31/48,17/48,True,False,mixed,,22/48,False,,does not hold
+2,QQE beats the RSI in most pairs,BTCUSDm,QQE's RSI pairs,22/48,46/48,False,True,mixed,,19/48,False,,does not hold
+2,QQE has a shorter longest losing streak in most pairs,XAUUSDm,QQE's RSI pairs,34/48,40/48,True,True,holds,,42/48,True,,holds
+2,QQE has a shorter longest losing streak in most pairs,BTCUSDm,QQE's RSI pairs,42/48,48/48,True,True,holds,,45/48,True,,holds
+3,the zero line works: TSI R1 / R2 with F0 make money in most rows,XAUUSDm,"TSI R1, R2 with F0",8/12,10/12,True,True,holds,,12/12,True,,holds
+3,the zero line works: TSI R1 / R2 with F0 make money in most rows,BTCUSDm,"TSI R1, R2 with F0",8/12,10/12,True,True,holds,,8/12,True,,holds
+3,the signal line is a coin flip: the zero line (R1 F0) beats it in most pairs,XAUUSDm,"TSI R1 F0 against CTL-SIGNAL, same timeframe and stop",2/6,3/6,False,False,does not hold,"signal-line rows with net > 0: 4/6 (dev), 4/6 (val)",4/6,True,signal-line rows with net > 0: 6/6,holds
+3,the signal line is a coin flip: the zero line (R1 F0) beats it in most pairs,BTCUSDm,"TSI R1 F0 against CTL-SIGNAL, same timeframe and stop",6/6,5/6,True,True,holds,"signal-line rows with net > 0: 1/6 (dev), 0/6 (val)",4/6,True,signal-line rows with net > 0: 4/6,holds
+3,"TSI takes about half the RSI's trades (median ratio in [0.375, 0.625])",XAUUSDm,TSI's RSI pairs: median of trades / RSI's,0.60,0.58,True,True,holds,,0.49,True,,holds
+3,"TSI takes about half the RSI's trades (median ratio in [0.375, 0.625])",BTCUSDm,TSI's RSI pairs: median of trades / RSI's,0.57,0.52,True,True,holds,,0.61,True,,holds
+4,VWRSI's 20 / 80 reversals are no better than the RSI's (it wins at most half),XAUUSDm,VWRSI R4 against RSI R4,6/6,4/6,False,False,does not hold,,3/6,True,,holds
+4,VWRSI's 20 / 80 reversals are no better than the RSI's (it wins at most half),BTCUSDm,VWRSI R4 against RSI R4,1/6,2/6,True,True,holds,,4/6,False,,does not hold
+4,the VWRSI's trend rule on crypto; it needs real volume,XAUUSDm,,,,,,cannot be tested,not a crypto market: the gold CFD has tick volume only,,,not a crypto market: the gold CFD has tick volume only,cannot be tested
+4,VWRSI's trend rule beats the RSI on every crypto timeframe (most pairs on each),BTCUSDm,"VWRSI R1, R2 against RSI R1, R2, per timeframe","1H 0/20, 4H 16/16, 1D 12/12","1H 0/20, 4H 14/16, 1D 0/12",False,False,does not hold,,"1H 0/20, 4H 14/16, 1D 0/12",False,,does not hold
+4,VWRSI-RV's trend rule beats the RSI on every crypto timeframe (most pairs on each),BTCUSDm,"VWRSI-RV R1, R2 against RSI R1, R2, per timeframe","1H 20/20, 4H 12/16, 1D 12/12","1H 0/20, 4H 14/16, 1D 0/12",True,False,mixed,,"1H 17/20, 4H 0/16, 1D 6/12",False,,does not hold
+4,VWRSI-RV's 20 / 80 reversals are no better than the RSI's (it wins at most half),BTCUSDm,VWRSI-RV R4 against RSI R4,0/6,1/6,True,True,holds,,5/6,False,,does not hold
+4,the VWRSI needs real volume: on Binance volume it beats tick volume in most rows,BTCUSDm,VWRSI-RV against the same VWRSI row on tick volume,60/78,11/78,True,False,mixed,,55/78,True,,holds
+5,LaRSI beats the RSI in most pairs on every timeframe,XAUUSDm,"LaRSI's RSI pairs, per timeframe","1H 22/22, 4H 2/18, 1D 12/14","1H 7/22, 4H 16/18, 1D 3/14",False,False,does not hold,,"1H 22/22, 4H 2/18, 1D 14/14",False,,does not hold
+5,LaRSI beats the RSI in most pairs on every timeframe,BTCUSDm,"LaRSI's RSI pairs, per timeframe","1H 20/22, 4H 3/18, 1D 14/14","1H 12/22, 4H 17/18, 1D 2/14",False,False,does not hold,,"1H 18/22, 4H 2/18, 1D 5/14",False,,does not hold
+5,LaRSI takes far fewer trades than the RSI (median ratio <= 0.5),XAUUSDm,LaRSI's RSI pairs: median of trades / RSI's,0.42,0.41,True,True,holds,,0.33,True,,holds
+5,LaRSI takes far fewer trades than the RSI (median ratio <= 0.5),BTCUSDm,LaRSI's RSI pairs: median of trades / RSI's,0.42,0.34,True,True,holds,,0.44,True,,holds
+5,on 1H LaRSI on its own mostly did not make money (net > 0 in at most half),XAUUSDm,LaRSI 1H rows with F0,6/6,4/6,False,False,does not hold,,6/6,False,,does not hold
+5,on 1H LaRSI on its own mostly did not make money (net > 0 in at most half),BTCUSDm,LaRSI 1H rows with F0,0/6,2/6,True,True,holds,,1/6,True,,holds
+5,4H and 1D are where LaRSI shines (a larger share of rows with net > 0 than on 1H),XAUUSDm,"LaRSI rows, share with net > 0 per timeframe","1H 100%, 4H 44%, 1D 71%","1H 82%, 4H 94%, 1D 71%",False,False,does not hold,,"1H 100%, 4H 100%, 1D 100%",False,,does not hold
+5,4H and 1D are where LaRSI shines (a larger share of rows with net > 0 than on 1H),BTCUSDm,"LaRSI rows, share with net > 0 per timeframe","1H 18%, 4H 83%, 1D 100%","1H 64%, 4H 100%, 1D 100%",True,True,holds,,"1H 45%, 4H 22%, 1D 86%",False,,does not hold
+5,pair LaRSI with a trend filter: TSI > 0 (F3) beats no filter in most pairs,XAUUSDm,LaRSI with TSI > 0 (F3) against F0 (DEVIATIONS 30),4/12,3/12,False,False,does not hold,,4/12,False,,does not hold
+5,pair LaRSI with a trend filter: TSI > 0 (F3) beats no filter in most pairs,BTCUSDm,LaRSI with TSI > 0 (F3) against F0 (DEVIATIONS 30),10/12,5/12,True,False,mixed,,7/12,True,,holds
+5,"pair LaRSI with a trend filter: MA200 (F1, F2) beats no filter in most pairs",XAUUSDm,"LaRSI with MA200 (F1, F2) against F0 (DEVIATIONS 30)",1/24,13/24,False,True,mixed,,13/24,True,,holds
+5,"pair LaRSI with a trend filter: MA200 (F1, F2) beats no filter in most pairs",BTCUSDm,"LaRSI with MA200 (F1, F2) against F0 (DEVIATIONS 30)",18/24,15/24,True,True,holds,,19/24,True,,holds
+6,the four worked best on 4H and 1D (1H has the lowest share of rows with net > 0),XAUUSDm,"the four's rows, share with net > 0 per timeframe","1H 60%, 4H 69%, 1D 56%","1H 75%, 4H 81%, 1D 69%",False,False,does not hold,,"1H 97%, 4H 97%, 1D 83%",False,,does not hold
+6,the four worked best on 4H and 1D (1H has the lowest share of rows with net > 0),BTCUSDm,"the four's rows (with the RV rows), share with net > 0 per timeframe","1H 8%, 4H 81%, 1D 88%","1H 44%, 4H 76%, 1D 91%",True,True,holds,,"1H 35%, 4H 61%, 1D 87%",True,,holds
+6,on 1H even the best struggled (the best 1H row earns less than the best 4H and the best 1D row),XAUUSDm,"the four's best row by net, per timeframe","1H +733, 4H +543, 1D +1,330","1H +353, 4H +419, 1D +525",False,True,mixed,,"1H +2,987, 4H +3,183, 1D +2,964",False,,does not hold
+6,on 1H even the best struggled (the best 1H row earns less than the best 4H and the best 1D row),BTCUSDm,"the four's best row by net, per timeframe","1H +142, 4H +517, 1D +734","1H +188, 4H +365, 1D +404",True,True,holds,,"1H +444, 4H +505, 1D +573",True,,holds

@@ -1,0 +1,31 @@
+symbol,window,rows,n,pass,share
+XAUUSDm,dev,R2 rows (long only),126,67,0.5317460317460317
+XAUUSDm,dev,other rows,210,42,0.2
+XAUUSDm,dev,all rows,336,109,0.3244047619047619
+XAUUSDm,dev,qualifiers,44,44,1.0
+XAUUSDm,dev,buy-and-hold,1,1,1.0
+XAUUSDm,val,R2 rows (long only),126,116,0.9206349206349206
+XAUUSDm,val,other rows,210,61,0.2904761904761905
+XAUUSDm,val,all rows,336,177,0.5267857142857143
+XAUUSDm,val,qualifiers,44,37,0.8409090909090909
+XAUUSDm,val,buy-and-hold,1,1,1.0
+XAUUSDm,devval,R2 rows (long only),126,105,0.8333333333333334
+XAUUSDm,devval,other rows,210,47,0.22380952380952382
+XAUUSDm,devval,all rows,336,152,0.4523809523809524
+XAUUSDm,devval,qualifiers,44,44,1.0
+XAUUSDm,devval,buy-and-hold,1,1,1.0
+BTCUSDm,dev,R2 rows (long only),150,66,0.44
+BTCUSDm,dev,other rows,264,87,0.32954545454545453
+BTCUSDm,dev,all rows,414,153,0.3695652173913043
+BTCUSDm,dev,qualifiers,59,59,1.0
+BTCUSDm,dev,buy-and-hold,1,0,0.0
+BTCUSDm,val,R2 rows (long only),150,132,0.88
+BTCUSDm,val,other rows,264,99,0.375
+BTCUSDm,val,all rows,414,231,0.5579710144927537
+BTCUSDm,val,qualifiers,59,56,0.9491525423728814
+BTCUSDm,val,buy-and-hold,1,1,1.0
+BTCUSDm,devval,R2 rows (long only),150,100,0.6666666666666666
+BTCUSDm,devval,other rows,264,100,0.3787878787878788
+BTCUSDm,devval,all rows,414,200,0.4830917874396135
+BTCUSDm,devval,qualifiers,59,59,1.0
+BTCUSDm,devval,buy-and-hold,1,1,1.0

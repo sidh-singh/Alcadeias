@@ -1,0 +1,6 @@
+symbol,design,final10_label,engine,run8y_trades,run8y_overlapping_trades,run8y_sizes_equal_unit_rule,run8y_samples,run8y_samples_with_a_trade_open,run8y_samples_flat_not_at_balance,run8y_open_at_end_usd,run5y_trades,run5y_overlapping_trades,run5y_sizes_equal_unit_rule,run5y_samples,run5y_samples_with_a_trade_open,run5y_samples_flat_not_at_balance,run5y_open_at_end_usd,run5y_trades_also_in_run8y,run5y_final,rebuilt5y_final,rebuilt5y_minus_run5y,daily_samples_compared,daily_max_abs_diff,daily_samples_equal_to_the_cent
+XAUUSDm,V3-lite,V3-lite,ticks,809,0,809,2482,1390,0,0.0,517,0,517,1553,837,0,0.0,514,10747.58,10639.39,-108.19,1553,190.45,3
+XAUUSDm,Top 1,Top 1,ticks,1240,0,1240,2482,1608,0,-78.45,783,0,783,1553,998,0,-67.24,779,12433.38,12447.41,14.03,1553,16.53,2
+XAUUSDm,Top 2,Top 2,ticks,1316,0,1316,2482,1068,0,-44.83,814,0,814,1553,679,0,-44.83,813,8879.85,8880.02,0.17,1553,3.53,2
+BTCUSDm,Top 2,Top 2,ticks,1110,0,1110,2920,2185,0,20.53,675,0,675,1825,1376,0,20.53,671,3918.63,4130.53,211.9,1824,211.9,1
+BTCUSDm,Turtle System 2 + bot votes,Turtle [alt] + bot votes,warm,60,0,60,2917,1364,0,-0.0038,41,0,41,1822,790,0,0.0044,41,3546.56,3546.56,-0.0,1821,0.0,1821
