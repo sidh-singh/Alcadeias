@@ -505,3 +505,305 @@ missing; HA-H1 and HA-H2 ran as state rules). The other notes correct the record
   (ORB-P1). Kept.
 - REV-6 (MSD-R4). Corrected with the code fixes below (what the test compares).
 
+
+## The fixes after the review, 28 Nov 2026 (IST), before any rule result existed
+
+The review's confirmed findings (ORB-2, HA-1, ORB-1) and its notes that needed code (the claim functions 5, 11, 12
+and 14; HA-H1 / HA-H2 as event rules) were fixed; a verifier then re-derived every count below independently and
+checked the code against these items. Counts are of the Development bars (2019-01-01 to 2022-12-31) or, where
+named, of the bars to 2024-06-30: event geometry and sample sizes only. No rule's profit or loss was computed or read.
+The harness's item keeps the label the code cites, "harness reading 15", although the harness's own section ends at 14.
+
+- **Harness reading 15. Exits before a gap (`close_gap`), the harness side of ORB-2.** PREREG 4 fills an exit decided
+  at a bar's close at the open of the first M1 bar at or after that close. When the market closes early (gold's
+  early closes before the 17:00 New York break, BTC's data holes), that M1 bar is the reopen, so a rule that must be
+  flat before the break (PREREG 6.5) was held over it and could gap through its stop there. `entries()` and
+  `orders()` now take a per-row flag `close_gap` (default False). Take a flagged row whose own fixed exit is what
+  ends the position: its `exit_bar`, or for an order the earlier of that and `on_fill`'s, at the earliest the
+  fill's bar. When no M1 bar opens at that bar's close, the exit is booked at the close of the bar's last M1 bar: the
+  bid for a long, the ask for a short, with no extra spread. For those exits only, PREREG 4's fill at the reopen
+  becomes the last quote before the gap, so that the flat time holds. What it takes as known: whether an M1 bar
+  opens at that close shows in the bars only at the reopen, and the booking takes it as known at the close. For
+  gold's early closes that is the published trading schedule; a hole in the data (BTC's, and one gold session to
+  2024-06-30 missing the M1 bar at the flat bar's close) could not be known then. The booking is reading 3's
+  window-end exit at that close: a stop or a target touched before it wins, and every leg still open ends there. The
+  marks and the accounts hold the position through that M1 bar, and the next entry may fill from the next M1 bar
+  (the reopen) on. The trade row reads 'signal' (a time exit), with that M1 bar's close as its exit time; the paths
+  keep 'end', which every mark and account kernel reads as an exit at a bar's close. When an exit mask falls on the
+  row's own exit bar, the row's own exit decides, so it is booked at the close too; a window end inside the gap after
+  the own exit bar only renames that window-end exit 'signal' and counts it (the same price and P/L). Not a gap: an
+  M1 bar opening at the close, or the end of the data held. A bar whose last M1 bar lies past the window is closed by
+  the window's end, as before. Otherwise exit masks, tightenings and stops are unaffected. Without a gap, or without
+  the flag, nothing changes: 360 runs and 9,527 trades on synthetic gold- and BTC-like markets with breaks, weekends
+  and holes are identical bit for bit to the harness before the change, at x1.0 and x1.5. Every run's counts and
+  result rows gain `close_gap` (`n_close_gap`, `n_close_gap_x15`): the positions so closed, 0 when no row has the
+  flag. It replaces no earlier item; readings 1-14 stand. It moves only rows whose rule module passes the flag; that
+  module's own item replaces its reading of a flat exit across a gap (ORB-R16, SESSION-R12). Scope on the
+  Development bars, from bar times alone: gold's last M5 or M15 bar at or before 16:55 New York closes into a gap on
+  34 of 1,031 New York weekdays, its early closes (US holidays, the day after Thanksgiving, 24 and 31 December), that
+  bar then closing between 12:45 and 15:00 New York; BTC's does on none of 1,042.
+- **ORB-R16 (replaces ORB-R3; the review's ORB-2). Flat time.** The exit decision is at the close of the last chart
+  bar of the session's New York date closing at or before 16:55 (the 16:50 bar on M5, the 16:30 bar on M15), filled
+  at the next M1 open. When no M1 bar opens at that close (an early close on gold: US holidays, the day after
+  Thanksgiving, 24 and 31 December; a data hole on BTC), the next M1 open is the reopen. ORB-R3 held such a trade over
+  the break, against PREREG 6.5 ("Everything is flat at the last chart-bar close at or before 16:55 New York, because
+  gold's daily break starts at 17:00"). Such an exit is now booked at the close of the flat bar's last M1 bar (the bid
+  for a long, the ask for a short, no extra spread) and read as a time exit: the harness's `close_gap` (harness
+  reading 15). A stop or a target touched before that close still wins. On an early close the bars show which bar is
+  the flat bar only at 16:55 and the gap only at the reopen; booking at the flat bar's last M1 close takes both as
+  known from the market's published early-close hours (not knowable for a data hole: BTC's 5 sessions to 2024-06-30,
+  none in Development). The flag is set on every ORB row whose own exit decision is the flat bar, in every version
+  (main, LO, ORB-CX, TIGHT, the controls): every O2-O4 entry, every O5 order (its `exit_bar` and its trail's cap), and
+  every O1 entry whose trail has not fired before the flat bar (a trail firing on the flat bar's own close is the
+  same decision). An O1 trail exit decided at an earlier bar keeps the next-M1-open fill, also when a hole follows
+  that bar (in Development: one trade each on gold's ORB-CX M5 O1 x F0 and x F2-4H rows, 4 Aug 2021). The harness's
+  flag is per order, so on O5 it also books an exit decided at an earlier bar (the trail, or HV's LV fill bar) at
+  that bar's last M1 close when no M1 bar opens at its close; in Development this happens to no trade of any O5 row.
+  To 2024-06-30 the flat bar is followed by a gap in 92 of gold's 2,181 09:30 sessions (ORB-R3's 91 early closes and
+  one session missing the M1 bar at the flat bar's close) and in 5 of BTC's 1,693 (data holes). A bar from 10:00 to
+  before the flat bar is followed by a gap in 22 / 15 gold sessions (M5 / M15; 27 / 17 on ORB-CX) and in 13 / 10 BTC
+  sessions. In Development the flag moves the exit of 18 / 14 / 23 / 14 / 12 trades of gold's O1-O5 x F0 rows on M5
+  and 28 / 16 / 24 / 16 / 21 on M15 (x1.5: the same except O5, 11 and 20); ORB-R3 held every one of them to the
+  reopen. It moves none on BTC, which has no flat bar followed by a gap in Development. The rest of ORB-R3 stands: a
+  label at or after the flat bar is dropped (at most one per configuration). Affects every ORB row on the sessions
+  whose flat bar is followed by a gap (34 of gold's 1,031 Development sessions, none of BTC's), and O5 rows also
+  where a gap follows an earlier exit bar (no trade in Development).
+- **ORB-R17 (a wording correction; ORB-R5 stands; the review's ORB-5).** The ORB module's docstring and `describe()`
+  said O4 needs "at least 60 past sessions"; `describe()`'s text goes into FINALISTS.md. The code (`o4_choice`) and
+  ORB-R5 need at least 60 past sessions with a label of the trade's side decided by 16:00 New York (past breakouts
+  of that side), so a session without such a label does not count toward the 60. The text now says so: "once at
+  least 60 past sessions have a breakout of that side decided by 16:00 New York, else T1". No code changed; no
+  result moves.
+- **ORB-R18 (corrects the "Affects" lines of ORB-P4 and ORB-P2; the review's ORB-1; no code change).** O4's rule is
+  ORB-R5. A past breakout is a session's label of the trade's side decided by 16:00 New York. T_k counts as hit when
+  a chart bar after the label bar, up to and including the session's flat bar, reaches it. The rate is hits over
+  those past labels, with at least 60 of them (`after_hits`, `o4_choice`, `o4_targets`; the same for O4's LV
+  control). ORB-P4 describes the script's dashboard count instead: a target's first touch from the 10:00 bar to the
+  day reset, over the sessions the script counts (`totalSessions`; the port's `hit_u1`-`hit_d3`). In the rule module
+  only claim 8 reads that count, as the dashboard's unconditional rate (`hit_rate_stats`: those flags over 2 x the
+  window's complete sessions), against ORB-R5's after-breakout rate. So ORB-P4 is the dashboard's reading and affects
+  claim 8 only, not O4 or its LV control. Its open question is settled by ORB-R5: the hits are measured again on the
+  bars after the label, so a target touched only before the label is not a hit. ORB-P2's "Affects" line is corrected
+  the same way: of the spans the day reset sets (the port's hit flags, first breakout and raw breakouts), the rule
+  module reads only the hit flags, in claim 8's dashboard rate. O4 and its LV control read bars up to the flat bar
+  (16:55 New York at the latest), before gold's 17:00 New York reset and BTC's 00:00 UTC reset; claim 6 reads the
+  labels decided by 16:00 (ORB-P3), which no reset moves. ORB-P2 therefore affects claim 8's dashboard rates only.
+  No result moves.
+- **SESSION-R12 (replaces SESSION-R1). The time exit (every exit mode), priced where the script prices it.** The
+  script exits at the open of the first bar from 16:00 New York (L456-457), or on a new trading day at the previous
+  bar's close (L454-455), whichever comes first after the entry bar (the new day first when both hold). Here both
+  are an exit decision at the close of the bar before that bar (the Entries' `exit_bar`), each priced as the script
+  prices it. The 16:00 exit fills at the next M1 open: normally the 16:00 bar's open; after an early close that
+  reopens before 20:00 on the same trading day (gold's US holidays, closed from about 13:00 to 18:00 New York) the
+  reopen's open, the trade held over the break as the script holds it. The new-day exit is booked at the close of
+  the decision bar's last M1 bar (the row's `close_gap`, harness reading 15: the bid for a long, the ask for a short,
+  no extra spread), not at the first M1 bar after the gap. A new trading day comes first only when no bar of the
+  entry's trading day opens from 16:00 to 20:00: an early close into a weekend or a closed day (the Friday after
+  Thanksgiving, 3 July 2020, 24 and 31 December) or a hole in the data. The reopen then usually opens at 18:00 of a
+  later day, both a new day and from 16:00, and the new day is checked first (L454 before L456): 22 of the 30
+  flagged Development K2 x E1 trades. So a gap always precedes it; on every lane (K0-K3, five setups, M5 and M15,
+  both symbols, data start to 2024-06-30) no flagged exit lacks one. Whether the bar after the decision starts a new
+  trading day shows in the bars only at the reopen; the booking before the gap takes it as known, as the script's
+  own price does (L454-455): from the published hours for the early closes; the BTC hole of 2-3 Mar 2021 could not
+  be known then. A stop or a target touched before then exits as usual, and on days without a gap nothing changes.
+  SESSION-R1's "Across a data gap (an early close, a weekend) it is the first M1 bar after the gap, where the script
+  would book the last close" held only for the new-day exits. Not taken: `close_gap` on every time exit, which would
+  also book the same-day early closes at the last close before the break, where the script exits at the reopen's
+  open (68 gold and 4 BTC Development K2 x E1 exits). Effect, Development K2 x E1 trades whose time exit falls
+  before a gap (M5 / M15; event counts): gold 49 of 1,679 / 47 of 1,480, of which 16 / 12 are new-day exits now
+  booked at the last close and 33 / 35 the 16:00 exit at the reopen's open, unchanged; BTC 3 of 1,358 / 3 of 1,197,
+  of which 1 / 1 new-day (the hole from 2 Mar 2021 08:23 to 3 Mar 19:00 New York) and 2 / 2 the 16:00 exit (a
+  missing 16:00 M1 bar on 2 Aug 2021). Per setup (new-day in brackets): gold M5 AS 8 (3), LS 15 (5), PD 4 (2), AB 5
+  (1), OR 17 (5); gold M15 AS 6 (1), LS 11 (4), PD 4 (2), AB 12 (1), OR 14 (4); BTC M5 AS 1 (1), LS 1 (0), OR 1
+  (0); BTC M15 AS 1 (1), LS 1 (0), AB 1 (0). A new-day trade stopped or at its target before the early close does
+  not change; how many are was not counted (it reads stop hits). Rows: every Session Hunter row (all setups, K0-K3,
+  E1-E3, the presets' lanes, the F2 / F3 rows, the Monday variant and the claim-market rows).
+- **HA-R10 (replaces HA-P1 and the cap clause of HA-R9; the review's HA-1). All history.** The Heikin Ashi
+  trend-age statistics of every HA row (HA-MANAGED M1-M5 and HA-AND, HA-ENTRY) and of claim 5 use every finished
+  streak of the colour since the study's data start (gold 2016-01-03, BTC 2018-01-01), without the script's cap of
+  5,000 per colour (l.131-132). PREREG 6.8 says "Streak statistics are computed causally at every bar, from the
+  streaks finished before it, using all history from the data start". HA-P1 read this as where the history starts
+  and kept the cap, but the plan's text asks for every finished streak. How: the rule module calls port A's
+  `heikin_ashi(..., keep=None)`, a new public keyword that passes straight to the reconciled
+  `_heikin_ashi(..., keep=None)` path. The port's default stays KEEP = 5,000, the reconciled contract, which study 3
+  calls; nothing study 3 computes changes. Ports A and B agree bit for bit with `keep=None`, on every key and on the
+  streak table, on synthetic bars (one series with 5,010 finished streaks of each colour) and on the study's 1H bars
+  of gold and BTC from the data start to 2024-06-30 (`tests/test_tradeiq2_ind_ha.py`, section 4). On 4H and 1D the
+  cap never binds, so `keep=None` gives the reconciled output there. Effect on the Development decision bars: the
+  cap binds on 1H only, gold from 2022-11-28 and BTC from 2022-04-21. Without it `pct_below` differs on 398 gold and
+  4,500 BTC 1H bars (6,594 and 9,659 in Validation). `rare_now` differs on no bar: none of gold's 481 or BTC's 871
+  Development 1H rare ages, and no bar of any series from the data start to 2024-06-30. So no M4 exit moves.
+  Affects: the M4 rows on 1H bases only where a later window (the hold-out) differs, and claim 5's 1H cells from
+  2023 on (Validation and, for information, the hold-out). Not study 3.
+- **HA-R11 (replaces HA-R5; the review's note that HA-H1 and HA-H2 ran as state rules). HA-H1 and HA-H2 are event
+  rules.** PREREG 5 classes flips as events: "On event rules (flips, sweeps, breakouts, patterns): the filter must
+  agree at the decision close of the entry. It does not close an open trade, which keeps its own exits." HA-R5 had
+  made them state rules on the pre-plan map's word (spec 4.5): a filter turning against a trade closed it, and the
+  rule could reopen mid-streak on a candle that is neither a first STRONG candle nor a flip. Now HA-H1 enters at the
+  close of each streak's first STRONG candle (`ev_first_strong`, which can be the flip candle), on the streak's
+  colour (LS both sides, LO longs only), and exits at the close of the next colour flip, the streak's end. A streak
+  without a STRONG candle, or whose first STRONG candle the filter refuses, is not traded. HA-H2 is the colour
+  stop-and-reverse: every colour flip closes the open trade whatever the filter says (an unfiltered exit mask), and
+  opens the flip's side if the filter allows it at that close; the exit and the reverse entry fill at the same M1
+  open. LO buys the flips to bullish and exits at the next flip to bearish. This is RIB-LS x X0's pattern
+  (RIBBON-R1). There is no stop (PREREG 6.8 names none). F2 stays F2-4H on 1H, F2-1D on 4H and F1 on 1D. The rows
+  are built with `tradeiq2_market.event_exec`, `entries` and `tradeiq2_filters.gate_entries`; exit masks are never
+  filtered. The grid (24 rows per symbol) and the ids are unchanged; the params now read kind 'event', entry
+  'first-strong' or 'ha-flip', exit 'ha-flip'. As event rules the rows start each window flat and take the first
+  event decided inside it (harness reading 3). Development entries, state rule -> event rule (counts only; the event
+  rows take every candidate, none busy): the F0 rows are equal or lose one entry, the state rule's entry at the
+  window's first bar. The filtered rows lose 1.7-14.0% of their entries, the state rule's mid-streak entries after
+  its filter turned (in 9 of the 24 also, as on F0, its entry at the window's first bar). In the order HA-H1 LS,
+  HA-H1 LO, HA-H2 LS, HA-H2 LO: gold 1H F2-4H 2,030 -> 1,873, 1,099 -> 1,020, 3,033 -> 2,852, 1,659 -> 1,569; gold
+  4H F2-1D 564 -> 519, 382 -> 361, 804 -> 756, 549 -> 526; gold 1D F1 110 -> 98, 75 -> 70, 157 -> 135, 104 -> 91;
+  BTC 1H F2-4H 3,082 -> 2,911, 1,669 -> 1,581, 4,725 -> 4,509, 2,523 -> 2,410; BTC 4H F2-1D 755 -> 732, 385 -> 375,
+  1,126 -> 1,103, 572 -> 562; BTC 1D F1 138 -> 127, 61 -> 57, 191 -> 176, 89 -> 83. Affects: the 12 filtered
+  HA-ENTRY rows of each symbol (their trades change), and the 12 F0 rows only at each window's start.
+- **HA-R12 (new; before claim 5 was computed on the study's bars). Claim 5.** The claim had no function, so it came
+  out 'not computed'. Claim 5 (PREREG 8: the panel's "reached age A, then 5+ more" percentages, computed before each
+  year, against what happened in that year) is now `tradeiq2_rules_ha.claim5`, the driver's `EXTRAS['claim5']`; its
+  cells are in `claim5_table`. The panel's number at age A is 100 g / r = survive(curA, A, aheadN) (l.176-184,
+  280-281; aheadN = 5, the script's default): of the finished streaks of the current colour, r reached age A and g
+  of them reached A + 5; here every streak finished since the data start (HA-R10). Cells: one per symbol, timeframe
+  (1H, 4H, 1D), colour, evidence window, calendar year inside it (`ev.years`: the year clipped to the window) and age
+  A. "Computed before each year" means from the streaks whose flip candle closed at or before the cell's start, the
+  indicator's state then; gold's history includes its 2016 warm-up and 2017-2018, read as indicator bars only, as
+  every HA statistic reads them. "What happened in that year" means the year's streak-ages of that colour (a streak
+  whose A-th candle opens and closes inside the cell) and the share of them that went on to age A + 5, with no flip
+  on the next 5 candles. A streak-age counts only when those 5 candles also close inside the cell's window, whatever
+  happens on them, so no outcome is read outside the windows (CLAIM_RULE) and the rule does not depend on the
+  outcome. Ages: every A that at least 50 earlier streaks of the colour had reached (r >= 50), i.e. 1 up to the 50th
+  longest finished length: PREREG 6.8's minimum of 50 finished streaks for a rare age, applied to the panel's own
+  denominator. A cell is tested when its year has at least PREREG 5's minimum number of trades for its timeframe as
+  streak-ages: 30 on 1H and 4H, 15 on 1D. The test, stated in advance: a tested cell is covered when the year's count
+  lies inside the central 95% interval of Binomial(n, the panel's rate), with exact quantiles. A row is 'calibrated'
+  in a window when most (more than half) of its tested cells are covered (study 1's DEVIATIONS 30-31; driver D24); a
+  window without a tested cell makes the row 'cannot be tested'. Rows: per symbol one over all its tested cells (1H,
+  4H, 1D, both colours), then one per timeframe and colour. dev holds Development's years 2019-2022, val holds
+  Validation's 2023 and 2024-H1; after the freeze both hold the hold-out's years. If the panel's numbers were the
+  true probabilities, at least 95% of cells would be covered in expectation; the panel's own sampling error (r >= 50,
+  and one to eight years of history: BTC 1-6, gold 3-8) lowers that to roughly 84-96% (a synthetic simulation:
+  84-91%, 91-94% and 93-96% with 1, 3 and 6 years). So 'holds' says the panel is within the year's sampling error in
+  most cells; "most" is lenient (a panel that misses in close to half its cells would still hold), so every row also
+  reports the share of cells covered, by year, the n-weighted mean gap between the year and the panel in percentage
+  points, and how often the year is above the panel. Not chosen: every age the panel can print (at high ages it rests
+  on a handful of streaks); the year's finished streaks instead of its streak-ages (the panel is read at a candle of
+  age A, so the outcome belongs to the year in which that candle closed); a two-sample test of the year against the
+  history (it tests the rate's stability, not the panel's numbers); a stricter share than "most" (a 90% bar would
+  often fail a panel that is right on average).
+- **SWING-R9 (new; supplies the claim-11 extra the review found missing). Claim 11.** PREREG 8.11: "the point of
+  control of the last leg is a level price often comes back to. Test: how often the forming POC is touched before
+  the leg ends, against the 50% level (W1-W3 against their placebo)"; `tradeiq2_rules_swing.claim11`. After each
+  flip, the leg it starts runs from the bar after the flip bar up to and including the next flip bar, whose close
+  ends it. A touch is a bar t of that span with low[t] <= level <= high[t] (equality counts; a gap through the level
+  between two bars is no touch). The verdict part is the test as written: the forming leg's POC as drawn at bar t's
+  close (`f_poc[t]`, W1 / W2's level, read as W1 reads it) against the forming 50% level ((f_lo[t] + f_hi[t]) / 2, the
+  placebo's), a bar counting for either only when both exist at it. It holds in a window when the POC is touched in
+  strictly more legs than the 50% level and the exact one-sided sign test on the discordant legs (those that touch
+  only one of the two) gives p < 0.05; with too few discordant legs for that (0.5^n >= 0.05, n < 5) the window has
+  no test and the part is 'cannot be tested'. The row gives both shares, the discordant legs and p. An information
+  part (no verdict) reads the quoted sentence's own words, "the point of control of the last leg": on the same spans,
+  the just-finished leg's POC (`legs.poc`, its tie nearest the flip bar's close, SWING-P4; W3's level, known only from
+  its flip bar's close, so the flip bar itself is not read, as SWING-R4) against its 50% level (`legs.fifty`). The
+  driver adds the second part (W1-W3 against their placebo, net pair by pair). Why: the verdict follows the test
+  PREREG 8.11 names. A first version of this extra, written before any touch was computed, tested the just-finished
+  leg's levels instead (the quote's "last leg"); the verifier showed that the plan's test names the forming POC, so
+  that version is kept as the information part. The sign test puts claim 11 on claim 12's standard (p < 0.05): with
+  about 100-450 legs a window, "strictly more legs" alone could be decided by one leg. The forming levels are drawn
+  at a bar's close with that bar's own volume and close (the script's drawing, as W1 trades it), so a bar can touch a
+  level it moved; the test is the comparison of the two levels on the same bars, not either touch rate alone.
+  "Before the leg ends" includes the bar that ends it; leaving it out is the alternative. Windows (CLAIM_RULE): a leg
+  belongs to the window its end bar closes in and is counted only when its first bar also opens inside that window,
+  so no touch is counted on a bar outside the window (the leg across a window's start is left out); the levels are
+  indicator values and may come from bars before it (on gold one just-finished leg per timeframe begins in December
+  2018, in the Early window: 1H 2018-12-19 21:00, 4H 2018-12-14 12:00 UTC). The last leg, which no flip has ended, is
+  not counted. Each row carries the first open and the last close it counted ('start', 'end'), which the driver's
+  `check_rows` holds to the windows. Development sample (`claim_counts`, no touch computed): 317 / 87 legs on gold 1H
+  / 4H and 457 / 107 on BTC, one left out at the window's start in each; every one has both forming levels on some
+  bar and both just-finished levels. Affects claim 11 only.
+- **SWING-R10 (new; supplies the claim-12 extra the review found missing; it applies SWING-P2 and SWING-P3, which
+  name claim 12, and reads the warning as SWING-R6 does). Claim 12.** PREREG 8.12: "the next leg's size after up
+  legs with negative against positive delta"; `tradeiq2_rules_swing.claim12`. The up legs are the finished legs with
+  dir +1 (finished by a flip to a new 50-bar low, SWING-P2), split by the sign of their delta (`legs.delta_pct`, the
+  script's bin sums, SWING-P3; gold on tick volume, BTC on Binance BTCUSDT volume, as the rules): below 0 against
+  above 0. A delta of exactly 0, or none, is in neither group and is counted. The next leg is the following finished
+  leg, the down leg (flips alternate). Its size is its high - low as the script draws it (`legs.hi - legs.lo`: from
+  its swing high, usually the up leg's top, to its swing low), over PREREG 5's ATR(14) of the timeframe at the up
+  leg's flip bar, the bar at whose close the warning is known (not the script's ATR(200)). The part holds in a window
+  when the median size after a negative delta is above the median after a positive one and the exact one-sided
+  Mann-Whitney U test (the next leg larger after a negative delta; the permutation distribution of the rank sum, ties
+  as midranks) gives p < 0.05. A window with an empty group, or with groups so small that no ranking could reach
+  p < 0.05 (1 / C(n_neg + n_pos, n_neg) >= 0.05; strict: 3 against 3 gives exactly 0.05 and has no test), has no
+  test, and the part is then 'cannot be tested', also when the other window has one. Windows (CLAIM_RULE): a pair
+  belongs to the window its next leg's end bar (its flip) closes in and is counted only when the next leg's first bar
+  (its older swing point) also opens inside that window; the up leg's delta is an indicator value and may read
+  earlier bars. Why: the literal "next leg's size", in the study's default ATR, at the bar where the warning is known;
+  with 3-19 legs in the smaller group a comparison of medians alone could not tell noise from an effect. The size
+  includes the fall from the top to the up leg's flip bar, which came before the warning was known: claim 12 asks
+  what the delta says about the next leg; it is not a trade (the alternative, from the flip bar's close to the next
+  leg's low, is not taken). Development sample (`claim_counts`, no size computed), up legs whose next leg is
+  counted, delta below / above 0: gold 1H 5 / 154 and 4H 3 / 41; BTC 1H 19 / 209 and 4H 3 / 50. None has a delta of
+  0. One pair is left out at the window's start on BTC 1H and one on BTC 4H, none on gold. BTC 1H's 19 include
+  SWING-P2's FOMC-hour "up" leg (flip 2022-09-21 18:00 UTC), which carries the down leg's negative delta. The
+  smallest p the test could give is at most 7.6e-5 in each of the four, so every Development sample can be tested.
+  Affects claim 12 only.
+- **MSD-C14 (adopts MSD-P8's reading of "the closed one"; replaces no item). Claim 14: what is counted, and when it
+  holds.** The driver's `EXTRAS['claim14']` is now `tradeiq2_rules_msd.claim14`; until now the function was missing
+  and claim 14 came out 'not computed'. PREREG 8's test, "the share of chart closes inside a higher-timeframe bar
+  where the forming-bar score differs from the closed one", is computed per symbol, chart and higher row (1H chart:
+  4H, D, W; 4H chart: D, W; 1D chart: W), in each of the evidence's two windows. The forming-bar score is model B's
+  s_<row> at the chart close (MSD-P8): the row's state after its last closed bar, stepped once on the forming
+  candle, with the swing vote at the chart close; this is what the live dashboard shows. The closed one is the score
+  the higher bar ends with: its own row values with the swing vote at its own close, as MSD-P8 proposed. Where a
+  chart bar closes with the higher bar, this is model A on that chart bar. Gold's week, its Friday day bar and its
+  Friday 20:00 4H bar close at Saturday 00:00 UTC, when no 1H bar closes, so only the row's own values can supply
+  them. A chart close is counted when it lies strictly inside a higher bar (the bar opened at or before the chart
+  bar's open and closes after the chart bar's close) and that higher bar is complete and lies inside the window. Both
+  bars pass `ev.in_window` (CLAIM_RULE), so the outcome is inside the window too, and a higher bar that straddles a
+  window's edge is not counted. Chart closes at the higher bar's own close are left out: there the live score is the
+  closed one by construction. "Inside" is by the clock: every counted close after which no data come in its higher
+  bar agrees by construction (the last bar before a weekend, a holiday or early close, or a data hole); in
+  Development these are 234 / 213 / 208 gold 1H closes (4H / D / W rows), 11 / 8 gold 4H closes (D / W), and on BTC
+  6 / 5 / 0 and 1 / 0. The verdict line was fixed in the code before any count existed: "can change" states a
+  possibility, so a part holds in a window when the share is above 0 (at least one counted close differs); it fails
+  at 0 or when nothing is counted. A cut above 0, such as 5% or 10%, would be ours, not the claim's. The line is
+  weak: the Development shares below (computed after it was fixed) are 19-27% in all 12 parts, so they will read
+  'holds'; it is kept, because a cut chosen now would be chosen with those shares known. The share and the number of
+  higher bars that change at least once are reported, so the size is visible. The claim's first half, that the rows
+  use the forming candle, is the script's code (`request.security` on realtime bars); history cannot show it, and
+  model B is built on it. For information, with no verdict, each chart also gets the label the live dashboard shows
+  (model B) against the label the chart's history shows for the same bar (model A), and MSD-A1's side under each,
+  over the window's chart closes that lie strictly inside a bar of at least one higher row. Before counting, `claim14`
+  checks that at the last chart bar inside each higher bar of the windows the forming score equals the closed score,
+  and raises otherwise; the check passes on every Development higher bar of both symbols. Development event counts:
+  the forming score differs from the closed one at 25.4% / 24.9% / 26.9% of gold's counted 1H closes (4H / D / W
+  rows), 24.4% / 27.0% of its 4H closes (D / W) and 27.0% of its 1D closes (W); on BTC 24.0% / 23.3% / 19.3%, 24.0%
+  / 19.5% and 19.6%. The label differs at 4,497 / 1,155 / 141 gold and 6,971 / 1,753 / 227 BTC Development closes
+  (1H / 4H / 1D charts), exactly the reconciliation's counts behind MSD-P8's percentages. Affects claim 14 only
+  (information beside the rows; no row, filter or selection reads it).
+- **MSD-1 (replaces MSD-R4's third and fourth sentences, "Tested: every line and the S1 distance are bit-identical
+  ..." and "The only differences sit inside study 1's own warm-up ..."; see REV-6). What the test behind MSD-R4
+  compares.** MSD-R4 and the rule module's reading 3 said that every study-1 line was tested bit-identical from
+  2019-01-01 to 2024-06-30. The repository test compared the bars, S1's distance (by value), the 120 MSD-FILTER rows'
+  base states and their filtered states, but not the lines. The line comparison has been added, and S1 is now
+  compared by its bits: `tests/test_tradeiq2_rules_msd.py::test_bars_lines_s1_and_base_states_are_study_1s_on_every_
+  bar_from_2019` compares the study-2 market (gold from 2016-01-03) with study 1's Study on study 1's own market
+  (`tradeiq_market.load`; gold from 2017-01-03), for both symbols and the 1H, 4H and 1D bars. It asserts that the bars
+  (open and close times, OHLC, tick volume) are equal on study 1's whole span; that on every bar closing after
+  2019-01-01 00:00, up to the hold-out start, every array `tradeiq.lines_of` returns and the S1 distance are
+  bit-identical (14 arrays on gold, 17 on BTC, which adds VWRSI-RV, its score and the missing-kline count; the same
+  dtype, floats compared by their 64-bit patterns); and that each MSD-FILTER row's base state equals study 1's F0
+  row of that base and the row's state equals study 1's `apply_filter` of it. It passes on both symbols, so MSD-R4's
+  conclusion stands from 2019: the scored states of Development, Validation and the hold-out are exactly study 1's.
+  A one-ulp change planted in a line no state reads (TSI:signal) fails the new test; the old test could not see it.
+  Measured besides, not asserted (the module's reading 6): on gold the states differ on at most 57 bars of a series,
+  all closing on or before 2017-03-29, so gold's Early window (exam 2) is the exception; S1 is missing on study 1's
+  first 13 bars of each series (its ATR's warm-up) and then differs in its last bits until 2018-09-14 (1D); the lines
+  differ in their last bits until 2018-12-25 (the 1D VWRSI; on 1H until 2017-01-31, on 4H until 2017-05-03), and
+  during study 1's warm-up some by more (MA200 missing on its first 199 bars, QQE:color on 44 1H bars). None of this
+  reaches 2019; study 1 has no Early result to pair with. On BTC both markets start on 2018-01-01 and nothing
+  differs. Affects the record only; no state, line, count or result changes.
+- **FIX-1, a process disclosure.** One fixer's mutation check (claim 14) wrote mutants into
+  `tradeiq2_rules_msd.py` in place and restored it byte-identical (sha256 checked against its kept copy). Other test
+  runs in that window could have imported a mutant, so every affected test file was run again on the final files
+  before this section's commit. Later mutation checks ran in memory only.

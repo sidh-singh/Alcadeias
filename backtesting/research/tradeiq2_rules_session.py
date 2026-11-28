@@ -75,8 +75,10 @@ What a row does (an EVENT rule, one lane per setup)
   the level itself; every stop fill is charged one extra spread.
 * EXITS (the script's order, L452-461: a new trading day, the 16:00 bar, the stop, the target; the time exits apply
   to every mode):
-  - E1, "Hold to 16:00 NY" (L80, the default): the stop, or the time exit: the open of the first chart bar from 16:00
-    New York or of a new trading day (reading 1);
+  - E1, "Hold to 16:00 NY" (L80, the default): the stop, or the time exit, priced where the script prices it
+    (reading 1): the open of the first chart bar from 16:00 New York (after an early close that reopens before 20:00,
+    the reopen's open), or, when a new trading day comes first, the last close before it (the harness's
+    ``close_gap``);
   - E2, "At TP2": also a target 2R from the fill (2 x |fill - stop|; reading 2);
   - E3, "Opposite liquidity": also a target at the port's ``tgt_ref`` (L403): the opposite side of the swept range for
     a fade, the broken side plus one range width for a breakout (reading 3), as an absolute level (|fill - level|
@@ -95,16 +97,35 @@ A signal of bar i reads the chart bars 0 .. i (the session levels are final befo
 bar i's OPEN (up to an hour old) or, in the trend rows, the 4H / 1D / 1H bars closed by bar i's CLOSE. The cancels
 read the entry bar's open time and bid open, which are those of the fill's own M1 bar. The time exit reads the clock:
 the decision is booked at the close of the bar before the exit bar and filled at that bar's first M1 open, the moment
-its open time is known. Stops and targets are levels fixed at the fill. Removing the bars after bar T changes no entry
-decided before T, and no exit decision before T (tested).
+its open time is known. A new-day exit is priced as the script prices it (L454-455), at the close of the last bar
+before the gap that always precedes it here: a price known at that close, while the fact that no bar of that trading
+day would open from 16:00 to 20:00 is known only at the reopen. The booking takes it as known, as the script's own
+price does: from the published hours for the early closes; a hole in the data (BTC's of 2-3 Mar 2021) could not be
+known then. Nothing else reads it (the stop and a target act up to that close, and the
+next entry of the lane is the next trading day's, after the reopen). Stops and targets are levels fixed at the fill.
+Removing the bars after bar T changes no entry decided before T, and no exit decision before T (tested; nor whether
+it is a new-day exit).
 
 Readings where the plan leaves a choice (deviation paragraphs, for DEVIATIONS.md)
 --------------------------------------------------------------------------------
-1. THE TIME EXIT. The script exits at the open of the first bar from 16:00 (L456-457) or, on a new trading day, at the
-   previous bar's close (L454-455), whichever comes first after the entry bar. Here both are an exit decision at the
-   close of the bar before that bar (``exit_bar``), filled at the next M1 open: the 16:00 bar's open; across a data
-   gap (an early close, a weekend) the first M1 bar after the gap, where the script would book the last close. Every
-   exit mode has it (E2, E3 too), as in the script.
+1. THE TIME EXIT, PRICED WHERE THE SCRIPT PRICES IT. The script exits at the open of the first bar from 16:00
+   (L456-457) or, on a new trading day, at the previous bar's close (L454-455), whichever comes first after the entry
+   bar (a new day first when both hold, the Sunday reopen). Here both are an exit decision at the close of the bar
+   before that bar (``exit_bar``, ``time_exits``), and each is priced as the script prices it:
+   - the 16:00 exit fills at the next M1 open, the open of the script's first bar from 16:00: normally the 16:00
+     bar's; after an early close that reopens before 20:00 on the same trading day (gold's US holidays, closed from
+     about 13:00 to 18:00 New York) the reopen's, the trade held over the break as the script holds it;
+   - the new-day exit is booked at the previous bar's close. A new trading day comes first only when no bar of the
+     entry's trading day opens from 16:00 to 20:00 (an entry bar opens before 16:00: one from 16:00 is cancelled): an
+     early close into a weekend or a closed day (the Friday after Thanksgiving, 3 July 2020, 24 and 31 December), a
+     hole in the data. The reopen then usually opens at 18:00 of a later day, both a new day and from 16:00, and the
+     new day is checked first (L454 before L456): 22 of the 30 flagged Development K2 x E1 trades. So a gap always
+     precedes it, and the row's ``close_gap`` (``time_exit_new_day``; the harness's reading 15) books it
+     at the close of that bar's last M1 bar (the bid for a long, the ask for a short, no extra spread), not at the
+     first M1 bar after the gap.
+   A stop or a target touched before then exits as usual; on days without a gap nothing differs. Every exit mode has
+   it (E2, E3 too), as in the script. Not taken: ``close_gap`` on every time exit, which would also book the US
+   holidays at the last close before the break, where the script holds to the reopen's open.
 2. E2'S 2R FROM THE FILL. The 2R target is 2 x the trade's own initial risk |fill - stop| from its fill (the harness's
    ``target_r``; R as DEVIATIONS 9), as the ribbon's and Wyckoff's R targets. The script draws TP2 from the chart's
    bid open (L436: ``open + d * 2 * risk``): the same level for a short (a sell fills at the bid), three spreads
@@ -148,8 +169,8 @@ from . import tradeiq2_market as M
 
 __all__ = ["MODULE", "SCRIPT", "FAMILY", "TFS", "TF_MIN", "SETUPS", "CONF_SETS", "EXITS", "TREND_EMA", "TREND_FILTERS",
            "PRESETS", "PRESET_TOKEN", "TARGET_R", "MONDAY_TOKEN", "CLAIM_ROWS", "variants", "build", "describe", "warm",
-           "plan_counts", "trend_dir", "signal_table", "time_exits", "lane_mask", "lane_entries", "lane_exec",
-           "event_table"]
+           "plan_counts", "trend_dir", "signal_table", "time_exits", "time_exit_new_day", "lane_mask", "lane_entries",
+           "lane_exec", "event_table"]
 
 MODULE = "tradeiq2_rules_session"           # the Context cache's module key
 SCRIPT = "SH"
@@ -199,11 +220,15 @@ TREND_WORDS = {
     "F2-1D": "the last closed 1D bar's side of its MA200 (F2-1D, in place of the 1H EMA200)",
     "F3": "the TSI(5, 25) of the last closed 1H bar on the trade's side of 0 (F3, in place of the 1H EMA200)",
 }
+TIME_WORDS = ("the open of the first bar from 16:00 New York (after an early close that reopens before 20:00, the "
+              "reopen's), or the last close before a new trading day when that comes first (an early close into a "
+              "weekend or a closed day)")
 EXIT_WORDS = {
-    "E1": "the stop, else the open of the first bar from 16:00 New York (or of a new trading day)",
-    "E2": "a target 2R from the fill (2 x |fill - stop|), the stop, else the 16:00 exit",
+    "E1": f"the stop, else the time exit: {TIME_WORDS}",
+    "E2": f"a target 2R from the fill (2 x |fill - stop|), the stop, else the time exit: {TIME_WORDS}",
     "E3": ("a target at the opposite liquidity (a fade: the far side of the swept range; a breakout: the broken side "
-           "plus one range width), cancelled when less than 1R from the entry open; the stop; else the 16:00 exit"),
+           "plus one range width), cancelled when less than 1R from the entry open; the stop; else the time exit: "
+           f"{TIME_WORDS}"),
 }
 
 
@@ -309,7 +334,8 @@ def time_exits(ctx: M.Context, tf: str) -> np.ndarray:
     1), i.e. j - 1 for the first chart bar j > e that opens in 16:00-20:00 New York (``closeT``, L140, L456) or starts a
     new trading day (``newDay``, L133, L454); -1 when no such bar is in the data. The script checks both only after
     the entry bar (``bar_index > T.x0``), and its cancel at entry rules them out on the entry bar itself, so the exit
-    decision is never earlier than the entry bar (and always later than the signal bar).
+    decision is never earlier than the entry bar (and always later than the signal bar). Where it is priced (the next
+    M1 open, or the decision bar's last M1 close for a new-day exit): ``time_exit_new_day``.
     """
     _check_tf(tf)
 
@@ -324,6 +350,28 @@ def time_exits(ctx: M.Context, tf: str) -> np.ndarray:
         j = np.where(pos < len(idx), idx[np.minimum(pos, len(idx) - 1)], n)
         return _ro(np.where(j < n, j - 1, -1).astype(np.int64))
     return ctx.get(MODULE, tf, {"series": "time_exit"}, make)
+
+
+def time_exit_new_day(ctx: M.Context, tf: str) -> np.ndarray:
+    """
+    Per entry bar e (0 .. len(bars), aligned with ``time_exits``; read-only, cached): True when the script prices that
+    time exit at the previous bar's close, i.e. the bar after the decision bar starts a new trading day (``newDay``,
+    L454-455; checked before ``closeT``, so also on a Sunday reopen that opens in 16:00-20:00). That is the row's
+    ``close_gap`` (reading 1): across the gap before that bar the exit is booked at the decision bar's last M1 close.
+    False when that bar opens in 16:00-20:00 of the same trading day (``closeT``, L456-457: priced at its open, the
+    next M1 open after the decision, after an early close too) and when there is no time exit (-1). Known at that
+    bar's open, like the exit decision itself.
+    """
+    _check_tf(tf)
+
+    def make():
+        xb = time_exits(ctx, tf)
+        nd = _clock(ctx, tf)["new_day"]
+        out = np.zeros(len(xb), np.bool_)
+        has = xb >= 0
+        out[has] = nd[xb[has] + 1]          # the bar the script exits on: xb + 1 < len(bars) whenever xb >= 0
+        return _ro(out)
+    return ctx.get(MODULE, tf, {"series": "time_exit_new_day"}, make)
 
 
 # ───────────────────────────── one lane: the entries of one setup ─────────────────────────────
@@ -350,8 +398,10 @@ def lane_entries(ctx: M.Context, tf: str, setup: str, conf: str, exit: str, tren
     """
     The market entries of one setup (one lane): per kept signal (``lane_mask``), decided at the signal bar's close,
     side = the signal's, ``stop_level`` = the port's stop (an absolute level; the harness measures it from the fill),
-    ``exit_bar`` = the time exit (``time_exits`` of the entry bar), E2 ``target_r`` = 2, E3 ``target_level`` = the
-    port's ``tgt_ref``; ``tag`` = the setup's index in SETUPS. At most one entry per trading day (asserted).
+    ``exit_bar`` = the time exit (``time_exits`` of the entry bar), ``close_gap`` = whether it is a new-day exit
+    (``time_exit_new_day``: booked at the last M1 close before the gap that precedes it; reading 1), E2 ``target_r`` =
+    2, E3 ``target_level`` = the port's ``tgt_ref``; ``tag`` = the setup's index in SETUPS. At most one entry per
+    trading day (asserted).
     """
     sig = signal_table(ctx, tf, conf, trend, monday)
     keep, _ = lane_mask(sig, setup, exit)
@@ -360,14 +410,15 @@ def lane_entries(ctx: M.Context, tf: str, setup: str, conf: str, exit: str, tren
     if len(np.unique(dk)) != len(dk):
         raise AssertionError(f"{setup} on {tf}: two signals on one trading day (the script's done flag)")
     n = len(ctx.bars(tf))
-    xb = time_exits(ctx, tf)[np.minimum(sig["entry_bar"][k], n)]
+    eb = np.minimum(sig["entry_bar"][k], n)
+    xb = time_exits(ctx, tf)[eb]
     kw = {}
     if exit == "E2":
         kw["target_r"] = TARGET_R
     elif exit == "E3":
         kw["target_level"] = sig["tgt_ref"][k]
     return M.entries(sig["bar"][k], sig["dir"][k], stop_level=sig["stop"][k], exit_bar=xb,
-                     tag=SETUPS.index(setup), **kw)
+                     tag=SETUPS.index(setup), close_gap=time_exit_new_day(ctx, tf)[eb], **kw)
 
 
 def lane_exec(ctx: M.Context, tf: str, setup: str, conf: str, exit: str, trend: Optional[str] = None,
@@ -505,7 +556,7 @@ def describe(variant: M.Variant) -> str:
 
 def warm(ctx: M.Context, variants_: Sequence[M.Variant]) -> None:
     """Compute in the parent, before the driver forks its workers, every array the given rows read: the trend
-    directions (the 1H EMA, the F2 / F3 filters), the signal tables and the time exits."""
+    directions (the 1H EMA, the F2 / F3 filters), the signal tables, the time exits and their new-day flags."""
     for v in variants_:
         v = _row(v)
         if v.symbol != ctx.symbol:
@@ -513,6 +564,7 @@ def warm(ctx: M.Context, variants_: Sequence[M.Variant]) -> None:
         setups, conf, exit, trend, monday, preset = _settings(v)
         signal_table(ctx, v.tf, conf, trend, monday)
         time_exits(ctx, v.tf)
+        time_exit_new_day(ctx, v.tf)
 
 
 def plan_counts(symbol: str) -> Dict[Tuple[str, bool], int]:
@@ -527,8 +579,9 @@ def event_table(ctx: M.Context, variant: M.Variant) -> pd.DataFrame:
     """Event geometry of a row for reports and checks (no profit or loss): per signal of its setups, the lane, the
     setup, the signal bar and its close time, the side, the stop and target reference, the stop distance from the
     signal close in the port's ATR(14) (at least 0.5: the minimum stop), the script's cancel at entry ('' none;
-    'cancel_lt_1R' for E3's), whether the lane takes it to the harness, and the time exit's decision bar (-1: none in
-    the data)."""
+    'cancel_lt_1R' for E3's), whether the lane takes it to the harness, the time exit's decision bar (-1: none in
+    the data), its kind ('closeT': the first bar from 16:00, at its open; 'new_day': the previous close; '' none) and
+    the ``close_gap`` flag the lane hands the harness (True on the new-day exits; reading 1)."""
     v = _row(variant)
     if v.symbol != ctx.symbol:
         raise ValueError(f"{v.id}: not a variant of {ctx.symbol}")
@@ -536,6 +589,7 @@ def event_table(ctx: M.Context, variant: M.Variant) -> pd.DataFrame:
     b = ctx.bars(v.tf)
     sig = signal_table(ctx, v.tf, conf, trend, monday)
     tx = time_exits(ctx, v.tf)
+    nd = time_exit_new_day(ctx, v.tf)
     # the port's own ATR(14) (the one its minimum-stop rule reads, L143 and L401)
     atr = ctx.get(MODULE, v.tf, {"series": "atr14"}, lambda: _ro(SH.shared_series(b.h, b.l, b.c)["atr"]))
     parts = []
@@ -545,11 +599,14 @@ def event_table(ctx: M.Context, variant: M.Variant) -> pd.DataFrame:
         bar = sig["bar"][sel]
         cancel = np.where(sig["cancel"][sel] != "", sig["cancel"][sel],
                           np.where((exit == "E3") & sig["e3_cancel"][sel], "cancel_lt_1R", ""))
+        eb = np.minimum(sig["entry_bar"][sel], len(b))
         with np.errstate(invalid="ignore", divide="ignore"):
             parts.append(pd.DataFrame({
                 "vid": v.id, "lane": q, "setup": s, "bar": bar, "t_signal": pd.to_datetime(b.tc[bar], unit="s",
                                                                                          utc=True),
                 "side": sig["dir"][sel], "stop": sig["stop"][sel], "tgt_ref": sig["tgt_ref"][sel],
                 "stop_atr": np.abs(b.c[bar] - sig["stop"][sel]) / atr[bar], "cancel": cancel,
-                "taken": keep[sel], "exit_bar": tx[np.minimum(sig["entry_bar"][sel], len(b))]}))
+                "taken": keep[sel], "exit_bar": tx[eb],
+                "time_exit": np.where(tx[eb] < 0, "", np.where(nd[eb], "new_day", "closeT")).astype(object),
+                "close_gap": nd[eb]}))
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()

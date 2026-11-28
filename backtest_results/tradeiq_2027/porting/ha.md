@@ -153,7 +153,7 @@ The effects are counted on the Development decision bars (section 6) and the Val
 | 8 | First STRONG candle on the flip bar (l.146, l.158-160) | Yes: a STRONG flip candle is its streak's first STRONG candle, at age 1 | l.146 clears the marker at the flip, before l.158 tests it | Excluding flip bars would move about a third of the events: 1,260 of 3,831 on gold 1H, 1,793 of 5,823 on BTC 1H, similar on every series |
 | 9 | Where a finished streak's length goes (l.126-130) | Into the array of the streak that ended, at the close of the flip candle | `a = sDir == 1 ? bullL : bearL` before `sDir` is changed | Into the new colour's array: other percentiles everywhere (port A's trap test) |
 | 10 | The first streak (l.121-125) | Counted, although it starts at the first bar given and its true start is unknown | The script counts it | Leaving it out changes the rare age on 11 gold 4H bars and 1 gold 1D bar of Development; nothing else (with study 1's start: 4 gold 1D bars in Development, 4 in Validation) |
-| 11 | The cap of 5,000 lengths per colour (l.131-132) | Kept | As written; PREREG's "all history from the data start" is read as where the history starts | No cap: it binds on 1H only, BTC from 2022-04-21 and gold from 2022-11-28. The percentile then differs on 398 gold / 4,500 BTC 1H Development bars and 6,594 / 9,659 Validation bars; the rare age on none |
+| 11 | The cap of 5,000 lengths per colour (l.131-132) | Kept by the ports' default (`KEEP`, the reconciled contract; study 3 calls it). Study 2 calls `keep=None`: every finished streak (DEVIATIONS HA-R10, replacing HA-P1 = reading 8.1 below) | As written; `keep=None` is PREREG 6.8's "all history from the data start" as study 2 reads it | No cap: it binds on 1H only, BTC from 2022-04-21 and gold from 2022-11-28. The percentile then differs on 398 gold / 4,500 BTC 1H Development bars and 6,594 / 9,659 Validation bars; the rare age on none |
 | 12 | Rare age at every bar (l.209-212) | Computed at every bar, as if it were the chart's last bar (PREREG 6.8) | The value the live alert computes at that bar's close | The literal script: no rare age on any historical bar, so no M4 or HA-M4 exit at all |
 | 13 | The 50-streak minimum (PREREG 6.8) | Counts every finished streak of the current colour, also those the cap dropped | The plan's words. Equal to counting the stored lengths, because 5,000 > 50 | The script's own rule (one finished streak) changes the rare age only in the warm-up, on no Development or Validation bar. The minimum is reached on 2016-01-27 (gold 1H), 2016-04-19 (gold 4H), 2017-11-07 (gold 1D), 2018-01-18 (BTC 1H), 2018-03-08 (BTC 4H) and 2019-02-03/04 (BTC 1D) |
 | 14 | The percentile (l.166-173, l.212) | (100 × count) / number stored; "shorter" is strict; rare when it is at least 90 | As written | An exact 90.0% occurs on 3 gold 4H bars and 1 gold 1D bar of Development, each a rare age; "above 90" would remove them. 100 × (count / number) gives the same rare ages |
@@ -324,7 +324,10 @@ rare age:
 These are written before any Heikin Ashi result exists. Each can move a result; the tie, zero-range, seed and
 arithmetic readings of section 3 cannot, on our bars.
 
-1. **The statistics keep the script's cap of 5,000 streaks per colour.**
+1. **The statistics keep the script's cap of 5,000 streaks per colour.** *Superseded for study 2 by DEVIATIONS
+   HA-R10 (28 Nov 2026, before any rule result): study 2's rule module calls `heikin_ashi(..., keep=None)`, every
+   finished streak since the data start; ports A and B agree bit for bit with it (tests/test_tradeiq2_ind_ha.py,
+   section 4). The ports' default still keeps the cap (study 3 calls it). The reading below is kept as written.*
    - **What.** PREREG 6.8 computes the streak statistics "using all history from the data start". The ports read
      this as where the history starts and keep the script's own cap (l.131-132): each colour keeps its latest 5,000
      finished lengths for the percentile and the rare age.

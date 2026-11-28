@@ -58,7 +58,9 @@ What a row does (an EVENT rule: PREREG 5's filters gate the entry and close no t
 * DECISION WINDOW AND FLAT TIME (PREREG 6.5). A label is a candidate when its bar closes at or before 16:00 New York of
   the session's date. Every trade's last exit decision is the close of the FLAT BAR: the last chart bar of that date
   closing at or before 16:55 New York (M5: the bar opening 16:50; M15: the bar opening 16:30), filled at the next M1
-  open (reading 3). A label at or after the flat bar (possible only on an early close) is not a candidate.
+  open; when no M1 bar opens at that close (an early close, a data hole) it is booked at the close of the flat bar's
+  last M1 bar instead, before the break (the harness's ``close_gap``; reading 3). A label at or after the flat bar
+  (possible only on an early close) is not a candidate.
 * O1, the script's trade: a market entry at the label (decided at its close, filled at the next M1 open: a buy at the
   ask, a sell at the bid), out at the close of the first bar whose close is below the trail, ``max(trail[1], low -
   2 x ATR(14))`` from the label bar on (l.258, 274-279: ``math.max(nz(trailStop[1], x), x)``; a short mirrors it with
@@ -73,8 +75,8 @@ What a row does (an EVENT rule: PREREG 5's filters gate the entry and close no t
   recomputes all of it on its own spreads. One position at a time (the harness: a label while a trade is open is
   "busy"); a trade stopped inside a bar is flat at that bar's close, so a label there opens the next trade.
 * O4, the video's "use the hit rates to pick your target": as O2 with the target T_k, k the furthest of 1-3 whose
-  hit rate after past breakouts of the trade's side is at least 50%, over at least 60 past sessions (else T1;
-  reading 5): ``o4_targets``.
+  hit rate after past breakouts of the trade's side is at least 50%, once at least 60 past sessions have a label of
+  that side decided by 16:00 New York (else T1; reading 5): ``o4_targets``.
 * O5: at the close of the range's last bar (10:00 New York; the bar before the first post-session bar) a buy stop at
   ``orHigh`` and a sell stop at ``orLow``, one cancels the other, cancelled at 16:00 New York (the first M1 bar opening
   at or after it); a buy fills once the ask reaches the level, at max(level, ask at the open), a sell once the bid
@@ -107,6 +109,12 @@ The range is final at the close of the session's last bar and the port's labels,
 bar (they read bars 0 .. i). The 16:00 cut and the flat time are clock times fixed in advance; the flat bar of a
 session is the last bar closing at or before 16:55, and while the data end lies before that instant it is unknown
 (``flat_bar`` -1: no exit row, the harness runs the trade to the window's end). A trail exit at bar k reads bars e .. k.
+``close_gap`` decides nothing: it only says where an exit decided at a bar's close is booked when no M1 bar opens at
+that close (the harness looks for the gap); O2-O5's rows carry it from the start, O1's is known with its exit. That
+booking does take one fact as known before the bars show it: on an early close the bars show which bar is the flat bar
+only at 16:55 and the gap only at the reopen, so booking at the flat bar's last M1 close takes both from the market's
+published early-close hours (harness reading 15). A data hole could not be known then (BTC's 5 sessions to
+2024-06-30, none in Development).
 O4's rates count only sessions before the decision's (each complete by its own flat bar, the day before or earlier).
 TIGHT's ``adr`` reads finished trading days. The orders are placed at the range's close with its levels. The port
 counts a session on its first post-session bar (``post_bar``, where the script's ``sessionEnded`` turns true), which
@@ -130,12 +138,30 @@ Readings where the plan leaves a choice (deviation paragraphs, for DEVIATIONS.md
    nothing. O2-O4 have no close-based exit before the flat time: a trade stopped or at its target inside a bar is flat
    at that bar's close.
 3. THE FLAT TIME. "Everything is flat at the last chart-bar close at or before 16:55 New York" is the exit decision at
-   the close of that bar of the session's New York date, filled at the next M1 open, as every decision of the study
-   (PREREG 4). On a normal day that is the 16:55 M1 open; on an early close (a US holiday) it is the first M1 open after
-   the break, so a trade still open then is held over the break, as Session Hunter's time exit is across a gap. Counted
-   on the 09:30 ranges to 2024-06-30: 91 of gold's 2,181 sessions close early (their flat bar closes 15 minutes or
-   more before 16:55), 5 of BTC's 1,693 (data holes). A label decided at or after the flat bar (only on an early close;
-   at most one per configuration to 2024-06-30) is not a candidate: its fill would come after the flat time.
+   the close of that bar of the session's New York date (the FLAT BAR), filled at the next M1 open as every decision
+   of the study (PREREG 4): on a normal day the 16:55 M1 open (M5) or 16:45 (M15). When no M1 bar opens at the flat
+   bar's close (an early close: a US holiday on gold, a data hole on BTC), that open is the reopen, and a fill there
+   would hold the trade over the break the flat time is there for ("because gold's daily break starts at 17:00").
+   Such an exit is booked at the close of the flat bar's last M1 bar instead, at the bid for a long and the ask for a
+   short, with no extra spread, read as a time exit (the harness's ``close_gap``, its reading 15); a stop or a target
+   touched before that close still wins. The flag is set on every row whose own exit decision is the flat bar: every
+   O2-O4 entry, every O5 order (its ``exit_bar`` and the cap of its trail), and each O1 entry whose trail has not
+   fired before the flat bar (a trail firing on the flat bar's own close is the same decision). An O1 trail exit
+   decided at an earlier bar keeps the next-M1-open fill, also when a hole follows that bar. The harness's flag is per
+   order, so O5's exits cannot be told apart: an O5 exit decided at an earlier bar (its trail, or HV's LV fill bar) is
+   also booked at that bar's last M1 close when no M1 bar opens at its close. Counted on the study's bars to
+   2024-06-30: the flat bar is followed by a gap in 92 of gold's 2,181 09:30 sessions (91 close early, their flat bar
+   closing 15 minutes or more before 16:55; one misses the M1 bar at the flat bar's close) and in 5 of BTC's 1,693
+   (data holes); a bar from 10:00 to before the flat bar is followed by a gap in 22 / 15 gold sessions (M5 / M15; 27 /
+   17 on ORB-CX) and 13 / 10 BTC sessions. In Development (2019-2022) the flag books the flat exit of 18 / 14 / 23 /
+   14 / 12 trades of gold's O1-O5 x F0 rows on M5 and 28 / 16 / 24 / 16 / 21 on M15 (x1.5: the same, but O5 11 and
+   20), each of them held to the reopen before; none on BTC, where no Development flat bar is followed by a gap. In
+   Development no O1 trail exit on the New York rows is decided at an earlier bar followed by a gap; on gold's ORB-CX
+   M5 O1 x F0 and x F2-4H rows one trade each (4 Aug 2021: the trail exits at the 10:00 bar's close, after which
+   no M1 bar opens until 10:06) keeps the next M1 open, as designed. No exit of any O5 row is booked at an earlier bar's
+   close (the one planned case, ORB-CX M5 O5 on 4 Aug 2021, had ended before that close). A label
+   decided at or after the flat bar (only on an early close; at most one per configuration to 2024-06-30) is not a
+   candidate: its fill would come after the flat time.
 4. O2 / O3 LEVELS. T1 / T2 are the script's ``u1`` / ``u2`` (``d1`` / ``d2``) of its default "Multiples" (l.39-42,
    187-193); the far side is the range's other edge. Both are absolute levels re-measured from the actual fill (PREREG
    4), so R = the P/L over |fill - far side|. A zero-width range (never seen on the study's bars) gives a target at the
@@ -146,7 +172,10 @@ Readings where the plan leaves a choice (deviation paragraphs, for DEVIATIONS.md
    bar it can act on. Rate_k = hits / past breakouts of that side, over the sessions before the decision's; with fewer
    than 60 past breakouts, or no level at 50% or more, the target is T1. The rates are monotone (u3 reached implies u2
    and u1), so "the furthest whose rate is at least 50%" is unambiguous. The script's own dashboard (unconditional,
-   l.195-214) is not used for the target; claim 8 compares the two.
+   l.195-214) is not used for the target; claim 8 compares the two. The port's count (``porting/orb.md`` reading 4,
+   DEVIATIONS ORB-P4: a target's first touch from the 10:00 bar to the day reset, over the sessions the script
+   counts) is the dashboard's, read by claim 8 alone (``hit_rate_stats``); O4 and its LV control read this one
+   (``after_hits``), whose bars all lie before the day reset, so the reset (ORB-P2) moves no O4 target.
 6. O5'S ORDERS AND TRAIL. Placed at the close of the range's last bar, live from the next M1 open (the first
    post-session bar's open, 10:00) until 16:00. The buy stop triggers on the ASK reaching ``orHigh`` (a bid range, a
    real stop order), the sell stop on the bid reaching ``orLow``; when both are reached in one M1 bar the side nearer
@@ -158,7 +187,8 @@ Readings where the plan leaves a choice (deviation paragraphs, for DEVIATIONS.md
 7. HV ON O5. HV is "the breakout bar's volume above the SMA(20) of volume, the bar included". A stop order fills inside
    a bar whose volume is known only at its close, and nothing at the placement (10:00) describes it. Read: the
    breakout bar of a touch entry is the chart bar that holds the fill; at its close the trade is kept if that bar is HV
-   and closed (at the next M1 open) if it is LV. This uses the plan's definition on the plan's bar at the first moment
+   and closed (at the next M1 open; at that bar's last M1 close when no M1 bar opens at its close, the order's
+   ``close_gap``, reading 3) if it is LV. This uses the plan's definition on the plan's bar at the first moment
    it exists, at the cost of PREREG 5's "the filter does not close an open trade" for this one case. The alternative, a
    pure gate on the fill by the last closed bar's HV (``tradeiq2_filters.fill_masks``), reads another bar's volume.
    F2-4H, F2-1D and LO on O5 are checked at the placement close (the order is the decision).
@@ -235,7 +265,8 @@ TIGHT = "TIGHT"
 ENTRY_END = 16 * 60                     # 16:00 New York: the last decision close
 FLAT_AT = 16 * 60 + 55                  # 16:55 New York: flat at the last chart-bar close at or before it
 TARGET_K = {"O2": 1, "O3": 2}           # T1, T2 (O4 chooses per entry)
-O4_MIN_DAYS = 60                        # PREREG 6.5: "Past days only, with at least 60 of them"
+O4_MIN_DAYS = 60                        # PREREG 6.5: "Past days only, with at least 60 of them" (reading 5: 60
+                                        # past sessions with a label of the side decided by 16:00 New York)
 O4_MIN_RATE = 0.5                       # "... whose hit rate ... is at least 50%"
 TIGHT_FRAC = SHI.ADR_PCT / 100.0        # Session Hunter's adrPct 50 (SH l.66, 325), as it computes it
 TRAIL_MULT = ORB.TRAIL_MULT             # 2.0 (l.61)
@@ -672,8 +703,9 @@ def o1_trades(ctx: M.Context, tf: str, row: Row) -> Dict[str, np.ndarray]:
     (decided by 16:00, before the flat bar), in a tight session for TIGHT, and allowed by the row's filter at their
     close; each opens a trade only when no trade is open AT ITS BAR (a trade whose trail exits at the close of bar x is
     still open on bar x); the trade's exit is ``trail_exits`` of its label bar and side. Returns ``index`` (into
-    ``candidates``), ``bar``, ``side``, ``exit_bar``, ``session``, ``day`` of the trades and ``busy`` (the candidates
-    refused because a trade was open).
+    ``candidates``), ``bar``, ``side``, ``exit_bar``, ``session``, ``day`` of the trades, ``flat_exit`` (True where the
+    exit is the session's flat bar: the trail has not fired before it, or fires on that bar's own close; reading 3)
+    and ``busy`` (the candidates refused because a trade was open).
     """
     C = candidates(ctx, tf, row.version)
     keep = np.asarray(C["ok"], bool).copy()
@@ -696,23 +728,30 @@ def o1_trades(ctx: M.Context, tf: str, row: Row) -> Dict[str, np.ndarray]:
         xb.append(x)
         open_until = x if x >= 0 else np.iinfo(np.int64).max
     idx = np.asarray(take, np.int64)
-    return {"index": idx, "bar": C["bar"][idx], "side": C["side"][idx], "exit_bar": np.asarray(xb, np.int64),
-            "session": C["session"][idx], "day": C["day"][idx], "busy": np.asarray(busy, np.int64)}
+    xb = np.asarray(xb, np.int64)
+    flat = sessions(ctx, tf, row.version)["flat_bar"][C["session"][idx]]
+    return {"index": idx, "bar": C["bar"][idx], "side": C["side"][idx], "exit_bar": xb,
+            "session": C["session"][idx], "day": C["day"][idx], "flat_exit": (xb >= 0) & (xb == flat),
+            "busy": np.asarray(busy, np.int64)}
 
 
 def o1_entries(ctx: M.Context, tf: str, row: Row) -> M.Entries:
     """O1 as market entries for the harness: each trade of ``o1_trades`` at its label bar, no stop, no target, its
-    exit decision at ``exit_bar`` (the trail's close or the flat bar), tag = the session's New York date."""
+    exit decision at ``exit_bar`` (the trail's close or the flat bar), tag = the session's New York date.
+    ``close_gap`` where that exit is the session's flat bar (``flat_exit``): booked at the flat bar's last M1 close
+    when no M1 bar opens at its close; a trail exit decided at an earlier bar fills at the next M1 open (reading 3)."""
     T = o1_trades(ctx, tf, row)
-    return M.entries(T["bar"], T["side"], exit_bar=T["exit_bar"], tag=T["day"])
+    return M.entries(T["bar"], T["side"], exit_bar=T["exit_bar"], tag=T["day"], close_gap=T["flat_exit"])
 
 
 def target_entries(ctx: M.Context, tf: str, row: Row) -> M.Entries:
     """
     O2 / O3 / O4 as market entries: every ``ok`` candidate the row's filter allows at its close; stop level = the far
     side of the range, target level = T_k (k = 1 for O2, 2 for O3, ``o4_targets`` for O4), both absolute (the harness
-    measures them from the actual fill and drops an entry beyond either, PREREG 4); exit decision at the flat bar; tag =
-    the session's New York date. One position at a time is the harness's (a candidate while a trade is open is busy).
+    measures them from the actual fill and drops an entry beyond either, PREREG 4); exit decision at the flat bar,
+    ``close_gap`` on every row (that exit is booked at the flat bar's last M1 close when no M1 bar opens at its close;
+    reading 3); tag = the session's New York date. One position at a time is the harness's (a candidate while a trade
+    is open is busy).
     """
     if row.rule not in ("O2", "O3", "O4"):
         raise ValueError(f"{row.rule}: target_entries is for O2, O3 and O4")
@@ -734,7 +773,8 @@ def target_entries(ctx: M.Context, tf: str, row: Row) -> M.Entries:
     dn = np.stack([S["d1"], S["d2"], S["d3"]], axis=1)
     target = np.where(side == 1, up[j, k - 1], dn[j, k - 1]) if len(sel) else np.zeros(0)
     stop = np.where(side == 1, S["or_low"][j], S["or_high"][j])
-    return M.entries(bar, side, stop_level=stop, target_level=target, exit_bar=S["flat_bar"][j], tag=S["day"][j])
+    return M.entries(bar, side, stop_level=stop, target_level=target, exit_bar=S["flat_bar"][j], tag=S["day"][j],
+                     close_gap=True)
 
 
 def o5_orders(ctx: M.Context, tf: str, row: Row) -> M.Orders:
@@ -742,8 +782,10 @@ def o5_orders(ctx: M.Context, tf: str, row: Row) -> M.Orders:
     O5's stop orders (reading 6): per valid session of positive width with a bar after the range before its flat bar
     (and tight for TIGHT), placed at the close of the range's last bar: buy stop ``or_high`` with its stop ``or_low``,
     sell stop ``or_low`` with its stop ``or_high``, one cancels the other, until 16:00 New York of the session's date;
-    exit decision at the flat bar; tag = the session's date. F2-4H / F2-1D / LO remove the sides they refuse at the
-    placement close (``tradeiq2_filters.gate_orders``).
+    exit decision at the flat bar (``on_fill``'s trail may decide earlier), ``close_gap`` on every order (reading 3:
+    the flag is the order's, so the harness applies it to whichever of the flat bar and ``on_fill``'s bar decides the
+    exit); tag = the session's date. F2-4H / F2-1D / LO remove the sides they refuse at the placement close
+    (``tradeiq2_filters.gate_orders``, which keeps the flag).
     """
     if row.rule != "O5":
         raise ValueError(f"{row.rule}: o5_orders is for O5")
@@ -754,7 +796,8 @@ def o5_orders(ctx: M.Context, tf: str, row: Row) -> M.Orders:
         sel = sel & tight_sessions(ctx, tf, row.version)
     j = np.flatnonzero(sel)
     O = M.orders(S["end_bar"][j], S["entry_end_s"][j], buy=S["or_high"][j], sell=S["or_low"][j],
-                 buy_stop=S["or_low"][j], sell_stop=S["or_high"][j], exit_bar=flat[j], tag=S["day"][j])
+                 buy_stop=S["or_low"][j], sell_stop=S["or_high"][j], exit_bar=flat[j], tag=S["day"][j],
+                 close_gap=True)
     gate, _ = _o5_filters(row.filt)
     if gate is not None:
         al, ash = ctx.allow(tf, gate)
@@ -819,7 +862,8 @@ RULE_WORDS = {
     "O2": "a market entry at a labelled breakout; target T1 = the range edge + 1 range width, stop at the far side",
     "O3": "a market entry at a labelled breakout; target T2 = the range edge + 2 range widths, stop at the far side",
     "O4": ("a market entry at a labelled breakout; target the furthest of T1-T3 whose hit rate after past breakouts "
-           "of that side is at least 50% (at least 60 past sessions, else T1), stop at the far side"),
+           "of that side is at least 50% (once at least 60 past sessions have a breakout of that side decided by "
+           "16:00 New York, else T1), stop at the far side"),
     "O5": ("stop orders at both range edges, one cancels the other, active from the range's end to 16:00; stop at the "
            "far side; out on the trail started at the bar of the fill or at the flat time"),
 }
@@ -850,8 +894,9 @@ def describe(variant: M.Variant) -> str:
 
 def event_table(ctx: M.Context, variant: M.Variant) -> pd.DataFrame:
     """Event geometry of a row (no profit or loss): O1-O4 per candidate (its bar, close time, side, session date,
-    decided / room / allowed, taken by O1's order or not, the stop and target levels, the flat bar); O5 per order
-    (its placement bar, expiry, levels, flat bar)."""
+    decided / room / allowed, taken by O1's order or not, the stop and target levels, the flat bar, ``close_gap``:
+    the row's exit is the flat bar, booked before a gap that follows it; reading 3); O5 per order (its placement bar,
+    expiry, levels, flat bar, ``close_gap``)."""
     tf, row = _row_of(variant)
     b = ctx.bars(tf)
     S = sessions(ctx, tf, row.version)
@@ -859,7 +904,8 @@ def event_table(ctx: M.Context, variant: M.Variant) -> pd.DataFrame:
         O = o5_orders(ctx, tf, row)
         return pd.DataFrame({"bar": O.bar, "placed": pd.to_datetime(b.tc[O.bar], unit="s", utc=True),
                              "until": pd.to_datetime(O.until, unit="s", utc=True), "buy": O.buy, "sell": O.sell,
-                             "buy_stop": O.buy_stop, "sell_stop": O.sell_stop, "exit_bar": O.exit_bar, "tag": O.tag})
+                             "buy_stop": O.buy_stop, "sell_stop": O.sell_stop, "exit_bar": O.exit_bar, "tag": O.tag,
+                             "close_gap": O.close_gap})
     C = candidates(ctx, tf, row.version)
     al, ash = entry_allow(ctx, tf, row.filt, row.version)
     allowed = np.where(C["side"] == 1, al[C["bar"]], ash[C["bar"]])
@@ -880,6 +926,9 @@ def event_table(ctx: M.Context, variant: M.Variant) -> pd.DataFrame:
         ex = np.full(len(df), -1, np.int64)
         ex[T["index"]] = T["exit_bar"]
         df["exit_bar"] = ex
+        gap = np.zeros(len(df), bool)
+        gap[T["index"]] = T["flat_exit"]
+        df["close_gap"] = gap
     else:
         if row.rule == "O4":
             T4 = o4_targets(ctx, tf, row.version)
@@ -891,6 +940,7 @@ def event_table(ctx: M.Context, variant: M.Variant) -> pd.DataFrame:
         df["target_k"] = k
         df["target"] = np.where(C["side"] == 1, up[j, k - 1], dn[j, k - 1]) if len(df) else np.zeros(0)
         df["stop"] = np.where(C["side"] == 1, S["or_low"][j], S["or_high"][j])
+        df["close_gap"] = np.ones(len(df), bool)                  # every O2-O4 row's exit is the flat bar
     return df
 
 

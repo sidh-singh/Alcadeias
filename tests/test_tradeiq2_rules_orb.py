@@ -8,25 +8,32 @@ functions of claims 6-9 (PREREG 8).
 (b) Hand-made bars (continuous M1 bars of gold in January 2019, New York = UTC-5, so every level, fill and exit is
     known by hand), run through the real port: O1's label entry, its close-based trail (a wick does not exit, the
     trail never moves down), the script's order (a bear label on the trail-exit bar opens no short; a later one does),
-    the 16:00 decision cut and the 16:55 flat time (M5 and M15), an early close; O2 / O3 / O4's absolute levels from
-    the ACTUAL fill (a gap through the stop, x1.5, an entry beyond its target dropped); O5's OCO stop orders (placed at
-    10:00, cancelled at 16:00, the far-side stop, the trail from the fill's bar, one trade a day).
+    the 16:00 decision cut and the 16:55 flat time (M5 and M15); an early close (13:30, the reopen at 18:00), where
+    every exit decided at the flat bar is booked at its last M1 close before the break (``close_gap``, reading 3): O1's
+    trail cap and a trail firing on the flat bar, O2 / O3 / O4 (long, short, x1.5; a stop inside the flat bar wins),
+    O5's trail cap and a fill inside the flat bar (F0, HV); an O1 trail exit before the flat bar keeps the next M1
+    open after a hole, an O5 one does not (the flag is the order's); O2 / O3 / O4's absolute levels from the ACTUAL
+    fill (a gap through the stop, x1.5, an entry beyond its target dropped); O5's OCO stop orders (placed at 10:00,
+    cancelled at 16:00, the far-side stop, the trail from the fill's bar, one trade a day).
 (c) Filters: HV / LV at the label bar (the SMA(20) with the bar included), F2 / LO at the label's close (never
     closing a trade; a refused label blocks nothing), O5's F2 / LO at the placement and HV at the fill bar's close;
     TIGHT (Session Hunter's adr); ORB-CX's range and order window; the literal UTC-5 clock in summer; BTC on 7 days.
-(d) O4's target from the past breakouts (60 needed, the furthest level at 50%), against a brute-force count.
-(e) Causality: every entry and exit decided at a bar closing at or before T, and every O5 order whose post-session bar
-    (where the port counts the session) opens before T, is the same when the data after T is removed (every row, a
-    synthetic 300-day market cut at eleven times, among them 10:00, 13:45 and 16:30 New York; the study's bars in (g)).
+(d) O4's target from the past breakouts (60 needed, the furthest level at 50%), against a brute-force count; on a
+    market where an M1 bar opens at every close the ``close_gap`` flags change nothing.
+(e) Causality: every entry and exit decided at a bar closing at or before T (with its ``close_gap`` once the flat time
+    has passed), and every O5 order whose post-session bar (where the port counts the session) opens before T, is the
+    same when the data after T is removed (every row, a synthetic 300-day market cut at eleven times, among them 10:00,
+    13:45 and 16:30 New York; the study's bars in (g)).
 (f) Claims 6-9 on synthetic bars against brute-force counts from the M1 bars, and on synthetic results.
 (g) Real data (skipped when the store is absent; read to 2019-07-01 only): O1 x F0 is the port's own trade logic,
     causality, and an execution smoke test on Development data (2019-01-01 to 2019-06-30) for one row of each rule
-    type through ``tradeiq2_market.run_variant``. Its profit or loss is neither printed, asserted nor reported: only
-    counts, times and levels are checked.
+    type through ``tradeiq2_market.run_variant`` (every trade flat by its flat bar's close, early closes included).
+    Its profit or loss is neither printed, asserted nor reported: only counts, times and levels are checked.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import gc
 import json
 
@@ -267,6 +274,26 @@ def build(ctx, vid):
     return R.build(V(vid), ctx)
 
 
+def no_gap(ex):
+    """The same Exec with every row's ``close_gap`` off: the reading before 28 Nov 2026, whose flat exit always fills
+    at the next M1 open, the reopen when the market closed early."""
+    if ex.entries is not None:
+        return dataclasses.replace(ex, entries=dataclasses.replace(ex.entries, close_gap=None))
+    return dataclasses.replace(ex, orders=dataclasses.replace(ex.orders, close_gap=None))
+
+
+def early_close(ch, close="13:30", reopen="18:00", day=0):
+    """``ch``'s market without its M1 bars from New York ``close`` to ``reopen`` (a holiday's early close)."""
+    return ch.market(keep=~((ch.t >= ny(close, day)) & (ch.t < ny(reopen, day))))
+
+
+def m1(mk, hhmm, day=0):
+    """The index in ``mk`` of the M1 bar opening at New York ``hhmm``."""
+    i = int(np.searchsorted(mk.t, ny(hhmm, day)))
+    assert mk.t[i] == ny(hhmm, day)
+    return i
+
+
 def s1():
     """The range 99-101; the 10:00 bar breaks up (close 101.5); at 12:00 the price falls to 96 for the rest of the day
     (that bar closes below the trail AND below the range: a bear label on the long's trail-exit bar)."""
@@ -360,26 +387,162 @@ def test_b_decisions_only_up_to_16_00_and_the_flat_bar_of_m5_and_m15():
         assert len(build(ctx, v).entries) <= 1                              # never day 1's late label
 
 
-def test_b_an_early_close_flat_bar_is_the_last_bar_before_the_break():
-    """A day whose bars stop at 13:30 New York (a holiday close) and resume at 18:00: the flat bar is the 13:25 bar, so
-    the long's last exit decision is its close, filled at the first M1 open after the break (reading 3); a label on
-    the flat bar itself is not a candidate."""
+def test_b_an_early_close_flat_exit_is_booked_at_the_last_m1_close_before_the_break():
+    """A day whose bars stop at 13:30 New York (a holiday close) and resume at 18:00, 1.50 lower: the flat bar is the
+    last bar before the break (M5: the 13:25 bar; M15: the 13:15 bar), so the long's last exit decision is its close at
+    13:30. No M1 bar opens there, so the exit is booked at the close of the 13:29 M1 bar, the bid 101.5, read as a time
+    exit ('signal', exit time 13:30; ``close_gap``, reading 3): flat before the break, as PREREG 6.5 says. Without the
+    flag (the reading before 28 Nov 2026) the same decision is held over the break and fills at the 18:00 reopen
+    (100.0). A label on the flat bar itself is not a candidate."""
     ch = range_99_101(Chart(days=2))
-    ch.seg("10:00", "24:00", 101.5)
-    keep = ~((ch.t >= ny("13:30")) & (ch.t < ny("18:00")))
-    mk = ch.market(keep=keep)
+    ch.seg("10:00", "18:00", 101.5).seg("18:00", "24:00", 100.0)
+    mk = early_close(ch)
     ctx = M.Context(mk)
-    S = R.sessions(ctx, "M5")
-    assert S["flat_bar"][0] == bix(ctx, "M5", "13:25")
-    r = run(mk, build(ctx, "XAUUSDm|M5|ORB|O1|F0"))
-    reopen = int(np.searchsorted(mk.t, ny("18:00")))
-    assert rows(r) == [(1, int(np.searchsorted(mk.t, ny("10:05"))), reopen, 101.7, 101.5, "signal")]
+    for tf, flat, e in (("M5", "13:25", "10:05"), ("M15", "13:15", "10:15")):
+        S = R.sessions(ctx, tf)
+        assert S["flat_bar"][0] == bix(ctx, tf, flat) and ctx.bars(tf).tc[S["flat_bar"][0]] == ny("13:30")
+        ex = build(ctx, f"XAUUSDm|{tf}|ORB|O1|F0")
+        assert list(ex.entries.exit_bar) == [S["flat_bar"][0]] and list(ex.entries.close_gap) == [True]
+        r = run(mk, ex)
+        assert rows(r) == [(1, m1(mk, e), m1(mk, "13:29"), 101.7, 101.5, "signal")] and r.counts["close_gap"] == 1
+        assert r.trades.exit_time[0] == TM.utc(ny("13:30"))
+        old = run(mk, no_gap(ex))
+        assert rows(old) == [(1, m1(mk, e), m1(mk, "18:00"), 101.7, 100.0, "signal")] and old.counts["close_gap"] == 0
     ch2 = range_99_101(Chart(days=2))
     ch2.seg("13:25", "24:00", 101.5)                                        # the label is the 13:25 bar's
-    ctx2 = M.Context(ch2.market(keep=keep))
+    ctx2 = M.Context(early_close(ch2))
     C = R.candidates(ctx2, "M5")
     assert list(C["bar"]) == [bix(ctx2, "M5", "13:25")] and list(C["decided"]) == [True]
     assert list(C["room"]) == [False] and len(build(ctx2, "XAUUSDm|M5|ORB|O1|F0").entries) == 0
+
+
+def test_b_o1_a_trail_firing_on_the_flat_bars_own_close_is_the_flat_decision_booked_before_the_break():
+    """The same early close with the price at 97 inside the flat bar (13:25-13:30): the bar closes below the trail
+    (the highest low - 2 ATR since the 10:00 label, about 99), so the trail fires on the flat bar's own close. That is
+    the flat time's decision too, so the row carries ``close_gap`` and the exit is booked at the 13:29 close (the bid
+    97.0), not at the 18:00 reopen (100.0)."""
+    ch = range_99_101(Chart(days=2))
+    ch.seg("10:00", "13:25", 101.5).seg("13:25", "18:00", 97.0).seg("18:00", "24:00", 100.0)
+    mk = early_close(ch)
+    ctx = M.Context(mk)
+    b = ctx.bars("M5")
+    b10, flat = bix(ctx, "M5", "10:00"), bix(ctx, "M5", "13:25")
+    atr = np.asarray(R.orb_output(ctx, "M5")["atr"])
+    trail = max(b.l[k] - 2.0 * atr[k] for k in range(b10, flat + 1))         # the ratchet, never down
+    assert (b.c[b10:flat] > trail).all() and b.c[flat] == 97.0 < trail     # it fires on the flat bar, not before
+    T = R.o1_trades(ctx, "M5", R.Row("O1", "F0"))
+    assert list(T["exit_bar"]) == [flat] and list(T["flat_exit"]) == [True]
+    ex = build(ctx, "XAUUSDm|M5|ORB|O1|F0")
+    r = run(mk, ex)
+    assert rows(r) == [(1, m1(mk, "10:05"), m1(mk, "13:29"), 101.7, 97.0, "signal")] and r.counts["close_gap"] == 1
+    assert rows(run(mk, no_gap(ex))) == [(1, m1(mk, "10:05"), m1(mk, "18:00"), 101.7, 100.0, "signal")]
+
+
+def test_b_o1_a_trail_exit_before_the_flat_bar_keeps_the_next_m1_open_also_after_a_hole():
+    """A normal day (flat bar 16:50) with a data hole from 12:00 to 12:30 New York: the trail fires on the 11:55 bar's
+    close (97), an exit decided before the flat bar, so its row has no ``close_gap`` and it fills at the next M1 open,
+    the first after the hole (12:30, the bid 98.0), as every decision of the study (PREREG 4). (The bear label on that
+    bar finds the long open: busy.) With the flag forced on, the harness would book it at the 11:59 close (97.0)."""
+    ch = range_99_101(Chart())
+    ch.seg("10:00", "11:55", 101.5).seg("11:55", "12:30", 97.0).seg("12:30", "24:00", 98.0)
+    mk = ch.market(keep=~((ch.t >= ny("12:00")) & (ch.t < ny("12:30"))))
+    ctx = M.Context(mk)
+    b1155 = bix(ctx, "M5", "11:55")
+    assert R.sessions(ctx, "M5")["flat_bar"][0] == bix(ctx, "M5", "16:50")
+    T = R.o1_trades(ctx, "M5", R.Row("O1", "F0"))
+    assert list(T["exit_bar"]) == [b1155] and list(T["flat_exit"]) == [False] and len(T["busy"]) == 1
+    ex = build(ctx, "XAUUSDm|M5|ORB|O1|F0")
+    assert list(ex.entries.close_gap) == [False]
+    r = run(mk, ex)
+    assert rows(r) == [(1, m1(mk, "10:05"), m1(mk, "12:30"), 101.7, 98.0, "signal")] and r.counts["close_gap"] == 0
+    forced = dataclasses.replace(ex, entries=dataclasses.replace(ex.entries, close_gap=True))
+    assert rows(run(mk, forced)) == [(1, m1(mk, "10:05"), m1(mk, "11:59"), 101.7, 97.0, "signal")]
+
+
+def test_b_o2_o3_o4_flat_exits_on_an_early_close_are_booked_before_the_break_and_a_stop_before_that_close_wins():
+    """O2-O4 leave at their stop, their target or the flat bar, and every row carries ``close_gap``. On the early close
+    a long whose targets (T1 103, T2 105; O4 is T1 here, fewer than 60 past breakouts) and stop (99) are not reached by
+    13:30 leaves at the 13:29 close, the bid 101.5; without the flag it is held to the 18:00 reopen at 97.0 and gaps
+    through its stop there (96.8: one spread charged). A stop touched inside the flat bar (13:27) still wins. A short
+    (the range broken down at 98.5, the bid fill) leaves at the ask of the 13:29 close: 98.7 at x1.0, 98.8 at x1.5."""
+    ch = range_99_101(Chart(days=2))
+    ch.seg("10:00", "18:00", 101.5).seg("18:00", "24:00", 97.0)
+    mk = early_close(ch)
+    ctx = M.Context(mk)
+    e, last, reopen = m1(mk, "10:05"), m1(mk, "13:29"), m1(mk, "18:00")
+    for rule in ("O2", "O3", "O4"):
+        ex = build(ctx, f"XAUUSDm|M5|ORB|{rule}|F0")
+        assert list(ex.entries.close_gap) == [True] and list(ex.entries.exit_bar) == [bix(ctx, "M5", "13:25")]
+        r = run(mk, ex)
+        assert rows(r) == [(1, e, last, 101.7, 101.5, "signal")] and r.counts["close_gap"] == 1, rule
+        assert rows(run(mk, no_gap(ex))) == [(1, e, reopen, 101.7, 96.8, "gap stop")], rule
+    ch.bar("13:27", l=98.5)                                                 # through the stop 99 before the close
+    mk = early_close(ch)
+    r = run(mk, build(M.Context(mk), "XAUUSDm|M5|ORB|O2|F0"))
+    assert rows(r) == [(1, e, m1(mk, "13:27"), 101.7, 98.8, "stop")] and r.counts["close_gap"] == 0
+    ch = range_99_101(Chart(days=2))
+    ch.seg("10:00", "18:00", 98.5).seg("18:00", "24:00", 102.0)
+    mk = early_close(ch)
+    ctx = M.Context(mk)
+    for cost, out in ((1.0, 98.7), (1.5, 98.8)):
+        r = run(mk, build(ctx, "XAUUSDm|M5|ORB|O2|F0"), cost)
+        assert rows(r) == [(-1, e, last, 98.5, out, "signal")] and r.counts["close_gap"] == 1, cost
+
+
+def test_b_o5_its_trail_cap_on_an_early_close_is_booked_before_the_break():
+    """O5's orders carry ``close_gap``. The buy stop fills at 101.0 inside the 11:02 M1 bar; its trail (from the 11:00
+    bar) never fires, so its exit is the trail's cap, the flat bar (13:25): booked at the 13:29 close, the bid 101.5.
+    Without the flag it is held to the 18:00 reopen at 97.0 and gaps through its stop (99) there (96.8). (One day of
+    bars, to 19:00 New York: a second session's orders would fill on its own touches.)"""
+    ch = range_99_101(Chart())
+    ch.bar("11:02", h=101.3).seg("11:03", "18:00", 101.5).seg("18:00", "24:00", 97.0)
+    mk = early_close(ch)
+    ctx = M.Context(mk)
+    ex = build(ctx, "XAUUSDm|M5|ORB|O5|F0")
+    flat = bix(ctx, "M5", "13:25")
+    assert list(ex.orders.close_gap) == [True] and list(ex.orders.exit_bar) == [flat]
+    assert ex.on_fill(bix(ctx, "M5", "11:00"), 1) == flat
+    r = run(mk, ex)
+    assert rows(r) == [(1, m1(mk, "11:02"), m1(mk, "13:29"), 101.0, 101.5, "signal")] and r.counts["close_gap"] == 1
+    assert rows(run(mk, no_gap(ex))) == [(1, m1(mk, "11:02"), m1(mk, "18:00"), 101.0, 96.8, "gap stop")]
+
+
+def test_b_o5_a_fill_inside_the_flat_bar_of_an_early_close_leaves_at_its_last_m1_close():
+    """The buy stop fills inside the flat bar itself (13:27: the ask high 101.5 reaches 101; the fill at max(101, the
+    ask at the open 100.2) = 101.0). The trail started at the flat bar cannot exit on that bar's own close, so on_fill
+    gives the flat bar (F0: the trail's cap; HV: that bar is LV, 5 ticks against an SMA of 5, which also ends the trade
+    at its close): either way the exit is booked at the 13:29 close (the bid 101.5), where without the flag it would
+    gap through the stop (99) at the 18:00 reopen (97.0: 96.8)."""
+    ch = range_99_101(Chart())
+    ch.bar("13:27", h=101.3).seg("13:28", "18:00", 101.5).seg("18:00", "24:00", 97.0)
+    mk = early_close(ch)
+    ctx = M.Context(mk)
+    flat = bix(ctx, "M5", "13:25")
+    assert not bool(np.asarray(R.orb_output(ctx, "M5")["hv"])[flat])
+    for f in ("F0", "HV"):
+        ex = build(ctx, f"XAUUSDm|M5|ORB|O5|{f}")
+        assert ex.on_fill(flat, 1) == flat and list(ex.orders.close_gap) == [True]
+        r = run(mk, ex)
+        assert rows(r) == [(1, m1(mk, "13:27"), m1(mk, "13:29"), 101.0, 101.5, "signal")], f
+        assert list(r.trades.bar) == [flat] and r.counts["close_gap"] == 1, f
+        assert rows(run(mk, no_gap(ex))) == [(1, m1(mk, "13:27"), m1(mk, "18:00"), 101.0, 96.8, "gap stop")], f
+
+
+def test_b_o5_the_flag_is_the_orders_so_an_earlier_trail_exit_before_a_hole_is_booked_at_its_close():
+    """The harness's flag is per order and covers whichever of the flat bar and ``on_fill``'s trail bar decides the
+    exit, so for O5 (unlike O1, above) a trail exit decided before the flat bar that a data hole follows is booked at
+    that bar's last M1 close, not at the next M1 open after the hole (reading 3 counts where this can happen). s8's
+    trade with the M1 bars from 13:05 to 13:30 missing: the trail fires on the 13:00 bar's close and the exit is
+    booked at the 13:04 close (the bid 100.0); without the flag it fills at the 13:30 open (99.6)."""
+    ch = s8()
+    ch.seg("13:30", "14:00", 99.6)
+    mk = ch.market(keep=~((ch.t >= ny("13:05")) & (ch.t < ny("13:30"))))
+    ctx = M.Context(mk)
+    ex = build(ctx, "XAUUSDm|M5|ORB|O5|F0")
+    assert ex.on_fill(bix(ctx, "M5", "11:00"), 1) == bix(ctx, "M5", "13:00") < R.sessions(ctx, "M5")["flat_bar"][0]
+    r = run(mk, ex)
+    assert rows(r) == [(1, m1(mk, "11:02"), m1(mk, "13:04"), 101.0, 100.0, "signal")] and r.counts["close_gap"] == 1
+    assert rows(run(mk, no_gap(ex))) == [(1, m1(mk, "11:02"), m1(mk, "13:30"), 101.0, 99.6, "signal")]
 
 
 def test_b_event_table_and_warm_describe_the_rows_geometry():
@@ -396,13 +559,20 @@ def test_b_event_table_and_warm_describe_the_rows_geometry():
     t1 = R.event_table(ctx, V("XAUUSDm|M5|ORB|O1|F0"))
     assert list(t1.bar) == [b10, b12] and list(t1.taken) == [True, False] and list(t1.busy) == [False, True]
     assert list(t1.exit_bar) == [b12, -1] and t1.decided.all() and t1.allowed.all()
+    assert list(t1.close_gap) == [False, False]                             # a trail exit before the flat bar
     t4 = R.event_table(ctx, V("XAUUSDm|M5|ORB|O4|F0"))
     assert list(t4.target_k) == [1, 1] and list(t4.target) == [103.0, 97.0] and list(t4.stop) == [99.0, 101.0]
+    assert list(t4.close_gap) == [True, True]
     t5 = R.event_table(ctx, V("XAUUSDm|M5|ORB|O5|F0|TIGHT"))
-    assert len(t5) <= 1 and set(t5.columns) >= {"bar", "placed", "until", "buy", "sell", "exit_bar", "tag"}
+    assert len(t5) <= 1 and set(t5.columns) >= {"bar", "placed", "until", "buy", "sell", "exit_bar", "tag",
+                                                "close_gap"}
+    assert t5.close_gap.all()
     assert "tight" in R.event_table(ctx, V("XAUUSDm|M5|ORB|O1|F0|TIGHT")).columns
     d = R.describe(V("BTCUSDm|M15|ORB|O5|HV"))
     assert "Binance" in d and "stop orders" in d and "16:55" in d
+    # O4's 60 are past sessions with a breakout of the trade's side decided by 16:00 (reading 5), not any sessions
+    assert ("once at least 60 past sessions have a breakout of that side decided by 16:00 New York, else T1"
+            in R.describe(V("XAUUSDm|M5|ORB|O4|F0")))
     assert "COMEX" in R.describe(V("XAUUSDm|M5|ORB|O1|F2-4H|ORB-CX"))
     assert "UTC-5" in R.describe(V("XAUUSDm|M5|ORB|O1|F0|UTC-5"))
     assert "TIGHT" in R.describe(V("XAUUSDm|M5|ORB|O5|F0|TIGHT"))
@@ -810,6 +980,20 @@ def test_d_one_trade_per_side_per_day_for_o1_to_o4_and_one_per_day_for_o5(synth)
         assert ((entry_ny % DAY) // 60 >= 600).all() and ((entry_ny % DAY) // 60 <= R.ENTRY_END).all(), v.id
 
 
+def test_d_close_gap_changes_nothing_where_an_m1_bar_opens_at_every_close(synth):
+    """The synthetic market has an M1 bar at every minute, so no exit decision is followed by a gap: with their
+    ``close_gap`` flags (O1's at its flat exits, every O2-O5 row's) the rows give the trades, counts and marks they
+    give without them."""
+    ctx = synth[0]
+    for vid in ("XAUUSDm|M5|ORB|O1|F0", "XAUUSDm|M15|ORB|O3|F0", "XAUUSDm|M5|ORB|O5|F0", "XAUUSDm|M15|ORB|O5|HV"):
+        ex = build(ctx, vid)
+        flags = ex.entries.close_gap if ex.entries is not None else ex.orders.close_gap
+        assert flags.any(), vid
+        r1, r0 = (M.run_exec(ctx.mk, x, "2019-02-01", "2019-06-01") for x in (ex, no_gap(ex)))
+        assert len(r1.trades) > 20 and r1.trades.equals(r0.trades) and r1.counts == r0.counts, vid
+        assert np.array_equal(r1.ec, r0.ec) and np.array_equal(r1.ew, r0.ew) and r1.counts["close_gap"] == 0, vid
+
+
 # ───────────────────────────── (e) causality ─────────────────────────────
 
 def _known(b, x, upto_s):
@@ -817,25 +1001,37 @@ def _known(b, x, upto_s):
     return np.where((x >= 0) & (b.tc[np.maximum(x, 0)] <= upto_s), x, -1)
 
 
+def _known_gap(flag, known_exit, tag, upto_s):
+    """A row's ``close_gap`` where it is known by ``upto_s``: its exit is known and its session's flat time (16:55 New
+    York of the date ``tag``) has passed, so whether that exit is the flat bar is known; False elsewhere."""
+    tag = np.asarray(tag, np.int64)
+    cut = np.asarray(M.utc_of_ny(tag, R.FLAT_AT), np.int64) if len(tag) else np.zeros(0, np.int64)
+    return np.asarray(flag, bool) & (np.asarray(known_exit) >= 0) & (cut <= upto_s)
+
+
 def decisions(ctx, v, upto_s):
     """Every decision a row takes by ``upto_s``: entries decided at bars closing at or before it (bar, side, levels,
-    tag) with their exit decision when that is known by then (else -1); orders whose post-session bar opens before it
-    (the port counts the session on that bar, opening at the instant the range's last bar closes: the module
-    docstring) with their bar, expiry, levels, tag and exit; and O5's exit for a fill in each bar of the last sessions
-    before ``upto_s``."""
+    tag) with their exit decision when that is known by then (else -1) and its ``close_gap`` once the flat time has
+    passed; orders whose post-session bar opens before it (the port counts the session on that bar, opening at the
+    instant the range's last bar closes: the module docstring) with their bar, expiry, levels, tag, exit and
+    ``close_gap``; and O5's exit for a fill in each bar of the last sessions before ``upto_s``."""
     ex = R.build(v, ctx)
     b = ctx.bars(v.tf)
     if ex.entries is not None:
         E = ex.entries
         m = b.tc[E.bar] <= upto_s
         out = {k: getattr(E, k)[m] for k in ("bar", "side", "stop_level", "target_level", "tag")}
-        out["exit_bar"] = _known(b, E.exit_bar, upto_s)[m]
+        xb = _known(b, E.exit_bar, upto_s)
+        out["exit_bar"] = xb[m]
+        out["close_gap"] = _known_gap(E.close_gap, xb, E.tag, upto_s)[m]
         return out
     O = ex.orders
     assert (O.bar + 1 < len(b)).all() and (b.tc[O.bar] <= b.t[O.bar + 1]).all()
     m = b.t[O.bar + 1] < upto_s
     out = {k: getattr(O, k)[m] for k in ("bar", "until", "buy", "sell", "buy_stop", "sell_stop", "tag")}
-    out["exit_bar"] = _known(b, O.exit_bar, upto_s)[m]
+    xb = _known(b, O.exit_bar, upto_s)
+    out["exit_bar"] = xb[m]
+    out["close_gap"] = _known_gap(O.close_gap, xb, O.tag, upto_s)[m]
     S = R.sessions(ctx, v.tf, v.params["version"])
     js = np.flatnonzero(b.t[S["post_bar"]] < upto_s)[-3:]                  # the sessions counted by then
     fills = []
@@ -1099,6 +1295,7 @@ def test_g_smoke_one_row_of_each_rule_type_runs_on_development_data(symbol, real
     R.warm(ctx, R.variants(symbol))
     a_s = TM.s_of("2019-01-01")
     pats = SMOKE + (SMOKE_GOLD if symbol == "XAUUSDm" else SMOKE_BTC)
+    gaps = 0
     for pat in pats:
         v = V(pat.format(s=symbol))
         ex = R.build(v, ctx)
@@ -1122,10 +1319,17 @@ def test_g_smoke_one_row_of_each_rule_type_runs_on_development_data(symbol, real
         pos = {int(d): i for i, d in enumerate(S["day"])}
         js = np.asarray([pos[int(x)] for x in tr.tag], np.int64)
         flat = S["flat_bar"][js]
-        assert (flat >= 0).all() and (exit_s <= ctx.mk.t[b.ex[flat]]).all(), v.id    # flat by the flat time
-        early = b.tc[flat] < S["flat_cut_s"][js] - 900                      # an early close (e.g. 2019-05-27)
+        # flat by the flat bar's close: at the next M1 open where one opens at that close, else at the flat bar's last
+        # M1 close (close_gap, reading 3), so an early close (e.g. 2019-05-27) is flat before the break too
+        assert (flat >= 0).all() and (exit_s <= b.tc[flat]).all(), v.id
+        early = b.tc[flat] < S["flat_cut_s"][js] - 900
         assert early.sum() <= 3, v.id
-        assert ((x_ny[~early] % DAY) // 60 <= R.FLAT_AT).all() and (x_ny[~early] // DAY == e_ny[~early] // DAY).all()
+        assert ((x_ny % DAY) // 60 <= R.FLAT_AT).all() and (x_ny // DAY == e_ny // DAY).all(), v.id
+        nt = len(ctx.mk.t)                                                  # no M1 bar opens at the flat bar's close:
+        gap = (b.ex[flat] < nt) & (ctx.mk.t[np.minimum(b.ex[flat], nt - 1)] > b.tc[flat])
+        booked = gap & (tr.reason.to_numpy() == "signal") & (exit_s == ctx.mk.t[b.i1[flat]] + 60)
+        assert int(row["n_close_gap"]) == int(booked.sum()), v.id           # booked at its last M1 close
+        gaps += int(row["n_close_gap"])
         if rule == "O5":
             assert (tr.groupby("tag").size() <= 1).all() and int(row["n_unfilled"]) >= 0
             start = 530 if v.params["version"] == "ORB-CX" else 600
@@ -1148,6 +1352,8 @@ def test_g_smoke_one_row_of_each_rule_type_runs_on_development_data(symbol, real
                 assert set(tr.reason) <= REASONS["O2"]
         if v.params["filter"] == "LO":
             assert (tr.side == 1).all()
+    # gold's early closes of 2019-H1 (US holidays) leave trades flat before the break; BTC has no such day there
+    assert gaps > 0 if symbol == "XAUUSDm" else gaps == 0
     # the claims' geometry runs on the real bars (counts only)
     monkeypatch.setitem(M.WINDOWS, "dev", ("2019-01-01", "2019-04-01"))
     monkeypatch.setitem(M.WINDOWS, "val", ("2019-04-01", "2019-07-01"))

@@ -52,6 +52,30 @@ How an Exec is executed (PREREG 4; DEVIATIONS 1-7 of study 1 hold unchanged)
   fill, |fill - L|; an entry whose fill is at or beyond its stop or any of its targets is dropped; a tightened stop is
   applied only below the bid (long) / above the ask (short) at the open of the M1 bar that executes it, otherwise it
   becomes a market exit at that open; the x1.5 run recomputes every fill, distance and comparison on its own spreads.
+* Exits before a gap (``close_gap``, a flag per entry / order row; harness reading 15 of this study's DEVIATIONS). A
+  row's own fixed exit decision, the close of bar xb (its ``exit_bar``; for an order the earlier of that and
+  ``on_fill``'s, at the earliest the fill's bar), fills at the open of ``bars.ex[xb]``. When the market closes early
+  that open is the reopen, and PREREG 6.5's "flat at the last chart-bar close at or before 16:55 New York" would be
+  held over the break. With ``close_gap`` True, when that decision is what ends the position (no exit mask and no
+  crossed tightening ends it first) and no M1 bar opens at the bar's close (``cm.t[bars.ex[xb]] > bars.tc[xb]``: an
+  early close, a weekend, a data hole), the exit is booked at the close of the bar's last M1 bar, ``bars.i1[xb]``,
+  instead: at the bid of that close for a long, the ask for a short, with no extra spread. It is the run of a position
+  still open at a window's end (the position's run simply ends after that M1 bar, and ``external._path_kernel`` closes
+  it at that close), so a stop or a target touched before the close wins, every leg still open ends there, the marks
+  and the accounts hold the position through that M1 bar, and the next candidate may fill from the next M1 bar (the
+  reopen) on. The trade row reads as a time exit: reason 'signal' (``X.WHY_SIGNAL``'s), exit time that M1 bar's close,
+  ``exit_ix`` that bar. The path keeps ``X.WHY_END``, because every mark and account kernel (study 1's
+  ``_unit_marks``, ``_sum_marks`` here, ``external._account_kernel``, ``balke._multi_kernel``, the driver's sizing)
+  reads a signal exit as one at a bar's open, and the position is held through that bar. ``Run2.counts['close_gap']``
+  counts the positions it closed. Not a gap: an M1 bar opening at the bar's close, and the end of the data held (no M1
+  bar after the bar at all). A bar whose last M1 bar is past the window is closed by the window's end, as before.
+  When an exit mask falls on the row's own exit bar, the row's own exit decides, so it is booked at the close too; a
+  window end inside the gap after the own exit bar only renames that window-end exit 'signal' and counts it (the
+  price and P/L are the same). Otherwise exit masks, tightenings and stops are unaffected; without a gap, or with the
+  flag False, nothing changes. What it takes as known: whether an M1 bar opens at that close shows in the bars only
+  at the reopen, and the booking takes it as known at the close. For gold's early closes that is the published
+  trading schedule; a hole in the data (BTC's, and one gold session to 2024-06-30 missing the M1 bar at the flat
+  bar's close) could not be known then.
 * Legs (PREREG 4's partial exits): weights summing to 1, identical entries (an entry is taken when every leg is flat),
   each leg its own target or break-even. P/L is the weighted sum; the drawdown is measured on the summed M1 marks.
 * Lanes (Session Hunter's presets): several single-position Execs whose results are summed; the account is
@@ -64,9 +88,9 @@ The API at a glance (what the rule modules use)
     ctx.get(module, tf, params, fn)          # the indicator cache, keyed by (module, symbol, tf, params)
     ex = state_exec(tf, state, stop=None, target_r=.., be_r=.., legs=.., exit_long=.., tighten_long=.., ...)
     ex = event_exec(tf, entries=entries(bar, side, stop_level=.., stop_dist=.., target_level=.., target_r=..,
-                                        be_r=.., exit_bar=.., risk=.., tag=..), legs=.., exit_long=.., ...)
+                                        be_r=.., exit_bar=.., risk=.., tag=.., close_gap=..), legs=.., exit_long=..)
     ex = event_exec(tf, orders=orders(bar, until, buy=.., sell=.., buy_stop=.., sell_stop=.., buy_target=..,
-                                      target_r=.., exit_bar=..), on_fill=.., fill_long=.., ...)
+                                      target_r=.., exit_bar=.., close_gap=..), on_fill=.., fill_long=.., ...)
     ex = lanes_exec([ex_a, ex_b, ...])
     r = run_exec(mk, ex, start, end, cost=1.0)       # a Run2; metrics(r), scores(r), r_stats(r), account_curve(r)
     res = run_variant(ctx, Variant(...), ex)         # rows per window (dev, val, devval) at x1.0 and x1.5
@@ -677,6 +701,16 @@ def _at_most_one(cols: Sequence[np.ndarray], names: Sequence[str], what: str) ->
         raise ValueError(f"{what}: more than one of {', '.join(names)} given (row {int(np.flatnonzero(both)[0])})")
 
 
+def _flags(x, n: int, name: str) -> np.ndarray:
+    """A True / False column of ``n`` rows: None = all False, a scalar is broadcast; bools, or the integers 0 and 1."""
+    if x is None:
+        return np.zeros(n, np.bool_)
+    a = np.asarray(x)
+    if a.dtype.kind not in "biu" or (a.dtype.kind != "b" and not np.isin(a, (0, 1)).all()):
+        raise ValueError(f"{name}: True or False per row (or one value for all)")
+    return _col(a, n, np.bool_, name, False)
+
+
 @dataclass(eq=False)
 class Entries:
     """
@@ -689,7 +723,12 @@ class Entries:
     each M1 bar after its stop and target; it applies from the next M1 bar). ``exit_bar``: the first exit decision of
     this entry's own (a time stop = the close of bar k, an exit signal at a later close; -1 none); it must be later than
     ``bar``. ``risk``: a price distance used as the trade's R when it has no stop (NaN: the stop distance). ``tag``: the
-    rule's own integer per entry (a setup, a campaign), carried to the trades.
+    rule's own integer per entry (a setup, a campaign), carried to the trades. ``close_gap`` (True / False, default
+    False): when the row's ``exit_bar`` is what ends the position and no M1 bar opens at that bar's close (an early
+    close, a weekend, a data hole: ``bars.ex[exit_bar]`` is the reopen), the exit is booked at the close of the bar's
+    last M1 bar (``bars.i1[exit_bar]``, the bid for a long, the ask for a short) as a position still open at a
+    window's end, not at the reopen; the trade row reads as a time exit ('signal'). A stop or a target touched before
+    that close wins; exit masks and tightenings are unaffected (the module docstring has the whole reading).
     """
     bar: np.ndarray
     side: np.ndarray
@@ -702,6 +741,10 @@ class Entries:
     exit_bar: np.ndarray
     risk: np.ndarray
     tag: np.ndarray
+    close_gap: Optional[np.ndarray] = None          # None: all False (a table built before the flag existed)
+
+    def __post_init__(self) -> None:
+        self.close_gap = _flags(self.close_gap, len(self.bar), "close_gap")
 
     def __len__(self) -> int:
         return int(len(self.bar))
@@ -712,8 +755,10 @@ class Entries:
 
 
 def entries(bar, side, *, stop_level=None, stop_dist=None, target_level=None, target_dist=None, target_r=None,
-            be_r=None, exit_bar=None, risk=None, tag=None) -> Entries:
-    """Build and check an ``Entries`` table; scalars are broadcast, NaN (or -1 for ``exit_bar``) means "none"."""
+            be_r=None, exit_bar=None, risk=None, tag=None, close_gap=None) -> Entries:
+    """Build and check an ``Entries`` table; scalars are broadcast, NaN (or -1 for ``exit_bar``) means "none".
+    ``close_gap``: True / False per row or one for all (None: False): book the row's own ``exit_bar`` at the last M1
+    close before a gap instead of at the reopen (``Entries``; harness reading 15)."""
     bar = np.asarray(bar, np.int64).ravel()
     n = len(bar)
     side = _col(side, n, np.int64, "side", 0)
@@ -732,7 +777,7 @@ def entries(bar, side, *, stop_level=None, stop_dist=None, target_level=None, ta
     xb = _col(exit_bar, n, np.int64, "exit_bar", -1)
     if np.any((xb >= 0) & (xb <= bar)) or np.any(xb < -1):
         raise ValueError("exit_bar must be -1 or later than the entry's bar")
-    return Entries(bar=bar, side=side, exit_bar=xb, tag=_col(tag, n, np.int64, "tag", 0), **f)
+    return Entries(bar=bar, side=side, exit_bar=xb, tag=_col(tag, n, np.int64, "tag", 0), close_gap=close_gap, **f)
 
 
 @dataclass(eq=False)
@@ -749,6 +794,8 @@ class Orders:
     ``target_r``. ``be_r``, ``exit_bar``, ``risk``, ``tag`` as for ``Entries``; a fixed ``exit_bar`` before the fill's
     bar exits at the close of the fill's bar. Each order fills at most once. A newer order replaces an older one that
     has not filled; an order placed while a position is open becomes active when it closes (until ``until``).
+    ``close_gap`` as for ``Entries``, for the order's own fixed exit: the earlier of ``exit_bar`` and the bar
+    ``on_fill`` returns, at the earliest the fill's bar (a fill in the last M1 bar before a gap exits at its close).
     """
     bar: np.ndarray
     until: np.ndarray
@@ -765,6 +812,10 @@ class Orders:
     exit_bar: np.ndarray
     risk: np.ndarray
     tag: np.ndarray
+    close_gap: Optional[np.ndarray] = None          # None: all False (a table built before the flag existed)
+
+    def __post_init__(self) -> None:
+        self.close_gap = _flags(self.close_gap, len(self.bar), "close_gap")
 
     def __len__(self) -> int:
         return int(len(self.bar))
@@ -776,8 +827,10 @@ class Orders:
 
 def orders(bar, until, *, buy=None, sell=None, buy_stop=None, sell_stop=None, stop_dist=None, buy_target=None,
            sell_target=None, target_dist=None, target_r=None, be_r=None, exit_bar=None, risk=None,
-           tag=None) -> Orders:
-    """Build and check an ``Orders`` table; scalars are broadcast, NaN (or -1 for ``exit_bar``) means "none"."""
+           tag=None, close_gap=None) -> Orders:
+    """Build and check an ``Orders`` table; scalars are broadcast, NaN (or -1 for ``exit_bar``) means "none".
+    ``close_gap``: True / False per row or one for all (None: False): book the order's own fixed exit (``exit_bar`` or
+    ``on_fill``'s) at the last M1 close before a gap instead of at the reopen (``Orders``; harness reading 15)."""
     bar = np.asarray(bar, np.int64).ravel()
     n = len(bar)
     if isinstance(until, (str, int, np.integer, pd.Timestamp)):
@@ -807,7 +860,8 @@ def orders(bar, until, *, buy=None, sell=None, buy_stop=None, sell_stop=None, st
     xb = _col(exit_bar, n, np.int64, "exit_bar", -1)
     if np.any((xb >= 0) & (xb <= bar)) or np.any(xb < -1):
         raise ValueError("exit_bar must be -1 or later than the order's bar")
-    return Orders(bar=bar, until=until, exit_bar=xb, tag=_col(tag, n, np.int64, "tag", 0), **f)
+    return Orders(bar=bar, until=until, exit_bar=xb, tag=_col(tag, n, np.int64, "tag", 0), close_gap=close_gap,
+                  **f)
 
 
 @dataclass(frozen=True, eq=False)
@@ -849,7 +903,8 @@ class Exec:
       bar), ``legs``, ``exit_long`` / ``exit_short`` and the tightening arrays (below). After an overlay exit the
       state rule stays flat until its state changes.
     * EVENTS: ``entries`` (market entries) or ``orders`` (stop-entry orders), not both; one position at a time; a
-      candidate arriving while a position is open is skipped ("an event rule waits for its next event").
+      candidate arriving while a position is open is skipped ("an event rule waits for its next event"). A row with
+      ``close_gap`` has its own fixed exit booked at the last M1 close before a gap (``Entries``; harness reading 15).
     * LANES: ``lanes``, single-position STATE / EVENTS Execs of one symbol executed independently and summed.
 
     Per-signal-bar overlays (STATE and EVENTS): ``exit_long[b]`` / ``exit_short[b]`` close an open long / short at the
@@ -915,7 +970,10 @@ def state_exec(tf: str, state, stop=None, *, target_r=None, be_r=None, legs=None
 def event_exec(tf: str, entries: Optional[Entries] = None, orders: Optional[Orders] = None, *, legs=None,
                exit_long=None, exit_short=None, tighten_long=None, tighten_short=None, tighten_be=None,
                on_fill=None, fill_long=None, fill_short=None, label: str = "") -> Exec:
-    """An EVENTS Exec (see ``Exec``): market ``entries`` or stop-entry ``orders`` of timeframe ``tf``."""
+    """An EVENTS Exec (see ``Exec``): market ``entries`` or stop-entry ``orders`` of timeframe ``tf``. A row whose
+    ``close_gap`` is True has its own fixed exit (``exit_bar``; for orders also ``on_fill``'s) booked at the close of
+    that bar's last M1 bar when no M1 bar opens at the bar's close, instead of at the reopen; the per-bar overlays
+    given here (exit masks, tightenings) and the stops are unaffected (module docstring, harness reading 15)."""
     if (entries is None) == (orders is None):
         raise ValueError("an event Exec has entries or orders (one of them; lanes can mix)")
     if on_fill is not None and orders is None:
@@ -1050,7 +1108,10 @@ class Run2(TM.Run):
     position (legs combined: weighted P/L, the last leg's exit and reason, every leg's reason in ``reasons``) and the
     columns ``risk`` (the initial risk distance, price; NaN without a stop) and ``r`` (P/L over the risk in dollars),
     ``tag``, ``bar`` (the decision bar of the entry; for orders the bar of the fill) and ``lane``. ``path`` is the
-    single-position path, or a guard object when there are several legs or lanes.
+    single-position path, or a guard object when there are several legs or lanes. A close_gap exit (harness reading
+    15) reads 'signal' in ``trades`` (``reason`` / ``reasons``), with the exit time of the M1 bar's close it was booked
+    at; its paths (``path``, ``legs``) keep ``X.WHY_END`` at that bar, which every mark and account kernel reads as an
+    exit at the bar's close; ``counts['close_gap']`` counts those positions.
     """
     kind: str = "state"
     legs: Tuple[Tuple[float, X.Path_], ...] = ()
@@ -1227,8 +1288,9 @@ CHUNK = 1 << 15                     # M1 bars a position without an exit decisio
 #   unfilled        orders that expired (or were replaced) without a fill
 #   tighten_rows    stop tightenings applied while the position was open
 #   tighten_exits   tightenings already crossed at their open that closed the position there (PREREG 4)
+#   close_gap       positions a close_gap row's own exit closed at the last M1 close before a gap (harness reading 15)
 COUNT_KEYS = ("candidates", "taken", "busy", "dropped_stop", "dropped_target", "unfilled", "tighten_rows",
-              "tighten_exits")
+              "tighten_exits", "close_gap")
 
 
 class _Sim:
@@ -1246,7 +1308,7 @@ class _Sim:
         self.ms = self.ones if ex.fill_short is None else self._m1_mask(ex.fill_short, "fill_short")
         self.free = ia
         self.out = [{k: [] for k in ("dir", "eix", "epx", "xix", "xpx", "why", "risk")} for _ in self.legs]
-        self.meta = {k: [] for k in ("tag", "bar")}
+        self.meta = {k: [] for k in ("tag", "bar", "gap")}       # gap: the M1 bar of a close_gap exit (-1 none)
         self.counts = {k: 0 for k in COUNT_KEYS}
 
     def _m1_mask(self, x, name: str) -> np.ndarray:
@@ -1292,22 +1354,55 @@ class _Sim:
         if crossed and any(int(p.xix[0]) == int(self.bars.ex[xb]) and int(p.why[0]) == X.WHY_SIGNAL for p in ps):
             self.counts["tighten_exits"] += 1
 
+    def _gap_exit(self, xb: int, jf: int) -> int:
+        """
+        Where a close_gap row's own exit decision at the close of bar ``xb`` is booked (harness reading 15): the M1
+        bar ``bars.i1[xb]``, at whose close it is booked, when no M1 bar opens at the bar's close (the bar that would
+        execute the exit, ``bars.ex[xb]``, opens after ``bars.tc[xb]``: an early close, a weekend, a data hole) and that
+        M1 bar is inside the window; -1 otherwise: an M1 bar opening at the close (no gap: the exit fills at its open as
+        before), no M1 bar after the bar in the data held (their end, not a gap), or the bar's last M1 bar past the
+        window (the window's end closes the position, as before). ``jf``: the position's fill M1 bar, which that close
+        cannot precede (``xb`` is later than an entry's bar, and never before an order fill's bar).
+        """
+        b, t = self.bars, self.cm.t
+        jx = int(b.ex[xb])
+        if jx >= len(t) or int(t[jx]) <= int(b.tc[xb]):
+            return -1
+        x = int(b.i1[xb])
+        if not x < jx:
+            raise AssertionError(f"bar {xb}: its last M1 bar is not before the M1 bar that executes its close")
+        if x >= self.iz:
+            return -1
+        if x < jf:
+            raise AssertionError(f"a close_gap exit at the close of {utc(t[x])} comes before the position's fill at "
+                                 f"{utc(t[jf])}")
+        return x
+
     def _plan(self, j: int, entry: Dict[str, float], rows: List[Tuple[int, float]], xb: int, d: int,
-              order: Optional[Dict[str, float]] = None) -> Tuple[X.PathPlan, Optional[int]]:
+              order: Optional[Dict[str, float]] = None, gap_ix: int = -1) -> Tuple[X.PathPlan, Optional[int]]:
         """The position's plan: the entry (or order) row at M1 bar ``j``, the tightening rows, the exit row (at
-        ``bars.ex[xb]`` when that is inside the window). Returns the plan and the run's end (None: no exit row)."""
+        ``bars.ex[xb]`` when that is inside the window). With ``gap_ix`` >= 0 (a close_gap exit, ``_gap_exit``) there
+        is no exit row: the run ends after M1 bar ``gap_ix`` and ``external._path_kernel``'s end-of-period exit closes
+        what is still open at that bar's close (``X.WHY_END``), exactly as at a window's end. Returns the plan and the
+        run's end (None: no exit row, the window's end)."""
         t, ex_ = self.cm.t, self.bars.ex
         z = None
         dx = [j] + [jb for jb, _ in rows]
-        if xb < self.n and int(ex_[xb]) < self.iz:
+        exit_row = False
+        if gap_ix >= 0:
+            if max(dx) > gap_ix:
+                raise AssertionError("a row of the position's plan executes after its close_gap exit")
+            z = gap_ix + 1
+        elif xb < self.n and int(ex_[xb]) < self.iz:
             dx.append(int(ex_[xb]))
             z = int(ex_[xb]) + 1
+            exit_row = True
         K = len(dx)
         dt = t[np.asarray(dx, np.int64)]
         want = np.zeros(K, np.int64)
         xl = np.zeros(K, np.bool_)
         xs = np.zeros(K, np.bool_)
-        if z is not None:
+        if exit_row:
             xl[-1], xs[-1] = d == 1, d == -1
         f = {k: np.full(K, np.nan) for k in ("sl", "tp", "tpr", "ber", "rk", "trl", "trs", "bstop", "sstop",
                                              "bsl", "ssl")}
@@ -1375,7 +1470,9 @@ class _Sim:
             out.append(f)
         return out
 
-    def _book(self, ps: List[X.Path_], tag: int, bar: int) -> None:
+    def _book(self, ps: List[X.Path_], tag: int, bar: int, gap_ix: int = -1) -> None:
+        """Book a position's legs. The next candidate may fill at the M1 bar of an exit at an open, else from the bar
+        after its exit; a close_gap exit (``gap_ix``) is an exit at that bar's close (``X.WHY_END``): from the next."""
         free = 0
         for q, p in enumerate(ps):
             o = self.out[q]
@@ -1386,7 +1483,10 @@ class _Sim:
         self.free = free
         self.meta["tag"].append(tag)
         self.meta["bar"].append(bar)
+        self.meta["gap"].append(gap_ix)
         self.counts["taken"] += 1
+        if gap_ix >= 0 and any(int(p.why[0]) == X.WHY_END and int(p.xix[0]) == gap_ix for p in ps):
+            self.counts["close_gap"] += 1
 
     def _needs_stop(self, sl: float, legs_f: List[Dict[str, float]]) -> None:
         if not math.isfinite(sl) and any(("tpr" in f) or ("ber" in f) for f in legs_f):
@@ -1426,21 +1526,24 @@ class _Sim:
                 self.counts["dropped_target"] += 1
                 continue
             self._needs_stop(sl, legs_f)
-            xb = int(E.exit_bar[c]) if E.exit_bar[c] >= 0 else self.n
-            xb = min(xb, int(self.ov.nxt[d][e + 1]))
+            own = int(E.exit_bar[c]) if E.exit_bar[c] >= 0 else self.n       # the row's own fixed exit (n: none)
+            xb = min(own, int(self.ov.nxt[d][e + 1]))
             rows, xb, crossed = self._rows_after(d, fill, e + 1, xb)
+            # close_gap: only when the row's own exit is what ends the position (an exit mask or a crossed
+            # tightening that ends it first fills at its open as before)
+            gx = self._gap_exit(xb, j) if (E.close_gap[c] and own < self.n and xb == own) else -1
             base = {"sl": sl}
             if math.isfinite(E.risk[c]):
                 base["rk"] = float(E.risk[c])
             ps = []
             for f in legs_f:
-                plan, z = self._plan(j, {**base, **f}, rows, xb, d)
+                plan, z = self._plan(j, {**base, **f}, rows, xb, d, gap_ix=gx)
                 p = self._run(plan, j, z)
                 if int(p.eix[0]) != j or float(p.epx[0]) != fill or int(p.dir[0]) != d:
                     raise AssertionError("a market entry did not fill at its bar's open")
                 ps.append(p)
             self._count_tight(rows, xb, crossed, ps)
-            self._book(ps, int(E.tag[c]), e)
+            self._book(ps, int(E.tag[c]), e, gx)
 
     def orders(self, O: Orders, a_s: int) -> None:
         bars, cm, t = self.bars, self.cm, self.cm.t
@@ -1499,20 +1602,22 @@ class _Sim:
                         raise ValueError(f"on_fill returned exit bar {xf} before the fill's bar {bf}")
                     xb = min(xb, xf)
             xb = max(xb, bf)
+            own = xb                                    # the order's own fixed exit: exit_bar or on_fill's (n: none)
             xb = min(xb, int(self.ov.nxt[d][bf]))
             rows, xb, crossed = self._rows_after(d, fill, bf, xb)
+            gx = self._gap_exit(xb, jf) if (O.close_gap[c] and own < self.n and xb == own) else -1
             base = dict(order)
             if math.isfinite(O.risk[c]):
                 base["rk"] = float(O.risk[c])
             ps = []
             for f in legs_f:
-                plan, z = self._plan(j0, {}, rows, xb, d, order={**base, **f})
+                plan, z = self._plan(j0, {}, rows, xb, d, order={**base, **f}, gap_ix=gx)
                 p = self._run(plan, j0, z)
                 if int(p.eix[0]) != jf or float(p.epx[0]) != fill or int(p.dir[0]) != d:
                     raise AssertionError("a stop order did not fill as in its first pass")
                 ps.append(p)
             self._count_tight(rows, xb, crossed, ps)
-            self._book(ps, int(O.tag[c]), bf)
+            self._book(ps, int(O.tag[c]), bf, gx)
 
     def paths(self) -> List[X.Path_]:
         """Per leg, the positions as an ``external.Path_`` (one leg per trade), before the stop slippage."""
@@ -1598,6 +1703,25 @@ def _with_r(tr: pd.DataFrame, risk: np.ndarray, k: float) -> pd.DataFrame:
     return tr
 
 
+def _gap_exits(p: X.Path_, gap: Optional[np.ndarray]) -> np.ndarray:
+    """Per trade of the leg path ``p`` (one per position): True where a close_gap exit closed it, i.e. its exit is
+    the end-of-run exit (``X.WHY_END``) at the M1 bar its position's close_gap booked (``gap``, -1 none)."""
+    if gap is None or len(p) == 0:
+        return np.zeros(len(p), bool)
+    gap = np.asarray(gap, np.int64)
+    return (gap >= 0) & (p.why == X.WHY_END) & (p.xix == gap)
+
+
+def _as_time_exits(tr: pd.DataFrame, mask: np.ndarray) -> pd.DataFrame:
+    """The trade rows of close_gap exits (``mask``) read as time exits: reason 'signal' (``X.WHY_SIGNAL``'s name).
+    Their exit price, time (the M1 bar's close) and ``exit_ix`` are those of the close they were booked at."""
+    if len(mask) and bool(np.any(mask)):
+        reason = tr["reason"].to_numpy(dtype=object).copy()
+        reason[mask] = TM.REASONS[X.WHY_SIGNAL]
+        tr["reason"] = reason
+    return tr
+
+
 def _run_single(mk: TMarket2, ex: Exec, bars: TM.TBars, a_s: int, z_s: int, ia: int, iz: int, cost: float) -> Run2:
     """One STATE or EVENTS Exec over one window (see ``run_exec``)."""
     cm = mk.costed(cost)
@@ -1624,15 +1748,16 @@ def _run_single(mk: TMarket2, ex: Exec, bars: TM.TBars, a_s: int, z_s: int, ia: 
     weights = [float(g.weight) for g in sim.legs]
     tags = np.asarray(sim.meta["tag"], np.int64)
     bar_of = np.asarray(sim.meta["bar"], np.int64)
+    gap = np.asarray(sim.meta["gap"], np.int64)
     stopped = _has_stop(ex)
     if len(paths) == 1:
         p = paths[0]
         ec, ew, pos, bal, maxdd = TM._unit_marks(cm.c, cm.h, cm.l, cm.sp, cm.k, p.dir, p.eix, p.xix, p.epx, p.xpx,
                                                  p.why, ia, iz)
-        tr = _with_r(TM._trades(cm, p), p.risk, cm.k)
+        tr = _as_time_exits(_with_r(TM._trades(cm, p), p.risk, cm.k), _gap_exits(p, gap))
         path = p
     else:
-        tr, ec, ew, pos, bal, maxdd = _combine_legs(cm, paths, weights, ia, iz)
+        tr, ec, ew, pos, bal, maxdd = _combine_legs(cm, paths, weights, ia, iz, gap)
         path = _NoSinglePath()
     tr["tag"], tr["bar"], tr["lane"] = tags, bar_of, 0
     net = float(bal)
@@ -1668,11 +1793,13 @@ def _marks(cm: TM.TMarket, parts: Sequence[Tuple[float, X.Path_]], ia: int, iz: 
                       f["xpx"].astype(np.float64), f["why"].astype(np.int64), int(ia), int(iz))
 
 
-def _combine_legs(cm: TM.TMarket, paths: Sequence[X.Path_], weights: Sequence[float], ia: int, iz: int):
+def _combine_legs(cm: TM.TMarket, paths: Sequence[X.Path_], weights: Sequence[float], ia: int, iz: int,
+                  gap: Optional[np.ndarray] = None):
     """One trades row per position from its legs (identical entries; ``tradeiq_market._trades`` per leg): the weighted
     P/L, slippage and exit price, the exit time, bar and reason of the last leg out (a tie: the later leg), every leg's
-    reason in ``reasons``; and the marks of the weighted sum (``_sum_marks``)."""
-    per = [TM._trades(cm, p) for p in paths]
+    reason in ``reasons`` (a leg a close_gap exit closed, ``gap`` per position, reads 'signal'); and the marks of the
+    weighted sum (``_sum_marks``)."""
+    per = [_as_time_exits(TM._trades(cm, p), _gap_exits(p, gap)) for p in paths]
     n = len(per[0])
     if any(len(x) != n for x in per) or any(not np.array_equal(p.eix, paths[0].eix) for p in paths) or \
             any(not np.array_equal(p.epx, paths[0].epx) for p in paths):

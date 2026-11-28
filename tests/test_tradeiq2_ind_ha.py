@@ -40,6 +40,10 @@ reconciliation of its two independent ports. The notes for readers are ``backtes
    Heikin Ashi shapes (ties, zero ranges, dojis after STRONG runs, WEAK runs), random inputs inside the script's input
    ranges (l.20-28) and the plan's minimum, small private caps below and above the minimum, and series of 0 to 9
    bars: bit for bit. Bad bars and inputs are refused alike.
+4. All history (``keep=None``, what study 2's rule module reads; DEVIATIONS HA-R10): port A's public
+   ``heikin_ashi(..., keep=None)`` against port B's ``_transcribe(..., keep=None)``, bit for bit, on synthetic bars
+   with more than 5,000 finished streaks of each colour and on the study's 1H bars of both symbols from the data start
+   to 2024-06-30, where the cap binds (on 4H and 1D it never does, so ``keep=None`` equals the reconciled default).
 
 Line numbers l. are those of the plain-text copy of the script the study ported from (third-party code, cited,
 never copied).
@@ -589,3 +593,108 @@ def test_the_two_ports_refuse_bad_bars_and_inputs_alike():
     for got in (A.heikin_ashi(*lists, ahead_n=5.0, rare_pct=np.int64(90)), B.heikin_ashi(*lists, ahead_n=5.0,
                                                                                           rare_pct=np.int64(90))):
         assert not identical(got, want)
+
+
+# ───────────────────────────── 4. all history: keep=None, what the study-2 rule module reads ─────────────────────────
+#
+# PREREG 6.8 computes the streak statistics "using all history from the data start". Port A's contract keeps the
+# script's cap of 5,000 lengths per colour (KEEP, the default, which study 3 calls); the rule module
+# (backtesting/research/tradeiq2_rules_ha.py: the HA-MANAGED and HA-ENTRY rows and claim 5) calls the public
+# ``heikin_ashi(..., keep=None)``, which forwards to the reconciled ``_heikin_ashi(..., keep=None)`` path. Port B's
+# private ``_transcribe(..., keep=None)`` is its oracle: synthetic bars here, and the study's 1H bars of both symbols
+# from the data start to 2024-06-30, where the cap binds (1H only; gold from 2022-11-28, BTC from 2022-04-21).
+
+RULE_KEYS = ("dir", "flip", "age", "ev_ind", "weak_run", "ev_first_strong", "rare_now")   # what the rule module reads
+
+
+def test_keep_none_bit_for_bit_on_synthetic_bars():
+    """Port A with keep=None against port B with keep=None: random walks (plain, rounded, with flat runs), exact
+    shapes and random inputs inside the script's ranges, where the cap cannot bind (keep=None equals KEEP there), and
+    one long series where it binds: 50 bullish streaks of 4 candles and 4,960 of 1, each followed by one bearish
+    candle, then a bullish streak of 5 (5,010 finished streaks of each colour). There, at the last streak's ages 2-4,
+    4,960 of the 5,010 finished bullish streaks are shorter (99.0 %) against 4,960 of the last 5,000 kept (99.2 %);
+    both are rare ages at age 2, so only the percentile moves. Bit for bit, every key and the streak table."""
+    rng = np.random.default_rng(31)
+    for case in range(16):
+        kind = ("walk", "round", "flat", "shapes")[case % 4]
+        n = int(rng.choice([60, 400, 1500, 3000]))
+        bars = random_shapes(rng, n) if kind == "shapes" else walk(rng, n, kind)
+        p = {} if case % 5 == 0 else random_inputs(rng)
+        ra, rb = A.heikin_ashi(*bars, keep=None, **p), B._transcribe(*bars, keep=None, **p)
+        bad = identical(ra, rb)
+        assert not bad, (case, kind, n, p, {k: first_differences(ra, rb, k) for k in bad if k != "keys"})
+        assert not identical(ra, A.heikin_ashi(*bars, **p))                  # the cap does not bind here
+        assert not identical(A.heikin_ashi(*bars, keep=A.KEEP, **p), A.heikin_ashi(*bars, **p))
+    bars = runs_of([4, 1] * 50 + [1, 1] * 4960 + [5])
+    n = len(bars[0])
+    assert n == 50 * 5 + 4960 * 2 + 5
+    ra, rb = A.heikin_ashi(*bars, keep=None), B._transcribe(*bars, keep=None)
+    bad = identical(ra, rb)
+    assert not bad, {k: first_differences(ra, rb, k) for k in bad if k != "keys"}
+    st = ra["streaks"]
+    assert int((st["dir"] == 1).sum()) == int((st["dir"] == -1).sum()) == 5010 > A.KEEP
+    cap = A.heikin_ashi(*bars)
+    assert identical(ra, cap) == ["pct_below"] and identical(cap, B.heikin_ashi(*bars)) == []
+    assert ra["pct_below"][n - 5:].tolist() == [0.0] + [100.0 * 4960 / 5010] * 3 + [100.0]
+    assert cap["pct_below"][n - 5:].tolist() == [0.0] + [100.0 * 4960 / 5000] * 3 + [100.0]
+    assert np.flatnonzero(ra["rare_now"][n - 5:]).tolist() == [1] == np.flatnonzero(cap["rare_now"][n - 5:]).tolist()
+
+
+@pytest.fixture(scope="module")
+def real_1h(tmp_path_factory):
+    """Per symbol: the study's 1H bars from its data start to 2024-06-30, read as ``real`` reads them (the M1 bars of
+    ``external.load_market(..., end="2024-07-01")``, study 1's ``TMarket.tbars``, the guards pointed at an empty
+    folder; only 1H is built, and the M1 bars are released at once), with port A and port B at keep=None and port A at
+    the contract's KEEP."""
+    closed = tmp_path_factory.mktemp("closed_study_keep_none")
+    cache = {}
+
+    def get(symbol):
+        if symbol in cache:
+            return cache[symbol]
+        start = TM2.data_start(symbol)
+        months = store.available_months(symbol)
+        if (2024, 6) not in months or (int(start[:4]), int(start[5:7])) not in months:
+            pytest.skip(f"the tick store of {symbol} is not on this machine")
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(TM, "STUDY_DIR", closed)
+            mp.setattr(TM2, "STUDY_DIR", closed)
+            mp.delenv("ALCADEIAS_STORE_DIR", raising=False)
+            m = X.load_market(symbol, earliest=start, end="2024-07-01")
+            mk = TM.TMarket(symbol, {"t": m.t, "o": m.o, "h": m.h, "l": m.l, "c": m.c, "spread_mean": m.sp,
+                                     "n": m.n}, TM.CUT_S)
+            del m
+            assert int(mk.t[-1]) + 60 <= TM.CUT_S                      # nothing from the hold-out is in memory
+            iz = int(np.searchsorted(mk.t, TM.s_of(DEV[1]), side="left"))
+            b = mk.tbars("1H")
+            out = NS(t=b.t.copy(), tc=b.tc.copy(), o=b.o.copy(), h=b.h.copy(), l=b.l.copy(), c=b.c.copy(),
+                     dev=(b.tc > TM.s_of(DEV[0])) & (b.ex < iz), val=b.tc > TM.s_of(VAL_START))
+            del mk, b
+        out.a = A.heikin_ashi(out.o, out.h, out.l, out.c, keep=None)
+        out.b = B._transcribe(out.o, out.h, out.l, out.c, keep=None)
+        out.cap = A.heikin_ashi(out.o, out.h, out.l, out.c)
+        cache[symbol] = out
+        return out
+    return get
+
+
+@pytest.mark.parametrize("symbol", SYMS)
+def test_real_1h_bars_keep_none_bit_for_bit(symbol, real_1h):
+    """On the study's 1H bars of gold (from 2016-01-03) and BTC (from 2018-01-01) to 2024-06-30, where more than 5,000
+    streaks of each colour finish: port A with keep=None equals port B with keep=None bit for bit, on every key of the
+    contract (those the rule module reads, ``RULE_KEYS``, among them) and on the streak table. Against the contract's
+    cap only the percentile moves, on the recorded Development / Validation bars (``_NO_CAP_PCT_DIFF``); the rare age
+    moves on no bar, so no M4 exit moves (counts only, no rule is run)."""
+    b = real_1h(symbol)
+    assert int(b.tc[-1]) <= TM.CUT_S and len(b.c) > 40000
+    assert set(RULE_KEYS) <= set(ARRAY_KEYS)
+    bad = identical(b.a, b.b)
+    assert not bad, (symbol, {k: first_differences(b.a, b.b, k) for k in bad if k != "keys"})
+    pd.testing.assert_frame_equal(b.a["streaks"], b.b["streaks"], check_exact=True)
+    st = b.a["streaks"]
+    assert int((st["dir"] == 1).sum()) > A.KEEP and int((st["dir"] == -1).sum()) > A.KEEP
+    assert identical(b.a, b.cap) == ["pct_below"]
+    pa, pc = b.a["pct_below"], b.cap["pct_below"]
+    moved = ~((pa == pc) | (np.isnan(pa) & np.isnan(pc)))
+    assert (int((moved & b.dev).sum()), int((moved & b.val).sum())) == _NO_CAP_PCT_DIFF[(symbol, "1H")]
+    assert np.array_equal(b.a["rare_now"], b.cap["rare_now"]) and int((b.a["rare_now"] & b.dev).sum()) > 400

@@ -22,7 +22,8 @@ script's lines compute anything (l.20-28, 79-160, 166-184, 204-212); the rest dr
 
 The contract (both ports)
 -------------------------
-``heikin_ashi(o, h, l, c, strong_tol=0.05, doji_max=0.25, ahead_n=5, rare_pct=90, min_streaks=50)`` returns a dict
+``heikin_ashi(o, h, l, c, strong_tol=0.05, doji_max=0.25, ahead_n=5, rare_pct=90, min_streaks=50, keep=KEEP)``
+returns a dict
 with exactly the keys ``KEYS``. Every key but ``streaks`` is an array of ``len(c)`` values, one per bar, oldest first,
 each the value at the bar's close:
 
@@ -48,7 +49,8 @@ key                 dtype   value (the script's names; defaults shown)
                             after 2 or more consecutive STRONG candles of the same streak; never on a flip bar
 ``ev_first_strong`` bool    ``evFirstSt`` (l.158-160): the streak's first STRONG candle; it can be the flip bar
 ``pct_below``       float64 ``pctBelow(curA, age)`` (l.166-173, 206, 210): the percentage of the finished streaks of
-                            the current colour (the last 5,000 kept, l.131-132) shorter than ``age``, computed as
+                            the current colour (the last 5,000 kept by default, l.131-132; every one with
+                            ``keep=None``) shorter than ``age``, computed as
                             ``100.0 * c / n``; NaN while the colour has no finished streak
 ``rare_now``        bool    ``rareNow`` (l.209-212) evaluated at every bar, not only on the last one:
                             ``pct_below >= rare_pct`` and the previous age's percentage ``< rare_pct``; also False
@@ -139,12 +141,14 @@ Development event counts of this reading are: gold 1H / 4H / 1D 5,866 / 1,554 / 
 ``rare_now``; BTC 9,211 / 2,229 / 350 flips, 871 / 201 / 30 ``rare_now`` (``backtest_results/tradeiq_2027/porting/
 ha.md`` has the rest; ports A and B are identical bit for bit on these bars, ``tests/test_tradeiq2_ind_ha.py``).
 
-* The 5,000-streak cap (l.131-132): kept, as written. The plan's "using all history from the data start" is read as
-  where the history starts, not as dropping the script's own cap. The cap binds only on 1H: gold's from 2022-11-28,
-  BTC's from 2022-04-21 (both colours; gold's from 2023-11-27 with study 1's later start, 2017-01-03); never on 4H or
-  1D before 2024-07. With every streak kept, ``pct_below`` differs on 398 gold / 4,500 BTC 1H bars of Development
-  and on 6,594 / 9,659 of Validation, but ``rare_now`` on none: the cap cannot change a signal on our bars.
-  ``_heikin_ashi(..., keep=None)`` computes the other reading.
+* The 5,000-streak cap (l.131-132): the port's default keeps it as written (``KEEP``, the reconciled contract,
+  which study 3 calls). ``heikin_ashi(..., keep=None)`` keeps every finished streak since the first bar: that is
+  PREREG 6.8's "using all history from the data start" as study 2 reads it (DEVIATIONS HA-R10, replacing HA-P1),
+  and study 2's rule module calls it so; ports A and B agree bit for bit with it (``tests/test_tradeiq2_ind_ha.py``,
+  section 4). The cap binds only on 1H: gold's from 2022-11-28, BTC's from 2022-04-21 (both colours; gold's from
+  2023-11-27 with study 1's later start, 2017-01-03); never on 4H or 1D before 2024-07. With every streak kept,
+  ``pct_below`` differs on 398 gold / 4,500 BTC 1H bars of Development and on 6,594 / 9,659 of Validation, but
+  ``rare_now`` on none: the cap changes no signal on our bars.
 * ``rareNow`` at every bar (PREREG 6.8, spec 4.2) instead of on the last bar only (l.209): on a chart's history the
   script has no rare-age event at all, so every ``rare_now`` event (M4) is this reading's.
 * ``min_streaks`` = 50 (PREREG 6.8; the script needs one finished streak), counted over every finished streak of the
@@ -352,14 +356,17 @@ def _streak_kernel(d, ph, ahead_n, rare_pct, min_streaks, keep):
 # ───────────────────────────── the indicator ─────────────────────────────
 
 def heikin_ashi(o, h, l, c, strong_tol=0.05, doji_max=0.25, ahead_n=5, rare_pct=90,
-                min_streaks=50) -> Dict[str, object]:
+                min_streaks=50, keep: Optional[int] = KEEP) -> Dict[str, object]:
     """
     The script on one chart's bars (bid OHLC, oldest first, no na), with its defaults and the plan's minimum of 50
     finished streaks for a rare age: a dict with the keys ``KEYS`` (the module docstring defines each one).
     ``strong_tol`` / ``doji_max`` / ``ahead_n`` / ``rare_pct`` are the script's inputs ``strongTol`` (l.20),
-    ``dojiMax`` (l.22), ``aheadN`` (l.26) and ``rarePct`` (l.28).
+    ``dojiMax`` (l.22), ``aheadN`` (l.26) and ``rarePct`` (l.28). ``keep`` is the cap of l.131-132 on each colour's
+    array of finished lengths: the script's ``KEEP`` = 5,000 by default (the reconciled contract); ``keep=None``
+    keeps every finished streak since the first bar (``_heikin_ashi(..., keep=None)``, the plan's "all history",
+    which the study-2 rule module uses). It moves only ``pct_below`` and ``rare_now``.
     """
-    return _heikin_ashi(o, h, l, c, strong_tol, doji_max, ahead_n, rare_pct, min_streaks, KEEP)
+    return _heikin_ashi(o, h, l, c, strong_tol, doji_max, ahead_n, rare_pct, min_streaks, keep)
 
 
 def _heikin_ashi(o, h, l, c, strong_tol, doji_max, ahead_n, rare_pct, min_streaks,

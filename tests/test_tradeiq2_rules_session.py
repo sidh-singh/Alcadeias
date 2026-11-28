@@ -10,11 +10,17 @@ section 8): the grid, and what each row executes.
     a buy at the ask, a sell at the bid), its stop (the sweep's extreme, the range's middle, from the fill) and its
     exits (E1 the 16:00 open, E2 2R from the fill, E3 the opposite liquidity), the script's cancels at entry applied
     on top of PREREG 4's absolute-level rules (a long whose bid open is at the stop, a 16:00 entry bar, E3's "less
-    than 1R"), x1.5 recomputing every distance from its own fill (and dropping a fill beyond its target), the time
-    exit across a data gap, the Monday quirk and its variant, the HTF confirmation (the script's 1H EMA) and the
-    trend rows (F2 / F3 in its place: a refused bar does not end the setup), one trade a day per setup, the presets as
-    the sum of their lanes.
-(c) CAUSALITY: the entries and exit decisions before bar T do not change when the bars after T are removed.
+    than 1R"), x1.5 recomputing every distance from its own fill (and dropping a fill beyond its target), the Monday
+    quirk and its variant, the HTF confirmation (the script's 1H EMA) and the trend rows (F2 / F3 in its place: a
+    refused bar does not end the setup), one trade a day per setup, the presets as the sum of their lanes.
+(b2) THE TIME EXIT ACROSS A GAP (reading 1), priced where the script prices it, for E1, E2 and E3, long and short, at
+    x1.0 and x1.5: an early close into the next trading day (a reopen at 20:00 or 01:00) books the last close before
+    it (the row's close_gap), however the reopen gaps; an early close that reopens at 18:00 (the same trading day:
+    the script's first bar from 16:00) exits at the reopen's open, the row's flag False; a stop or a target before
+    the early close keeps its fill. On a walk with gaps of both kinds only the new-day exits move, each to the run of
+    its entry ended at that close; every other trade, on days without a gap too, is unchanged field by field.
+(c) CAUSALITY: the entries and exit decisions before bar T do not change when the bars after T are removed (nor
+    whether a time exit is a new-day exit), also when T falls inside an early close.
 (d) THE SMOKE TEST on real data, Development only: gold, BTC, EURUSDm and GBPUSDm 2019-01-01 to 2019-06-30, USTECm
     2020-07-01 to 2020-12-31 (its Development starts 2020-07-01; it has no 2019 bars). One variant of each rule type
     through ``tradeiq2_market.run_exec`` at x1.0 and x1.5. Its profit or loss is never printed, asserted or reported:
@@ -29,6 +35,7 @@ from __future__ import annotations
 
 import gc
 import json
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
@@ -489,18 +496,166 @@ def test_or_breakout_on_m5_and_m15():
 
 def test_the_time_exit_across_a_gap():
     """No bars from 15:00 to 20:00: the first bar after the entry that starts the 16:00 period or a new day is the
-    20:00 bar (a new trading day); the decision at the close of the bar before it fills at its open (reading 1)."""
+    20:00 bar, a new trading day, so the script books the previous bar's close (L454-455). The decision bar is the
+    14:55 bar, the last before the gap; the row's close_gap books the exit at its last M1 close (14:59, closing at
+    15:00), the OR short's buy at the ask 99.2 + 0.1, not at the 20:00 reopen where the same entry without the flag
+    fills (reading 1)."""
     tp = tape_or()
     tp.cut(ny(TUE, "15:00"), ny(TUE, "20:00"))
     mk = tp.market()
     ctx = M.Context(mk)
-    tr = one(run(mk, ctx, "XAUUSDm|M5|SH|OR|K0|E1"))
-    assert at(tr, 99.2, 99.3) == ("Tue 10:35", "Tue 20:00", "signal")
+    r = run(mk, ctx, "XAUUSDm|M5|SH|OR|K0|E1")
+    assert at(one(r), 99.2, 99.3) == ("Tue 10:35", "Tue 15:00", "signal") and r.counts["close_gap"] == 1
     b = ctx.bars("M5")
-    tx = R.time_exits(ctx, "M5")
+    tx, nd = R.time_exits(ctx, "M5"), R.time_exit_new_day(ctx, "M5")
     e = int(np.searchsorted(b.t, ny(TUE, "10:35")))
     assert ny_of(pd.Timestamp(int(b.t[tx[e]]), unit="s", tz="UTC")) == "Tue 14:55"     # the last bar before the gap
-    assert tx[len(b)] == -1
+    assert bool(nd[e]) and tx[len(b)] == -1 and not nd[len(b)]
+    E = R.lane_entries(ctx, "M5", "OR", "K0", "E1")
+    assert list(E.close_gap) == [True]
+    held = one(M.run_exec(mk, M.event_exec("M5", entries=replace(E, close_gap=None)), A, Z))
+    assert at(held, 99.2, 99.3) == ("Tue 10:35", "Tue 20:00", "signal")
+    et = R.event_table(ctx, VAR["XAUUSDm|M5|SH|OR|K0|E1"])
+    assert list(et.time_exit) == ["new_day"] and list(et.close_gap) == [True]
+
+
+# ───────────────────────────── (b2) the time exit across a gap, priced where the script prices it ─────────────────
+
+TUE_CLOSE = ny(TUE, "13:00")                           # the early close: no M1 bars from 13:00 New York
+
+
+def tape_early(side, reopen, after, event=None):
+    """Tuesday 5 Feb 2019 as an early-close day. An AB breakout at 03:00 with an FVG and the 1H EMA200 on its side: a
+    long closing at 100.4 above the Asia range 99.7-100.3 (first hour 90: the EMA below), or a short closing at 99.6
+    below it (first hour 110). Then the base at that close until 13:00 (the short's with half 0.1, so its ask high
+    stays below the stop), no M1 bars from 13:00 to ``reopen`` (UTC s) and the base at ``after`` from there. The long:
+    fill at the ask 100.5 (x1.5: 100.55), stop the range's middle 100.0, E2 2R from the fill (101.5 / 101.65), E3 the
+    broken side plus one width, 100.9; the short: fill at the bid 99.6, stop 100.0, E2 98.8, E3 99.1, its exit (a buy)
+    at the ask. ``event`` in the 11:00 M1 bar: 'stop' (through the stop) or 'target' (through both targets, at either
+    cost)."""
+    tp = Tape(A, Z)
+    i = tp.ix(ny(TUE, "11:00"))
+    if side == 1:
+        tp.level(TM.s_of(A), TM.s_of(A) + 3600, 90.0)
+        tp.bar(ny(TUE, "03:00"), 100.32, 100.45, 100.31, 100.4, first="low")
+        tp.level(ny(TUE, "03:05"), TUE_CLOSE, 100.4)
+        if event == "stop":
+            tp.l[i] = 99.9
+        elif event == "target":
+            tp.h[i] = 101.7
+    else:
+        tp.level(TM.s_of(A), TM.s_of(A) + 3600, 110.0)
+        tp.bar(ny(TUE, "03:00"), 99.68, 99.69, 99.55, 99.6, first="high")
+        tp.level(ny(TUE, "03:05"), TUE_CLOSE, 99.6, half=0.1)
+        if event == "stop":
+            tp.h[i] = 99.95                                            # the ask high 100.05 / 100.10
+        elif event == "target":
+            tp.l[i] = 98.5
+    tp.level(TUE_CLOSE, TM.s_of(Z), after)
+    tp.cut(TUE_CLOSE, reopen)
+    return tp
+
+
+def _early_prices(side, cost):
+    """(the fill, the 12:59 close the exit is booked at, the stop's fill, {exit: target}) of ``tape_early``."""
+    s = 0.1 * cost
+    if side == 1:
+        fill = round(100.4 + s, 9)
+        return fill, 100.4, round(100.0 - s, 9), {"E2": round(fill + 2 * (fill - 100.0), 9), "E3": 100.9}
+    return 99.6, round(99.6 + s, 9), round(100.0 + s, 9), {"E2": 98.8, "E3": 99.1}
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+@pytest.mark.parametrize("side", [1, -1])
+@pytest.mark.parametrize("reopen", ["Tue 20:00", "Wed 01:00", "Wed 18:00"])
+def test_an_early_close_into_a_new_trading_day_books_the_last_close(cost, side, reopen):
+    """No M1 bars from 13:00 New York to a reopen that starts the next trading day (20:00; or 01:00, as after 24
+    December; or 18:00 of a later day, as on a Sunday reopen after a Friday early close: that bar is both a new day and
+    from 16:00, and the new day is checked first): the script's first bar after the entry that is a new day or from
+    16:00 is the reopen, a new day, so it books the previous bar's close (L454-455). E1, E2 and E3 exit at the 12:59
+    M1 close (13:00) as a time exit with no extra spread, the long at the bid 100.4, the short at the ask 99.6 +
+    spread, though the reopen gaps through the
+    long's stop (99.0) and beyond the short's targets (98.5). Without the flag the harness would hold them over the
+    gap to the reopen: the long a gap stop there, the short a gap target (E2, E3) or the time exit at the ask open."""
+    s = 0.1 * cost
+    t_re = {"Tue 20:00": ny(TUE, "20:00"), "Wed 01:00": ny("2019-02-06", "01:00"),
+            "Wed 18:00": ny("2019-02-06", "18:00")}[reopen]
+    after = 99.0 if side == 1 else 98.5
+    mk = tape_early(side, t_re, after).market()
+    ctx = M.Context(mk)
+    b = ctx.bars("M5")
+    j = int(np.searchsorted(b.t, t_re))                                  # the reopen's bar
+    ck = R._clock(ctx, "M5")
+    assert b.t[j] == t_re and ck["new_day"][j] and bool(ck["close_t"][j]) == (reopen == "Wed 18:00")
+    fill, last, _, _ = _early_prices(side, cost)
+    for e in R.EXITS:
+        ex = R.build(VAR[f"XAUUSDm|M5|SH|AB|K2|{e}"], ctx)
+        E = ex.entries
+        assert len(E) == 1 and E.side[0] == side and list(E.close_gap) == [True], e
+        assert ny_of(pd.Timestamp(int(b.t[E.exit_bar[0]]), unit="s", tz="UTC")) == "Tue 12:55", e
+        r = M.run_exec(mk, ex, A, Z, cost)
+        tr = one(r)
+        assert at(tr, fill, last) == ("Tue 03:05", "Tue 13:00", "signal"), (e, side, cost)
+        assert tr.slippage == 0.0 and r.counts["close_gap"] == 1 and near(tr.risk, abs(fill - 100.0)), e
+        held = one(M.run_exec(mk, M.event_exec("M5", entries=replace(E, close_gap=None)), A, Z, cost))
+        if side == 1:
+            want = (round(99.0 - s, 9), "gap stop")
+        else:
+            want = (round(98.5 + s, 9), "signal" if e == "E1" else "gap target")
+        assert at(held, fill, want[0]) == ("Tue 03:05", reopen, want[1]), (e, side, cost)
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+@pytest.mark.parametrize("side", [1, -1])
+def test_an_early_close_that_reopens_at_18h_exits_at_the_reopens_open(cost, side):
+    """No M1 bars from 13:00 to 18:00 New York (gold's US holidays): the 18:00 reopen is the script's first bar from
+    16:00 of the same trading day (not a new day: the day key turns at 20:00), so the script holds the trade over the
+    break and exits at that bar's open (L456-457). The rows keep close_gap False there: E1, E2 and E3 exit at the
+    18:00 M1 open, the long at the bid 100.55, the short at the ask 99.45 + spread, as before. (With the flag the
+    harness would book the 12:59 close instead: not the script's price, so not taken.)"""
+    s = 0.1 * cost
+    after = 100.55 if side == 1 else 99.45
+    mk = tape_early(side, ny(TUE, "18:00"), after).market()
+    ctx = M.Context(mk)
+    b = ctx.bars("M5")
+    fill, last, _, _ = _early_prices(side, cost)
+    reopen = 100.55 if side == 1 else round(99.45 + s, 9)
+    e0 = int(np.searchsorted(b.t, ny(TUE, "03:05")))
+    assert not R.time_exit_new_day(ctx, "M5")[e0]
+    for e in R.EXITS:
+        ex = R.build(VAR[f"XAUUSDm|M5|SH|AB|K2|{e}"], ctx)
+        E = ex.entries
+        assert len(E) == 1 and list(E.close_gap) == [False], e
+        assert ny_of(pd.Timestamp(int(b.t[E.exit_bar[0]]), unit="s", tz="UTC")) == "Tue 12:55", e
+        r = M.run_exec(mk, ex, A, Z, cost)
+        assert at(one(r), fill, reopen) == ("Tue 03:05", "Tue 18:00", "signal") and r.counts["close_gap"] == 0, e
+        alt = one(M.run_exec(mk, M.event_exec("M5", entries=replace(E, close_gap=True)), A, Z, cost))
+        assert at(alt, fill, last) == ("Tue 03:05", "Tue 13:00", "signal"), e
+    et = R.event_table(ctx, VAR["XAUUSDm|M5|SH|AB|K2|E1"])
+    assert list(et.time_exit) == ["closeT"] and list(et.close_gap) == [False]
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+@pytest.mark.parametrize("side", [1, -1])
+def test_a_stop_or_a_target_before_the_early_close_keeps_its_fill(cost, side):
+    """The early close into the next trading day (reopen 20:00) with an M1 bar at 11:00 through the stop: E1, E2 and E3
+    are stopped there, at the level and one extra spread, and close_gap books nothing. With one through both targets
+    instead: E2 and E3 end at their targets there (the long's E2 2R from each run's own fill), E1 (no target) at the
+    12:59 close."""
+    after = 99.0 if side == 1 else 98.5
+    fill, last, stop, tgt = _early_prices(side, cost)
+    mk = tape_early(side, ny(TUE, "20:00"), after, event="stop").market()
+    ctx = M.Context(mk)
+    for e in R.EXITS:
+        r = run(mk, ctx, f"XAUUSDm|M5|SH|AB|K2|{e}", cost)
+        assert at(one(r), fill, stop) == ("Tue 03:05", "Tue 11:00", "stop") and r.counts["close_gap"] == 0, e
+    mk = tape_early(side, ny(TUE, "20:00"), after, event="target").market()
+    ctx = M.Context(mk)
+    for e in ("E2", "E3"):
+        r = run(mk, ctx, f"XAUUSDm|M5|SH|AB|K2|{e}", cost)
+        assert at(one(r), fill, tgt[e]) == ("Tue 03:05", "Tue 11:00", "target") and r.counts["close_gap"] == 0, e
+    r = run(mk, ctx, "XAUUSDm|M5|SH|AB|K2|E1", cost)
+    assert at(one(r), fill, last) == ("Tue 03:05", "Tue 13:00", "signal") and r.counts["close_gap"] == 1
 
 
 def test_presets_are_the_sum_of_their_lanes():
@@ -620,6 +775,31 @@ def walk():
     return m1, mk
 
 
+# New York (EST) gaps cut into the walk without its random holes: early closes into the next trading day or the
+# weekend (no bar from 16:00 to 20:00, so the time exit is a new-day exit: close_gap), and early closes that reopen at
+# 18:00 and a hole over 16:00 (the script's first bar from 16:00 is the reopen: its open, no flag)
+NEW_DAY_GAPS = (("2019-02-05", "13:00", "2019-02-05", "20:30"), ("2019-02-14", "12:30", "2019-02-14", "20:15"),
+                ("2019-02-22", "13:00", "2019-02-24", "18:00"), ("2019-02-26", "14:00", "2019-02-27", "01:00"))
+SAME_DAY_GAPS = (("2019-02-11", "13:00", "2019-02-11", "18:00"), ("2019-02-20", "12:30", "2019-02-20", "18:00"),
+                 ("2019-02-25", "13:15", "2019-02-25", "18:00"), ("2019-02-28", "15:30", "2019-02-28", "16:30"))
+
+
+def _plain_market(m1):
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(M, "STUDY_DIR", M.STUDY_DIR.parent / "__no_such_study__")
+        return M.TMarket2("XAUUSDm", m1)
+
+
+@pytest.fixture(scope="module")
+def gapped():
+    m1 = random_m1(gaps=0)
+    keep = np.ones(len(m1["t"]), bool)
+    for d0, h0, d1, h1 in NEW_DAY_GAPS + SAME_DAY_GAPS:
+        keep &= (m1["t"] < ny(d0, h0)) | (m1["t"] >= ny(d1, h1))
+    m1 = {k: v[keep] for k, v in m1.items()}
+    return m1, _plain_market(m1)
+
+
 def _rows(symbol="XAUUSDm", blocks=("core", "K0 x E1", "K2 x E3", "trend", "Monday variant")):
     return [v for v in R.variants(symbol) if v.params["block"] in blocks]
 
@@ -711,26 +891,21 @@ def _entries_frame(ex: M.Exec):
     for q, x in enumerate(lanes):
         E = x.entries
         out.append(pd.DataFrame({"lane": q, "bar": E.bar, "side": E.side, "stop": E.stop_level,
-                                 "tlev": E.target_level, "tr": E.target_r, "xb": E.exit_bar, "tag": E.tag}))
+                                 "tlev": E.target_level, "tr": E.target_r, "xb": E.exit_bar, "tag": E.tag,
+                                 "gap": E.close_gap}))
     return pd.concat(out, ignore_index=True)
 
 
-def test_causality_entries_before_t_do_not_change(walk):
-    """Cut the M1 bars at T (on a 15-minute boundary): every entry decided at a bar before the truncated chart's last
-    bar keeps its bar, side, stop, target and tag; its exit decision is the same when it lies before that last bar,
-    and none yet (-1) otherwise. (A signal on the last bar waits for the next bar's open, where the script's cancels
-    are decided: that is its fill.)"""
-    m1, mk = walk
+def _causality(m1, mk, cuts, rows):
+    """Cut the M1 bars at each T (on a 15-minute boundary): every entry decided at a bar before the truncated chart's
+    last bar keeps its bar, side, stop, target and tag; its exit decision and its close_gap flag (a new-day exit) are
+    the same when the decision lies before that last bar, and none yet (-1, False) otherwise. Returns the entries
+    checked and the flagged ones among them."""
     ctx_full = M.Context(mk)
-    rows = _rows(blocks=("core", "K0 x E1", "K2 x E3", "preset", "trend", "Monday variant"))
-    cuts = ["2019-02-05 08:15", "2019-02-12 15:00", "2019-02-20 04:45", "2019-02-27 17:30"]
-    checked = 0
+    checked = flagged = 0
     for cut in cuts:
-        T = TM.s_of(cut)
-        keep = m1["t"] < T
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(M, "STUDY_DIR", M.STUDY_DIR.parent / "__no_such_study__")
-            mk_t = M.TMarket2("XAUUSDm", {k: v[keep] for k, v in m1.items()})
+        keep = m1["t"] < TM.s_of(cut)
+        mk_t = _plain_market({k: v[keep] for k, v in m1.items()})
         ctx_t = M.Context(mk_t)
         for v in rows:
             n_t = len(ctx_t.bars(v.tf))
@@ -742,11 +917,131 @@ def test_causality_entries_before_t_do_not_change(walk):
             assert len(full) == len(part), (cut, v.id)
             cols = ["lane", "bar", "side", "stop", "tlev", "tr", "tag"]
             assert full[cols].equals(part[cols]), (cut, v.id)
-            want_xb = np.where(full.xb.to_numpy() < n_t - 1, full.xb.to_numpy(), -1)
-            assert np.array_equal(part.xb.to_numpy(), want_xb), (cut, v.id)
+            known = full.xb.to_numpy() < n_t - 1
+            assert np.array_equal(part.xb.to_numpy(), np.where(known, full.xb.to_numpy(), -1)), (cut, v.id)
+            assert np.array_equal(part.gap.to_numpy(), known & full.gap.to_numpy()), (cut, v.id)
             checked += len(full)
+            flagged += int(full.gap.sum())
         del ctx_t, mk_t
+    return checked, flagged
+
+
+def test_causality_entries_before_t_do_not_change(walk):
+    """The check of ``_causality`` on the walk with random holes: four cuts, every row type. (A signal on the last bar
+    waits for the next bar's open, where the script's cancels are decided: that is its fill.)"""
+    m1, mk = walk
+    rows = _rows(blocks=("core", "K0 x E1", "K2 x E3", "preset", "trend", "Monday variant"))
+    checked, _ = _causality(m1, mk, ["2019-02-05 08:15", "2019-02-12 15:00", "2019-02-20 04:45", "2019-02-27 17:30"],
+                            rows)
     assert checked > 1000
+
+
+def test_causality_with_cuts_inside_early_closes(gapped):
+    """Cuts inside an early close into the next trading day (14 Feb, 19:00 UTC = 14:00 New York; the weekend after
+    22 Feb) and inside one that reopens at 18:00 (20 Feb): an entry whose time exit is the last bar before the cut's gap
+    has no exit decision yet, nor a flag (whether the next bar starts a new day is known only at the reopen); the
+    flagged entries of the earlier new-day gaps (5 and 14 Feb) are the same in the truncated data."""
+    m1, mk = gapped
+    rows = _rows(blocks=("core", "K0 x E1", "preset", "Monday variant"))
+    checked, flagged = _causality(m1, mk, ["2019-02-14 19:00", "2019-02-20 19:00", "2019-02-23 12:00"], rows)
+    assert checked > 500 and flagged >= 5
+
+
+COLS = ["entry_time", "exit_time", "side", "entry", "exit", "reason", "pnl", "slippage", "hold_h", "entry_ix",
+        "exit_ix", "risk", "r", "tag", "bar"]
+
+
+def test_only_the_new_day_exits_across_a_gap_move(gapped):
+    """On the gapped walk, every setup x K0 / K2 x E1-E3 x M5 / M15: a lane flags exactly its entries whose time exit
+    is a new-day exit (``time_exit_new_day``), each with a gap after its decision bar. Against the same entries without
+    the flag: the trades the flag moves are exactly the flagged ones the harness held to the reopen (no stop or target
+    before the early close), each now the run of its entry on a window that ends at the decision bar's last M1 close
+    ('end' there, 'signal' here: the same entry, exit, P/L and exit time); every other trade, on days without a gap,
+    across the 18:00 reopens and the hole over 16:00 (the script's first bar from 16:00, at its open), is the same
+    field by field; the counts are the same but close_gap."""
+    _, mk = gapped
+    ctx = M.Context(mk)
+    a, z = "2019-02-04", "2019-03-05"
+    moved_n = reopen_n = 0
+    both_n = 0
+    for tf in R.TFS:
+        b = ctx.bars(tf)
+        n = len(b)
+        gap = np.zeros(n, bool)
+        inside = b.ex < len(mk.t)
+        gap[inside] = mk.t[b.ex[inside]] > b.tc[inside]
+        nd = R.time_exit_new_day(ctx, tf)
+        # the trading day by the clock: New York time plus 4 hours (the day key turns at 20:00), from the bar times alone
+        ny_t = pd.to_datetime(b.t, unit="s", utc=True).tz_convert("America/New_York")
+        day = (ny_t + pd.Timedelta(hours=4)).normalize().asi8
+        new_day = np.r_[True, day[1:] != day[:-1]]
+        mins = ny_t.hour.to_numpy() * 60 + ny_t.minute.to_numpy()
+        close_t = (mins >= 16 * 60) & (mins < 20 * 60)
+        for s in R.SETUPS:
+            for conf in ("K0", "K2"):
+                for e in R.EXITS:
+                    key = (tf, s, conf, e)
+                    E = R.lane_entries(ctx, tf, s, conf, e)
+                    assert np.array_equal(E.close_gap, nd[np.minimum(E.bar + 1, n)]), key
+                    assert gap[E.exit_bar[E.close_gap]].all(), key
+                    # independently: flagged exactly when the bar after the decision bar starts a new trading day
+                    has = E.exit_bar >= 0
+                    want = np.zeros(len(E), bool)
+                    want[has] = new_day[E.exit_bar[has] + 1]
+                    assert np.array_equal(E.close_gap, want), key
+                    both_n += int((E.close_gap & has & close_t[np.minimum(E.exit_bar + 1, n - 1)]).sum())
+                    r1 = M.run_exec(mk, M.event_exec(tf, entries=E), a, z)
+                    r0 = M.run_exec(mk, M.event_exec(tf, entries=replace(E, close_gap=None)), a, z)
+                    t0, t1 = r0.trades, r1.trades
+                    assert list(t0.bar) == list(t1.bar), key
+                    q = np.searchsorted(E.bar, t0.bar.to_numpy())
+                    assert np.array_equal(E.bar[q], t0.bar.to_numpy()), key
+                    xb = E.exit_bar[q]
+                    at_reopen = (xb >= 0) & (t0.exit_ix.to_numpy() == b.ex[np.maximum(xb, 0)])
+                    moved = E.close_gap[q] & at_reopen
+                    assert np.array_equal(moved, (t0.exit_ix != t1.exit_ix).to_numpy()), key
+                    assert t0[~moved][COLS].equals(t1[~moved][COLS]), key
+                    for i in np.flatnonzero(moved):
+                        row, c = t1.iloc[i], int(q[i])
+                        x = int(b.i1[E.exit_bar[c]])
+                        assert row.reason == "signal" and row.exit_ix == x, key
+                        assert row.exit_time == TM.utc(int(mk.t[x]) + 60), key
+                        alone = replace(E.take([c]), exit_bar=np.array([-1]), close_gap=None)
+                        ref = M.run_exec(mk, M.event_exec(tf, entries=alone), a, int(mk.t[x]) + 60).trades.iloc[0]
+                        assert ref.reason == "end" and all(ref[k] == row[k] for k in COLS if k != "reason"), key
+                    assert r1.counts == {**r0.counts, "close_gap": int(moved.sum())}, key
+                    moved_n += int(moved.sum())
+                    reopen_n += int((~E.close_gap[q] & at_reopen & gap[np.maximum(xb, 0)]).sum())
+    assert moved_n >= 20 and reopen_n >= 20
+    assert both_n >= 1                                                  # the Sunday 18:00 reopen after 22 Feb
+
+
+def test_days_without_a_gap_are_unchanged():
+    """On the walk without a hole (an M1 bar every minute, around the clock) a bar opens from 16:00 every day, so no
+    time exit is a new-day exit: no row hands the harness a close_gap flag, and a row's run is the run of the same
+    entries without the flag, bit for bit (trades, marks, counts), at x1.0 and x1.5."""
+    mk = _plain_market(random_m1(gaps=0))
+    ctx = M.Context(mk)
+    rows = _rows(blocks=("core", "K0 x E1", "K2 x E3", "preset", "trend", "Monday variant"))
+    n_entries = 0
+    for v in rows:
+        ex = R.build(v, ctx)
+        lanes = ex.lanes if ex.kind == "lanes" else (ex,)
+        assert not any(x.entries.close_gap.any() for x in lanes), v.id
+        n_entries += sum(len(x.entries) for x in lanes)
+    assert n_entries > 500
+    for vid in ("XAUUSDm|M5|SH|OR|K0|E1", "XAUUSDm|M5|SH|AS|K1|E2", "XAUUSDm|M15|SH|LS|K1|E2",
+                "XAUUSDm|M5|SH|OR|K2|E3", "XAUUSDm|M15|SH|PRESET-CUSTOM|K2|E1"):
+        ex = R.build(VAR[vid], ctx)
+        lanes = ex.lanes if ex.kind == "lanes" else (ex,)
+        plain = [M.event_exec(x.tf, entries=replace(x.entries, close_gap=None), label=x.label) for x in lanes]
+        ex0 = M.lanes_exec(plain, label=ex.label) if ex.kind == "lanes" else plain[0]
+        for cost in M.COSTS:
+            r1, r0 = (M.run_exec(mk, x, "2019-02-04", "2019-03-05", cost) for x in (ex, ex0))
+            assert len(r1.trades) >= 5 and r0.trades.equals(r1.trades) and r0.counts == r1.counts, (vid, cost)
+            assert r1.counts["close_gap"] == 0, (vid, cost)
+            for f in ("ec", "ew", "pos"):
+                assert np.array_equal(getattr(r0, f), getattr(r1, f)), (vid, cost, f)
 
 
 def test_describe_warm_and_the_event_table(walk):
@@ -764,6 +1059,8 @@ def test_describe_warm_and_the_event_table(walk):
     et = R.event_table(ctx, VAR["XAUUSDm|M5|SH|PRESET-CUSTOM|K2|E1"])
     assert set(et.setup) <= {"AS", "LS"} and set(et.lane) <= {0, 1} and et.taken.any()
     assert (et.stop_atr[et.taken] >= 0.5 - 1e-9).all()                  # the minimum stop: 0.5 ATR from the close
+    assert set(et.time_exit) <= {"closeT", "new_day", ""} and (et.close_gap == (et.time_exit == "new_day")).all()
+    assert ((et.time_exit == "") == (et.exit_bar < 0)).all()
 
 
 # ───────────────────────────── (d) the smoke test on real data (Development only) ─────────────────────────────
@@ -789,7 +1086,8 @@ def _available(symbol: str, start: str, end: str) -> bool:
 def test_smoke_on_development_data(symbol):
     """Each rule type runs through the harness on Development data only, at x1.0 and x1.5. Checked: the Exec's kind
     and lanes, the same candidates at both costs, no busy lane, entries inside the window, one trade a day per lane,
-    no target exit on an E1 row, the scores computable. No profit or loss is printed, asserted or kept."""
+    no target exit on an E1 row, close_gap exits only on flagged (new-day) time exits, the scores computable. No
+    profit or loss is printed, asserted or kept."""
     a, z = SMOKE[symbol]
     if not _available(symbol, a, z):
         pytest.skip(f"the tick store of {symbol} does not cover {M.data_start(symbol)} .. {z}")
@@ -807,10 +1105,12 @@ def test_smoke_on_development_data(symbol):
         else:
             assert ex.kind == "events" and ex.label == vid, vid
         got = {}
+        flagged = sum(int(x.entries.close_gap.sum()) for x in (ex.lanes if ex.kind == "lanes" else (ex,)))
         for cost in M.COSTS:
             r = M.run_exec(mk, ex, a, z, cost)
             got[cost] = dict(r.counts)
             assert r.counts["busy"] == 0 and r.counts["taken"] <= r.counts["candidates"], vid
+            assert r.counts["close_gap"] <= flagged, vid
             tr = r.trades
             if len(tr):
                 assert tr.entry_time.min() >= pd.Timestamp(a, tz="UTC") and \

@@ -18,13 +18,28 @@ sections 4 (execution), 5 (filters on state rules) and 7 (families, eligibility)
 (d) On synthetic bars, nothing replaced: every row's state is the composition, written again here, of the dashboard
     port, study 1's lines / states / filters and study 1's S1; FS is the dashboard's label.
 (e) Real data (skipped without the store; both guards closed, nothing at or after 2024-07-01 is loaded):
-    - the base states and the S1 distances are study 1's, from study 1's Study on study 1's own market, on every bar
-      from 2019-01-01 (gold's study-2 market starts in 2016, study 1's in 2017);
+    - against study 1's Study on study 1's own market (gold's study-2 market starts in 2016, study 1's in 2017): the
+      1H / 4H / 1D bars (times, OHLC, tick volume) on study 1's whole span; and on every bar closing after
+      2019-01-01, every array of study 1's ``lines_of`` (14 on gold, 17 on BTC) and the S1 distance bit for bit, each
+      MSD-FILTER row's base state (study 1's F0 row) and its filtered state;
     - Development counts (labels, A1 / A2 / A3 changes, breaks of structure, BOS-trend flips, F6 vetoes) equal the
       reconciliation's record (``backtest_results/tradeiq_2027/porting/msd.md``, section 6);
     - no look-ahead: every state up to T is unchanged when the data after T is removed;
     - an execution smoke test of one row of each rule on 2019-01-01 .. 2019-06-30 through the harness's runner, at
-      x1.0 and x1.5. Its profit or loss is neither printed nor asserted: only the trades' timing and stops.
+      x1.0 and x1.5. Its profit or loss is neither printed nor asserted: only the trades' timing and stops;
+    - claim 14 on the Development bars only (both of the evidence's windows set to Development). Its check of each
+      row bar's last chart bar passes, and the live label differs from model A's on exactly the Development closes the
+      reconciliation recorded.
+(f) Claim 14 (PREREG 8), on hand-made bars and arrays, on two synthetic markets (gold's calendar, whose Friday 4H, day
+    and week bars close at Saturday 00:00 with no chart bar, and 24/7) and on a synthetic Evidence:
+    - which row bar a chart bar lies strictly inside;
+    - the counts by hand;
+    - the closed score is the score each row bar ends with: model B's at the bar's last chart bar, and model A's at
+      the chart bar closing with it where one exists (gold's Saturday closes have none);
+    - claim14's counts equal a recount by loops;
+    - nothing after a window's end is read: the counts are unchanged on data cut at the window's end;
+    - the verdict line: a share of 0 does not hold, one change in a window holds there;
+    - the rows pass through the driver's claims table, with their verdict words.
 """
 
 from __future__ import annotations
@@ -32,6 +47,8 @@ from __future__ import annotations
 import gc
 import importlib
 import json
+import re
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -50,6 +67,7 @@ from backtesting.research import tradeiq2_rules_msd as R
 SYMS = ("XAUUSDm", "BTCUSDm")
 T0 = TM.s_of("2019-03-04")                      # a Monday, 00:00 UTC
 H = 3600
+DAY = 86400
 STUDY1_GRID = REPO_ROOT / "backtest_results" / "tradeiq_rsi" / "grid.csv"
 # PREREG 6.2, "Size: 18 alone + 60 MSD-F4 + 60 MSD-F6 + 12 BOS-trend = 150 rows per symbol"
 PLAN_SIZE = {"MSD-ALONE": 18, "MSD-F4": 60, "MSD-F6": 60, "BOS": 12}
@@ -517,12 +535,36 @@ def real(request, tmp_path_factory):
     gc.collect()
 
 
-def test_base_states_and_s1_are_study_1s_on_every_bar_from_2019(real):
+def same_bits(a, b) -> bool:
+    """Bit for bit: the same dtype and shape, floats compared by their 64-bit patterns (a NaN must sit on the same
+    bar, and -0.0 is not 0.0)."""
+    a, b = np.ascontiguousarray(a), np.ascontiguousarray(b)
+    if a.dtype != b.dtype or a.shape != b.shape:
+        return False
+    if a.dtype.kind == "f":
+        a, b = a.view(f"u{a.itemsize}"), b.view(f"u{b.itemsize}")
+    return bool(np.array_equal(a, b))
+
+
+def test_same_bits_by_hand():
+    x = np.array([1.0, np.nan, -0.0, 2.5])
+    assert same_bits(x, x.copy()) and same_bits(np.array([1, 2], np.int8), np.array([1, 2], np.int8))
+    assert not same_bits(x, np.array([1.0, np.nan, 0.0, 2.5]))                 # -0.0 against 0.0
+    assert not same_bits(x, np.array([1.0, 1.0, -0.0, 2.5]))                   # NaN against a number
+    assert not same_bits(x, np.nextafter(x, 3.0))                              # one ulp
+    assert not same_bits(np.array([1, 2], np.int8), np.array([1, 2], np.int64))   # the dtype counts
+
+
+def test_bars_lines_s1_and_base_states_are_study_1s_on_every_bar_from_2019(real):
+    """Against study 1's Study on study 1's own market (gold from 2017, the study-2 market from 2016): the bars on study
+    1's whole span; on every bar closing after 2019-01-01 to the hold-out start, every array of ``lines_of`` and the
+    S1 distance bit for bit, each MSD-FILTER row's base state against study 1's F0 row and its filtered state."""
     sym, ctx = real
     mk1 = TM.load(sym, end=TM.HOLDOUT_START)                       # study 1's own market (gold from 2017)
     st1 = T1.Study(mk1)
     a_s = TM.s_of("2019-01-01")
-    n_rows = 0
+    n_rows = n_lines = 0
+    n_keys = 17 if T1.has_rv(sym) else 14                         # BTC adds VWRSI-RV, its score, the missing klines
     for tf in R.TFS:
         b2, b1 = ctx.bars(tf), st1.bars[tf]
         k = int(np.searchsorted(b2.t, b1.t[0]))
@@ -530,7 +572,12 @@ def test_base_states_and_s1_are_study_1s_on_every_bar_from_2019(real):
             assert np.array_equal(getattr(b2, f)[k:], getattr(b1, f)), (tf, f)
         sel1 = np.flatnonzero(b1.tc > a_s)
         sel2 = sel1 + k
-        assert np.array_equal(R.s1_stop(ctx, tf)[sel2], st1.stops[tf][sel1], equal_nan=True)
+        L2, L1 = R.study1_lines(ctx, tf), st1.lines[tf]                    # every line study 1 reads
+        assert set(L2) == set(L1) and len(L1) == n_keys
+        for key in L1:
+            assert same_bits(np.asarray(L2[key])[sel2], np.asarray(L1[key])[sel1]), (tf, key)
+        n_lines += len(L1)
+        assert same_bits(R.s1_stop(ctx, tf)[sel2], st1.stops[tf][sel1]), tf
         for v in R.variants(sym):
             if v.tf != tf or v.family != "MSD-FILTER":
                 continue
@@ -541,7 +588,7 @@ def test_base_states_and_s1_are_study_1s_on_every_bar_from_2019(real):
             want = T1.apply_filter(base1[sel1], al[sel2], ash[sel2])
             assert np.array_equal(R.state_of(v, ctx)[sel2], want), v.id
             n_rows += 1
-    assert n_rows == 120
+    assert n_rows == 120 and n_lines == 3 * n_keys
     del st1, mk1
     gc.collect()
 
@@ -652,3 +699,360 @@ def test_one_row_of_each_rule_runs_on_development_data(real):
             assert sc["r_trades"] == (len(tr) if v.params["stop"] == "S1" else 0)
             total += len(tr)
     assert total > 100
+
+
+# the reconciliation's record (tests/test_tradeiq2_ind_msd.py RECORDED_CHARTS, porting/msd.md section 3 item 21): the
+# Development chart bars where model B's label differs from model A's
+MODEL_B_LABELS = {("XAUUSDm", "1H"): 4497, ("XAUUSDm", "4H"): 1155, ("XAUUSDm", "1D"): 141,
+                  ("BTCUSDm", "1H"): 6971, ("BTCUSDm", "4H"): 1753, ("BTCUSDm", "1D"): 227}
+
+
+def test_claim14_on_the_development_bars(real):
+    """Claim 14 on the real bars, with both of the evidence's windows set to Development, so nothing of Validation is
+    read. It runs, so its check that each row bar's last chart bar shows the bar's closed score passes on every row bar
+    of the window, gold's Saturday closes included. Every row has chart closes to count. The live label differs from
+    model A's on exactly the Development closes the reconciliation recorded. The shares themselves are claim 14's
+    evidence: they are counted here, not asserted."""
+    sym, ctx = real
+    got = R.claim14(FakeEv({sym: ctx}, windows=("dev", "dev")))
+    assert len(got) == 9 and {g["symbol"] for g in got} == {sym}
+    for g in got:
+        assert g["dev"] == g["val"]
+        tf = g["part"].split(" ")[0]
+        if "(information)" in g["part"]:
+            kd, n, ks, n2 = fracs(g["dev"])
+            assert kd == MODEL_B_LABELS[(sym, tf)] and n == n2 and ks <= kd < n
+        else:
+            d, n, bd, bn = fracs(g["dev"])
+            assert 0 <= d <= n and bd <= bn and n > {"1H": 15000, "4H": 5000, "1D": 800}[tf] and bn > 200
+            assert isinstance(g["dev_ok"], bool)
+
+
+# ───────────────────────────── (f) claim 14 ─────────────────────────────
+
+ROWS_OF = {"1H": ("1H", "4H", "1D", "1W"), "4H": ("4H", "1D", "1W"), "1D": ("1D", "1W")}    # L692, written again
+WORD = {"4H": "4H", "1D": "D", "1W": "W"}
+
+
+class FakeEv:
+    """What claim14 reads of the driver's Evidence (``tradeiq2.Evidence``): the symbols, the contexts, and ``span`` /
+    ``in_window`` as the driver computes them ('dev' and 'val' stand for the real windows ``windows``)."""
+
+    def __init__(self, ctxs, windows=("dev", "val")):
+        self.symbols = list(ctxs)
+        self._ctx = dict(ctxs)
+        self.windows = windows
+
+    def context(self, symbol):
+        return self._ctx[symbol]
+
+    def span(self, window, symbol):
+        return M.window_span(dict(zip(("dev", "val"), self.windows))[window], symbol)
+
+    def in_window(self, symbol, tf, window):
+        b = self.context(symbol).bars(tf)
+        a, z = (TM.s_of(x) for x in self.span(window, symbol))
+        return (b.t >= a) & (b.tc <= z)
+
+
+def fracs(text):
+    """The 'k/n' numbers of a claim cell, in order."""
+    return tuple(int(x) for pair in re.findall(r"(\d+)/(\d+)", text) for x in pair)
+
+
+def times(t, tc):
+    return SimpleNamespace(t=np.asarray(t, np.int64), tc=np.asarray(tc, np.int64))
+
+
+def test_forming_bar_is_the_row_bar_a_chart_bar_lies_strictly_inside():
+    # a 4H row: [0, 4h), [4h, 8h), a hole, [12h, 16h), and a gold Friday [20h, 24h) whose only 1H bar is [20h, 21h)
+    row = times([0, 4 * H, 12 * H, 20 * H], [4 * H, 8 * H, 16 * H, 24 * H])
+    hours = [0, 1, 2, 3, 4, 5, 6, 7, 9, 12, 13, 14, 15, 20, 25]          # 9: in the hole; 25: after the last row bar
+    chart = times([x * H for x in hours], [(x + 1) * H for x in hours])
+    # hours 0-2 lie inside bar 0 and hour 3 closes with it; 4-6 inside bar 1, 7 closes with it; 9 in no bar; 12-14
+    # inside bar 2, 15 closes with it; 20 strictly inside the Friday bar (it closes at 21h, the bar at 24h); 25 in none
+    assert R.forming_bar(chart, row).tolist() == [0, 0, 0, -1, 1, 1, 1, -1, -1, 2, 2, 2, -1, 3, -1]
+    assert R.forming_bar(times([-H], [0]), row).tolist() == [-1]                 # before the first row bar
+    assert R.forming_bar(chart, times([], [])).tolist() == [-1] * len(hours)
+    assert R.forming_bar(chart, row).dtype == np.int64
+
+
+def test_forming_counts_by_hand():
+    k = np.array([0, 0, -1, 1, 1, 1, 2, 2])          # the row bar each of 8 chart bars lies strictly inside
+    sf = np.array([1, 2, 9, 0, 0, -1, 3, 3])         # the forming scores at the chart closes
+    sc = np.array([2, 0, 3])                         # the scores the 3 row bars close with
+    every = np.ones(8, bool)
+    # row bar 0: close 0 differs (1 against 2), close 1 agrees; row bar 1: closes 3 and 4 agree, close 5 differs (-1
+    # against 0); row bar 2: both agree. Chart bar 2 lies in no row bar: never counted, whatever its score.
+    assert R.forming_counts(sf, sc, k, every, np.ones(3, bool)) == {"closes": 7, "differ": 2, "bars": 3,
+                                                                    "bars_differ": 2}
+    # a window that keeps chart bars 3.. and row bars 1 and 2
+    chart_ok = np.array([False] * 3 + [True] * 5)
+    assert R.forming_counts(sf, sc, k, chart_ok, np.array([False, True, True])) == {"closes": 5, "differ": 1,
+                                                                                    "bars": 2, "bars_differ": 1}
+    # a row bar outside the window drops its chart closes, though they lie inside it
+    assert R.forming_counts(sf, sc, k, every, np.array([True, False, True])) == {"closes": 4, "differ": 1,
+                                                                                 "bars": 2, "bars_differ": 1}
+    # a chart bar outside the window is dropped on its own (in claim14 it is implied: a chart bar strictly inside a
+    # row bar of the window lies in the window)
+    assert R.forming_counts(sf, sc, k, np.arange(8) != 5, np.ones(3, bool)) == {"closes": 6, "differ": 1,
+                                                                                 "bars": 3, "bars_differ": 1}
+    assert R.forming_counts(sf, sc, k, ~every, np.ones(3, bool)) == {"closes": 0, "differ": 0, "bars": 0,
+                                                                     "bars_differ": 0}
+    with pytest.raises(ValueError):
+        R.forming_counts(sf, sc, k[:-1], every, np.ones(3, bool))
+    with pytest.raises(ValueError):
+        R.forming_counts(sf, sc, k, every, np.ones(2, bool))
+
+
+def claim_m1(gold, days, seed, start):
+    """Synthetic M1 bars with two-day trends (as ``synth``): gold's sessions (Sunday from 22:05 UTC, a daily break
+    20:57-22:02, Friday to 20:57: its Friday 4H, day and week bars close at Saturday 00:00, when no 1H bar closes) or
+    24/7."""
+    rng = np.random.default_rng(seed)
+    t = TM.s_of(start) + 60 * np.arange(days * 1440, dtype=np.int64)
+    if gold:
+        minute = (t % DAY) // 60
+        weekday = ((t // DAY) + 4) % 7                                   # 0 = Sunday
+        keep = ~((minute >= 20 * 60 + 57) & (minute < 22 * 60 + 2)) & (weekday != 6)
+        keep &= ~((weekday == 0) & (minute < 22 * 60 + 5)) & ~((weekday == 5) & (minute >= 20 * 60 + 57))
+        t = t[keep]
+    n = len(t)
+    drift = np.repeat(rng.normal(0.0, 0.004, n // 2880 + 1), 2880)[:n]
+    c = 1300.0 + np.cumsum(drift + rng.normal(0.0, 0.25, n))
+    o = np.concatenate(([1300.0], c[:-1]))
+    h = np.maximum(o, c) + np.abs(rng.normal(0.0, 0.1, n))
+    l = np.minimum(o, c) - np.abs(rng.normal(0.0, 0.1, n))
+    return {"t": t, "o": o, "h": h, "l": l, "c": c, "spread_mean": np.full(n, 0.2), "n": np.ones(n)}
+
+
+@pytest.fixture(scope="module")
+def claim_ctxs(tmp_path_factory):
+    """Gold's calendar (XAUUSDm, from Sunday 2019-01-06) and a 24/7 market (BTCUSDm, from Monday 2019-01-07), 320 days
+    each, ending inside a week (the last week forming); their M1 arrays for the cuts."""
+    m1 = {"XAUUSDm": claim_m1(True, 320, 21, "2019-01-06"), "BTCUSDm": claim_m1(False, 320, 22, "2019-01-07")}
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(M, "STUDY_DIR", tmp_path_factory.mktemp("closed2_claim"))
+        mp.setattr(TM, "STUDY_DIR", tmp_path_factory.mktemp("closed1_claim"))
+        ctxs = {s: M.Context(M.TMarket2(s, x)) for s, x in m1.items()}
+    return ctxs, m1
+
+
+@pytest.fixture
+def claim_windows(monkeypatch):
+    """The evidence's two windows on the synthetic markets (after 17 weeks of warm-up). 'val' runs past the data end
+    (22 / 23 Nov), so the last week, still forming (its close time is its ISO end, 25 Nov), lies inside it by the
+    clock: only a complete row bar may be counted."""
+    monkeypatch.setitem(M.WINDOWS, "dev", ("2019-05-01", "2019-08-01"))
+    monkeypatch.setitem(M.WINDOWS, "val", ("2019-08-01", "2019-12-01"))
+
+
+def test_closed_score_is_the_score_each_row_bar_ends_with(claim_ctxs):
+    """The closed score (MSD-P8): the row's committed values with the swing vote at its own close. It is model B's
+    forming score at the row bar's last chart bar (the forming candle is the whole bar there), and model A's score at
+    the chart bar closing with the row bar where one exists. Gold's Friday 4H, day and week bars close at Saturday
+    00:00, so on its 1H chart no chart bar closes with them and model A cannot give their score there."""
+    ctxs, _ = claim_ctxs
+    for s, ctx in ctxs.items():
+        tick = MS.MINTICK[s]
+        for tf in R.TFS:
+            bars = {r: ctx.bars(r) for r in ROWS_OF[tf]}
+            A = MS.structure_dashboard(bars, tf, "A")
+            B = MS.structure_dashboard(bars, tf, "B")
+            ch = bars[tf]
+            for r in ROWS_OF[tf][1:]:
+                rb = bars[r]
+                sc = R.closed_score(ctx, r)
+                rv = MS.row_values(rb)
+                want = (rv["struct"].astype(np.int64) + rv["ob"] + rv["fvg"]
+                        + MS.swing_factor(rb.c, rv["swing_h"], rv["swing_l"], tick))
+                assert np.array_equal(sc, want) and sc.dtype == np.int64 and not sc.flags.writeable
+                assert sc is R.closed_score(ctx, r) and -4 <= sc.min() and sc.max() <= 4
+                n_closing = n_none = 0
+                for i in range(len(rb.t)):
+                    inside = np.flatnonzero((ch.t >= rb.t[i]) & (ch.tc <= rb.tc[i]))
+                    if not len(inside):
+                        continue
+                    j = inside[-1]
+                    assert B[f"s_{r}"][j] == sc[i], (s, tf, r, i)
+                    if ch.tc[j] == rb.tc[i]:
+                        assert A[f"s_{r}"][j] == sc[i], (s, tf, r, i)
+                        n_closing += 1
+                    else:
+                        n_none += 1
+                complete_none = int(np.sum(~np.isin(rb.tc, ch.tc) & rb.complete))
+                if s == "XAUUSDm" and tf == "1H":
+                    assert complete_none == 45                              # the 45 complete weeks' Friday bars
+                else:
+                    assert complete_none == 0, (s, tf, r)
+                assert n_none == complete_none + int(not rb.complete[-1])   # and the last week, still forming
+                if (s, tf, r) == ("XAUUSDm", "1H", "1W"):
+                    assert n_closing == 0                                   # no 1H bar closes with a gold week
+                else:
+                    assert n_closing > 30, (s, tf, r)
+    with pytest.raises(ValueError):
+        R.closed_score(ctxs["XAUUSDm"], "M15")
+
+
+def recount_claim14(ctx, windows):
+    """Claim 14 counted again by loops, from the port and the bars only, per window (start, end): {(chart, row): (closes
+    that differ, closes, row bars with a change, row bars)} over the chart closes strictly inside a complete row bar,
+    chart bar and row bar inside the window, where model B's score is set against the score the row bar ends with
+    (its row_values and the swing vote at its own close); {chart: (closes where model B's label differs from model
+    A's, closes, those where MSD-A1's side differs, closes)} over the chart closes in the window strictly inside a bar
+    of a higher row."""
+    tick = MS.MINTICK[ctx.symbol]
+    end = ctx.mk.end_s
+    side = (lambda x: 1 if x >= 1 else (-1 if x <= -1 else 0))
+    out = {w: ({}, {}) for w in windows}
+    for tf in R.TFS:
+        bars = {r: ctx.bars(r) for r in ROWS_OF[tf]}
+        A = MS.structure_dashboard(bars, tf, "A")
+        B = MS.structure_dashboard(bars, tf, "B")
+        ch = bars[tf]
+        inside_any = np.zeros(len(ch.t), bool)
+        found = {}
+        for r in ROWS_OF[tf][1:]:
+            rb = bars[r]
+            rv = MS.row_values(rb)
+            closed = [int(rv["struct"][i]) + int(rv["ob"][i]) + int(rv["fvg"][i]) +
+                      int(MS.swing_factor([rb.c[i]], [rv["swing_h"][i]], [rv["swing_l"][i]], tick)[0])
+                      for i in range(len(rb.t))]
+            pairs, i = [], -1
+            for j in range(len(ch.t)):
+                while i + 1 < len(rb.t) and rb.t[i + 1] <= ch.t[j]:
+                    i += 1
+                if i >= 0 and ch.tc[j] < rb.tc[i]:                       # strictly inside: it closes before the row bar
+                    inside_any[j] = True
+                    pairs.append((j, i, int(B[f"s_{r}"][j]) != closed[i]))
+            found[r] = (pairs, rb)
+        for w, (a, z) in windows.items():
+            a, z = TM.s_of(a), TM.s_of(z)
+            for r, (pairs, rb) in found.items():
+                kept = [(j, i, d) for j, i, d in pairs
+                        if a <= ch.t[j] and ch.tc[j] <= z and a <= rb.t[i] and rb.tc[i] <= z and rb.tc[i] <= end]
+                out[w][0][(tf, r)] = (sum(d for _, _, d in kept), len(kept), len({i for _, i, d in kept if d}),
+                                      len({i for _, i, _ in kept}))
+            js = [j for j in range(len(ch.t)) if inside_any[j] and a <= ch.t[j] and ch.tc[j] <= z]
+            kd = sum(int(A["label"][j] != B["label"][j]) for j in js)
+            ks = sum(int(side(A["label"][j]) != side(B["label"][j])) for j in js)
+            out[w][1][tf] = (kd, len(js), ks, len(js))
+    return out
+
+
+def test_claim14_counts_equal_a_recount_by_loops(claim_ctxs, claim_windows):
+    ctxs, _ = claim_ctxs
+    got = R.claim14(FakeEv(ctxs))
+    assert [g["symbol"] for g in got] == ["XAUUSDm"] * 9 + ["BTCUSDm"] * 9      # 6 rows and 3 charts per symbol
+    for g in got:
+        assert set(g) == {"part", "symbol", "rows", "dev", "val", "dev_ok", "val_ok", "note"}
+    differ = 0
+    for s, ctx in ctxs.items():
+        mine = iter([g for g in got if g["symbol"] == s])
+        want = recount_claim14(ctx, {w: M.window_span(w, s) for w in ("dev", "val")})
+        for tf in R.TFS:
+            for r in ROWS_OF[tf][1:]:
+                g = next(mine)
+                assert g["part"].startswith(f"{tf} chart, {WORD[r]} row: ")
+                for w in ("dev", "val"):
+                    d, n, bd, bn = want[w][0][(tf, r)]
+                    assert fracs(g[w]) == (d, n, bd, bn), (s, tf, r, w)
+                    assert g[f"{w}_ok"] is (n > 0 and d > 0)                     # the verdict line: a share above 0
+                    assert n > 0
+                    differ += d
+            g = next(mine)
+            assert g["part"].startswith(f"{tf} chart: the label")
+            for w in ("dev", "val"):
+                assert fracs(g[w]) == want[w][1][tf], (s, tf, w)
+                assert np.isnan(g[f"{w}_ok"])                                    # information
+    assert differ > 1000                                                         # the case is not empty
+
+
+def test_claim14_reads_nothing_after_a_windows_end(claim_ctxs, claim_windows):
+    """A window's counts are unchanged when the M1 data after its end is removed. No chart close and no score a row
+    bar closes with comes from after the window. A week that the window's end cuts is forming in the cut data and
+    closes after the window in the full data, so it is counted in neither."""
+    ctxs, m1 = claim_ctxs
+    full = R.claim14(FakeEv(ctxs))
+    for s, x in m1.items():
+        z = TM.s_of(M.window_span("dev", s)[1])
+        keep = x["t"] < z
+        cctx = M.Context(M.TMarket2(s, {k: v[keep] for k, v in x.items()}))
+        assert cctx.mk.end_s == z and not cctx.bars("1W").complete[-1]
+        got = R.claim14(FakeEv({s: cctx}))
+        mine = [g for g in full if g["symbol"] == s]
+        assert [g["dev"] for g in got] == [g["dev"] for g in mine]
+        assert [g["dev_ok"] for g in got if isinstance(g["dev_ok"], bool)] == \
+               [g["dev_ok"] for g in mine if isinstance(g["dev_ok"], bool)]
+        assert all(fracs(g["val"])[1] == 0 for g in got)                        # nothing left in 'val'
+
+
+def zero_dashboard(ctx, tf, model="A"):
+    """A dashboard whose rows all score 0 and whose label is NEUTRAL (claim 14 reads ``s_<row>`` and ``label``)."""
+    n = len(ctx.bars(tf))
+    return {"label": np.zeros(n, np.int8), **{f"s_{r}": np.zeros(n, np.int64) for r in R.ROWS[tf]}}
+
+
+def test_claim14_a_row_that_never_changes_does_not_hold_and_one_change_holds(claim_ctxs, claim_windows, monkeypatch):
+    """The verdict line, fixed before any count existed: a share of 0 does not hold, and one differing close in a window
+    holds there. Hand-made: every forming score equals the closed one (all 0), except at one 1D close inside a
+    Validation week."""
+    ctxs, _ = claim_ctxs
+    ctx = ctxs["BTCUSDm"]
+    ch, wk = ctx.bars("1D"), ctx.bars("1W")
+    k = R.forming_bar(ch, wk)
+    va, vz = (TM.s_of(x) for x in M.window_span("val", "BTCUSDm"))
+    j_star = next(j for j in range(len(ch.t)) if k[j] >= 0 and va <= wk.t[k[j]] and wk.tc[k[j]] <= vz)
+    assert ch.t[j_star] == wk.t[k[j_star]]                     # the week's first day: not its last chart bar
+
+    def fake(c, tf, model="A"):
+        d = zero_dashboard(c, tf, model)
+        if model == "B" and tf == "1D":
+            d["s_1W"][j_star] = 1
+        return d
+    monkeypatch.setattr(R, "dashboard", fake)
+    monkeypatch.setattr(R, "closed_score", lambda c, r: np.zeros(len(c.bars(r)), np.int64))
+    got = R.claim14(FakeEv({"BTCUSDm": ctx}))
+    oks = [(g["part"].split(":")[0], g["dev_ok"], g["val_ok"]) for g in got if "(information)" not in g["part"]]
+    assert oks == [("1H chart, 4H row", False, False), ("1H chart, D row", False, False),
+                   ("1H chart, W row", False, False), ("4H chart, D row", False, False),
+                   ("4H chart, W row", False, False), ("1D chart, W row", False, True)]
+    w = next(g for g in got if g["part"].startswith("1D chart, W row"))
+    assert fracs(w["val"])[:1] == (1,) and fracs(w["val"])[2:3] == (1,) and fracs(w["dev"])[0] == 0
+    # the check before counting: a last chart bar whose forming score is not the closed one stops the claim (here
+    # the last day of j_star's week, which closes with it)
+    i = int(k[j_star])
+    j_last = int(np.flatnonzero((ch.t >= wk.t[i]) & (ch.tc <= wk.tc[i]))[-1])
+    assert ch.tc[j_last] == wk.tc[i] and k[j_last] == -1
+
+    def broken(c, tf, model="A"):
+        d = zero_dashboard(c, tf, model)
+        if model == "B" and tf == "1D":
+            d["s_1W"][j_last] = 1
+        return d
+    monkeypatch.setattr(R, "dashboard", broken)
+    with pytest.raises(AssertionError):
+        R.claim14(FakeEv({"BTCUSDm": ctx}))
+
+
+def test_claim14_through_the_drivers_claims_table(claim_ctxs, claim_windows, tmp_path):
+    """The driver finds claim14 (EXTRAS), checks its rows against the evidence's windows (CLAIM_RULE) and gives study
+    1's verdict words: holds / does not hold / mixed from the two windows, 'information' for the label rows."""
+    try:
+        T2 = importlib.import_module("backtesting.research.tradeiq2")
+    except Exception as e:  # noqa: BLE001 - the driver is not this module's; without it there is nothing to check
+        pytest.skip(f"the study driver does not import here: {e!r}")
+    ctxs, _ = claim_ctxs
+    syms = list(ctxs)
+    res = pd.DataFrame({"vid": [f"{s}|1H|X" for s in syms for _ in (0, 1)], "window": ["dev", "val"] * len(syms),
+                        "symbol": [s for s in syms for _ in (0, 1)]})
+    grid = pd.DataFrame({"vid": [f"{s}|1H|X" for s in syms], "params": ["{}"] * len(syms)})
+    ev = T2.Evidence(tmp_path, res, grid, pd.DataFrame(), {"msd": R}, loader=lambda s, end: ctxs[s].mk)
+    assert T2.extra({"msd": R}, "claim14") is R.claim14
+    table, errors = T2.claims_table(ev, numbers=[14])
+    assert errors == [] and len(table) == 18 and set(table.claim) == {14}
+    info = table.part.str.endswith("(information)")
+    assert int(info.sum()) == 6 and (table.verdict[info] == "information").all()
+    for _, r in table[~info].iterrows():
+        assert r.verdict == T1.verdict(bool(r.dev_ok), bool(r.val_ok))
+    assert set(table.verdict[~info]) <= {"holds", "does not hold", "mixed"}

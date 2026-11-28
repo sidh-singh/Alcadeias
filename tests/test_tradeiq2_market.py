@@ -13,6 +13,12 @@ Study 2's data, guard and execution harness (``backtesting/research/tradeiq2_mar
     a stop in one M1 bar, a gap through the stop, a stop entry at max(level, ask), OCO, a time stop, break-even after
     1R, two legs, two lanes, absolute targets from the actual fill, x1.5 recomputing every distance, R statistics; a
     STATE Exec through the event engine is study 1's ``run`` exactly; the summed marks are study 1's marks.
+    Exits before a gap (``close_gap``, harness reading 15), at x1.0 and x1.5: on an early close (M1 bars to 12:59,
+    then from 18:00) a long's and a short's own exit is booked at the 12:59 close (bid / ask, no extra spread) instead
+    of gapping through the stop at the reopen; a stop or a target before that close wins; every leg ends there; stop
+    orders with on_fill; the marks and the trade row are a window-end exit read as a time exit; the next entry fills
+    from the next M1 bar; exit masks and tightenings are unaffected; random rows on bars without a gap change nothing
+    bit for bit, and on gold-like bars only the exits held over a gap move, each to its window-end run.
 Real-data tests read the store and data/raw/binance up to the hold-out start only (skipped when absent) and run no
 rule of the study: bars, clocks, volumes and one placeholder random state (not a rule) for the engine's identity.
 """
@@ -631,6 +637,378 @@ def test_sum_marks_are_study_1s_unit_marks_for_trades_that_do_not_overlap():
         assert bal == r.net and dd == r.max_dd
 
 
+# ───────────────────────────── (e) exits before a gap (close_gap, harness reading 15) ─────────────────────────────
+
+EC = T0 + 10 * 3600                 # 10:00 UTC on Monday 4 March 2019
+
+
+def early_t(first=180):
+    """The M1 times of an early close: ``first`` bars from 10:00 (180: 10:00-12:59), then 18:00-20:59 (180 bars). The
+    harness reads no clock, so these stand for New York's: the market closes early at 13:00 and reopens at 18:00. On
+    1H the bars are 0-2 (10:00, 11:00, 12:00) and 3-5 (18:00, 19:00, 20:00); bar 2 closes at 13:00, where no M1 bar
+    opens, so its exit fill ``bars.ex[2]`` is the reopen (M1 180) and its last M1 bar ``bars.i1[2]`` the 12:59 bar
+    (M1 179)."""
+    return np.concatenate([EC + 60 * np.arange(first), EC + 8 * 3600 + 60 * np.arange(180)]).astype(np.int64)
+
+
+def early(reopen=None, c179=100.5):
+    """Prices on ``early_t()``: flat at 100.00 (highs 100.02, lows 99.98, spread 0.20), the 12:59 bar closing at
+    ``c179`` (its high 0.02 above), the M1 bars from the reopen on flat at ``reopen`` (None: 100.00)."""
+    o, h, l = flat(360)
+    c = o.copy()
+    c[179], h[179] = c179, max(c179, 100.0) + 0.02
+    if reopen is not None:
+        o[180:], h[180:], l[180:], c[180:] = reopen, reopen + 0.02, reopen - 0.02, reopen
+    return o, h, l, c
+
+
+def run_ec(m, ex, cost=1.0, z=None):
+    return run6(m, ex, cost, a=EC, z=z)
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+def test_e_close_gap_exits_at_the_last_m1_close_before_an_early_close(cost):
+    """(c) A long and a short whose exit_bar is the last bar before the gap (bar 2, 12:00-13:00) exit with close_gap at
+    the 12:59 M1 bar's close, on the right side of the spread (the bid 100.50 for the long, the ask 100.50 + spread
+    for the short, the cost's own spread), as a time exit with no extra spread. Without it both are held over the gap
+    and gap through their stops at the 18:00 reopen, one extra spread worse."""
+    s = 0.2 * cost
+    o, h, l, c = early(reopen=97.0)                                  # the reopen gaps through a long's stop (99.00)
+    m = market(o, h, l, c, t=early_t())
+    b = m.tbars("1H")
+    assert (int(b.i1[2]), int(b.ex[2]), int(b.tc[2]), int(m.t[180])) == (179, 180, EC + 3 * 3600, EC + 8 * 3600)
+    E = dict(stop_level=99.0, exit_bar=2)
+    held = run_ec(m, M.event_exec("1H", entries=M.entries([0], [1], **E)), cost)
+    assert rows(held) == [(1, 60, 180, round(100 + s, 9), round(97 - s, 9), "gap stop")]
+    r = run_ec(m, M.event_exec("1H", entries=M.entries([0], [1], close_gap=True, **E)), cost)
+    assert rows(r) == [(1, 60, 179, round(100 + s, 9), 100.5, "signal")]
+    assert r.trades.pnl[0] == pytest.approx(0.5 - s) and r.trades.slippage[0] == 0.0
+    assert r.trades.r[0] == pytest.approx((0.5 - s) / (1.0 + s))                 # the risk from the fill to 99.00
+    assert (r.counts["close_gap"], held.counts["close_gap"]) == (1, 0)
+    # the short: the ask at the 12:59 close
+    o, h, l, c = early(reopen=103.0)                                 # through a short's stop (101.00)
+    m = market(o, h, l, c, t=early_t())
+    E = dict(stop_level=101.0, exit_bar=2)
+    held = run_ec(m, M.event_exec("1H", entries=M.entries([0], [-1], **E)), cost)
+    assert rows(held) == [(-1, 60, 180, 100.0, round(103 + 2 * s, 9), "gap stop")]
+    r = run_ec(m, M.event_exec("1H", entries=M.entries([0], [-1], close_gap=True, **E)), cost)
+    assert rows(r) == [(-1, 60, 179, 100.0, round(100.5 + s, 9), "signal")]
+    assert r.trades.pnl[0] == pytest.approx(-(0.5 + s)) and r.trades.slippage[0] == 0.0
+    # the M1 bar of the exit cannot come before the position's fill (it cannot when the exit bar is later)
+    sim = M._Sim(m, m.costed(cost), b, M.event_exec("1H", entries=M.entries([0], [-1])), 0, len(m.t))
+    assert sim._gap_exit(2, 60) == 179 and sim._gap_exit(1, 60) == -1        # bar 1 closes at 12:00: M1 120 opens
+    with pytest.raises(AssertionError):
+        sim._gap_exit(2, 180)
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+def test_e_close_gap_marks_and_trade_row_are_a_window_end_exit_read_as_a_time_exit(cost):
+    """(g) The close_gap exit has the price and the accounting of a position still open at a window's end: the same
+    entry without an exit, run on a window that ends at 13:00, closes at the 12:59 close ('end') with the same entry,
+    exit, P/L, exit time and marks. The 12:59 bar is held through (its worst mark is its low 99.90, the position long
+    in it), the balance flat after it; the drawdown is 0.10 + spread (the peak 0, the trough that low). The row reads
+    as a time exit at 13:00 (the M1 bar's close: a 2-hour hold); the path keeps X.WHY_END. At the window's own last M1
+    bar the flag only renames 'end' to 'signal'; a bar whose last M1 bar is past the window, or the end of the data
+    held, is the window's end as before."""
+    s = 0.2 * cost
+    fill = 100.0 + s
+    o, h, l, c = early(reopen=97.0)
+    l[179] = 99.9
+    m = market(o, h, l, c, t=early_t())
+    plain = M.event_exec("1H", entries=M.entries([0], [1], stop_level=99.0, exit_bar=2))
+    ex = M.event_exec("1H", entries=M.entries([0], [1], stop_level=99.0, exit_bar=2, close_gap=True))
+    r = run_ec(m, ex, cost)
+    tr = r.trades.iloc[0]
+    assert tr.reason == "signal" and tr.exit_ix == 179 and tr.exit_time == TM.utc(EC + 3 * 3600)
+    assert tr.hold_h == pytest.approx(2.0) and int(r.path.why[0]) == X.WHY_END and int(r.path.xix[0]) == 179
+    assert np.all(r.ec[:60] == 0.0) and r.ec[60] == pytest.approx(100.0 - fill)
+    assert r.ec[179] == pytest.approx(100.5 - fill) and r.ew[179] == pytest.approx(99.9 - fill)
+    assert np.all(r.pos[60:180] == 1) and np.all(r.pos[:60] == 0) and np.all(r.pos[180:] == 0)
+    assert np.allclose(r.ec[180:], 100.5 - fill) and np.allclose(r.ew[180:], 100.5 - fill)
+    assert r.max_dd == pytest.approx(0.1 + s) and r.net == pytest.approx(0.5 - s)
+    # the window-end run of the same entry
+    end = M.run_exec(m, M.event_exec("1H", entries=M.entries([0], [1], stop_level=99.0)), EC, EC + 3 * 3600, cost)
+    e = end.trades.iloc[0]
+    assert e.reason == "end" and e.exit_ix == 179
+    for k in ("entry_time", "exit_time", "side", "entry", "exit", "pnl", "slippage", "hold_h", "risk", "r"):
+        assert e[k] == tr[k], k
+    assert np.array_equal(end.ec, r.ec[:180]) and np.array_equal(end.ew, r.ew[:180])
+    assert np.array_equal(end.pos, r.pos[:180]) and end.max_dd == r.max_dd
+    _check_against_reference(r)
+    assert M.account_curve(r)[1]["final"] == pytest.approx(X.ACCOUNT + r.net)        # one unit at $2,000
+    # the window's last M1 bar is the 12:59 bar: the same close, read 'signal' instead of 'end'
+    w0, w1 = (M.run_exec(m, x, EC, EC + 3 * 3600, cost) for x in (plain, ex))
+    assert rows(w0)[0][:5] == rows(w1)[0][:5] == (1, 60, 179, round(fill, 9), 100.5)
+    assert (w0.trades.reason[0], w1.trades.reason[0]) == ("end", "signal") and w1.counts["close_gap"] == 1
+    # a window that ends inside bar 2 (12:30): its end closes the position at 12:29's close, with or without the flag
+    w0, w1 = (M.run_exec(m, x, EC, EC + 9000, cost) for x in (plain, ex))
+    assert rows(w0) == rows(w1) == [(1, 60, 149, round(fill, 9), 100.0, "end")] and w1.counts["close_gap"] == 0
+    # the data held end at 13:00 (no M1 bar after bar 2 at all): not a gap, the window's end as before
+    mm = market(o[:180], h[:180], l[:180], c[:180], t=early_t()[:180])
+    d0, d1 = (run_ec(mm, x, cost) for x in (plain, ex))
+    assert rows(d0) == rows(d1) == [(1, 60, 179, round(fill, 9), 100.5, "end")] and d1.counts["close_gap"] == 0
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+def test_e_close_gap_a_stop_or_a_target_touched_before_that_close_wins(cost):
+    """(d) Inside the last bar before the gap (M1 120-179), a stop (99.00) or a target (101.00) touched before the
+    12:59 close still wins, in the 12:59 bar itself too (the stop before the target there, as in every M1 bar), and a
+    gap through the stop at the 12:59 open is a gap stop there; the close_gap count stays 0."""
+    s = 0.2 * cost
+    fill = round(100.0 + s, 9)
+    ex = M.event_exec("1H", entries=M.entries([0], [1], stop_level=99.0, target_level=101.0, exit_bar=2,
+                                              close_gap=True))
+
+    def go(**at):
+        """``at``: name -> (M1 bar, value) for o / h / l / c."""
+        o, h, l, c = early(reopen=97.0)
+        for name, (j, v) in at.items():
+            dict(o=o, h=h, l=l, c=c)[name][j] = v
+        r = run_ec(market(o, h, l, c, t=early_t()), ex, cost)
+        assert r.counts["close_gap"] == 0
+        return rows(r)
+
+    stop, gap_stop = round(99.0 - s, 9), round(98.0 - s, 9)
+    assert go(l=(150, 98.5)) == [(1, 60, 150, fill, stop, "stop")]
+    assert go(h=(160, 101.2)) == [(1, 60, 160, fill, 101.0, "target")]
+    assert go(l=(179, 98.5)) == [(1, 60, 179, fill, stop, "stop")]
+    assert go(h=(179, 101.2)) == [(1, 60, 179, fill, 101.0, "target")]
+    assert go(h=(179, 101.2), l=(179, 98.5)) == [(1, 60, 179, fill, stop, "stop")]
+    assert go(o=(179, 98.0), h=(179, 98.02), l=(179, 97.98), c=(179, 98.0)) == [(1, 60, 179, fill, gap_stop,
+                                                                                 "gap stop")]
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+def test_e_close_gap_ends_every_leg_still_open_at_that_close(cost):
+    """(e) Two 0.5 legs, one with a 2R target: when the target is not reached both legs end at the 12:59 close
+    ('signal|signal', P/L 0.50 - spread); when it is (at M1 150) that leg leaves there and the other at the close
+    ('target|signal', 0.5 x 2R + 0.5 x (0.50 - spread)); the row has the last leg's exit (13:00, 'signal'); both paths
+    keep X.WHY_END for what the close ended; the marks are the summed ones. The next entry waits for both legs (one
+    filled at M1 120 is busy) and the one decided at the 13:00 close fills at the reopen (M1 180)."""
+    s = 0.2 * cost
+    legs = (M.Leg(0.5, target_r=2.0), M.Leg(0.5, no_target=True))
+    E = M.entries([0, 1, 2], [1, 1, -1], stop_dist=1.0, exit_bar=[2, 3, 4], close_gap=True)
+    for hit, reasons, pnl in ((False, "signal|signal", 0.5 - s), (True, "target|signal", 1.0 + 0.5 * (0.5 - s))):
+        o, h, l, c = early(reopen=99.5)
+        if hit:
+            h[150] = 102.5                                           # 2R above the fill (102.20 / 102.30)
+        r = run_ec(market(o, h, l, c, t=early_t()), M.event_exec("1H", entries=E, legs=legs), cost)
+        assert not r.single and list(r.trades.entry_ix) == [60, 180] and r.counts["busy"] == 1
+        tr = r.trades.iloc[0]
+        assert (tr.reasons, tr.reason, tr.exit_ix, tr.exit_time) == (reasons, "signal", 179, TM.utc(EC + 3 * 3600))
+        assert tr.pnl == pytest.approx(pnl) and r.counts["close_gap"] == 1
+        assert [int(p.why[0]) for _, p in r.legs] == [X.WHY_TARGET if hit else X.WHY_END, X.WHY_END]
+        # the short filled at the reopen's bid (99.50) exits at bar 4's close, where an M1 bar opens: at that open
+        assert (r.trades.reasons[1], r.trades.exit_ix[1]) == ("signal|signal", 300)
+        assert r.trades.exit[1] == pytest.approx(99.5 + s)
+        _check_against_reference(r)
+        assert M.account_curve(r)[1]["final"] == pytest.approx(X.ACCOUNT + r.net)
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+def test_e_close_gap_in_lanes_each_lane_ends_at_that_close(cost):
+    """Lanes (Session Hunter's presets): a long lane (filled at M1 60) and a short lane (filled at M1 120, the bid
+    100.00, stop 101.00) both end at the 12:59 close, the bid and the ask; the lanes' trades, marks and counts are
+    their sums, and the summed marks are the plain reference reading."""
+    s = 0.2 * cost
+    o, h, l, c = early(reopen=97.0)
+    m = market(o, h, l, c, t=early_t())
+    la = M.event_exec("1H", entries=M.entries([0], [1], stop_level=99.0, exit_bar=2, close_gap=True))
+    lb = M.event_exec("1H", entries=M.entries([1], [-1], stop_level=101.0, exit_bar=2, close_gap=True))
+    r, ra, rb = (run_ec(m, x, cost) for x in (M.lanes_exec([la, lb]), la, lb))
+    assert list(r.trades.reason) == ["signal", "signal"] and list(r.trades.exit_ix) == [179, 179]
+    assert list(r.trades.lane) == [0, 1] and list(np.round(r.trades.exit, 9)) == [100.5, round(100.5 + s, 9)]
+    assert r.counts["close_gap"] == ra.counts["close_gap"] + rb.counts["close_gap"] == 2
+    assert r.net == pytest.approx(ra.net + rb.net) and r.net == pytest.approx((0.5 - s) - (0.5 + s))
+    assert np.allclose(r.ec, ra.ec + rb.ec, atol=1e-9) and np.all(r.pos[120:180] == 2)
+    _check_against_reference(r)
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+def test_e_close_gap_on_stop_orders_with_on_fill(cost):
+    """(f) A buy stop at 100.40 (stop 99.50) placed at bar 0's close fills inside bar 1 (M1 90, the ask high reaching
+    the level; at the level, above the ask open); on_fill gives its exit decision at bar 2's close, which close_gap
+    books at the 12:59 close (the bid 100.50) instead of at the reopen, where it gaps through the stop. The same with
+    exit_bar=2 and no on_fill. A fill inside bar 2 (M1 150) with exit_bar=1, earlier than the fill's bar, exits at the
+    close of the fill's bar: the 12:59 close. A fill in the 12:59 bar itself enters and leaves in that M1 bar."""
+    s = 0.2 * cost
+    until = EC + 3 * 3600
+
+    def go(fill_at, close_gap, on_fill=None, exit_bar=None):
+        o, h, l, c = early(reopen=97.0)
+        if fill_at is not None:
+            h[fill_at] = 100.42
+        O = M.orders([0], until, buy=100.4, buy_stop=99.5, exit_bar=exit_bar, close_gap=close_gap)
+        return run_ec(market(o, h, l, c, t=early_t()), M.event_exec("1H", orders=O, on_fill=on_fill), cost)
+
+    seen = []
+
+    def to_bar_2(fill_bar, side):
+        seen.append((fill_bar, side))
+        return 2
+
+    r = go(90, True, on_fill=to_bar_2)
+    assert rows(r) == [(1, 90, 179, 100.4, 100.5, "signal")] and seen == [(1, 1)]
+    assert r.trades.bar[0] == 1 and r.trades.pnl[0] == pytest.approx(0.1) and r.counts["close_gap"] == 1
+    assert rows(go(90, False, on_fill=to_bar_2)) == [(1, 90, 180, 100.4, round(97 - s, 9), "gap stop")]
+    assert rows(go(90, True, exit_bar=2)) == [(1, 90, 179, 100.4, 100.5, "signal")]
+    r = go(150, True, exit_bar=1)
+    assert rows(r) == [(1, 150, 179, 100.4, 100.5, "signal")] and r.trades.bar[0] == 2
+    r = go(None, True, exit_bar=2)                                   # the 12:59 bar's high (100.52) fills it there
+    assert rows(r) == [(1, 179, 179, 100.4, 100.5, "signal")] and r.trades.hold_h[0] == pytest.approx(1 / 60)
+    assert r.trades.exit_time[0] == TM.utc(EC + 3 * 3600) and r.counts["close_gap"] == 1
+    assert rows(go(None, False, exit_bar=2)) == [(1, 179, 180, 100.4, round(97 - s, 9), "gap stop")]
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+def test_e_close_gap_frees_the_position_from_the_next_m1_bar_on(cost):
+    """The last bar before the gap holds one M1 bar (12:00, then nothing until 18:00). A close_gap exit at that M1 bar's
+    close holds the position through it, so an entry filling at its open (decided at the 11:00 bar's close) is busy,
+    while the one decided at the 12:00 bar's close fills at the reopen (M1 121). Without the flag the first position
+    leaves at the reopen's open instead, and the same two entries are taken."""
+    t = early_t(first=121)                                            # 10:00-12:00, then 18:00-20:59
+    o = 100.0 + 0.01 * np.arange(len(t))
+    m = market(o, t=t)
+    b = m.tbars("1H")
+    assert (int(b.i0[2]), int(b.i1[2]), int(b.ex[1]), int(b.ex[2])) == (120, 120, 120, 121)
+    E = dict(exit_bar=[2, 4, 4])
+    r = run_ec(m, M.event_exec("1H", entries=M.entries([0, 1, 2], [1, -1, -1], close_gap=True, **E)), cost)
+    assert [x[:3] + (x[5],) for x in rows(r)] == [(1, 60, 120, "signal"), (-1, 121, 241, "signal")]
+    assert r.trades.exit[0] == pytest.approx(o[120]) and r.counts["busy"] == 1 and r.counts["close_gap"] == 1
+    r0 = run_ec(m, M.event_exec("1H", entries=M.entries([0, 1, 2], [1, -1, -1], **E)), cost)
+    assert [x[:3] + (x[5],) for x in rows(r0)] == [(1, 60, 121, "signal"), (-1, 121, 241, "signal")]
+    assert r0.counts["busy"] == 1 and r0.counts["close_gap"] == 0
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+def test_e_close_gap_leaves_exit_masks_and_tightenings_alone(cost):
+    """Only the row's own exit is booked before the gap. An exit mask at bar 2 ending a row whose exit_bar is 4 still
+    fills at the reopen (gapping through the stop); at the row's own exit bar the row decides (the 12:59 close). A
+    tightening decided at bar 1 (99.90, below the bid at M1 120's open) is applied there and stops inside bar 2 as
+    before, or is applied and the position closes at the 12:59 close; one already crossed at its open (100.10) is a
+    market exit at that open."""
+    s = 0.2 * cost
+    fill = round(100.0 + s, 9)
+    o, h, l, c = early(reopen=97.0)
+    m = market(o, h, l, c, t=early_t())
+
+    def go(mk, exit_bar, **over):
+        E = M.entries([0], [1], stop_level=99.0, exit_bar=exit_bar, close_gap=True)
+        return run_ec(mk, M.event_exec("1H", entries=E, **over), cost)
+
+    r = go(m, 4, exit_long=_at(6, 2))
+    assert rows(r) == [(1, 60, 180, fill, round(97 - s, 9), "gap stop")] and r.counts["close_gap"] == 0
+    r = go(m, 2, exit_long=_at(6, 2))
+    assert rows(r) == [(1, 60, 179, fill, 100.5, "signal")] and r.counts["close_gap"] == 1
+    tight = np.full(6, np.nan)
+    tight[1] = 99.9
+    l2 = l.copy()
+    l2[150] = 99.85
+    r = go(market(o, h, l2, c, t=early_t()), 2, tighten_long=tight)
+    assert rows(r) == [(1, 60, 150, fill, round(99.9 - s, 9), "stop")] and r.counts["tighten_rows"] == 1
+    r = go(m, 2, tighten_long=tight)
+    assert rows(r) == [(1, 60, 179, fill, 100.5, "signal")] and r.counts["tighten_rows"] == 1
+    tight[1] = 100.1
+    r = go(m, 2, tighten_long=tight)
+    assert rows(r) == [(1, 60, 120, fill, 100.0, "signal")]
+    assert r.counts["tighten_exits"] == 1 and r.counts["close_gap"] == 0
+
+
+def _same_runs(r0, r1):
+    assert r0.trades.equals(r1.trades)
+    for f in ("ec", "ew", "pos"):
+        assert np.array_equal(getattr(r0, f), getattr(r1, f)), f
+    assert (r0.net, r0.max_dd, r0.n_decisions, r0.counts) == (r1.net, r1.max_dd, r1.n_decisions, r1.counts)
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+def test_e_close_gap_changes_nothing_on_a_market_without_gaps(cost):
+    """(b) Random rows on BTC-like M1 bars without a hole (an M1 bar opens at every bar's close; the last bar's close
+    is the end of the data held, not a gap): close_gap True gives the trades, the marks and the counts of close_gap
+    False bit for bit, for market entries (stops, R targets, break-even, time exits, exit masks, tightenings; one leg
+    and two) and for stop orders with on_fill, on 1H and M15."""
+    m = M.TMarket2("BTCUSDm", btc_like(days=12, seed=11))
+    a, z = int(m.t[0]), int(m.t[-1]) + 60
+    for tf in ("1H", "M15"):
+        b = m.tbars(tf)
+        n = len(b)
+        assert np.all(m.t[b.ex[:-1]] == b.tc[:-1]) and b.ex[-1] == len(m.t)
+        atr = M.atr14(b)
+        rng = np.random.default_rng(23)
+        k = 40
+        bar = np.sort(rng.choice(np.arange(20, n - 2), k, replace=False))
+        side = rng.choice([-1, 1], k)
+        xb = np.where(rng.random(k) < 0.85, np.minimum(bar + rng.integers(1, 12, k), n - 1), -1)
+        kw = dict(stop_dist=2.0 * atr[bar], target_r=np.where(rng.random(k) < 0.5, 2.0, np.nan),
+                  be_r=np.where(rng.random(k) < 0.3, 1.0, np.nan), exit_bar=xb, tag=np.arange(k))
+        over = dict(exit_long=rng.random(n) < 0.04, exit_short=rng.random(n) < 0.04,
+                    tighten_long=np.where(rng.random(n) < 0.1, b.c - atr, np.nan),
+                    tighten_short=np.where(rng.random(n) < 0.1, b.c + atr, np.nan))
+        for legs in (None, (M.Leg(0.5, target_r=1.5), M.Leg(0.5, no_target=True))):
+            r0, r1 = (M.run_exec(m, M.event_exec(tf, entries=M.entries(bar, side, close_gap=f, **kw), legs=legs,
+                                                 **over), a, z, cost) for f in (False, True))
+            _same_runs(r0, r1)
+            assert len(r0.trades) > 10 and set(r0.trades.reason) >= {"signal", "stop"}
+        ob = np.sort(rng.choice(np.arange(20, n - 2), 30, replace=False))
+        okw = dict(buy=b.c[ob] + 0.5 * atr[ob], sell=b.c[ob] - 0.5 * atr[ob], stop_dist=1.5 * atr[ob],
+                   target_r=np.where(rng.random(30) < 0.5, 2.0, np.nan),
+                   exit_bar=np.where(rng.random(30) < 0.5, np.minimum(ob + rng.integers(2, 10, 30), n - 1), -1))
+        until = b.tc[ob] + 4 * M.TF_SECONDS[tf]
+        r0, r1 = (M.run_exec(m, M.event_exec(tf, orders=M.orders(ob, until, close_gap=f, **okw),
+                                             on_fill=lambda fb, d: fb + 3 if fb + 3 < n else -1), a, z, cost)
+                  for f in (False, True))
+        _same_runs(r0, r1)
+        assert len(r0.trades) > 5 and r1.counts["close_gap"] == 0
+
+
+@pytest.mark.parametrize("cost", [1.0, 1.5])
+def test_e_close_gap_on_gold_like_bars_moves_only_the_exits_held_over_a_gap(cost):
+    """Random entries on gold-like bars (the daily break 20:57-22:02 UTC, the weekend), half of them with their exit at
+    the next bar that closes into a gap: close_gap moves exactly the positions that such an exit held to the reopen;
+    each moved one is the run of its entry on a window that ends at that bar's last M1 close ('end' there, 'signal'
+    here: the same entry, exit, P/L and exit time); every other position, and every count but close_gap, is
+    unchanged; the marks are the plain reference reading of the paths."""
+    m = M.TMarket2("XAUUSDm", gold_like(days=15))
+    a, z = TM.s_of("2019-03-05"), TM.s_of("2019-03-14 12:00")
+    iz = int(np.searchsorted(m.t, z))
+    cols = ["entry_time", "exit_time", "side", "entry", "exit", "pnl", "slippage", "hold_h", "entry_ix", "exit_ix",
+            "risk", "r", "tag", "bar"]
+    for tf in ("1H", "M15"):
+        b = m.tbars(tf)
+        n = len(b)
+        inside = b.ex < len(m.t)
+        gap = np.zeros(n, bool)
+        gap[inside] = m.t[b.ex[inside]] > b.tc[inside]
+        gaps = np.flatnonzero(gap)
+        rng = np.random.default_rng(31)
+        k = 60
+        pool = np.flatnonzero((b.tc > a) & (b.ex < iz) & (np.arange(n) >= 20))
+        bar = np.sort(rng.choice(pool[:-2], k, replace=False))
+        side = rng.choice([-1, 1], k)
+        to_gap = gaps[np.minimum(np.searchsorted(gaps, bar + 1), len(gaps) - 1)]
+        exit_bar = np.where((rng.random(k) < 0.5) & (to_gap > bar), to_gap, np.minimum(bar + rng.integers(1, 8, k),
+                                                                                         n - 1))
+        sd = 3.0 * M.atr14(b)[bar]
+        r0, r1 = (M.run_exec(m, M.event_exec(tf, entries=M.entries(bar, side, stop_dist=sd, exit_bar=exit_bar,
+                                                                   tag=np.arange(k), close_gap=f)), a, z, cost)
+                  for f in (False, True))
+        t0, t1 = r0.trades, r1.trades
+        assert list(t0.tag) == list(t1.tag)                         # the same positions are taken
+        q = t0.tag.to_numpy()
+        moved = gap[exit_bar[q]] & (t0.exit_ix.to_numpy() == b.ex[exit_bar[q]])
+        assert moved.sum() >= 3 and np.array_equal(moved, (t0.exit_ix != t1.exit_ix).to_numpy())
+        assert t0[~moved][cols + ["reason"]].equals(t1[~moved][cols + ["reason"]])
+        for i in np.flatnonzero(moved):
+            row, qi = t1.iloc[i], int(q[i])
+            x = int(b.i1[exit_bar[qi]])
+            assert row.reason == "signal" and row.exit_ix == x and row.exit_time == TM.utc(int(m.t[x]) + 60)
+            ref = M.run_exec(m, M.event_exec(tf, entries=M.entries([bar[qi]], [side[qi]], stop_dist=sd[qi], tag=qi)),
+                             a, int(m.t[x]) + 60, cost).trades.iloc[0]
+            assert ref.reason == "end" and all(ref[c] == row[c] for c in cols), (tf, qi)
+        assert r1.counts == {**r0.counts, "close_gap": int(moved.sum())}
+        _check_against_reference(r1)
+
+
 # ───────────────────────────── scores, R, run_variant ─────────────────────────────
 
 def test_r_statistics_and_the_study_1_score_functions_accept_a_run2():
@@ -951,6 +1329,15 @@ def test_bad_inputs_are_refused():
         M.orders([0], T0 + DAY, buy=100.5, buy_stop=100.6)
     with pytest.raises(ValueError):
         M.event_exec("1H")
+    for bad in (0.5, "yes", [2]):                                              # close_gap: True / False only
+        with pytest.raises(ValueError):
+            M.entries([0], [1], close_gap=bad)
+        with pytest.raises(ValueError):
+            M.orders([0], T0 + DAY, buy=100.5, close_gap=bad)
+    with pytest.raises(ValueError):
+        M.entries([0, 1], [1, 1], close_gap=[True])                            # one value per row, or one for all
+    with pytest.raises(ValueError):
+        M.orders([0, 1], T0 + DAY, buy=100.5, close_gap=[True])
     with pytest.raises(ValueError):
         run6(m, M.event_exec("1H", entries=M.entries([9], [1])))
     with pytest.raises(ValueError):
@@ -970,6 +1357,24 @@ def test_bad_inputs_are_refused():
     with pytest.raises(TypeError):
         ctx.get("mod", "1H", {"x": np.arange(2)}, f)
     assert M.Variant("v", "XAUUSDm", "1H", "RIB", "RIB", params={"f": "F0"}).ident()["params"] == '{"f": "F0"}'
+
+
+def test_close_gap_is_carried_by_take_and_by_a_table_rebuilt_from_its_fields():
+    """The flag is a bool column like exit_bar and tag: broadcast from a scalar, False by default, kept by ``take`` and
+    by a table rebuilt from its fields (``tradeiq2_filters.gate_orders``); a table built without it is all False."""
+    E = M.entries([0, 1, 2], [1, -1, 1], exit_bar=[3, 4, 5], close_gap=[True, False, 1])
+    assert E.close_gap.dtype == np.bool_ and list(E.close_gap) == [True, False, True]
+    assert list(E.take([2, 0]).close_gap) == [True, True] and list(E.take(E.side < 0).close_gap) == [False]
+    assert list(M.entries([0, 1], 1).close_gap) == [False, False]
+    assert list(M.entries([0, 1], 1, close_gap=True).close_gap) == [True, True]
+    O = M.orders([0, 1], T0 + DAY, buy=101.0, close_gap=[False, True])
+    again = M.Orders(**{k: getattr(O, k).copy() for k in O.__dataclass_fields__})
+    assert list(again.close_gap) == [False, True] and list(O.take([1]).close_gap) == [True]
+    old = {k: getattr(O, k) for k in O.__dataclass_fields__ if k != "close_gap"}
+    assert list(M.Orders(**old).close_gap) == [False, False]
+    old = {k: getattr(E, k) for k in E.__dataclass_fields__ if k != "close_gap"}
+    assert list(M.Entries(**old).close_gap) == [False, False, False]
+    assert "close_gap" in M.COUNT_KEYS
 
 
 # ───────────────────────────── real data (read up to the hold-out start; skipped when absent) ─────────────────────────────

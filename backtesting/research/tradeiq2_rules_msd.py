@@ -7,6 +7,7 @@ TradeIQ study 2: the rule rows of the Market Structure Dashboard (Flux Charts), 
     ex = R.build(vs[0], ctx)                     # a STATE Exec: study 1's tradeiq_market.run, exactly
     res = M.run_variant(ctx, vs[0], ex)          # Development, Validation and D+V at x1.0 and x1.5
     R.study1_ids(vs[18])                         # the first MSD-F4 row: its study-1 rows F0, F1, F2-4H, F2-1D
+    rows = R.claim14(ev)                         # PREREG 8 claim 14 on a tradeiq2.Evidence (the driver's extra)
 
 The plan is ``backtest_results/tradeiq_2027/PREREG.md`` (frozen): section 4 (execution), 5 (filters: how a filter
 applies to a state rule), 6.2 (these rules) and 7 (families, eligibility), read with ``DEVIATIONS.md``. The
@@ -93,19 +94,65 @@ Readings where PREREG 6.2 leaves a choice (written before any result of these ro
    shows no bias per row, so "says bearish" is the row's score below 0, as the PREREG writes it.
 2. MSD-A3 trades both sides, as MSD-A1 does ("as A1, at BULLISH or BEARISH only").
 3. The base states of MSD-F4 / MSD-F6 are computed with study 1's ``lines_of`` / ``raw_state`` on the study-2 market.
-   Gold's market starts in 2016 here (study 1's in 2017); every line study 1 reads is bit-identical from 2019-01-01
-   to 2024-06-30 on both symbols (tested), so these are study 1's states on every scored bar. BTC's VWRSI is study 1's
-   "VWRSI-RV" (Binance BTCUSDT spot volume, PREREG 6.2), gold's VWRSI the tick-volume one.
+   Gold's market starts in 2016 here (study 1's in 2017). What the test compares (``tests/test_tradeiq2_rules_msd.py``,
+   real data, both symbols, 1H, 4H and 1D), against study 1's ``Study`` on study 1's own market: the bars (open and
+   close times, OHLC, tick volume) on study 1's whole span; and on every bar closing after 2019-01-01 00:00 up to the
+   hold-out start, every array ``lines_of`` returns (14 on gold, 17 on BTC) and S1's distance, bit for bit (the same
+   dtype, floats by their 64-bit patterns), each MSD-FILTER row's base state against study 1's F0 row of that base,
+   and the row's state against study 1's ``apply_filter`` of it. So these are study 1's states on every bar from 2019
+   (Development, Validation and the hold-out); gold's Early window (exam 2) differs until 2017-03-29 (reading 6).
+   BTC's VWRSI is study 1's "VWRSI-RV" (Binance BTCUSDT spot volume, PREREG 6.2), gold's VWRSI the tick-volume one.
 4. BOS-trend's F1 is a state filter (it is a state rule): long only while the close is above the MA200 of the same
    timeframe, short only while below; BOS-trend runs with S1 only (PREREG 6.2).
 5. All 150 rows are eligible: section 6.2 marks none "not eligible" or "information only", and section 7's totals
    (738 gold, 720 BTC eligible) count all of them.
-6. The data start (information, measured on states only). Gold's base states on the study-2 market (from 2016) and
-   on study 1's market (from 2017) differ only inside study 1's own warm-up: on at most 57 bars of a series, all
-   closing on or before 2017-03-29; S1's distance differs in its last bits only, until 2018-09-14 (1D). This touches
-   gold's Early window (exam 2) only, where study 1 has no result to pair with. The dashboard's own dependence on the
-   data start (BTC's D and W rows until 2019-06-30, gold's until 2018-05-19) is the port's: ``porting/msd.md``,
-   sections 6 and 8 (entries 3 and 4).
+6. The data start (information: measured, not asserted by a test). Gold's base states on the study-2 market (from
+   2016) and on study 1's market (from 2017) differ only inside study 1's own warm-up: on at most 57 bars of a series,
+   all closing on or before 2017-03-29. S1's distance is missing on study 1's first 13 bars of each series (its ATR's
+   warm-up) and after them differs in its last bits only, until 2018-09-14 (1D). The lines differ in their last bits
+   until 2018-12-25 (the 1D VWRSI; on 1H until 2017-01-31, on 4H until 2017-05-03). This touches gold's Early window
+   (exam 2) only, where study 1 has no result to pair with. BTC's two markets start together (2018-01-01) and differ
+   nowhere. The dashboard's own dependence on the data start (BTC's D and W rows until 2019-06-30, gold's until
+   2018-05-19) is the port's: ``porting/msd.md``, sections 6 and 8 (entries 3 and 4).
+
+Claim 14 (PREREG 8): "its higher-timeframe rows use the forming candle and can change"
+---------------------------------------------------------------------------------------
+``claim14(ev)`` is the driver's extra (``tradeiq2.EXTRAS['claim14']``). PREREG's test is "the share of chart closes
+inside a higher-timeframe bar where the forming-bar score differs from the closed one". It is read as follows
+(``porting/msd.md`` section 8, entry 8; DEVIATIONS MSD-P8 and MSD-C14), per symbol, chart and higher row (1H chart: 4H,
+D, W; 4H chart: D, W; 1D chart: W), in each of the evidence's two windows:
+
+* The forming-bar score at a chart close is model B's ``s_<row>`` (``dashboard(ctx, tf, "B")``). The row's state after
+  its last closed bar is stepped once on the forming candle: the open of its first chart bar, the high and the low so
+  far and the chart close. The swing vote uses the chart close. This is what the live dashboard shows.
+* The closed one is the score the row bar ends with (``closed_score``): its own committed values (``row_values``) with
+  the swing vote at its own close. Where a chart bar closes with the row bar, this is model A's ``s_<row>`` on that
+  chart bar. Gold's week, its Friday day bar and its Friday 20:00 4H bar close at Saturday 00:00 UTC, when no chart
+  bar closes, so there only the row's own values can supply it.
+* The chart closes counted are those strictly inside a row bar (``forming_bar``): the row bar opened at or before the
+  chart bar's open and closes after the chart bar's close. The chart bar must lie inside the window, and the row bar
+  must be complete and also lie inside the window (``ev.in_window`` of both; the first follows from the second), so
+  the closed score, the outcome, is inside the window too. A chart close at the row bar's own close is left out:
+  there the live score is the closed one by construction. "Inside" is read by the clock. Gold's last 1H bar before
+  the weekend (closing at 21:00 or 22:00 UTC) is inside its 4H, D and W bars, but no data come after it, so its
+  forming candle is already the whole bar. It is counted, and it agrees by construction. So does every counted close
+  after which no data come in its higher bar: before a weekend, a holiday or early close, or a data hole (in
+  Development 234 / 213 / 208 gold 1H closes for the 4H / D / W rows, 11 / 8 gold 4H closes for D / W, and on BTC
+  6 / 5 / 0 and 1 / 0).
+* The verdict, fixed before any count existed: "can change" states a possibility, so a row's part holds in a window
+  when the share is above 0 (at least one counted close differs). It fails when the share is 0 or nothing is counted.
+  A cut above 0 (5%, 10%) would be ours, not the claim's. The share and the number of row bars that change at least
+  once are reported, so the size is visible. The claim's first half, that the rows use the forming candle, is the
+  script's code (``request.security`` on realtime bars); history cannot show it, and model B is built on it.
+* For information, per chart (no verdict): the label the live dashboard shows (model B) against the label the chart's
+  history shows for the same bar (model A), and MSD-A1's long / flat / short side under each. These are counted over
+  the chart closes in the window that lie strictly inside a bar of at least one higher row (elsewhere the two models
+  are equal by construction).
+* A check before counting: at the last chart bar inside each row bar of the windows, the forming score must equal the
+  closed score (the chart bars tile the row bar, so the forming candle is the whole bar there). Otherwise
+  ``claim14`` raises ``AssertionError``.
+
+The closed score of a row bar is known only at that bar's close. It is a measurement and no state reads it.
 """
 
 from __future__ import annotations
@@ -126,6 +173,7 @@ __all__ = [
     "BASE_FAMILIES", "BOS_SIDES", "BOS_FILTERS", "ROWS", "VETO_ROWS", "STUDY1_FILTERS", "COUNTS", "Spec",
     "variants", "build", "spec_of", "state_of", "study1_ids", "describe", "warm", "dashboard", "alone_state",
     "veto_allow", "bos_state", "base_indicator", "base_state", "study1_lines", "s1_stop", "filter_allow",
+    "HIGHER_ROWS", "closed_score", "forming_bar", "forming_counts", "claim14",
 ]
 
 SCRIPT = "MSD"
@@ -272,15 +320,18 @@ def _ro(a) -> np.ndarray:
     return a
 
 
-def dashboard(ctx: M.Context, tf: str) -> Dict[str, np.ndarray]:
-    """The dashboard on chart ``tf`` (model A) for every bar of ``ctx.bars(tf)``: ``tradeiq2_ind_msd
-    .structure_dashboard`` on the rows ``ROWS[tf]`` taken from ``ctx.bars`` (label, score, the rows' scores ``s_<r>``
-    and votes, ``bos``, ``bos_trend``). Read-only arrays, cached."""
+def dashboard(ctx: M.Context, tf: str, model: str = "A") -> Dict[str, np.ndarray]:
+    """The dashboard on chart ``tf`` for every bar of ``ctx.bars(tf)``: ``tradeiq2_ind_msd.structure_dashboard`` on
+    the rows ``ROWS[tf]`` taken from ``ctx.bars`` (label, score, the rows' scores ``s_<r>`` and votes, ``bos``,
+    ``bos_trend``). Read-only arrays, cached. ``model`` "A" (each higher row from its last closed bar) is what every
+    row of the grid reads; "B" (each higher row on its forming bar: the live dashboard) is for claim 14 only."""
     if tf not in TFS:
         raise ValueError(f"{tf}: the dashboard's rules are on {', '.join(TFS)} charts (PREREG 6.2)")
+    if model not in ("A", "B"):
+        raise ValueError(f"model {model!r}: 'A' (the rows) or 'B' (claim 14)")
 
     def make():
-        out = MS.structure_dashboard({r: ctx.bars(r) for r in ROWS[tf]}, tf, model="A")
+        out = MS.structure_dashboard({r: ctx.bars(r) for r in ROWS[tf]}, tf, model=model)
         n = len(ctx.bars(tf))
         res = {}
         for k, v in out.items():
@@ -289,7 +340,7 @@ def dashboard(ctx: M.Context, tf: str) -> Dict[str, np.ndarray]:
                 raise AssertionError(f"dashboard {k}: shape {a.shape}, the {tf} bars {n}")
             res[k] = _ro(a)
         return res
-    return ctx.get(CACHE, tf, {"what": "dashboard", "model": "A"}, make)
+    return ctx.get(CACHE, tf, {"what": "dashboard", "model": model}, make)
 
 
 def alone_state(label, rule: str) -> np.ndarray:
@@ -468,3 +519,164 @@ def warm(ctx: M.Context, variants_: Iterable[M.Variant]) -> None:
         state_of(v, ctx)
         if spec_of(v).stop == "S1":
             s1_stop(ctx, v.tf)
+
+
+# ───────────────────────────── claim 14 (PREREG 8): the forming candle ─────────────────────────────
+
+# the rows above each chart: claim 14's higher-timeframe rows (the chart's own row is never forming at its close)
+HIGHER_ROWS: Dict[str, Tuple[str, ...]] = {tf: tuple(ROWS[tf][1:]) for tf in TFS}
+_EV_WINDOWS = ("dev", "val")                    # the evidence's two windows as it labels them (tradeiq2.Evidence)
+
+
+def closed_score(ctx: M.Context, row: str) -> np.ndarray:
+    """
+    Claim 14's "closed one", per bar of ``ctx.bars(row)``: the score that bar ends with. These are its own committed
+    values (``tradeiq2_ind_msd.row_values``: the structure, order-block and gap votes and the swing high and low after
+    the bar) with the swing vote at its own close: struct + ob + fvg + swing, in [-4, 4] (int64, read-only, cached).
+    Where a chart bar closes with the row bar, this equals model A's ``s_<row>`` on that chart bar. Gold's week, its
+    Friday day bar and its Friday 20:00 4H bar close when no chart bar closes (Saturday 00:00 UTC).
+    """
+    if row not in MS.ROWS:
+        raise ValueError(f"{row}: the dashboard's rows are {', '.join(MS.ROWS)}")
+    tick = MS.MINTICK.get(ctx.symbol)
+    if tick is None:
+        raise ValueError(f"{ctx.symbol}: the dashboard's tick (syminfo.mintick) is known on {', '.join(MS.MINTICK)}")
+
+    def make():
+        b = ctx.bars(row)
+        v = MS.row_values(b)
+        swing = MS.swing_factor(b.c, v["swing_h"], v["swing_l"], tick)
+        return _ro(v["struct"].astype(np.int64) + v["ob"] + v["fvg"] + swing)
+    return ctx.get(CACHE, row, {"what": "closed_score"}, make)
+
+
+def _times(bars) -> Tuple[np.ndarray, np.ndarray]:
+    return np.asarray(bars.t, np.int64), np.asarray(bars.tc, np.int64)
+
+
+def forming_bar(chart, row) -> np.ndarray:
+    """
+    Per chart bar, the row bar it lies strictly inside, else -1 (int64). That is the last row bar opening at or before
+    the chart bar's open, if it closes after the chart bar's close, so it is still forming at the chart close. A chart
+    bar that closes with a row bar, or lies in none (before the first, in a hole between two, after the last), gets
+    -1. Times only (``t``, ``tc``): inside by the clock.
+    """
+    ct, ctc = _times(chart)
+    rt, rtc = _times(row)
+    if len(rt) == 0:
+        return np.full(len(ct), -1, np.int64)
+    k = np.searchsorted(rt, ct, side="right") - 1
+    inside = (k >= 0) & (ctc < rtc[np.maximum(k, 0)])
+    return np.where(inside, k, -1).astype(np.int64)
+
+
+def _last_inside(chart, row) -> Tuple[np.ndarray, np.ndarray]:
+    """(row bars, their last chart bar): every row bar with a chart bar inside it (opening at or after the row bar's
+    open, closing at or before its close), with the last such chart bar."""
+    ct, ctc = _times(chart)
+    rt, rtc = _times(row)
+    if len(rt) == 0 or len(ct) == 0:
+        z = np.zeros(0, np.int64)
+        return z, z
+    k = np.searchsorted(rt, ct, side="right") - 1
+    j = np.flatnonzero((k >= 0) & (ctc <= rtc[np.maximum(k, 0)]))
+    kj = k[j]
+    last = np.append(kj[1:] != kj[:-1], True) if len(j) else np.zeros(0, bool)
+    return kj[last], j[last]
+
+
+def forming_counts(s_forming, s_closed, k, chart_ok, row_ok) -> Dict[str, int]:
+    """
+    Claim 14's count over one window, from per-bar arrays. Chart bar j is counted when it lies strictly inside row bar
+    ``k[j] >= 0`` (``forming_bar``), ``chart_ok[j]`` and ``row_ok[k[j]]``. It differs where ``s_forming[j] !=
+    s_closed[k[j]]``. Returns ``closes`` (counted), ``differ``, ``bars`` (row bars with a counted close) and
+    ``bars_differ`` (those with at least one counted close that differs).
+    """
+    sf, sc, k = (np.asarray(x, np.int64) for x in (s_forming, s_closed, k))
+    chart_ok, row_ok = np.asarray(chart_ok, bool), np.asarray(row_ok, bool)
+    if not (sf.shape == k.shape == chart_ok.shape) or sc.shape != row_ok.shape:
+        raise ValueError("s_forming, k and chart_ok are per chart bar; s_closed and row_ok per row bar")
+    j = np.flatnonzero((k >= 0) & chart_ok)
+    j = j[row_ok[k[j]]]
+    kj = k[j]
+    diff = sf[j] != sc[kj]
+    return {"closes": int(len(j)), "differ": int(diff.sum()), "bars": int(len(np.unique(kj))),
+            "bars_differ": int(len(np.unique(kj[diff])))}
+
+
+def _part(part: str, symbol: str, rows: str, dev: str, val: str, dev_ok, val_ok, note: str = "") -> Dict[str, object]:
+    """One row of the driver's claims table (the fields of ``tradeiq2._row``)."""
+    return {"part": part, "symbol": symbol, "rows": rows, "dev": dev, "val": val, "dev_ok": dev_ok,
+            "val_ok": val_ok, "note": note}
+
+
+def _pct(k: int, n: int) -> str:
+    return f"{100.0 * k / n:.1f}%" if n else "-"
+
+
+def _can_change(st: Mapping[str, int]) -> bool:
+    """Claim 14's verdict line in one window (fixed before any count existed): a counted chart close differs."""
+    return bool(st["closes"] > 0 and st["differ"] > 0)
+
+
+_C14_NOTE = ("forming: model B, the row stepped once on its forming candle, the swing vote at the chart close (the "
+             "live dashboard); closed: the score the row bar ends with, its row_values with the swing vote at its own "
+             "close (MSD-P8); the part holds where the share is above 0 ('can change' states a possibility)")
+
+
+def claim14(ev) -> List[Dict[str, object]]:
+    """
+    The driver's claim-14 extra (PREREG 8): "its higher-timeframe rows use the forming candle and can change", tested
+    by "the share of chart closes inside a higher-timeframe bar where the forming-bar score differs from the closed
+    one". The parts are per symbol of ``ev.symbols``, chart and higher row (``HIGHER_ROWS``), in the evidence's two
+    windows ('dev' and 'val'). A close is counted through ``ev.in_window`` of the chart bar and of the row bar, and
+    the row bar must be complete. Each part carries a verdict: it holds where the share is above 0. Each chart also
+    gets one information part: the label the live dashboard shows against the label the chart's history shows. The
+    readings are in the module docstring.
+    """
+    out: List[Dict[str, object]] = []
+    for s in ev.symbols:
+        ctx = ev.context(s)
+        for tf in TFS:
+            chart = ctx.bars(tf)
+            live = dashboard(ctx, tf, "B")
+            inside_any = np.zeros(len(chart), bool)
+            for r in HIGHER_ROWS[tf]:
+                row = ctx.bars(r)
+                rw = _ROW_WORDS[r]
+                k = forming_bar(chart, row)
+                inside_any |= k >= 0
+                sf = np.asarray(live[f"s_{r}"], np.int64)
+                sc = closed_score(ctx, r)
+                row_ok = {w: np.asarray(ev.in_window(s, r, w), bool) & np.asarray(row.complete, bool)
+                          for w in _EV_WINDOWS}
+                kl, jl = _last_inside(chart, row)
+                keep = row_ok["dev"][kl] | row_ok["val"][kl]
+                if not np.array_equal(sf[jl[keep]], sc[kl[keep]]):
+                    raise AssertionError(f"claim 14, {s} {tf} chart, {r} row: at the last chart bar inside a row bar "
+                                         "the forming score must be the score the bar closes with (the chart bars "
+                                         "tile the row bar)")
+                st = {w: forming_counts(sf, sc, k, ev.in_window(s, tf, w), row_ok[w]) for w in _EV_WINDOWS}
+                txt = {w: f"{x['differ']}/{x['closes']} chart closes ({_pct(x['differ'], x['closes'])}); "
+                          f"{x['bars_differ']}/{x['bars']} {rw} bars change at least once" for w, x in st.items()}
+                out.append(_part(
+                    f"{tf} chart, {rw} row: the forming-bar score differs from the closed one at some chart closes "
+                    f"inside a {rw} bar (it can change: a share above 0)", s,
+                    f"{tf} chart closes strictly inside a complete {rw} bar of the window; the live {rw} score against "
+                    "the score that bar closes with", txt["dev"], txt["val"], _can_change(st["dev"]),
+                    _can_change(st["val"]), _C14_NOTE))
+            hist = dashboard(ctx, tf)
+            la, lb = np.asarray(hist["label"]), np.asarray(live["label"])
+            sa, sb = alone_state(la, "MSD-A1"), alone_state(lb, "MSD-A1")
+            txt = {}
+            for w in _EV_WINDOWS:
+                m = np.asarray(ev.in_window(s, tf, w), bool) & inside_any
+                n, kd, ks = int(m.sum()), int(np.sum(la[m] != lb[m])), int(np.sum(sa[m] != sb[m]))
+                txt[w] = f"label {kd}/{n} chart closes ({_pct(kd, n)}); MSD-A1's side {ks}/{n} ({_pct(ks, n)})"
+            out.append(_part(
+                f"{tf} chart: the label the live dashboard shows (forming rows, model B) differs from the label the "
+                "chart's history shows for that bar (closed rows, model A) (information)", s,
+                f"{tf} chart closes in the window strictly inside a bar of a higher row "
+                f"({', '.join(_ROW_WORDS[r] for r in HIGHER_ROWS[tf])})", txt["dev"], txt["val"], np.nan, np.nan,
+                "information, no verdict (the claim is about the rows' scores)"))
+    return out

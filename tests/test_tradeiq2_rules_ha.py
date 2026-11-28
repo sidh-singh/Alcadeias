@@ -13,15 +13,19 @@ overlays M1-M5 and HA-AND on the nine bases, the entry controls HA-H1 / HA-H2), 
     below the bid becomes the stop, a crossed one is a market exit (PREREG 4), break-even is the run's own fill (also
     at x1.5), events of the other colour do nothing, a WEAK run tightens from its second candle on; M5 = M1 + M2;
     HA-AND gates the base's entries at their decision close (state bases: per episode; ribbon bases: at the flip)
-    and never closes a trade; HA-H1 / HA-H2's states, LO, and their filters as state filters.
+    and never closes a trade; HA-H1 / HA-H2 as event rules (reading 5): HA-H1 in at the close of a streak's first
+    STRONG candle and out at the next flip, HA-H2 the colour stop-and-reverse (the exit and the reverse entry at the
+    same M1 open), LS and LO, F0 and a filter checked at the entry's close that never closes an open trade (a flip it
+    refuses still closes the trade and opens nothing), no entry at a window's first bar without an event there.
 (c) Filters: each row asks exactly its filter (HA-ENTRY: F0 or the timeframe's F2; the ribbon bases F0; study 1's
     bases their own study-1 filters, not the context's).
-(d) The real port: the overlay arrays, the colour gate and the entry states are the port's events read as the
-    module docstring says (by-hand loops on random bars); ``and_state`` and ``h1_state`` against plain loops.
+(d) The real port: the rules read it with every finished streak (``keep=None``, reading 9); the overlay arrays, the
+    colour gate, the flip exits and the entry events are the port's events read as the module docstring says
+    (by-hand loops on random bars); ``and_state`` against a plain loop.
 (e) The bases and one trade per event: on a synthetic market, study 1's finalists' states and S1 are study 1's own
     (``tradeiq.Study``); every overlay row keeps its base's entries and only shortens its trades, HA-AND keeps a
-    subset of the base's trades unchanged; HA-H1 takes at most one trade per streak, from its first STRONG candle,
-    HA-H2 one per streak from its flip.
+    subset of the base's trades unchanged; HA-H1 / HA-H2 take every event of the window their filter allows, one
+    trade per streak, and exit at the next flip (HA-H2 LS reverses at the same M1 open).
 (f) Causality: every decision of a bar closing at or before T is the same when the data after T is removed (all 78
     rows of both symbols; synthetic bars here, the study's bars in (g)).
 (g) Real data (skipped when the store is absent; read to 2019-07-01 only): causality; study 1's finalists' states and
@@ -29,6 +33,11 @@ overlays M1-M5 and HA-AND on the nine bases, the entry controls HA-H1 / HA-H2), 
     execution smoke test on Development data (2019-01-01 to 2019-06-30) for one row of each rule type through
     ``tradeiq2_market.run_variant``. Its profit or loss is neither printed, asserted nor reported: only counts,
     times, sides and exit reasons are checked.
+(h) Claim 5 (PREREG 8): the binomial interval and the cells by hand (the panel's numbers from the streaks finished
+    before the year, every one of them, also past the script's 5,000; the year's streak-ages with their 5 next
+    candles inside the window; the ages with 50 earlier streaks; the tested and covered cells); ``claim5`` through
+    the driver's ``Evidence`` and ``claims_table`` on a synthetic market against a plain loop over the port's streak
+    table, and on injected series where the panel is wrong in every cell.
 """
 
 from __future__ import annotations
@@ -36,8 +45,11 @@ from __future__ import annotations
 import gc
 import hashlib
 import json
+import math
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from backtesting.data import store
@@ -130,7 +142,9 @@ def test_a_the_rows_per_symbol_are_the_preregs(symbol):
                       for f in ("F0", F2_OF[tf])}
     assert all(v.id == f"{symbol}|{v.tf}|HA-ENTRY|{v.params['rule']}|{v.params['side']}|{v.params['filter']}"
                for v in ent)
-    assert all(v.params["stop"] == "none" and v.params["kind"] == "state" and H.base_of(v) is None for v in ent)
+    assert all(v.params["stop"] == "none" and v.params["kind"] == "event" and H.base_of(v) is None for v in ent)
+    assert all(v.params["entry"] == ("first-strong" if v.params["rule"] == "HA-H1" else "ha-flip")
+               and v.params["exit"] == "ha-flip" for v in ent)
 
 
 def test_a_the_bases_are_study_1s_frozen_finalists_and_the_ribbons_rows():
@@ -603,51 +617,79 @@ def masks(ctx, table):
     return asked
 
 
-def test_b_ha_h1_is_in_from_the_first_strong_candle_of_a_streak_and_out_at_the_flip():
+def test_b_ha_h1_is_in_at_the_first_strong_candle_of_a_streak_and_out_at_the_next_flip():
+    """An event rule (reading 5): the entries are the first STRONG candles (bars 2, 4, 10; the streak from bar 11 has
+    none), on the streak's colour; the exits are the flips (to bearish for a long: 4, 11; to bullish for a short: 8).
+    The STRONG flip candle of bar 4 ends the long and opens the short at the same M1 open (minute 300)."""
     mk, ctx = h_ctx()
     h = H.ha_of(ctx, "1H")
-    assert list(H.h1_state(h)) == [0, 0, 1, 1, -1, -1, -1, -1, 0, 0, 1, 0, 0, 0]
+    assert [x.tolist() for x in H.entry_events(h, "HA-H1")] == [[2, 4, 10], [1, -1, 1], [0, 1, 2]]
     ls = H.build(V("XAUUSDm|1H|HA-ENTRY|HA-H1|LS|F0"), ctx)
-    assert ls.kind == "state" and not ls.overlays and ls.stop is None
+    assert ls.kind == "events" and ls.stop is None and ls.state is None and len(ls.legs) == 1
+    E = ls.entries
+    assert list(E.bar) == [2, 4, 10] and list(E.side) == [1, -1, 1] and list(E.tag) == [0, 1, 2]
+    assert np.isnan(E.stop_dist).all() and np.isnan(E.stop_level).all() and np.isnan(E.target_r).all()
+    assert list(np.flatnonzero(ls.exit_long)) == [4, 11] and list(np.flatnonzero(ls.exit_short)) == [8]
+    assert ls.tighten_long is None and ls.tighten_short is None and ls.tighten_be is None
     r = run(mk, ls)
-    # in at bar 2's close; the STRONG flip candle of bar 4 reverses at once; out at the flip of bar 8 (not STRONG);
-    # in at bar 10, out at the flip of bar 11; the last streak has no STRONG candle
+    # in at bar 2's close (filled at minute 180), out at the flip of bar 4, where the short of the STRONG flip candle
+    # fills too; out at the flip of bar 8 (not STRONG: nothing opens); in at bar 10, out at the flip of bar 11
     assert rows(r) == [(1, 180, 300, 100.2, 100.0, "signal"), (-1, 300, 540, 100.0, 100.2, "signal"),
                        (1, 660, 720, 100.2, 100.0, "signal")]
-    assert r.trades.risk.isna().all() and not set(r.trades.reason) & {"stop", "gap stop"}
+    assert r.trades.risk.isna().all() and list(r.trades.tag) == [0, 1, 2] and list(r.trades.bar) == [2, 4, 10]
+    assert r.counts["taken"] == 3 and r.counts["busy"] == 0 and no_drops(r)
     lo = H.build(V("XAUUSDm|1H|HA-ENTRY|HA-H1|LO|F0"), ctx)
-    assert list(lo.state) == [0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]
+    assert list(lo.entries.bar) == [2, 10] and lo.exit_short is None
     assert rows(run(mk, lo)) == [(1, 180, 300, 100.2, 100.0, "signal"), (1, 660, 720, 100.2, 100.0, "signal")]
+    # a window that starts after bar 2's close does not enter the running streak (an event rule waits for its next
+    # event: the short of bar 4)
+    assert rows(run(mk, ls, start=T0 + 200 * 60)) == [(-1, 300, 540, 100.0, 100.2, "signal"),
+                                                      (1, 660, 720, 100.2, 100.0, "signal")]
 
 
-def test_b_ha_h2_is_the_colour_stop_and_reverse():
+def test_b_ha_h2_is_the_colour_stop_and_reverse_at_one_m1_open():
+    """Every flip (bars 4, 8, 11) closes the open trade and opens the flip's side; the exit and the reverse entry fill
+    at the same M1 open (minutes 540, 720). The window's first bar is not entered (no event there: DEVIATIONS 3)."""
     mk, ctx = h_ctx()
     ls = H.build(V("XAUUSDm|1H|HA-ENTRY|HA-H2|LS|F0"), ctx)
-    assert list(ls.state) == H_DIRS and ls.stop is None
-    # the window's first bar takes the state (study 1's DEVIATIONS 2), then a reversal at every flip
-    assert rows(run(mk, ls)) == [(1, 60, 300, 100.2, 100.0, "signal"), (-1, 300, 540, 100.0, 100.2, "signal"),
-                                 (1, 540, 720, 100.2, 100.0, "signal"), (-1, 720, 839, 100.0, 100.2, "end")]
+    assert ls.kind == "events" and ls.stop is None
+    assert list(ls.entries.bar) == [4, 8, 11] and list(ls.entries.side) == [-1, 1, -1]
+    assert list(ls.entries.tag) == [1, 2, 3]
+    r = run(mk, ls)
+    assert rows(r) == [(-1, 300, 540, 100.0, 100.2, "signal"), (1, 540, 720, 100.2, 100.0, "signal"),
+                       (-1, 720, 839, 100.0, 100.2, "end")]
+    tr = r.trades
+    assert list(tr.exit_ix[:-1]) == list(tr.entry_ix[1:]) and r.counts["busy"] == 0
     lo = H.build(V("XAUUSDm|1H|HA-ENTRY|HA-H2|LO|F0"), ctx)
-    assert rows(run(mk, lo)) == [(1, 60, 300, 100.2, 100.0, "signal"), (1, 540, 720, 100.2, 100.0, "signal")]
+    assert list(lo.entries.bar) == [8] and lo.exit_short is None
+    assert rows(run(mk, lo)) == [(1, 540, 720, 100.2, 100.0, "signal")]
 
 
-def test_b_the_entry_rules_filter_is_a_state_filter():
-    """PREREG 5 on a state rule: a state the filter does not allow is flat, so the position closes when the filter
-    turns against it and opens where it turns in favour (here mid-streak, on a candle that is not STRONG)."""
+def test_b_the_entry_rules_filter_is_an_entry_gate_that_never_closes_a_trade():
+    """PREREG 5 on an event rule: the filter must agree at the entry's decision close and does not close an open
+    trade, which keeps its own exits. The state reading of the module's first version would have entered HA-H1's
+    refused streak at bar 3 (where the filter allows a long) and closed the short at bar 5, where the filter turns
+    against it (reading 5)."""
     mk, ctx = h_ctx()
     n = 14
     al, ash = np.ones(n, bool), np.ones(n, bool)
-    al[2] = False                                     # the first STRONG candle of bar 2 is refused: in at bar 3
-    ash[6] = False                                    # the short is closed at bar 6 and reopened at bar 7
-    al[10] = False                                    # the third long never opens
+    al[2] = False                                     # the first STRONG candle of bar 2 is refused: no long at all
+    ash[5:8] = False                                  # the filter turns against the open short: it stays open
     asked = masks(ctx, {"F2-4H": (al, ash)})
     ex = H.build(V("XAUUSDm|1H|HA-ENTRY|HA-H1|LS|F2-4H"), ctx)
-    assert asked == [("1H", "F2-4H")]
-    assert list(ex.state) == [0, 0, 0, 1, -1, -1, 0, -1, 0, 0, 0, 0, 0, 0]
-    assert rows(run(mk, ex)) == [(1, 240, 300, 100.2, 100.0, "signal"), (-1, 300, 420, 100.0, 100.2, "signal"),
-                                 (-1, 480, 540, 100.0, 100.2, "signal")]
-    h2 = H.build(V("XAUUSDm|1H|HA-ENTRY|HA-H2|LO|F2-4H"), ctx)
-    assert list(h2.state) == [1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0]
+    assert asked == [("1H", "F2-4H")] and list(ex.entries.bar) == [4, 10]
+    assert list(np.flatnonzero(ex.exit_long)) == [4, 11] and list(np.flatnonzero(ex.exit_short)) == [8]
+    assert rows(run(mk, ex)) == [(-1, 300, 540, 100.0, 100.2, "signal"), (1, 660, 720, 100.2, 100.0, "signal")]
+    # HA-H2: the bull flip of bar 8 is refused; it still closes the short (the colour stop-and-reverse is the short's
+    # own exit) and opens nothing; the bear flip of bar 11 opens the next short
+    al[8] = False
+    del asked[:]
+    h2 = H.build(V("XAUUSDm|1H|HA-ENTRY|HA-H2|LS|F2-4H"), ctx)
+    assert asked == [("1H", "F2-4H")] and list(h2.entries.bar) == [4, 11]
+    assert list(np.flatnonzero(h2.exit_short)) == [8]                          # the exit mask is not filtered
+    assert rows(run(mk, h2)) == [(-1, 300, 540, 100.0, 100.2, "signal"), (-1, 720, 839, 100.0, 100.2, "end")]
+    lo = H.build(V("XAUUSDm|1H|HA-ENTRY|HA-H2|LO|F2-4H"), ctx)
+    assert len(lo.entries) == 0 and run(mk, lo).trades.empty
 
 
 # ───────────────────────────── (c) filters ─────────────────────────────
@@ -693,19 +735,42 @@ def walk(days=40, seed=5, symbol="XAUUSDm", p0=2000.0, vol=0.3, start="2019-01-0
     return {"t": t, "o": o, "h": h, "l": l, "c": c, "spread_mean": np.full(n, 0.2), "n": np.ones(n)}
 
 
-def test_d_the_overlays_and_the_entry_states_are_the_ports_events_of_the_positions_colour():
+def test_d_the_rules_read_the_port_with_every_finished_streak(monkeypatch):
+    """Reading 9 (PREREG 6.8: "using all history from the data start"): ``ha_of`` calls the port with ``keep=None``,
+    the plan's 50 streaks and the script's defaults; the port's own default stays the script's cap of 5,000 (the
+    reconciled contract, which study 3 calls)."""
+    assert H.HA_PARAMS["keep"] is None and HA.KEEP == 5000
+    assert HA.heikin_ashi.__defaults__[-1] == HA.KEEP                     # keep=KEEP: the contract is unchanged
+    seen = []
+    port = HA.heikin_ashi
+
+    def spy(*a, **k):
+        seen.append(dict(k))
+        return port(*a, **k)
+    monkeypatch.setattr(HA, "heikin_ashi", spy)
+    ctx = M.Context(M.TMarket2("XAUUSDm", walk(days=6)))
+    for tf in TFS:
+        H.ha_of(ctx, tf)
+        H.ha_of(ctx, tf)                                                  # cached: computed once
+    want = {"strong_tol": 0.05, "doji_max": 0.25, "ahead_n": 5, "rare_pct": 90, "min_streaks": 50, "keep": None}
+    assert seen == [want] * 3
+
+
+def test_d_the_overlays_and_the_entry_events_are_the_ports_events_of_the_positions_colour():
     ctx = M.Context(M.TMarket2("XAUUSDm", walk()))
     seen = {"ind": 0, "weak2": 0, "rare": 0, "flip": 0, "strong": 0}
     for tf in TFS:
         b = ctx.bars(tf)
-        h = HA.heikin_ashi(b.o, b.h, b.l, b.c)                    # the port itself, computed again
+        h = HA.heikin_ashi(b.o, b.h, b.l, b.c, keep=None)        # the port itself, computed again (all history)
         got = H.ha_of(ctx, tf)
         for k in got:
             assert np.array_equal(got[k], h[k], equal_nan=True) and not got[k].flags.writeable
         n = len(b)
         ov = {o: H.overlay_arrays(ctx, tf, o) for o in H.EXIT_OVERLAYS}
         gl, gs = H.colour_gate(ctx, tf)
-        seen_strong, h1 = False, []
+        xl, xs = H.flip_exits(ctx, tf)
+        assert not xl.flags.writeable and not xs.flags.writeable
+        streak, h1, h2 = 0, [], []
         for t in range(n):
             d = int(h["dir"][t])
             fl, ind, wr, rare = bool(h["flip"][t]), bool(h["ev_ind"][t]), int(h["weak_run"][t]), bool(h["rare_now"][t])
@@ -726,26 +791,26 @@ def test_d_the_overlays_and_the_entry_states_are_the_ports_events_of_the_positio
             for o in ("M1", "M4"):
                 assert ov[o]["tighten_long"] is None and ov[o]["tighten_be"] is None
             assert gl[t] == (d == 1) and gs[t] == (d == -1)
-            if t == 0 or fl:                                       # a plain loop for HA-H1
-                seen_strong = False
+            assert xl[t] == (fl and d == -1) and xs[t] == (fl and d == 1)     # HA-H1 / HA-H2's exits
+            if fl:                                                 # plain loops for HA-H1 / HA-H2's events
+                streak += 1
+                h2.append((t, d, streak))
             if h["ev_first_strong"][t]:
-                seen_strong = True
+                h1.append((t, d, streak))
                 seen["strong"] += 1
-            h1.append(d if seen_strong else 0)
             if ind:                                                # the port's facts the reading rests on
                 assert not fl and b.l[t] == h["ha_l"][t] and b.h[t] == h["ha_h"][t]
             if wr >= 2:
                 assert not fl and (b.l[t] == h["ha_l"][t] if d == 1 else b.h[t] == h["ha_h"][t])
-        assert list(H.h1_state(h)) == h1
-        for side in ("LS", "LO"):
-            for f in ("F0", F2_OF[tf]):
-                al, ash = ctx.allow(tf, f)
-                for rule, raw in (("HA-H1", np.asarray(h1)), ("HA-H2", h["dir"].astype(np.int64))):
-                    if side == "LO":
-                        raw = np.where(raw == 1, 1, 0)
-                    want = np.where((raw == 1) & al, 1, np.where((raw == -1) & ash, -1, 0))
-                    st = H.entry_state(ctx, tf, rule, side, f)
-                    assert np.array_equal(st, want) and not st.flags.writeable
+        for rule, want in (("HA-H1", h1), ("HA-H2", h2)):
+            assert list(zip(*(x.tolist() for x in H.entry_events(h, rule)))) == want
+            for side in ("LS", "LO"):
+                for f in ("F0", F2_OF[tf]):
+                    al, ash = ctx.allow(tf, f)
+                    keep = [(t, d, g) for t, d, g in want if (side == "LS" or d == 1) and (al[t] if d == 1 else ash[t])]
+                    E = H.entry_entries(ctx, tf, rule, side, f)
+                    assert list(zip(E.bar.tolist(), E.side.tolist(), E.tag.tolist())) == keep, (tf, rule, side, f)
+                    assert np.isnan(E.stop_dist).all() and np.isnan(E.target_r).all() and (E.exit_bar == -1).all()
     assert min(seen.values()) > 0, seen                            # the case is not empty
 
 
@@ -902,29 +967,57 @@ def test_e_every_overlay_row_keeps_its_bases_entries_and_ha_and_a_subset_of_its_
     assert n_base > 50 and min(acted.values()) > 0, acted          # every overlay changes some trade
 
 
-def test_e_ha_h1_takes_one_trade_per_streak_from_its_first_strong_candle_and_ha_h2_one_from_its_flip(synth):
+def test_e_ha_h1_and_ha_h2_take_every_event_their_filter_allows_and_exit_at_the_next_flip(synth):
+    """The trades' times, sides and reasons only (no profit or loss): each HA-ENTRY row takes every entry decided in
+    the window (one position at a time never refuses one: the previous trade ends at the flip that starts the new
+    streak), on an event bar only (no entry at the window's first bar without an event), one per streak, on the
+    candle's colour, allowed by its filter at that close; each trade ends at the next flip's fill (or the window's
+    end); HA-H2 LS reverses at the same M1 open."""
     sym, ctx, _ = synth
-    a_s = TM.s_of(WIN[0])
+    a_s, z_s = TM.s_of(WIN[0]), TM.s_of(WIN[1])
+    iz = int(np.searchsorted(ctx.mk.t, z_s, side="left"))
+    n_trades = n_refused = 0
     for tf in TFS:
         b = ctx.bars(tf)
         h = H.ha_of(ctx, tf)
         streak = np.cumsum(h["flip"])
+        flips = np.flatnonzero(h["flip"])
         for rule in ("HA-H1", "HA-H2"):
+            at = h["ev_first_strong"] if rule == "HA-H1" else h["flip"]
             for side in ("LS", "LO"):
-                r = M.run_exec(ctx.mk, H.build(V(f"{sym}|{tf}|HA-ENTRY|{rule}|{side}|F0"), ctx), *WIN)
-                tr = r.trades
-                if tf != "1D":
-                    assert len(tr) > 10
-                bar = tr.bar.to_numpy()
-                first = b.tc[np.maximum(bar - 1, 0)] <= a_s                  # the window's first bar
-                assert np.array_equal(tr.entry_ix.to_numpy(), b.ex[bar])     # filled at the next M1 open
-                assert np.array_equal(tr.side.to_numpy(), h["dir"][bar].astype(np.int64))
-                at = h["ev_first_strong"][bar] if rule == "HA-H1" else h["flip"][bar]
-                assert (at | first).all(), (tf, rule, side)
-                assert len(set(streak[bar])) == len(bar)                     # one trade per streak
-                if side == "LO":
-                    assert (tr.side == 1).all()
-                assert tr.risk.isna().all() and set(tr.reason) <= {"signal", "end"}
+                for f in ("F0", F2_OF[tf]):
+                    ex = H.build(V(f"{sym}|{tf}|HA-ENTRY|{rule}|{side}|{f}"), ctx)
+                    assert ex.kind == "events" and (ex.exit_short is None) == (side == "LO")
+                    r = M.run_exec(ctx.mk, ex, *WIN)
+                    tr = r.trades
+                    if tf != "1D" and f == "F0":
+                        assert len(tr) > 10
+                    E = ex.entries
+                    win = (b.tc[E.bar] > a_s) & (b.ex[E.bar] < iz)
+                    bar = tr.bar.to_numpy()
+                    assert np.array_equal(bar, E.bar[win]) and r.counts["busy"] == 0, (tf, rule, side, f)
+                    assert np.array_equal(tr.entry_ix.to_numpy(), b.ex[bar])     # filled at the next M1 open
+                    assert at[bar].all() and (b.tc[bar] > a_s).all()
+                    assert np.array_equal(tr.side.to_numpy(), h["dir"][bar].astype(np.int64))
+                    assert np.array_equal(tr.tag.to_numpy(), streak[bar]) and len(set(streak[bar])) == len(bar)
+                    al, ash = ctx.allow(tf, f)
+                    assert np.where(tr.side.to_numpy() == 1, al[bar], ash[bar]).all()
+                    ev = np.flatnonzero(at & (b.tc > a_s) & (b.ex < iz))
+                    ev = ev[(h["dir"][ev] == 1) | (side == "LS")]
+                    n_refused += len(ev) - len(bar)
+                    if side == "LO":
+                        assert (tr.side == 1).all()
+                    k = np.searchsorted(flips, bar, side="right")               # the next flip after the entry
+                    nxt = np.where(k < len(flips), flips[np.minimum(k, len(flips) - 1)], len(b))
+                    sig = tr.reason.to_numpy() == "signal"
+                    assert np.array_equal(tr.exit_ix.to_numpy()[sig], b.ex[nxt[sig]])
+                    ends = ~sig
+                    assert ((nxt[ends] >= len(b)) | (b.ex[np.minimum(nxt[ends], len(b) - 1)] >= iz)).all()
+                    assert tr.risk.isna().all() and set(tr.reason) <= {"signal", "end"}
+                    if rule == "HA-H2" and side == "LS" and f == "F0":
+                        assert np.array_equal(tr.entry_ix.to_numpy()[1:], tr.exit_ix.to_numpy()[:-1])
+                    n_trades += len(tr)
+    assert n_trades > 200 and n_refused > 0          # the filters refuse some events (not a vacuous check)
 
 
 # ───────────────────────────── (f) causality ─────────────────────────────
@@ -1126,11 +1219,11 @@ def test_g_smoke_one_row_of_each_rule_type_runs_on_development_data(symbol, real
             entry_s = np.asarray([int(x.timestamp()) for x in tr.entry_time], np.int64)
             assert np.array_equal(entry_s, ctx.mk.t[b.ex[bar]]) and (b.tc[bar] > a_s).all()
             assert set(tr.reason) <= {"signal", "stop", "gap stop", "end"}
-            if v.family == "HA-ENTRY":
-                st = ex.state
-                prev = np.where(bar >= 1, st[np.maximum(bar - 1, 0)], 0)
-                first = b.tc[np.maximum(bar - 1, 0)] <= a_s
-                assert (st[bar] == tr.side.to_numpy()).all() and ((st[bar] != prev) | first).all()
+            if v.family == "HA-ENTRY":                          # event rules: every trade is one of its events
+                h = H.ha_of(ctx, v.tf)
+                at = h["ev_first_strong"] if v.params["rule"] == "HA-H1" else h["flip"]
+                assert at[bar].all() and (h["dir"][bar] == tr.side.to_numpy()).all()
+                assert set(bar.tolist()) <= set(ex.entries.bar.tolist())
                 assert tr.risk.isna().all() and set(tr.reason) <= {"signal", "end"}
                 if v.params["side"] == "LO":
                     assert (tr.side == 1).all()
@@ -1153,3 +1246,243 @@ def test_g_smoke_one_row_of_each_rule_type_runs_on_development_data(symbol, real
             if "|RIB|" in base or T1.Variant.of(base).stop == "S1":
                 assert np.isfinite(tr.risk.to_numpy()).all()
     assert overlays == set(H.OVERLAYS)
+
+
+# ───────────────────────────── (h) claim 5 (PREREG 8): the panel's calibration ─────────────────────────────
+
+def streak_series(lengths, first=1):
+    """``dir``, ``flip`` and ``age`` per bar for consecutive streaks of the given lengths, the colours alternating
+    from ``first`` (the port's per-bar keys, as claim 5 reads them)."""
+    d, flip, age = [], [], []
+    c = first
+    for k, n in enumerate(lengths):
+        for a in range(1, n + 1):
+            d.append(c)
+            age.append(a)
+            flip.append(a == 1 and k > 0)
+        c = -c
+    return np.asarray(d, np.int8), np.asarray(flip, bool), np.asarray(age, np.int32)
+
+
+def hourly(n, start=T0):
+    t = start + 3600 * np.arange(n, dtype=np.int64)
+    return t, t + 3600
+
+
+def test_h_the_binomial_interval_by_hand():
+    """[q(2.5%), q(97.5%)] of Binomial(n, p), q(x) = the smallest k with P(K <= k) >= x. n = 10, p = 1/2: P(K <= 1) =
+    11/1024 < 0.025 <= P(K <= 2) = 56/1024, P(K <= 7) = 968/1024 < 0.975 <= P(K <= 8) = 1013/1024: [2, 8]. n = 20,
+    p = 0.1: P(K = 0) = 0.9^20 = 0.1216 >= 0.025, P(K <= 4) = 0.9568 < 0.975 <= P(K <= 5) = 0.9887: [0, 5]. n = 3,
+    p = 1/2: 1/8, 1/2, 7/8, 1: [0, 3]. A rate of 0 or 1 allows one count only."""
+    assert H.binom_interval(10, 0.5) == (2, 8)
+    assert H.binom_interval(20, 0.1) == (0, 5)
+    assert H.binom_interval(3, 0.5) == (0, 3) and H.binom_interval(1, 0.5) == (0, 1)
+    assert H.binom_interval(2, 1 / 3) == (0, 2)                    # 4/9, 8/9, 1
+    assert H.binom_interval(0, 0.3) == (0, 0) and H.binom_interval(5, 0.0) == (0, 0)
+    assert H.binom_interval(7, 1.0) == (7, 7)
+    assert H.binom_interval(10, 0.5, level=0.5) == (4, 6)          # P(K <= 3) = 176/1024 < 0.25 <= 386/1024
+    for bad in ((-1, 0.5), (5, 1.5), (5, -0.1)):
+        with pytest.raises(ValueError):
+            H.binom_interval(*bad)
+    with pytest.raises(ValueError):
+        H.binom_interval(5, 0.5, level=1.0)
+
+
+# bull 6, bear 3, bull 2, bear 1, bull 7, bear 2, bull 1, bear 8 (bars 0-29), then the year: bull 9 (bars 30-38),
+# bear 2 (39-40), bull 3 (41-43), bear 6 (44-49), bull 1 (50), bear 4 (51-54), bull 5 (55-59, unfinished)
+CLAIM_STREAKS = [6, 3, 2, 1, 7, 2, 1, 8, 9, 2, 3, 6, 1, 4, 5]
+
+
+def test_h_claim5_cells_by_hand():
+    """The cell (bars 30-59, the window to bar 59's close), 5 candles ahead, at least 2 earlier streaks reaching an age
+    and 2 streak-ages per tested cell. The history: the streaks whose flip candle closed by the cell's start, bull
+    6, 2, 7, 1 and bear 3, 1, 2 (the bear 8 of bars 22-29 ends at bar 30's flip, which closes inside the cell: not
+    yet known). Bull ages 1-6 (the 2nd longest is 6), bear 1-2. The year's bull streak-ages: age 1 at bars 30, 41,
+    50 (bar 55's five next candles are past the window): 30 went on to age 6, 41 and 50 did not; age 2 at 31 (went),
+    42; age 3 at 32 (went), 43, where the panel says 0 of 2: outside [0, 0]; ages 4-6 have one streak-age (bars
+    33-35: untested). Bear: age 1 at 39, 44 (went), 51 against the panel's 0 of 3: outside; age 2 at 40, 45, 52."""
+    d, flip, age = streak_series(CLAIM_STREAKS)
+    n = len(d)
+    assert n == 60 and list(np.flatnonzero(flip)[:9]) == [6, 9, 11, 12, 19, 21, 22, 30, 39]
+    t, tc = hourly(n)
+    cell = ("dev", 2019, int(t[30]), int(tc[59]), int(tc[59]))
+    got = H.panel_cells(t, tc, d, flip, age, [cell], 2, min_streaks=2)
+    assert tuple(got.columns) == H.CELL_COLUMNS
+    cols = ["colour", "age", "reached", "went", "n", "k", "lo", "hi", "tested", "covered"]
+    assert [tuple(x) for x in got[cols].itertuples(index=False)] == [
+        (1, 1, 4, 2, 3, 1, 0, 3, True, True), (1, 2, 3, 1, 2, 1, 0, 2, True, True),
+        (1, 3, 2, 0, 2, 1, 0, 0, True, False), (1, 4, 2, 0, 1, 1, 0, 0, False, False),
+        (1, 5, 2, 0, 1, 0, 0, 0, False, False), (1, 6, 2, 0, 1, 0, 0, 0, False, False),
+        (-1, 1, 3, 0, 3, 1, 0, 0, True, False), (-1, 2, 2, 0, 3, 0, 0, 0, True, True)]
+    assert got.panel_pct.tolist()[:2] == [50.0, 100.0 / 3] and got.year_pct.tolist()[0] == 100.0 / 3
+    assert set(got.window) == {"dev"} and set(got.year) == {2019}
+    assert (got.start.iloc[0], got.end.iloc[0]) == (str(TM.utc(t[30]).date()), str(TM.utc(tc[59]).date()))
+    # the window ending at bar 50's close: a streak-age needs its five next candles inside it (bars up to 45)
+    w50 = H.panel_cells(t, tc, d, flip, age, [("dev", 2019, int(t[30]), int(tc[59]), int(tc[50]))], 2,
+                        min_streaks=2)
+    assert w50.n.tolist() == [2, 2, 2, 1, 1, 1, 2, 2] and w50.k.tolist() == [1, 1, 1, 1, 0, 0, 1, 0]
+    # a cell of bars 30-34 inside a longer window: the outcomes are read on the candles after the cell
+    c5 = H.panel_cells(t, tc, d, flip, age, [("dev", 2019, int(t[30]), int(tc[34]), int(tc[59]))], 1,
+                       min_streaks=2)
+    assert c5.n.tolist() == [1, 1, 1, 1, 1, 0, 0, 0] and c5.k.tolist() == [1, 1, 1, 1, 0, 0, 0, 0]
+    assert c5.tested.tolist() == [True] * 5 + [False] * 3
+    # a later cell: its history holds the streaks finished by its start (bull 30-38 and 41-43; bear 22-29, 39-40)
+    late = H.panel_cells(t, tc, d, flip, age, [("val", 2020, int(t[45]), int(tc[59]), int(tc[59]))], 1,
+                         min_streaks=2)
+    bull, bear = late[late.colour == 1], late[late.colour == -1]
+    assert bull.age.tolist() == list(range(1, 8)) and bear.age.tolist() == [1, 2, 3]
+    assert (bull.reached.iloc[0], bull.went.iloc[0], bear.reached.iloc[0], bear.went.iloc[0]) == (6, 3, 5, 1)
+    # the plan's thresholds: fewer than 50 earlier streaks of a colour give no age at all
+    assert H.panel_cells(t, tc, d, flip, age, [cell], 30).empty
+    with pytest.raises(ValueError):
+        H.panel_cells(t, tc[:-1], d, flip, age, [cell], 2)
+
+
+def test_h_claim5_uses_every_finished_streak_not_the_scripts_last_5000():
+    """All history (reading 9): 50 bull streaks of 7 candles, then 5,000 of one (each followed by a bearish candle),
+    then the year. The panel counts all 5,050 finished bull streaks: 50 of them reached age 6 from age 1 (the script's
+    array of the last 5,000 would hold none of them: 0 of 5,000)."""
+    lengths = [7, 1] * 50 + [1, 1] * 5000 + [10, 10, 10, 10]
+    d, flip, age = streak_series(lengths)
+    n = len(d)
+    k0 = n - 40
+    t, tc = hourly(n)
+    got = H.panel_cells(t, tc, d, flip, age, [("dev", 2019, int(t[k0]), int(tc[-1]), int(tc[-1]))], 1)
+    bull = got[got.colour == 1].set_index("age")
+    assert (bull.at[1, "reached"], bull.at[1, "went"]) == (5050, 50) and 5050 > HA.KEEP
+    assert list(bull.index) == list(range(1, 8))                   # the 50th longest bull length is 7
+    assert (bull.at[1, "n"], bull.at[1, "k"], bull.at[6, "n"], bull.at[6, "k"]) == (2, 2, 2, 0)
+    bear = got[got.colour == -1]
+    assert bear.age.tolist() == [1] and bear.reached.tolist() == [5049]   # the last bear ends at the year's flip
+
+
+class FakeEvidence:
+    """What claim 5 reads of a ``tradeiq2.Evidence``: its symbols, years, window spans and contexts."""
+
+    def __init__(self, ctx, spans):
+        self.ctx, self.spans, self.symbols = ctx, spans, [ctx.symbol]
+
+    def span(self, w, s):
+        return self.spans[w]
+
+    def years(self, s):
+        out = []
+        for w in ("dev", "val"):
+            a, z = self.spans[w]
+            for y in range(int(a[:4]), int(z[:4]) + 1):
+                ya, yz = max(a, f"{y}-01-01"), min(z, f"{y + 1}-01-01")
+                if ya < yz:
+                    out.append((w, y, ya, yz))
+        return out
+
+    def context(self, s):
+        return self.ctx
+
+
+def test_h_claim5_says_does_not_hold_when_the_panel_is_wrong_in_every_cell():
+    """Injected colours: streaks of 10 candles until 2020 (73 of each colour finished by 2020-01-01), streaks of 2 in
+    January and February 2020. The panel says 73 of 73 streaks that reached ages 1-5 went 5 more; none does in the
+    year: every tested cell (ages 1 and 2) is outside its interval, in both windows. 4H and 1D are one bullish
+    streak (nothing finished): no tested cell, "cannot be tested"."""
+    start = TM.s_of("2019-11-01")
+    k = 121 * 1440
+    o = np.full(k, 100.0)
+    mk = M.TMarket2("XAUUSDm", {"t": start + 60 * np.arange(k, dtype=np.int64), "o": o, "h": o + 0.02,
+                                "l": o - 0.02, "c": o.copy(), "spread_mean": np.full(k, 0.2), "n": np.ones(k)})
+    ctx = M.Context(mk)
+    b = ctx.bars("1H")
+    k0 = int(np.searchsorted(b.t, TM.s_of("2020-01-01")))
+    assert k0 == 61 * 24
+    i = np.arange(len(b))
+    old = np.where((i // 10) % 2 == 0, 1, -1)
+    new = -old[k0 - 1] * np.where(((i - k0) // 2) % 2 == 0, 1, -1)
+    inject_ha(ctx, "1H", fake_ha(len(b), np.where(i < k0, old, new)))
+    for tf in ("4H", "1D"):
+        inject_ha(ctx, tf, fake_ha(len(ctx.bars(tf)), [1] * len(ctx.bars(tf))))
+    ev = FakeEvidence(ctx, {"dev": ("2020-01-01", "2020-02-01"), "val": ("2020-02-01", "2020-03-01")})
+    tab = H.claim5_table(ev)
+    tested = tab[tab.tested]
+    assert set(tested.tf) == {"1H"} and set(tested.age) == {1, 2} and not tested.covered.any()
+    dev = tab[(tab.window == "dev") & (tab.age <= 5)]
+    assert (dev.reached == 73).all() and (dev.went == 73).all() and (dev.panel_pct == 100.0).all()
+    assert (tested.k == 0).all() and (tested.n >= 150).all()
+    rows = H.claim5(ev)
+    assert len(rows) == 7 and [r["symbol"] for r in rows] == ["XAUUSDm"] * 7
+    assert all(r["dev_ok"] is False and r["val_ok"] is False for r in rows[:3])     # pooled, 1H bull, 1H bear
+    assert "0/4 cells inside the 95% interval" in rows[0]["dev"] and "0/2 cells" in rows[1]["val"]
+    for r in rows[3:]:                                                               # 4H and 1D
+        assert r["verdict"] == "cannot be tested" and r["dev"] == "no tested cell" and math.isnan(r["dev_ok"])
+    assert all(set(r) >= {"part", "symbol", "rows", "dev", "val", "dev_ok", "val_ok", "note"} for r in rows)
+
+
+def cells_by_loop(b, out, cells, min_n, ahead=5, min_streaks=50):
+    """Claim 5's cells read literally from the port's table of finished streaks (and the last, unfinished one):
+    the panel's history is the array the script holds at the close of the last bar before the cell, with every
+    streak kept (``kept_lengths(..., keep=None)``); a streak-age counts when its A-th candle is in the cell and the
+    five after it close inside the window, and it went 5 more when the streak has at least A + 5 candles."""
+    st = out["streaks"]
+    n = len(b.c)
+    every = [(int(s), int(L), int(c)) for s, L, c in zip(st.start_bar, st.length, st.dir)]
+    last = int(st.end_bar.iloc[-1]) + 1
+    every.append((last, n - last, int(out["dir"][last])))
+    got = []
+    for w, y, a_s, z_s, wz_s in cells:
+        ref = int(np.searchsorted(b.tc, a_s, side="right")) - 1
+        for c in (1, -1):
+            hist = HA.kept_lengths(st, ref, c, keep=None)
+            if len(hist) < min_streaks:
+                continue
+            for A in range(1, int(sorted(hist)[-min_streaks]) + 1):
+                r, g = HA.survive(hist, A, ahead)
+                nn = kk = 0
+                for s0, L, cc in every:
+                    i = s0 + A - 1
+                    if cc != c or L < A or not (b.t[i] >= a_s and b.tc[i] <= z_s):
+                        continue
+                    if i + ahead < n and b.tc[i + ahead] <= wz_s:
+                        nn += 1
+                        kk += int(L >= A + ahead)
+                got.append((w, y, c, A, r, g, nn, kk, nn >= min_n))
+    return got
+
+
+def test_h_claim5_through_the_drivers_evidence_on_a_synthetic_market(monkeypatch, tmp_path):
+    """The driver's ``Evidence`` (two synthetic windows: 2019-12-01 .. 2020-01-20 and .. 2020-02-25, so three year
+    cells) on a random walk from 2019-06-03: ``claim5_table`` equals the plain loop over the port's streak table on
+    every timeframe; the driver finds ``claim5`` (EXTRAS), its rows pass ``check_rows`` and get verdict words. On 1H
+    the panel has the history and the year the streak-ages to test (the walk is stationary: most cells are covered,
+    "holds"); 4H has too few streak-ages in each year and 1D too little history: "cannot be tested"."""
+    D = pytest.importorskip("backtesting.research.tradeiq2")
+    monkeypatch.setitem(M.WINDOWS, "dev", ("2019-12-01", "2020-01-20"))
+    monkeypatch.setitem(M.WINDOWS, "val", ("2020-01-20", "2020-02-25"))
+    mk = M.TMarket2("XAUUSDm", walk(days=270, seed=11, start="2019-06-03"))
+    vid = "XAUUSDm|1H|HA-ENTRY|HA-H2|LS|F0"
+    res = pd.DataFrame({"vid": [vid, vid], "window": ["dev", "val"], "symbol": "XAUUSDm"})
+    grid = pd.DataFrame({"vid": [vid], "params": ["{}"]})
+    ev = D.Evidence(Path(tmp_path), res, grid, pd.DataFrame(), {"ha": H}, loader=lambda s, end: mk)
+    assert ev.years("XAUUSDm") == [("dev", 2019, "2019-12-01", "2020-01-01"), ("dev", 2020, "2020-01-01", "2020-01-20"),
+                                   ("val", 2020, "2020-01-20", "2020-02-25")]
+    assert D.extra({"ha": H}, "claim5") is H.claim5
+    tab = H.claim5_table(ev)
+    cells = [(w, y, TM.s_of(ya), TM.s_of(yz), TM.s_of(ev.span(w, "XAUUSDm")[1])) for w, y, ya, yz in
+             ev.years("XAUUSDm")]
+    for tf in TFS:
+        b = ev.context("XAUUSDm").bars(tf)
+        out = HA.heikin_ashi(b.o, b.h, b.l, b.c, keep=None)
+        want = cells_by_loop(b, out, cells, H.CLAIM5_MIN_CELL[tf])
+        g = tab[tab.tf == tf]
+        got = [tuple(x) for x in g[["window", "year", "colour", "age", "reached", "went", "n", "k", "tested"]]
+               .itertuples(index=False)]
+        assert got == want, tf
+    t1 = tab[tab.tested]
+    assert set(t1.tf) == {"1H"} and set(t1.window) == {"dev", "val"} and set(t1.colour) == {1, -1}
+    assert len(tab[tab.tf == "4H"]) > 0 and not tab[tab.tf == "1D"].reached.any()
+    rows = H.claim5(ev)
+    assert len(rows) == 7
+    assert all(isinstance(r["dev_ok"], bool) and isinstance(r["val_ok"], bool) for r in rows[:3])
+    assert rows[0]["dev_ok"] and rows[0]["val_ok"]
+    assert all(r["verdict"] == "cannot be tested" for r in rows[3:])
+    cl, errors = D.claims_table(ev, numbers=[5])
+    assert errors == [] and len(cl) == 7 and set(cl.claim) == {5}
+    assert cl.verdict.iloc[0] == "holds" and set(cl.verdict.iloc[3:]) == {"cannot be tested"}
+    assert set(cl.verdict) <= {"holds", "does not hold", "mixed", "cannot be tested"}
