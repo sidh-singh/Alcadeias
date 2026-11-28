@@ -39,3 +39,20 @@ They read the plan where it is silent. Only item 13 changes anything, and only t
     4 exits) therefore run only after study 2's `FINALISTS.md` is frozen. So do stage 2 (the pairs, chosen from all
     singles) and everything after it. The other 50 singles of each design use no study-2 indicator and run first.
     This moves no result; it only keeps study 2's hold-out unseen until its freeze.
+
+## Written on 28 Nov 2026 (IST), before any port row, pair or later result existed
+
+14. **BTC Top 2's tick identity ran, with less free memory than item 11 waited for.** Item 11's 9 GB was the build
+    task's safety margin, not the plan's (PREREG names no memory figure). The 9 GB never became free on this Mac,
+    so the identity ran at 20:07 IST, when vm_stat showed 7.18 GB free + inactive, with no other study's run alive
+    (peak footprint 8.06 GB). It reproduced FINAL10's published five-year account exactly: $3,918.63, max DD
+    16.06%, 675 trades, with 1,351 fills identical. Base and identity filter are equal on all 24 Development
+    accounts. The BTC singles followed under the same rule. No result can depend on the memory figure: a run either
+    completes or fails.
+15. **Study 2 was frozen first (item 13).** Study 2's `FINALISTS.md` was frozen at 20:29 IST (commit f90da50,
+    sha256 106542cc04a27b4c34d77154d1e17ea7b1a5455b9f12ded2adee9ae36d4c53b0). That came after its run, selection,
+    an independent re-derivation of all 17 champions and its look-ahead check. From then on this study runs, in
+    order, the rows that read study 2's ports, stage 2 and everything after. Those rows are RIB, MSD and HA on
+    H1/H4/D1, 9 per design, and the Turtle's 4 Heikin Ashi exits. Nothing of this study fed a choice of study 2:
+    its singles' Development files were not opened by study 2's code or agents, and study 2's selection is mechanical
+    (PREREG 7).
